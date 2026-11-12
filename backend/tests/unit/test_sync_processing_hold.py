@@ -39,7 +39,7 @@ def test_parent_waits_for_last_content_and_merge_then_runs_once(state):
     for at in (100, 300, 450):
         outbox.mark('u', 'c', 'en', now=at, sync_hold=True)
     key = outbox.key('u', 'c')
-    process = Mock()
+    process = Mock(return_value=None)
     assert outbox.run(key, tasks[-1]['task_token'], process, now=700) == 'deferred'
     process.assert_not_called()
     assert outbox.run(key, tasks[-1]['task_token'], process, now=1050) == 'processed'
@@ -91,7 +91,7 @@ def test_kill_switch_drains_already_held_obligation_without_waiting(state, monke
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=100, sync_hold=True)
     monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
-    process = Mock()
+    process = Mock(return_value=None)
     assert outbox.run(outbox.key('u', 'c'), tasks[-1]['task_token'], process, now=101) == 'processed'
     process.assert_called_once()
 
@@ -237,7 +237,7 @@ def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch, h
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
-    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
     monkeypatch.setattr(callback.time, 'time', lambda: 700)
     if not has_summary:
         current['structured'] = {'title': 'Synthetic minimum'}
@@ -304,7 +304,7 @@ def test_relevance_discard_never_spends_the_first_full_summary_budget(monkeypatc
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
-    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
     monkeypatch.setattr(callback.time, 'time', lambda: 700)
     discarded = callback.deserialize_conversation({**current, 'discarded': True, 'structured': {'title': 'Minimum'}})
     monkeypatch.setattr(callback, 'process_conversation', Mock(return_value=discarded))
@@ -359,7 +359,7 @@ def test_budget_deferral_retains_late_revision_until_funding_returns(state, monk
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
-    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
     monkeypatch.setattr(callback.time, 'time', lambda: 700)
     monkeypatch.setattr(processor.time, 'time', lambda: 700)
     complete = Mock(return_value=True)
@@ -465,8 +465,9 @@ def test_rollback_sweep_releases_future_holds_and_fences_old_delivery(state, mon
     assert outbox.sweep(now=101) == {'repaired': 1, 'error': 0}
     assert rows[key]['due_at'] == 101 and rows[key]['task_token'] != old_token
     assert leased['lease_until'] == 500
-    assert rows[outbox.key('u', 'ordinary')]['due_at'] == 700
-    process = Mock()
+    # The graduated first-summary deadline (120s) caps the ordinary settle wake.
+    assert rows[outbox.key('u', 'ordinary')]['due_at'] == 220
+    process = Mock(return_value=None)
     assert outbox.run(key, old_token, process, now=101) == 'stale'
     assert outbox.run(key, rows[key]['task_token'], process, now=101) == 'processed'
     process.assert_called_once()
@@ -492,7 +493,7 @@ def test_rollback_processing_settles_hold_before_lazy_effects(monkeypatch):
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
-    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', Mock(return_value=True))
     full = Mock(return_value=callback.deserialize_conversation(world.get('user-1', 'parent')))
     monkeypatch.setattr(callback, 'process_conversation', full)
     token = PROCESS_CONTEXT.set({'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True})

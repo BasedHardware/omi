@@ -15,6 +15,7 @@ from database import users as users_db, redis_db
 from config.refactor_modes import serving_for, uid_digest
 from models.speaker_evidence import SpeakerEvidence, VoiceCluster, SpeakerCandidate, ClusterSimilarity
 from models.structured import Structured
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.transcript_for_llm import render_cluster_transcript
 from utils.episodes import incremental, moment_render
 from utils.llm import notes_packet as packet
@@ -30,7 +31,7 @@ START = datetime(2026, 1, 12, 1, 30, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def isolated_flags(monkeypatch):
-    for flag in ('NOTES_PACKET_V2_MODE', 'STT_LANGUAGE_HINTS_MODE'):
+    for flag in ('NOTES_PACKET_V2_MODE',):
         monkeypatch.delenv(flag, raising=False)
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
@@ -82,7 +83,9 @@ def test_language_preference_precedes_noisy_conversation_language(monkeypatch, p
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
 
 
-def test_notes_packet_normalizes_sentinel_output_language(monkeypatch):
+@pytest.mark.parametrize('mode,expected', [('off', 'vi'), ('shadow', 'vi'), ('serve', 'vi')])
+def test_notes_packet_without_segments_keeps_valid_capture_fallback(monkeypatch, mode, expected):
+    monkeypatch.setenv(packet.FLAG, mode)
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: '')
     packet_data = packet.build_notes_packet(
         prefix=prefix(),
@@ -91,8 +94,8 @@ def test_notes_packet_normalizes_sentinel_output_language(monkeypatch):
         words=30,
         inputs=inputs(output_language_code='multi', language_code='vi'),
     )
-    assert packet_data['output_language'] == 'vi'
-    assert packet_data['response_language'] == 'vi'
+    assert packet_data['output_language'] == expected
+    assert packet_data['response_language'] == expected
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'typo'])
@@ -331,7 +334,12 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
 def test_short_clip_shadow_does_not_serve_minimum(monkeypatch):
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
     monkeypatch.setenv(packet.FLAG, 'shadow')
-    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='A brief synthetic remark')], photos=[])
+    conversation = SimpleNamespace(
+        transcript_segments=[
+            TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0, is_user=False)
+        ],
+        photos=[],
+    )
     assert notes_short_clip.quiet_minimum('synthetic-account', conversation) is None
 
 
@@ -415,7 +423,9 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         processing, 'should_discard_conversation', lambda *_args, **_kwargs: pytest.fail('paid discard')
     )
     conversation = SimpleNamespace(
-        transcript_segments=[SimpleNamespace(text='A brief synthetic remark')],
+        transcript_segments=[
+            TranscriptSegment(text='A brief synthetic remark', start=0, end=1, speaker_id=0, is_user=False)
+        ],
         language='en',
         started_at=START,
         photos=[],
@@ -607,7 +617,7 @@ def test_app_result_receives_the_resolved_output_language_only_in_cohort(monkeyp
     monkeypatch.setenv(packet.FLAG, mode)
     app = SimpleNamespace(id='synthetic-app', name='Synthetic summary', enabled=True, works_with_memories=lambda: True)
     conversation = SimpleNamespace(
-        id='synthetic-conversation', language='zh', started_at=None, photos=[], apps_results=[]
+        id='synthetic-conversation', language='zh', started_at=None, photos=[], apps_results=[], transcript_segments=[]
     )
     seen = []
     monkeypatch.setattr(processing, 'get_available_apps', lambda *_args: [app])

@@ -62,6 +62,7 @@ from prometheus_client import Counter
 
 from database.firestore_document_probe import collection_pattern, is_plumbing_module
 from database.firestore_read_origin import current_read_origin
+from database.plane_leak_probe import record_plane_leak
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,7 @@ _WRITE_PLUMBING_MODULES = frozenset(
         'database.list_projection',
         'database.memory_change_head',
         'database.action_item_write_fence',
+        'database.batch_privacy_write_fence',
         # The transactional callback has returned before the SDK commits, so the
         # retry helper would otherwise be the first frame for every caller of it
         # (~50% of Cloud Run writes on 2026-11-01).
@@ -258,6 +260,7 @@ def _record(writes: Iterable[Any], caller: str) -> None:
         tally: dict[tuple[str, str, str], int] = {}
         for write in writes:
             op, database, parts = write_op(write)
+            record_plane_leak(parts, 'write')
             key = (collection_pattern(parts) if parts else _UNKNOWN, op, database)
             tally[key] = tally.get(key, 0) + 1
     except Exception:

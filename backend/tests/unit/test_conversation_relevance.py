@@ -75,6 +75,7 @@ def test_only_user_actions_skip_assessment():
     # separately approved threshold before any paid work; a post-hoc discard
     # would spend the finalization and drop the only recovered copy. SMART_MERGE
     # refreshes a survivor whose fragments were each already assessed and kept.
+    # SCREEN_EVIDENCE similarly refreshes notes on a completed, already-kept row.
     # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
     # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
     # is unchanged — only confirmed same-event meeting context is new — so
@@ -88,6 +89,7 @@ def test_only_user_actions_skip_assessment():
         ProcessingTrigger.SERVER_RECOVERY,
         ProcessingTrigger.BACKLOG_CHOICE,
         ProcessingTrigger.SILENT_BACKFILL,
+        ProcessingTrigger.SCREEN_EVIDENCE,
     }
 
 
@@ -306,7 +308,7 @@ def test_a_model_discard_next_to_a_kept_conversation_links_to_it():
     assert decision.as_record()['neighbor_id'] == 'meeting'
 
 
-def test_neighbor_is_checked_before_a_rule_can_discard():
+def test_content_free_rule_discards_without_a_neighbor_lookup():
     lookup = MagicMock(return_value=None)
     decision = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
@@ -321,4 +323,31 @@ def test_neighbor_is_checked_before_a_rule_can_discard():
         neighbor=lookup,
     )
     assert decision.reason == 'filler_only'
-    lookup.assert_called_once()
+    lookup.assert_not_called()
+
+
+def test_neighbor_is_checked_before_the_model_sees_content():
+    lookup = MagicMock(return_value=None)
+    decide_relevance(
+        trigger=ProcessingTrigger.CAPTURE_END,
+        texts=['Coming over there in a second.'],
+        speech_seconds=None,
+        has_photos=False,
+        user_kept=False,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=MagicMock(return_value=False),
+        calendar_retains=MagicMock(return_value=False),
+        neighbor=lookup,
+    )
+    lookup.assert_called()
+
+
+def test_repeated_outro_rule_uses_existing_recoverable_relevance_path():
+    decision, model, _ = _decide(texts=['Thanks for watching.'] * 3)
+    assert decision.discard and decision.reason == 'repeated_asr_outro'
+    model.assert_not_called()
+    restored, _, _ = _decide(texts=['Thanks for watching.'] * 3, user_kept=True)
+    assert not restored.discard
+    rescued, _, _ = _decide(texts=['Thanks for watching.'] * 3, calendar=MagicMock(return_value=True))
+    assert not rescued.discard and rescued.reason == 'calendar_overlap'

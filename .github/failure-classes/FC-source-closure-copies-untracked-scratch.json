@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-source-closure-copies-untracked-scratch",
+  "violated_contract": "The runtime image source closure must be reproducible from tracked source. Copying a backend directory must not depend on untracked scratch output that a concurrent test may write or delete, so the check cannot fail nondeterministically on a developer checkout.",
+  "canonical_prevention": "IGNORED_SOURCE_DIRECTORIES in backend/scripts/runtime_image_contracts.py skips the untracked scratch directories _temp, _samples, _speech_profiles and _segments, as well as the existing tool caches. Unit tests assert that these directories are not copied and that a source package with a colliding name is still copied.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/runtime_image_contracts.py",
+    "backend/tests/unit/test_runtime_image_contracts.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/runtime_image_contracts.py",
+    "backend/tests/unit/test_runtime_image_contracts.py",
+    "backend/tests/unit/test_runtime_image_source_closures_half_a.py",
+    "backend/tests/unit/test_runtime_image_source_closures_half_b.py"
+  ],
+  "status": "open"
+}

@@ -1,7 +1,7 @@
 """Fenced, duration-fair pull scheduling over durable transactional documents."""
 
-from dataclasses import asdict
 import hashlib
+from dataclasses import dataclass
 import math
 import logging
 import random
@@ -11,12 +11,17 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
+    SCHEDULER_SHARDS,
+    control_candidate_fanout,
+    pull_busy_borrow_enabled,
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
+    skip_unchanged_control_write_enabled,
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -25,9 +30,10 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
+from utils.batch_pipeline.control import activate, consume_frontier_hint, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
+from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -41,6 +47,14 @@ HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RedriveResult:
+    """Updated job staged by a successful re-drive and its post-commit signal."""
+
+    job: dict
+    spent: bool = False
 
 
 def _admission_retry_delay(value: object, streak: int) -> float:
@@ -60,6 +74,7 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue_key = f"{job['priority']}_{job['owner_key']}"
     queue = tx.get('queues', queue_key) or {'head': '', 'tail': '', 'deficit': 0.0, 'continuing': False}
     ring = control['rings'][str(job['priority'])]
+    tail = None
     if not queue['head']:
         if len(ring) >= MAX_ACTIVE_OWNERS:
             raise RuntimeError('active owner capacity exceeded; admission must retry')
@@ -71,12 +86,19 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     else:
         tail = tx.get('jobs', queue['tail'])
         tail['next'] = job['segment_id']
-        tx.put('jobs', tail['segment_id'], tail)
     queue['tail'] = job['segment_id']
     job['next'] = ''
+    control_key = scheduler_control_key(job['owner_key'])
+    activate(tx, control, job['priority'], job['available_at'], control_key)
+    # An owner already in the ring, on an active shard with no pull backoff to clear, leaves
+    # the shard identical; rewriting it only conflicts with every pull and admission on it.
+    write_control = not skip_unchanged_control_write_enabled() or control != tx.get('control', control_key)
+    # Finish queue/frontier/control reads before staging the first write.
+    if tail is not None:
+        tx.put('jobs', tail['segment_id'], tail)
     tx.put('queues', queue_key, queue)
-    activate(tx, control, job['priority'], job['available_at'])
-    tx.put('control', scheduler_control_key(job['owner_key']), control)
+    if write_control:
+        tx.put('control', control_key, control)
 
 
 def _pool_allows(job: dict, max_seconds: float, shared_gpu: bool) -> bool:
@@ -240,7 +262,7 @@ class Scheduler:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
         # Live jobs are never shadow; keep their documents free of the field.
-        immutable = {key: value for key, value in asdict(item).items() if key != 'shadow'}
+        immutable = {key: value for key, value in item.to_dict().items() if key != 'shadow'}
         immutable['priority'] = int(item.priority)
         if previous.get('state') == 'record_pending' and (
             previous.get('owner_id') != item.owner_id
@@ -262,7 +284,8 @@ class Scheduler:
         watermark = owner.get('watermark')
         control = read_control(tx, scheduler_control_key(key))
         job = {
-            **immutable,
+            # Unstamped work keeps the legacy document shape; readers default to None.
+            **{key: value for key, value in immutable.items() if key != 'timing_store' or value is not None},
             'policy': policy.to_dict(),
             'policy_source': 'admission',
             'protocol_version': 1,
@@ -291,7 +314,14 @@ class Scheduler:
         tx.put('owners', key, owner)
         return True
 
-    def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
+    def pull(
+        self,
+        now: float,
+        limit: int = 1,
+        *,
+        capacity: PoolCapacity | None = None,
+        borrow_when_fresh_busy: bool = False,
+    ) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
         with self._contention_lock:
@@ -315,6 +345,9 @@ class Scheduler:
         # One shard transaction may lease several units from the ring it has
         # already read; the kill switch restores one lease per transaction.
         multi = pull_multi_lease_enabled() and shared_gpu_id is None
+        # Only a dedicated-batch lane may borrow past claimed fresh shards; a
+        # shared live GPU takes one short item and stays strictly fresh-first.
+        borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
         while len(result) < limit:
             remaining = limit - len(result) if multi else 1
             try:
@@ -325,6 +358,7 @@ class Scheduler:
                     shared_gpu_id=shared_gpu_id,
                     max_fresh=remaining,
                     max_backfill=min(remaining, backfill_budget),
+                    borrow_when_fresh_busy=borrow,
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
@@ -385,6 +419,7 @@ class Scheduler:
         shared_gpu_id: str | None = None,
         max_fresh: int = 1,
         max_backfill: int = 1,
+        borrow_when_fresh_busy: bool = False,
     ) -> list[LeasedWork]:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
@@ -395,14 +430,34 @@ class Scheduler:
             spread = shard_spread_enabled()
             excluded = set()
             busy = False
+            candidates = None
+            refreshed = False
+            candidate_fanout = control_candidate_fanout()
             for _ in range(128):
                 if spread:
-                    shard = self.store.control_candidate(
-                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
-                    )
+                    if candidates is None:
+                        candidates = self.store.control_candidates(
+                            int(priority), self.pool, now, worker_id=self.worker_id, fanout=candidate_fanout
+                        )
+                    shard = next((key for key in candidates if key not in excluded), None)
                 else:
                     shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
+                    if (
+                        spread
+                        and busy
+                        and not refreshed
+                        and candidate_fanout < SCHEDULER_SHARDS
+                        and candidates is not None
+                        and len(candidates) >= candidate_fanout
+                    ):
+                        # A full busy prefix proves nothing about the remaining
+                        # shards. Spend the sole refresh on the legacy width,
+                        # skipping every already-tried claim locally.
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
+                        continue
                     break
                 receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
                 if receipts:
@@ -419,15 +474,28 @@ class Scheduler:
                     excluded.add(shard)
                     busy = True
                     continue
+                if spread:
+                    if not eligible:
+                        excluded.add(shard)
+                    # Share one wide refresh budget with busy-window refill.
+                    # Later deficit rounds retry the eligible head locally.
+                    if not refreshed:
+                        candidates = None
+                        candidate_fanout = SCHEDULER_SHARDS
+                        refreshed = True
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
             else:
                 return []
-            if busy:
+            if busy and not borrow_when_fresh_busy:
                 # Busy higher-priority work is still pending. Do not borrow
                 # backfill capacity while another puller owns its shard.
                 return []
+            # A borrowing lane found every eligible shard of this priority
+            # claimed: each claimant is serving that work right now, so this
+            # lane leases the next priority instead of idling. The pump's
+            # first lane never borrows, which keeps fresh-first per pump.
         return []
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
@@ -460,6 +528,7 @@ class Scheduler:
             if gpu.get('token'):
                 return None, 'reserved', observations
             control = read_control(tx, shard)
+            consume_frontier_hint(tx, control, int(priority), current_time())
             ring = control['rings'][str(int(priority))]
             eligible_queues, blocked = {}, set()
             owner_count = max(1, len(ring))
@@ -641,12 +710,12 @@ class Scheduler:
         def commit(tx):
             job = tx.get('jobs', result.segment_id)
             if job.get('state') in {'result_ready', 'committed'}:
-                return job.get('result') == asdict(result) and job.get('token') == token, False, 0
+                return result.matches_persisted(job.get('result')) and job.get('token') == token, False, 0
             if not owns_lease(job, token, now):
                 return False, False, 0
             if job.get('requires_compute_admission') and job.get('compute_admission_token') != token:
                 return False, False, 0
-            job.update(state='result_ready', result=asdict(result), ready_at=now)
+            job.update(state='result_ready', result=result.to_dict(), ready_at=now)
             job.pop('retry_started_at', None)
             job.pop('admission_refusals', None)
             tx.put('jobs', result.segment_id, job)
@@ -861,9 +930,104 @@ class Scheduler:
         return recovered
 
     @staticmethod
-    def redrive_in_transaction(tx: Transaction, job: dict, now: float) -> bool:
-        if job.get('state') != 'dead' or not job.get('merge_pending'):
+    def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Requeue one CAS-verified missing-input repair under its original identity.
+
+        The artifact-missing store owns the content/privacy/staging checks. No
+        paid recovery intent or sibling receipt is reset by this queue mutation.
+        """
+        marker = job.get('artifact_disposition') or {}
+        if (
+            job.get('state') != 'quarantined'
+            or job.get('recovery_state') != 'failed_held'
+            or marker.get('state') != 'restored'
+            or job.get('result')
+            or job.get('merge_pending') is not False
+            or job.get('token')
+            or job.get('lease_until', 0) > now
+        ):
+            raise ValueError('verified missing-input repair required')
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0)
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
+
+    @staticmethod
+    def held_requeue_eligible(tx: Transaction, job: dict, now: float, *, allow_dead=True) -> bool:
+        """Dormant worker holds only; never reopen an active paid/operator intent."""
+        held_dead = (
+            allow_dead
+            and job.get('state') == 'dead'
+            and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
+        )
+        state_ok = job.get('state') == 'quarantined' or held_dead
+        lease_until = job.get('lease_until', 0)
+        if (
+            not state_ok
+            or job.get('quarantine_reason') != 'worker_failed'
+            # Provider-STT units do not belong to the GPU DRR ring. Their
+            # vendor-attempt custody needs its own sanctioned re-drive path.
+            or (job.get('stt_route') or {}).get('stt_route') == 'provider'
+            or job.get('recovery_state') not in {'held', 'failed_held'}
+            or job.get('result')
+            # Expiry retains the legacy dead re-drive contract. Also accept
+            # earlier held-expired rows written with merge_pending=False.
+            or not (job.get('merge_pending') is False or (held_dead and job.get('merge_pending') is True))
+            or job.get('token')
+            or isinstance(lease_until, bool)
+            or not isinstance(lease_until, (int, float))
+            or not math.isfinite(lease_until)
+            or lease_until > now
+        ):
             return False
+        recovery = job.get('recovery') or {}
+        if recovery and not recovery.get('settled_at'):
+            return False
+        if any(
+            job.get(key) and (job.get(key) or {}).get('state') not in {'completed', 'failed_held'}
+            for key in ('silence_disposition', 'terminal_disposition', 'speech_redrive')
+        ):
+            return False
+        return not tx.get('results', job['segment_id'])
+
+    @staticmethod
+    def requeue_quarantined_in_transaction(
+        tx: Transaction, job: dict, now: float, *, account=True
+    ) -> RedriveResult | None:
+        """CAS requeue without deleting audio, results, intent or attempt history.
+
+        RecoveryStore owns content/ledger/privacy checks, as the missing-input
+        store does for restore_audio_in_transaction. The commit fence still runs.
+        """
+        if not Scheduler.held_requeue_eligible(tx, job, now):
+            return None
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        owner = tx.get('owners', job['owner_key'])
+        owner['revision'] = owner.get('revision', 0) + 1
+        job.update(state='ready', available_at=now, merge_pending=True, token='', lease_until=0.0, held_requeued_at=now)
+        spent = account_held_redrive(job, now) if account else False
+        _append(tx, control, job)
+        tx.put('owners', job['owner_key'], owner)
+        tx.put('jobs', job['segment_id'], job)
+        return RedriveResult(job, spent)
+
+    @staticmethod
+    def redrive_in_transaction(
+        tx: Transaction, job: dict, now: float, *, operator=False, checked=None
+    ) -> RedriveResult | None:
+        """Return the staged job and spent signal; refuse without a result."""
+        # Status polling must not silently undo an input-expiring terminal.
+        if job.get('dead_letter_reason') == 'input_expiring' and not operator:
+            return None
+        if job.get('state') != 'dead' or not job.get('merge_pending'):
+            return None
+        if job.get('dead_letter_reason') == 'held_expired':
+            # A fresh budget and its telemetry require the same content-owner,
+            # privacy, result and active-intent CAS as an operator requeue.
+            if checked is None:
+                return None
+            job, _ = checked(tx, job['segment_id'])
+            return Scheduler.requeue_quarantined_in_transaction(tx, job, now)
         control = read_control(tx, scheduler_control_key(job['owner_key']))
         job.update(
             state='ready',
@@ -875,11 +1039,20 @@ class Scheduler:
         )
         _append(tx, control, job)
         tx.put('jobs', job['segment_id'], job)
-        return True
+        return RedriveResult(job)
 
     def redrive_dead(self, segment_id: str, now: float) -> bool:
         """Authenticated recovery of historical dead records; never skips a gap."""
-        return self.store.run(lambda tx: self.redrive_in_transaction(tx, tx.get('jobs', segment_id), now))
+        outcome = self.store.run(
+            lambda tx: self.redrive_in_transaction(
+                tx, tx.get('jobs', segment_id), now, operator=True, checked=RecoveryFence(self.store).checked
+            )
+        )
+        if outcome is not None and outcome.spent:
+            from utils.backlog_metrics import record_transition
+
+            record_transition('held_redrive_budget_spent')
+        return bool(outcome)
 
     def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
         """Only the hardware admission owner may call this after GPU quiescence.
@@ -902,3 +1075,51 @@ class Scheduler:
             return True
 
         return self.store.run(commit)
+
+
+def held_redrives(job: dict) -> int:
+    """Nonnegative integer metadata; integral Firestore doubles are valid.
+
+    Invalid legacy metadata is repaired from zero on the next committed re-drive.
+    Log only the static signal, never the malformed value or content.
+    """
+    count = job.get('held_redrives', 0)
+    if type(count) is int and count >= 0:
+        return count
+    if type(count) is float and math.isfinite(count) and count >= 0 and count.is_integer():
+        return int(count)
+    logger.warning('event=batch_held_redrives_malformed action=restart_budget')
+    return 0
+
+
+def account_held_redrive(job: dict, now: float) -> bool:
+    """Account a verified held re-drive; return its once-per-unit spent event.
+
+    Durable accounting bounds class 3 independently of the telemetry switch.
+    The caller emits the returned signal only after the transaction commits.
+    Input-expiring repairs consume no held grant.
+    """
+    if job.get('dead_letter_reason') == 'input_expiring':
+        return False
+    prior = held_redrives(job)
+    spent = prior >= MAX_HELD_REDRIVES and 'held_redrive_budget_spent_at' not in job
+    job['held_redrives'] = prior + 1
+    if spent:
+        job['held_redrive_budget_spent_at'] = now
+    if held_redrive_budget_enabled() and prior < MAX_HELD_REDRIVES and retry_cap_enforced_for(job.get('owner_id', '')):
+        job['held_redrive_last_attempt'] = job.get('attempt', 0)
+        job['attempt'] = 0
+    return spent and held_redrive_counter_enabled()
+
+
+def retry_cap_enforced_for(owner_id: str) -> bool:
+    """Whether the batch lease-expiry retry cap quarantines at the cap for this owner."""
+    # Rollback: switching class 1 OFF stops new cap enforcement; existing grants
+    # persist until they finish; no clawback. Each grant is capped at
+    # MAX_ATTEMPTS only while the retry cap enforces for the owner (class 1 on,
+    # or the owner in the served cohort). With class 1 off, lease expiries
+    # defer, as on main.
+    from utils.capture.retry_cap import retry_cap
+
+    decision = retry_cap(owner_id, 0, 1, enforce=True)
+    return decision is not None and decision.serving

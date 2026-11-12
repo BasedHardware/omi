@@ -1,3 +1,9 @@
+// Root observable app state: onboarding, permissions (including system audio),
+// capture mode, and the long-lived services the SwiftUI tree observes.
+//
+// Permission status is modeled explicitly (unknown/granted/denied/unsupported)
+// rather than as booleans -- the unsupported case must hide a feature cleanly
+// instead of merely disabling it, on every macOS version from the 14.0 floor.
 @preconcurrency import AVFoundation
 import Combine
 @preconcurrency import ObjectiveC
@@ -687,6 +693,7 @@ class AppState: ObservableObject {
   }
 
   var wasTranscribingBeforeSleep = false
+  var darkWakeRearmTask: Task<Void, Never>?
   var conversationRoleBeforeSleep: MeetingConversationBoundaryPolicy.Role = .ambient
   var lastScreenLockTime: Date?
   var lastScreenUnlockTime: Date?
@@ -940,6 +947,7 @@ class AppState: ObservableObject {
         }
         // Flush final sync changes before sleep
         await AgentSyncService.shared.stop()
+        self.armDarkWakeCaptureRearm()
       }
     }
 
@@ -955,18 +963,20 @@ class AppState: ObservableObject {
       // Restart transcription if it was active before sleep
       Task { @MainActor in
         guard let self = self else { return }
+        self.cancelDarkWakeCaptureRearm()
         self.lastCaptureWakeAt = Date()
         if self.wasTranscribingBeforeSleep && AssistantSettings.shared.audioRecordingMode != .off {
           log("System wake: Restarting transcription (was active before sleep)")
           // Brief delay to let audio subsystem settle after wake
-          try? await Task.sleep(for: .seconds(2))
-          if !self.isTranscribing {
+          try? await Task.sleep(for: SleepCaptureRearmPolicy.audioSettleDelay)
+          if self.claimSleepRestart(signal: .didWake) {
             self.startTranscription(
               conversationRole: self.conversationRoleBeforeSleep, userInitiated: false,
               launchContext: .wake)
           }
+        } else {
+          self.wasTranscribingBeforeSleep = false
         }
-        self.wasTranscribingBeforeSleep = false
       }
     }
 

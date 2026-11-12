@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -355,6 +356,57 @@ void main() {
     expect(limiter.hasPersistedFairUseState, isFalse);
     expect(limiter.isBackendBusyLimited, isTrue);
     expect(limiter.reason, RateLimitReason.backendBusy);
+  });
+
+  SyncUploadGate failingGate(SyncUploadHttpException error) => SyncUploadGate(
+        limiter: limiter,
+        fairUseStatusLoader: () async => null,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          throw error;
+        },
+      );
+
+  test('a recording-scoped 503 wait never pauses the account drain', () async {
+    final gate = failingGate(const SyncUploadHttpException(
+      503,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: 30,
+      reasonCode: 'record_capture_pending',
+    ));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isFalse);
+  });
+
+  test('an unscoped 503 with Retry-After still pauses the account', () async {
+    final gate = failingGate(const SyncUploadHttpException(
+      503,
+      'Server is temporarily unavailable',
+      retryAfterSeconds: 30,
+    ));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+  });
+
+  test('only the closed record_capture_pending body code is read from a 5xx', () {
+    expect(
+      syncUploadServerWaitReasonCode(http.Response('{"code":"record_capture_pending","detail":"x"}', 503)),
+      'record_capture_pending',
+    );
+    expect(syncUploadServerWaitReasonCode(http.Response('{"code":"sync_dispatch_unavailable"}', 503)), isNull);
+    expect(syncUploadServerWaitReasonCode(http.Response('Service Unavailable', 503)), isNull);
   });
 
   test('one generic 429 closes admission and caps capacity backoff at 24 hours', () async {

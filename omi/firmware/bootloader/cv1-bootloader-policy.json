@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "region_start": 0,
+  "region_end": 65536,
+  "fill": 255,
+  "approved_boot_sha256": [
+    "6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1",
+    "c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086"
+  ],
+  "factory_source": "omi/firmware/FLASH_3.0.8/MAC/merged.hex",
+  "release_hex": "pinned custom MCUboot plus exact staged OTA signed app; excludes storage, UICR and network",
+  "build_boot_sha256": "6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1",
+  "qualification": {
+    "date": "2026-11-11",
+    "boot_sha256": "6cfd4a70a715c8885dd86db96eb97286590852dd4b0f28d9f7374faad235cad1",
+    "receipt": "docs/cv1-bootloader-release-audit.md#jig-qualification-2026-11-11",
+    "mode": "overwrite-only; no trial revert"
+  }
+}

@@ -63,7 +63,7 @@ def saturated(inline_session, monkeypatch):
         return result
 
     async def run(executor, fn, *args, **kwargs):
-        if fn is pusher.read_pcm:
+        if fn is pusher.upload_audio_chunks_batch:
             entered.set()
             await release.wait()
         return await real_run(executor, fn, *args, **kwargs)
@@ -178,7 +178,7 @@ async def test_expiry_enters_drain_with_slot_intact_and_late_finish(saturated, r
 @pytest.mark.asyncio
 async def test_closed_owner_admission_failure_keeps_fence_and_durable_slot(saturated, monkeypatch, remote):
     state = saturated
-    monkeypatch.setattr(pusher, 'retain_closed_record_drain', lambda _: False)
+    monkeypatch.setattr(pusher, 'retain_closed_record_drain', lambda _, **kwargs: False)
     handler = asyncio.create_task(pusher._websocket_util_trigger(state.socket(), 'owner', 16000, audio_custody=1))
     try:
         await at_capacity(state)
@@ -448,7 +448,7 @@ async def test_seal_only_admission_retry_keeps_closed_drain_owner(inline_session
         owners.append(owner)
         return owner
 
-    def keep(task):
+    def keep(task, **kwargs):
         retained.append(task)
         return retain(task)
 
@@ -538,3 +538,97 @@ async def test_background_failure_keeps_application_classification_when_receiver
         if not handler.done():
             handler.cancel()
         await asyncio.gather(handler, return_exceptions=True)
+
+
+async def test_lease_failure_keeps_tail_unstored_and_unacknowledged(inline_session, remote, monkeypatch):
+    from database import record_audio
+
+    client, path, barrier, projected = inline_session
+    client.rows[('users', 'owner')] = {'private_cloud_sync_enabled': True}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    begin = barrier.begin_recording
+
+    async def expired_begin(cid):
+        await begin(cid)
+        barrier.lease_renewed_at[cid] -= 7200
+
+    monkeypatch.setattr(barrier, 'begin_recording', expired_begin)
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', MagicMock(side_effect=OSError('unavailable')))
+    windows = []
+    retained = pusher.RetainedPcmWindow
+
+    def retain(*args):
+        window = retained(*args)
+        windows.append(window)
+        return window
+
+    monkeypatch.setattr(pusher, 'RetainedPcmWindow', retain)
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert not remote.list_blobs('raw-live/') and not remote.list_blobs('audio-outbox/')
+    assert not _sent_receipts(sock) and not projected
+    assert len(windows) == 1 and bytes(windows[0].payload) == pcm
+    assert windows[0].frames
+    assert client.rows[path]['record_upload_sessions']
+    assert not client.rows[path].get('record_audio_closed')
+
+
+@pytest.mark.parametrize('disconnect_first', [False, True])
+async def test_batch_renewal_outage_beyond_upload_retries_retains_audio(
+    inline_session, remote, monkeypatch, disconnect_first
+):
+    from database import record_audio
+
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    begin = barrier.begin_recording
+
+    async def expired_begin(cid):
+        await begin(cid)
+        barrier.lease_renewed_at[cid] -= 7200
+
+    monkeypatch.setattr(barrier, 'begin_recording', expired_begin)
+    fail = AsyncMock(wraps=barrier.fail_recording)
+    monkeypatch.setattr(barrier, 'fail_recording', fail)
+    renew = record_audio.renew_record_token_lease
+    attempts = []
+    outage_attempts = pusher.PRIVATE_CLOUD_SYNC_MAX_RETRIES + 3
+
+    def unavailable(*args, **kwargs):
+        attempts.append(1)
+        if len(attempts) <= outage_attempts:
+            assert not projected
+            raise OSError('persistent metadata outage')
+        return renew(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', unavailable)
+    stored = asyncio.Event()
+    upload = pusher.upload_audio_chunks_batch
+
+    def store(*args, **kwargs):
+        result = upload(*args, **kwargs)
+        loop.call_soon_threadsafe(stored.set)
+        return result
+
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', store)
+    pcm = b'\x01\x00' * 160
+    sock = Socket(_audio_frames('conversation', [pcm]))
+    receive = sock.receive_bytes
+
+    async def receive_until_stored():
+        if not sock.frames and not disconnect_first:
+            await stored.wait()
+        return await receive()
+
+    sock.receive_bytes = receive_until_stored
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'owner', 16000), 5)
+    assert len(attempts) == outage_attempts + 1
+    assert len(projected) == 1 and projected[0][0][0]['data'] == pcm
+    fail.assert_not_awaited()
+    assert not client.rows[path].get('record_upload_failed')

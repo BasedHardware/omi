@@ -6,13 +6,15 @@ keyed per conversation (``manual_labels:<conversation_id>``), so re-running, res
 or overlapping with live labels never counts a conversation twice.
 """
 
+from database import transcript_pointer
+
 from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from google.cloud import firestore
 
 from database.people_generation import bump_people_generation
-from database._client import run_transactional
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from models.person_confidence import AUTO_CORRECTED, MANUAL_LABELS
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.person_evidence import reconcile_evidence, receipt_person_ids
@@ -70,9 +72,12 @@ def backfill_person(
             receipt = conversations_db.decode_manual_speaker_assignments(
                 uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
             )
-            segments = conversations_db.decode_transcript_segments_verified(
-                uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
-            )
+            try:
+                segments = conversations_db.decode_transcript_segments_verified(
+                    uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
+                )
+            except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                return None
             # Only receipt-covered segments prove a manual label. A historical
             # text match with no provenance must not turn into positive evidence.
             covered = [

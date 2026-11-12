@@ -19,7 +19,7 @@ unit billed exactly once per vendor) and bound it, pending a decision on the pai
 import pytest
 
 from database import sync_ledger  # noqa: F401  # warm legacy_dark's lazy ledger import outside the call budget
-from testing.vendor_drill import DrillWorld, VendorScript, assert_invariants, route_table
+from testing.vendor_drill import EPOCH, DrillWorld, VendorScript, assert_invariants, route_table
 from utils.batch_pipeline import admission  # noqa: F401  # warm its fair-use/backfill imports
 from utils.batch_pipeline.vendor_route_contracts import VENDOR_HELD
 
@@ -348,3 +348,73 @@ def test_daily_caps_are_never_exceeded(monkeypatch):
             billed[post.service] += world.units[post.segment_id].duration
     assert billed['modulate'] <= 0.1 * 3600 and billed['soniox'] <= 0.05 * 3600
     assert any(world.job(s)['state'] == VENDOR_HELD for s in world.units)  # capped units wait, not drop
+
+
+# --- GPU saturation overflow (the supported failover path) -------------------------------------------
+
+ENTER = 600.0  # BATCH_VENDOR_OVERFLOW_ENTER_SECONDS for the drill (exit at half)
+GATE = 5  # BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS for the drill
+
+
+def overflow_world(monkeypatch, *, enabled=True):
+    world = DrillWorld(monkeypatch, gpu_workers=0, overflow=True)
+    world.set_env('BATCH_VENDOR_OVERFLOW_ENTER_SECONDS', str(int(ENTER)))
+    world.set_env('BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS', str(GATE))
+    world.set_env('BATCH_VENDOR_OVERFLOW_ENABLED', 'true' if enabled else 'false')
+    populate(world, owners=BUSY, until=4200.0, languages=('en', 'ja'))
+    world.at(1800.0, lambda w: w.set_gpu_workers(8))  # GPU capacity returns after 30 min
+    return world
+
+
+def english_routes(world, start, end):
+    return {
+        world.units[s].route
+        for s in world.units
+        if world.units[s].language == 'en' and start <= world.units[s].admitted_at - EPOCH < end
+    }
+
+
+def overflow_spend_seconds():
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    return metrics.OVERFLOW_AUDIO.labels(route='modulate')._value.get()
+
+
+def overflow_decisions():
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    return metrics.ROUTE_DECISIONS.labels(route='modulate', reason='gpu_overflow')._value.get()
+
+
+def test_gpu_unavailability_fires_overflow_to_modulate_and_releases_when_capacity_returns(monkeypatch):
+    """No GPU worker for 30 minutes: fresh English units first wait on GPU; once the oldest
+    admissible fresh unit is ENTER old with GATE waiting, the real sampler latches and new English
+    units admit to Modulate (gpu_overflow). After workers return and the ring drains below the exit
+    gate, new English units go back to GPU. Nothing is lost; the gauge and counter record it."""
+    from utils.batch_pipeline import vendor_route_metrics as metrics
+
+    before, spent_before = overflow_decisions(), overflow_spend_seconds()
+    world = overflow_world(monkeypatch)
+    assert_invariants(world.run(3 * 3600))
+    # The spend alert's counter: billed Modulate audio of the overflowed (GPU-capable) English
+    # units only; Japanese units start on Modulate by capability and never count.
+    overflowed = [u for u in world.units.values() if u.language == 'en' and u.route == 'modulate']
+    assert overflowed
+    assert overflow_spend_seconds() - spent_before == pytest.approx(sum(u.duration for u in overflowed))
+    assert english_routes(world, 0.0, ENTER) == {'gpu'}  # below the enter age nothing spills
+    assert 'modulate' in english_routes(world, ENTER + 60.0, 1800.0)  # saturated: overflow fires
+    assert english_routes(world, 3000.0, 4200.0) == {'gpu'}  # drained: back on GPU
+    answers = [answer for _, answer in world.overflow_answers]
+    assert True in answers and answers[-1] is False  # latched, then released
+    assert overflow_decisions() > before
+    assert metrics.GPU_OVERFLOW_ACTIVE._value.get() == 0
+
+
+def test_overflow_kill_switch_keeps_every_capable_unit_on_gpu_through_the_outage(monkeypatch):
+    before = overflow_decisions()
+    spent_before = overflow_spend_seconds()
+    world = overflow_world(monkeypatch, enabled=False)
+    assert_invariants(world.run(3 * 3600))
+    assert english_routes(world, 0.0, 4200.0) == {'gpu'}
+    assert overflow_decisions() == before
+    assert overflow_spend_seconds() == spent_before  # Japanese Modulate traffic is not overflow spend

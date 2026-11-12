@@ -207,7 +207,7 @@ void main() {
       final l10n = summaryL10n(tester);
       switch (item.slug) {
         case '01-empty-state' || '11-empty-state-long-title':
-          expect(find.text(l10n.summaryWithOmi), findsOneWidget);
+          expect(find.text(l10n.summaryWithTemplate('The Best Summarizer')), findsOneWidget);
         case '02-sheet-omi-and-template':
           expect(find.text('Paul Graham'), findsOneWidget);
           expect(find.text(l10n.lastUsedLabel), findsOneWidget);

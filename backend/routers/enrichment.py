@@ -7,21 +7,48 @@ rows bound to either handler drain (contract (b) invariant 7). Responses follow 
 an unexpected exception.
 """
 
+import asyncio
 import logging
 import os
 import re
+import threading
 import time
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
+from utils.workers.retry import retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_KINDS = {'enrichment', 'sync_reprocess'}
+_KINDS = {'enrichment', 'sync_reprocess', 'batch_final_pass'}
+# TimeoutMiddleware cuts an attempt at HTTP_POST_TIMEOUT (600s), so the request log records a bare 504
+# while this thread may still be working. Retries and slow deliveries log their real end and timing.
+SLOW_DELIVERY_SECONDS = 120.0
+# TimeoutMiddleware cuts this path at HTTP_POST_TIMEOUT (600s) with a bare 504 while the worker thread keeps
+# its heartbeated lease, so a slow delivery held a queue slot for the full 600s. Answer a 409 retry at the
+# budget instead; the worker still settles its own lease, and the queue retry or sweep claims after it.
+DELIVERY_BUDGET_SECONDS = 300.0
+
+
+def _delivery_budget() -> float:
+    try:
+        return float(os.getenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', DELIVERY_BUDGET_SECONDS))
+    except ValueError:
+        return DELIVERY_BUDGET_SECONDS
+
+
+def _drain(work: asyncio.Future) -> None:
+    # The abandoned delivery's own settlement already ran; only retrieve its outcome so it is not lost silently.
+    if not work.cancelled() and work.exception() is not None:
+        logger.warning(
+            'event=enrichment_delivery outcome=error phase=after_budget exception_type=%s',
+            type(work.exception()).__name__,
+        )
 
 
 def _audience() -> str:
@@ -48,12 +75,37 @@ def _task(payload: object) -> tuple[str, str] | None:
     return key, token
 
 
-def consume(key: str, token: str):
-    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler."""
+def consume(key: str, token: str, accepted: float | None = None, abandoned: threading.Event | None = None):
+    """One push delivery through the enrichment consumer; shared with the legacy sync-jobs handler.
+
+    ``accepted`` is the handler's ``time.monotonic()`` before the executor hop. Only a retry or a slow
+    delivery logs its executor wait and run time (no ids). ``abandoned`` is set once the route answered its
+    budget 409. That retry met this delivery's lease and was consumed as BUSY, so a RETRY here re-arms the
+    row under a fresh wake instead of stranding it.
+    """
+    from database.outbox import Outcome
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
-    return run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+    started = time.monotonic()
+    accepted = started if accepted is None else accepted
+    outcome, reason = 'error', 'unexpected'
+    try:
+        result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, token, now=time.time())
+        outcome, reason = result.outcome.value, result.reason.value
+        if abandoned is not None and abandoned.is_set() and result.outcome is Outcome.RETRY:
+            ENRICHMENT_OUTBOX.rearm_released(key, token, now=time.time())
+        return result
+    finally:
+        finished = time.monotonic()
+        if outcome == Outcome.RETRY.value or finished - accepted >= SLOW_DELIVERY_SECONDS:
+            logger.info(
+                'event=enrichment_delivery outcome=%s reason=%s wait_s=%.1f run_s=%.1f',
+                outcome,
+                reason,
+                started - accepted,
+                finished - started,
+            )
 
 
 @router.post('/v2/enrichment/run', include_in_schema=False)
@@ -63,13 +115,43 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
     except ValueError:
         payload = None
     task = _task(payload)
-    if task is None:
+    if payload is None or task is None:
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
+    if payload['kind'] == 'batch_final_pass':
+        from utils.conversations.final_pass_retry import consume as consume_speaker_pass
+
+        return JSONResponse(
+            status_code=200, content=await run_blocking(postprocess_executor, consume_speaker_pass, *task)
+        )
     from utils.enrichment import outbox
 
     if not outbox.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    result = await run_blocking(postprocess_executor, consume, *task)
+    from utils.enrichment.age_gate import max_age_seconds, park_if_expired
+
+    # Historical work must not wait behind the long-running callback pool.
+    if max_age_seconds() > 0:
+        try:
+            if await run_blocking(db_executor, park_if_expired, *task):
+                return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'age_gate_72h'})
+        except Exception as error:
+            from utils.enrichment.consumer import transient_dependency
+
+            if not transient_dependency(error):
+                raise
+            return retry_response(RetryReason.DEPENDENCY_WARMING)
+    budget = _delivery_budget()
+    if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
+        return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
+    abandoned = threading.Event()
+    work = asyncio.ensure_future(run_blocking(postprocess_executor, consume, *task, time.monotonic(), abandoned))
+    try:
+        result = await asyncio.wait_for(asyncio.shield(work), timeout=budget)
+    except asyncio.TimeoutError:
+        abandoned.set()
+        work.add_done_callback(_drain)
+        logger.warning('event=enrichment_delivery outcome=retry reason=delivery_budget budget_s=%.0f', budget)
+        return retry_response(RetryReason.DEPENDENCY_WARMING)
     return http_response(result)
 
 
@@ -82,6 +164,13 @@ def maintain(now: float) -> dict[str, int]:
     from database.outbox_firestore import ENRICHMENT_OUTBOX
     from services import summary_debt_repair
 
+    from utils.conversations import final_pass_retry
+
+    # Same scheduled maintenance, separate rows and speaker-only wakes.
+    try:
+        final_pass_retry.sweep(now=now)
+    except Exception as error:
+        logger.error('event=batch_final_pass_retry outcome=sweep_failed exception_type=%s', type(error).__name__)
     swept = ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,
@@ -92,7 +181,9 @@ def maintain(now: float) -> dict[str, int]:
         'provider_stt_sweep_errors': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
+        'summary_debt_near_expiry_admitted': 0,
         'summary_debt_errors': 0,
+        'summary_debt_expired_seen': 0,
     }
     # C8 provider-STT units rely on this sweep when a post-commit wake is lost (contract (b),
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
@@ -113,11 +204,13 @@ def maintain(now: float) -> dict[str, int]:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:
         logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-        summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+        summary = {'scanned': 0, 'admitted': 0, 'near_expiry_admitted': 0, 'errors': 1, 'expired_seen': 0}
     counts.update(
         summary_debt_scanned=summary['scanned'],
         summary_debt_admitted=summary['admitted'],
+        summary_debt_near_expiry_admitted=summary.get('near_expiry_admitted', 0),
         summary_debt_errors=summary['errors'],
+        summary_debt_expired_seen=summary['expired_seen'],
     )
     return counts
 

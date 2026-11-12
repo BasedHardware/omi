@@ -15,7 +15,9 @@ from typing import Callable, ParamSpec, TypeVar
 from prometheus_client import Counter, Gauge
 
 from database import record_audio as record_audio_db
-from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
+from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking, track_executor_future
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -92,7 +94,7 @@ class _CloseAdmission:
 RECORD_BARRIER_FAILURES = Counter(
     'omi_pusher_record_barrier_failures_total', 'Record barrier metadata failures; audio upload continues', ['stage']
 )
-for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity'):
+for _stage in ('begin', 'finish', 'seal', 'failure_marker', 'capacity', 'abandon'):
     RECORD_BARRIER_FAILURES.labels(stage=_stage).inc(0)
 
 RECORD_SEAL_REFUSED = Counter(
@@ -214,14 +216,22 @@ class PusherRecordBarrier:
         self.record_upload_failed = False
         self.failed_recordings: set[str] = set()
         self.upload_sessions: dict[str, str] = {}
+        self.registered_sessions: set[str] = set()
+        self.late_appends: set[str] = set()
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
         self.close_retry_at: dict[str, float] = {}
         self.keep_close_pending = False
+        self.lease_renewed_at: dict[str, float] = {}
+        self.lease_locks: dict[str, asyncio.Lock] = {}
+        self.lease_renewal_failed: set[str] = set()
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
+        return self._retry_close(conversation_id)
+
+    def _retry_close(self, conversation_id: str) -> bool:
         attempts = min(self.close_failures.get(conversation_id, 0) + 1, 6)
         if not self.keep_close_pending and (
             attempts >= CLOSE_RETRY_BUDGET
@@ -261,6 +271,7 @@ class PusherRecordBarrier:
             raise
         future.add_done_callback(admission.completed)
         wrapped = asyncio.wrap_future(future)
+        track_executor_future(record_barrier_executor, wrapped)
         deadline = asyncio.get_running_loop().call_later(CLOSE_METADATA_DEADLINE_SECONDS, admission.abandon)
 
         def settled(done):
@@ -298,6 +309,12 @@ class PusherRecordBarrier:
             # Allocate before dispatch: registration responses can return in
             # the reverse order of producer minting.
             mint_order = registry.mint_order()
+            # Retain the exact candidate even if cancellation races a successful
+            # registration response. Abandon's transaction tolerates absent tokens.
+            self.upload_sessions[conversation_id] = token
+            registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
+            began_at = time.monotonic()
+            observed = {}
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -306,9 +323,21 @@ class PusherRecordBarrier:
                 token,
                 True,
                 producer=producer_identity(),
+                **({'late_observation': observed} if lease.token_lease_mode() != 'off' else {}),
             ):
-                self.upload_sessions[conversation_id] = token
-                registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
+                if conversation_id in self.failed_recordings:
+                    return
+                self.registered_sessions.add(conversation_id)
+                if observed.get('late'):
+                    self.late_appends.add(conversation_id)
+                if lease.token_lease_mode() != 'off':
+                    # A delayed commit response must not make an old lease
+                    # look newly renewed to the receive/projection cache.
+                    self.lease_renewed_at[conversation_id] = began_at
+                    lease_metrics.ACTIVE.inc()
+                return
+            self.upload_sessions.pop(conversation_id, None)
+            registry.forget(self.uid, conversation_id, token)
         except record_audio_db.RecordUploadCapacityExceeded:
             _record_failure('capacity')
             await self.fail_recording(conversation_id)
@@ -316,6 +345,74 @@ class PusherRecordBarrier:
             # Metadata outages must not interrupt the audio custody lane.
             _record_failure('begin')
             await self.fail_recording(conversation_id)
+
+    async def renew_recording(self, conversation_id: str) -> bool:
+        """Frame-bearing receive/projection batches only; no idle socket timer."""
+        if (
+            lease.token_lease_mode() == 'off'
+            or conversation_id not in self.upload_sessions
+            or conversation_id in self.failed_recordings
+            or conversation_id not in self.registered_sessions
+        ):
+            return conversation_id not in self.lease_renewal_failed
+        now = time.monotonic()
+        if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+            return conversation_id not in self.lease_renewal_failed
+        # Receive and projection are concurrent tasks on this socket. Both must
+        # await the same committed fence, rather than double-renew or let the
+        # second appender pass while the first metadata write is still pending.
+        async with self.lease_locks.setdefault(conversation_id, asyncio.Lock()):
+            if (
+                lease.token_lease_mode() == 'off'
+                or conversation_id not in self.upload_sessions
+                or conversation_id in self.failed_recordings
+                or conversation_id not in self.registered_sessions
+            ):
+                return conversation_id not in self.lease_renewal_failed
+            now = time.monotonic()
+            if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+                return conversation_id not in self.lease_renewal_failed
+            observed = {}
+            try:
+                await run_blocking(
+                    record_barrier_executor,
+                    record_audio_db.renew_record_token_lease,
+                    self.uid,
+                    conversation_id,
+                    source='frames',
+                    session=self.upload_sessions[conversation_id],
+                    producer=producer_identity(),
+                    late_observation=observed,
+                )
+            except Exception:
+                # Retain/requeue this batch before storage can accept and clear
+                # it. Keep the old clock so the next attempt retries metadata.
+                self.lease_renewal_failed.add(conversation_id)
+                _record_failure('renew')
+                return False
+            if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
+                return False  # A concurrent failed drain already retired local lease ownership.
+            if observed.get('late'):
+                self.late_appends.add(conversation_id)
+            if conversation_id not in self.lease_renewed_at:
+                lease_metrics.ACTIVE.inc()
+            self.lease_renewed_at[conversation_id] = now
+            self.lease_renewal_failed.discard(conversation_id)
+            return True
+
+    def append_committed(self, conversation_id, *, observed=True):
+        """A successful durable window/object owns the late-append event."""
+        if observed and conversation_id in self.late_appends:
+            self.late_appends.remove(conversation_id)
+            lease_metrics.LATE_APPEND.inc()
+
+    def _forget_lease(self, conversation_id):
+        self.registered_sessions.discard(conversation_id)
+        self.lease_renewal_failed.discard(conversation_id)
+        self.late_appends.discard(conversation_id)
+        self.lease_locks.pop(conversation_id, None)
+        if self.lease_renewed_at.pop(conversation_id, None) is not None:
+            lease_metrics.ACTIVE.dec()
 
     async def finish_recording(self, conversation_id: str) -> bool:
         """Return whether settled (or the legacy bounded retry budget exhausted).
@@ -354,6 +451,7 @@ class PusherRecordBarrier:
                 registry.forget(self.uid, conversation_id, token)
                 if self.upload_sessions.get(conversation_id) == token:
                     self.upload_sessions.pop(conversation_id, None)
+                    self._forget_lease(conversation_id)
                 else:
                     logger.info('event=record_tokens_recleared count=1')
         except _CloseAdmissionRefused:
@@ -367,12 +465,59 @@ class PusherRecordBarrier:
             if refused is not None:
                 _SEAL_REFUSAL_COUNTERS[refused].inc()
                 logger.info('event=record_seal_refused reason=%s', refused)
+                if refused == 'producer_pending':
+                    # Another producer still owes audio. Reuse the existing
+                    # close budget/backoff; never certify its tail by retiring
+                    # this retry on the first refused seal.
+                    return self._retry_close(conversation_id)
+                # upload_failed is sticky and requires full-proof repair.
+                # deleted/not_batch_owner have no seal obligation here.
+                # These terminal drain outcomes never assert audio closure.
         except _CloseAdmissionRefused:
             return self._close_admission_refused(conversation_id)
         except Exception:
             return self._close_failed(conversation_id, 'seal')
         self.retire_close(conversation_id)
         return True
+
+    def forget_evicted_tokens(self) -> None:
+        # A reconnect must never recover a token selected for abandonment, even
+        # while admission is refused. This is a hint removal, not durable proof.
+        for cid, token in self.evicted_tokens():
+            _process_record_tokens().forget(self.uid, cid, token)
+
+    def evicted_tokens(self) -> set[tuple[str, str]]:
+        # upload_sessions retains every outstanding token minted by this socket,
+        # including its own pending clears. Recovered pending_clears may belong
+        # to another socket whose projection is still running: this socket's
+        # executor settlement is no authority to attest that producer stopped.
+        return set(self.upload_sessions.items())
+
+    async def abandon_recordings(self) -> None:
+        """Called only after the worker AND its executor futures have settled."""
+        self.keep_close_pending = True
+        self.forget_evicted_tokens()
+        for cid, token in self.evicted_tokens():
+            attempts = 0
+            while True:
+                try:
+                    abandoned = await self._close_metadata(
+                        cid, record_audio_db.abandon_record_upload_session, self.uid, cid, token
+                    )
+                    if abandoned:
+                        logger.info('event=record_closed_finish outcome=abandoned')
+                    break
+                except _CloseAdmissionRefused:
+                    pass  # No submission; retry while this process is alive.
+                except Exception:
+                    _record_failure('abandon')
+                attempts = min(attempts + 1, 6)
+                ceiling = min(2.0**attempts, CLOSE_RETRY_MAX_SECONDS)
+                await asyncio.sleep(random.uniform(ceiling / 2, ceiling))
+            self.pending_clears.discard((cid, token))
+            if self.upload_sessions.get(cid) == token:
+                self.upload_sessions.pop(cid, None)
+                self._forget_lease(cid)
 
     def _close_admission_refused(self, conversation_id: str) -> bool:
         # The drain loop already yields between scans. A positive, jittered
@@ -392,6 +537,7 @@ class PusherRecordBarrier:
 
     async def fail_recording(self, conversation_id: str) -> None:
         self.hold_recording(conversation_id)
+        self._forget_lease(conversation_id)
         # Terminal loss must not become recoverable if its durable failure
         # marker is unavailable. The persisted producer remains the fence.
         token = self.upload_sessions.get(conversation_id)

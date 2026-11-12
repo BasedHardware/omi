@@ -15,6 +15,7 @@ from scripts.diff_prod_adapter import (
     BATCH_PIPELINE_RULE,
     BATCH_PIPELINE_CAPACITY_RULE,
     BATCH_PIPELINE_CHAIN_RULE,
+    RECORD_SEAL_RULE,
     PARAKEET_QUEUE_RULES,
     compare,
     expected_config,
@@ -62,7 +63,8 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
     if service == 'batch-pipeline-worker':
         values = chart / 'prod_omi_batch-pipeline-worker_values.yaml'
-    templates = ['templates/hpa.yaml']
+    # Retired charts intentionally render no HPA; --show-only errors on empty templates.
+    templates = [] if service == 'parakeet' else ['templates/hpa.yaml']
     command = [
         helm,
         'template',
@@ -85,6 +87,10 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
         command.extend(['--set', 'autoscaling.enabled=true'])
     rendered = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     hpas = [obj for obj in yaml.safe_load_all(rendered) if obj and obj['kind'] == 'HorizontalPodAutoscaler']
+    if service == 'parakeet':
+        assert yaml.safe_load(values.read_text())['fleetRetired'] is True
+        assert hpas == []
+        return
     assert hpas, f'{service}: no prod HPA rendered'
     rules = yaml.safe_load(ADAPTER.read_text())['rules']
     available = {
@@ -115,7 +121,9 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     supplied = yaml.safe_load((CHARTS / 'batch-pipeline-worker/prometheus-adapter-rules.yaml').read_text())
     capacity = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']]
     chain = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as']]
-    assert actual + capacity + chain == supplied['external']
+    seal = [r for r in rules if r['name']['as'] == RECORD_SEAL_RULE['name']['as']]
+    assert seal == [RECORD_SEAL_RULE]
+    assert seal + actual + capacity + chain == supplied['external']
     assert capacity == [BATCH_PIPELINE_CAPACITY_RULE]
     query = capacity[0]['metricsQuery']
     assert 'max by (namespace, worker_release, priority)' in query
@@ -124,8 +132,12 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert 'or vector(0)' not in query
     assert chain == [BATCH_PIPELINE_CHAIN_RULE]
     chain_query = chain[0]['metricsQuery']
-    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[2m])' in chain_query
+    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[10m])' in chain_query
+    # Two scrape jobs read every worker pod: one series per pod, or demand doubles.
+    assert 'max by (namespace, pod) (' in chain_query
+    assert 'sampler_observed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
     assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'or' in chain_query  # old-worker clock remains valid during rollback/mixed fleets
     assert 'or vector(0)' not in chain_query
     # Stage timers export only the stage label; requiring worker_release here
     # (or in the HPA selector) would match zero series and pin the floor.
@@ -215,7 +227,9 @@ def _comparison_inputs():
     config = {'externalRules': values['external'], 'rules': values['custom']}
     live = copy.deepcopy(config)
     live['externalRules'].remove(NLLB_RULE)
-    listen = live['externalRules'][0]
+    listen = next(
+        rule for rule in live['externalRules'] if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
     # Captured pre-upgrade queries, independent of the candidate values above.

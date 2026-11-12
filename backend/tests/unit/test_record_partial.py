@@ -7,14 +7,14 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, AsyncMock
 import wave
 
 import pytest
 
 from config.record_audio import record_identity, require_record_audio_barrier
 from config.policy import BatchUnitPolicy
-from database.record_audio import seal_record_audio, set_record_upload_pending
+from database.record_audio import seal_record_audio, set_record_upload_pending, renew_record_token_lease
 from database.record_partial import finish_partial, PAYER_REFUSALS
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_intake import admit
@@ -39,6 +39,17 @@ NOW = 4000
 
 @pytest.fixture
 def source(monkeypatch):
+    from utils.executors import sync_executor
+
+    original_run_blocking = record_partial.run_blocking
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        # Partial source collection also downloads retained objects; it must
+        # not borrow the coordinator pool when admission concurrency grows.
+        assert executor is not sync_executor
+        return await original_run_blocking(executor, fn, *args, **kwargs)
+
+    monkeypatch.setattr(record_partial, 'run_blocking', run_blocking)
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
     monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch-bucket')
@@ -704,7 +715,13 @@ def audio(source, monkeypatch):
         )
         return True
 
-    monkeypatch.setattr(record_partial, 'admit', lambda *args, **kwargs: admit(*args, **kwargs, enqueue=enqueue))
+    from utils.batch_pipeline import record_provider
+
+    def admit_with_queue_seam(*args, **kwargs):
+        kwargs.setdefault('enqueue', enqueue)
+        return admit(*args, **kwargs)
+
+    monkeypatch.setattr(record_provider, 'admit', admit_with_queue_seam)
 
     def add(start, frames=16000):
         name = f'chunks/synthetic/record/{len(chunks)}.pcm'
@@ -712,9 +729,12 @@ def audio(source, monkeypatch):
         pcm[name] = b'\x01\x00' * frames
 
     async def drain(now=NOW):
-        return await live.admit_recording(store, pending(source), now=now)
+        return await live.admit_recording(
+            store, pending(source), now=now, provider_outbox_factory=lambda: environment.outbox
+        )
 
-    return SimpleNamespace(add=add, drain=drain, chunks=chunks, pcm=pcm, artifacts=artifacts)
+    environment = SimpleNamespace(add=add, drain=drain, chunks=chunks, pcm=pcm, artifacts=artifacts, outbox=None)
+    return environment
 
 
 async def test_real_staging_admission_worker_late_audio_and_serial_receipts(source, audio):
@@ -763,6 +783,60 @@ async def test_real_staging_admission_worker_late_audio_and_serial_receipts(sour
     assert new_jobs[0]['capture_at'] == 101 and new_jobs[0]['duration_seconds'] == 1
     assert new_jobs[0]['projection_binding']['partial_record']
     assert not source[1].rows[ROW]['record_audio_closed']
+
+
+@pytest.mark.parametrize('language', ['en', 'und'])
+async def test_auto_partial_freezes_audio_proof_without_changing_custody(source, audio, monkeypatch, language):
+    from diarizer.batch_pipeline_models import stt_language
+    from utils.batch_pipeline import record_language
+    from utils.batch_pipeline.audio import read_context
+
+    row = source[1].rows[ROW]
+    row.update(
+        language='multi',
+        client_platform='ios',
+        external_data={'server_batch_only': True},
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=110,
+    )
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    proof = {
+        'stt_language': language,
+        'stt_language_evidence': 'audio_lid' if language == 'en' else 'unavailable',
+        'stt_language_confidence': 0.99 if language == 'en' else 0.0,
+    }
+    classify = AsyncMock(return_value=proof)
+    monkeypatch.setattr(record_language, 'classify_wav', classify)
+    monkeypatch.setattr(
+        record_language, 'ServingLanguageProbeGuard', lambda *a, **k: SimpleNamespace(raise_if_denied=lambda: None)
+    )
+    await audio.drain()
+    await audio.drain()
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1 and classify.call_count == 1
+    intakes = [
+        intake
+        for path, intake in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_intakes' and intake.get('record_partial_parent')
+    ]
+    assert len(intakes) == 1
+    assert intakes[0]['language_receipts'][jobs[0]['segment_id']] == {
+        'version': 1,
+        'language': language,
+        'evidence': 'audio_lid' if language == 'en' else 'unavailable',
+    }
+    work = live.WorkItem(**{key: jobs[0][key] for key in live.WorkItem.__dataclass_fields__ if key in jobs[0]})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert stt_language(context, duration_seconds=1) == language
+    assert context['conversation_id'] == 'record'
+    assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
+    assert pending(source)['state'] == 'record_pending'
 
 
 async def test_over_cap_rows_use_real_worker_bounds_and_two_pages(source, audio):
@@ -848,3 +922,271 @@ async def test_deletion_during_partial_plan_read_returns_no_plaintext(source, au
     with pytest.raises(BatchPrivacyBlocked):
         await audio.drain()
     assert len([path for path in source[1].rows if path[0] == 'batch_pipeline_dev_jobs']) == 1
+
+
+@pytest.mark.parametrize('language', ['ca', 'sw'])
+async def test_unsupported_partial_uses_durable_modulate_outbox_after_rollback(source, audio, monkeypatch, language):
+    from utils.batch_pipeline import record_provider
+    from utils.batch_pipeline.audio import read_context
+
+    row = source[1].rows[ROW]
+    row.update(
+        language=language,
+        external_data={'server_batch_only': True},
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=110,
+    )
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    monkeypatch.setenv('SERVER_BATCH_UNSUPPORTED_LANGUAGES', '')
+    from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+    wakes = Mock()
+    outbox = FirestoreProviderSttOutbox(client=source[1], collection='synthetic_provider_outbox', create_wake=wakes)
+    audio.outbox = outbox
+    await audio.drain()
+    await audio.drain()
+    jobs = [
+        job
+        for path, job in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and not job.get('partial_coordinator')
+    ]
+    assert len(jobs) == 1
+    job = jobs[0]
+    assert job['state'] == 'provider_pending'
+    assert job['stt_route']['language'] == language
+    assert job['stt_route']['provider_service'] == 'modulate'
+    assert job['policy']['provider_service'] == 'modulate'
+    assert job['policy']['batch_enabled']
+    assert not job['requires_compute_admission']
+    assert job['projection_binding']['native_record'] and job['projection_binding']['partial_record']
+    rows = [value for path, value in source[1].rows.items() if path[0] == 'synthetic_provider_outbox']
+    assert len(rows) == 1 and rows[0]['segment_id'] == job['segment_id']
+    wakes.assert_called_once()
+    work = live.WorkItem(**{key: job[key] for key in live.WorkItem.__dataclass_fields__ if key in job})
+    context = read_context(audio.artifacts.fetch_audio(work))
+    assert context['stt_language'] == language and context['stt_language_evidence'] == 'declared'
+    assert len(audio.chunks) == 1 and audio.pcm[audio.chunks[0]['path']]
+    assert not any(path[0] in {'batch_pipeline_dev_queues', 'batch_pipeline_dev_control'} for path in source[1].rows)
+
+
+@pytest.mark.parametrize(
+    'mode,expected', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'partial_finished')]
+)
+def test_lease_dead_partial_exit_and_hourly_coordinator(source, monkeypatch, mode, expected):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    source[1].rows[ROW]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    source[2]['pods']['live'] = 1  # Scoped inventory proves this original pusher is still live.
+    assert finish(source) == expected
+    row = source[1].rows[ROW]
+    assert not row.get('record_audio_closed')
+    if expected == 'partial_finished':
+        assert not row['record_upload_sessions']
+        assert pending(source)['partial_coordinator']
+        assert pending(source)['available_at'] == NOW
+        assert row['record_audio_partial']['reason'] == 'tail_lagging'
+
+
+def test_renewal_before_partial_transaction_keeps_live_uploader_fenced(source, monkeypatch):
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    source[1].rows[ROW]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    renew_record_token_lease('synthetic', 'record', source='frames', session='s', firestore_client=source[1])
+    assert finish(source) == 'upload_pending'
+
+
+@pytest.mark.parametrize('accepted', [False, True])
+async def test_custody_fence_old_partial_pass_then_bytes_land_is_rerun(source, audio, monkeypatch, accepted):
+    from database import record_custody_append as custody
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    audio.add(100)
+    assert finish(source) == 'partial_finished'
+    await audio.drain()  # Old-audio plan exists before the upload starts.
+    revision = source[1].rows[ROW].get('record_upload_revision', 0)
+    assert custody.begin('synthetic', 'record', 'custody:interleaving', firestore_client=source[1])
+    assert source[1].rows[ROW].get('record_upload_revision', 0) == revision
+    assert finish(source) == 'upload_pending'
+    with pytest.raises(ValueError, match='barrier'):
+        await audio.drain()  # No old-audio pass may commit through the fence.
+    audio.add(105)  # The late bytes now land durably.
+    if not accepted:
+        from utils.batch_pipeline.record_lease_append import wake_partial
+
+        wake_partial(source[0], 'synthetic', 'record', NOW)
+    custody.finish('synthetic', 'record', 'custody:interleaving', accepted=accepted, firestore_client=source[1])
+    assert source[1].rows[ROW].get('record_upload_revision', 0) == revision + accepted
+    # An incomplete old plan may finish its old page, but the new revision and
+    # changed inventory schedule a subsequent generation containing these bytes.
+    assert pending(source)['partial_run']['next_inventory_at'] == NOW
+    assert not source[1].rows[ROW]['record_upload_sessions']
+    await audio.drain()
+    run = pending(source)['partial_run']
+    assert run['generation'] == 2
+    plan = audio.artifacts.load_record_plan(record_partial.seed_for(pending(source)), run['plan_uri'])
+    assert any(ref['path'] == audio.chunks[-1]['path'] for _, _, refs in plan['units'] for ref in refs)
+
+
+@pytest.mark.parametrize('writer', ['renew', 'begin'])
+@pytest.mark.parametrize('status', ['completed', 'processing', 'recording'])
+async def test_frames_fill_interior_gap_after_complete_seal_and_schedule_real_work(
+    source, audio, monkeypatch, writer, status
+):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    audio.add(100)
+    audio.add(109)  # Old retained tail already reaches finished_at.
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state='committed', partial_coordinator=False)
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(
+        record_audio_closed=True, record_audio_partial=None, record_upload_sessions={}, status=status
+    )
+    revision = source[1].rows[ROW].get('record_upload_revision', 0)
+    barrier = None
+    if writer == 'begin':
+        from database import record_audio
+        from utils import pusher_record_barrier
+
+        monkeypatch.setattr(record_audio, 'get_firestore_client', lambda: source[1])
+        monkeypatch.setattr(
+            pusher_record_barrier, 'producer_identity', lambda: {'pod': 'resumed-pusher', 'process_started_at': 100}
+        )
+        barrier = pusher_record_barrier.PusherRecordBarrier('synthetic')
+        await barrier.begin_recording('record')
+        assert barrier.upload_sessions['record'] in source[1].rows[ROW]['record_upload_sessions']
+    else:
+        assert renew_record_token_lease(
+            'synthetic',
+            'record',
+            source='frames',
+            session='resumed',
+            producer={'pod': 'resumed-pusher', 'process_started_at': 100},
+            firestore_client=source[1],
+        )
+    audio.add(105)  # Interior audio, not a missing tail.
+    # The obligation exists before any older job changes the conversation's
+    # status. Normal continuation can wait for finalization/publication.
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['partial_coordinator']
+    source[1].rows[ROW]['status'] = 'completed'
+    interior_pcm = audio.pcm[audio.chunks[-1]['path']]
+    audio.chunks.sort(key=lambda chunk: chunk['timestamp'])
+    assert source[1].rows[ROW]['record_upload_revision'] == revision + 1
+    assert not source[1].rows[ROW]['record_audio_closed']
+    if barrier is not None:
+        assert await barrier.finish_recording('record')
+    else:
+        set_record_upload_pending('synthetic', 'record', 'resumed', False, firestore_client=source[1])
+        assert seal_record_audio('synthetic', 'record', firestore_client=source[1]) is None
+    segment = recovery_segment('synthetic', 'record')
+    await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)
+    await live.admit_recording(source[0], source[0].run(lambda tx: tx.get('jobs', segment)), now=NOW)
+    jobs = [
+        row
+        for path, row in source[1].rows.items()
+        if path[0] == 'batch_pipeline_dev_jobs' and row.get('projection_binding', {}).get('partial_record')
+    ]
+    interior = next(row for row in jobs if row['capture_at'] <= 105 < row['capture_at'] + row['duration_seconds'])
+    item = live.WorkItem(**{key: interior[key] for key in live.WorkItem.__dataclass_fields__ if key in interior})
+    wav = audio.artifacts.fetch_audio(item)
+    with wave.open(io.BytesIO(wav), 'rb') as stream:
+        stream.setpos(round((105 - interior['capture_at']) * 16000))
+        assert stream.readframes(16000) == interior_pcm
+    worker, _, saved, _, _, failures = setup_worker(
+        decode=lambda work: decode_pcm16_wav(audio.artifacts.fetch_audio(work))
+    )
+    assert worker.process_batch([item])[0].segment_id == item.segment_id
+    assert saved[item.segment_id]['words'] and not failures
+    assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original
+
+
+def test_crashed_post_seal_producer_has_partial_finish_exit_on_recovery_coordinator(source, monkeypatch):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state='committed', partial_coordinator=False)
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    renew_record_token_lease(
+        'synthetic',
+        'record',
+        source='frames',
+        session='crashed',
+        producer={'pod': 'resumed', 'process_started_at': 100},
+        firestore_client=source[1],
+    )
+    now = NOW + 3601
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: now)
+    proof = {**source[2], 'captured_at': now}
+    assert (
+        finish_partial(source[0], '/'.join(ROW), reason='tail_lagging', proof=proof, now=now, retry_aged=True)
+        == 'partial_finished'
+    )
+    assert not source[1].rows[ROW]['record_upload_sessions']
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['state'] == 'record_pending' and recovery['partial_coordinator']
+    assert source[0].run(lambda tx: tx.get('jobs', original['segment_id'])) == original
+
+
+@pytest.mark.parametrize('old_state', ['record_pending', 'committed'])
+def test_post_seal_recovery_preserves_old_work_and_waits_for_full_publication(source, monkeypatch, old_state):
+    from database.batch_pipeline_record_lease_recovery import recovery_segment
+    from database.record_partial import continuation_refusal
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    assert finish(source) == 'partial_finished'
+    original = pending(source)
+    original.update(state=old_state, partial_coordinator=False)
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')  # A later ramp cannot replace the stored policy.
+    source[0].run(lambda tx: tx.put('jobs', original['segment_id'], original))
+    source[1].rows[ROW].update(record_audio_closed=True, record_audio_partial=None, record_upload_sessions={})
+    renew_record_token_lease(
+        'synthetic',
+        'record',
+        source='frames',
+        session='resumed',
+        producer={'pod': 'resumed', 'process_started_at': 100},
+        firestore_client=source[1],
+    )
+    if old_state == 'record_pending':
+        assert pending(source)['policy'] == original['policy']
+        assert not pending(source)['partial_coordinator']
+        assert not source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+        return
+    recovery = source[0].run(lambda tx: tx.get('jobs', recovery_segment('synthetic', 'record')))
+    assert recovery['policy'] == original['policy']
+    content = original['record_content_id']
+    source[0].run(lambda tx: tx.put('intakes', 'bp_' + content, {'segment_ids': [original['segment_id']]}))
+    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'processing'}))
+    assert continuation_refusal(source[0], recovery) == 'state_changed'
+    source[0].run(lambda tx: tx.put('content', 'synthetic/' + content, {'status': 'completed'}))
+    assert continuation_refusal(source[0], recovery) is None
+    assert pending(source) == original

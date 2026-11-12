@@ -690,7 +690,6 @@ def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
         return enrolled
 
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
-    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(
         subscription_utils.users_db,
         'get_user_valid_subscription',
@@ -977,14 +976,14 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
     and the snapshot the endpoint already built is still returned."""
     import utils.subscription as subscription_module
 
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+    with patch.object(
+        subscription_module, 'get_byok_key', side_effect=RuntimeError('firestore unavailable')
+    ), patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
         users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
     ), patch.object(
         users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
     ), patch.object(
         users_router.users_db,
         'get_user_valid_subscription',
@@ -1039,8 +1038,6 @@ def test_an_expired_paid_subscription_is_downgraded_to_basic_by_the_real_lookup(
     with patch.object(genuine_users_db, 'get_user_subscription', MagicMock(return_value=expired_plus)), patch.object(
         subscription_module.users_db, 'get_user_valid_subscription', genuine_users_db.get_user_valid_subscription
     ), patch.object(subscription_module.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
-    ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
         subscription_module, 'get_monthly_usage_for_subscription', MagicMock(return_value={'transcription_seconds': 0})
@@ -1073,8 +1070,6 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
         users_router, 'get_monthly_usage_for_subscription', usage_reads
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
     ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
@@ -1217,16 +1212,15 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(
-        subscription_module,
-        'is_trial_paywalled',
-        (
-            MagicMock(side_effect=RuntimeError('dependency unavailable'))
-            if reason == 'allowance_unavailable'
-            else lambda *args, **kwargs: False
-        ),
-    )
-    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+
+    def allowance_key(provider):
+        if reason == 'allowance_unavailable':
+            raise RuntimeError('dependency unavailable')
+        return None
+
+    monkeypatch.setattr(subscription_module, 'get_byok_key', allowance_key)
+    if reason == 'allowance_unavailable':
+        monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: True)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     response = users_router.get_user_subscription_endpoint(
         # Shipped clients do not declare the new six-plan capability.
@@ -1272,7 +1266,7 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription.model_copy())
     monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: subscription.model_copy())
-    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
     monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
     monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
     monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
@@ -1289,7 +1283,6 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     app = FastAPI()

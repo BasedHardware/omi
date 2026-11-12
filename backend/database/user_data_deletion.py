@@ -1,6 +1,9 @@
 """Account-data erasure across top-level batch stores and recursive user data."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
+
+from database.action_item_fence import fenced_action_item_commit
 import logging
 from typing import Any
 
@@ -53,7 +56,8 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # messages, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        delete_collection(sub, client=client)
+        with fenced_action_item_commit(uid) if sub.id == 'action_items' else nullcontext():
+            delete_collection(sub, client=client)
     # A historical-source-index bump or build (database/memories.py) can land
     # after memory_state was walked; the doc holds only hashes, but drop it too.
     user_ref.collection('memory_state').document('historical_source_index').delete()

@@ -5,7 +5,22 @@ from uuid import NAMESPACE_URL, uuid5
 
 from utils.batch_pipeline.contracts import MAX_PROJECTION_PARTS, projection_speech_spans
 from utils.sync.vad_segments import merge_and_cap_vad_segments
-from diarizer.batch_pipeline import validate_words
+from utils.batch_pipeline.word_validation import validate_words
+
+
+def stamp_speaker(segment, item, payload, authoritative, batch_segment_id):
+    """Keep source timing alongside the provider partition through re-scoping."""
+    segment.speaker_id_scope = (
+        f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
+    )
+    segment.stt_provider = payload.get('words_provider')
+    if item.timing_store is not None:
+        segment.provider_speaker = {
+            'id': segment.speaker_id,
+            'scope': segment.speaker_id_scope,
+            'provider': segment.stt_provider,
+            'timing_store': item.timing_store,
+        }
 
 
 def bounded_projection_words(words, duration):
@@ -38,7 +53,7 @@ def align_projection_words(words, payload, segment_id):
 
 def split_result(item, payload):
     duration = float(payload['audio_seconds'])
-    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+    if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1 + 1 / 16000 + 1e-9:
         raise ValueError('result audio duration differs from admitted capture')
     words = bounded_projection_words(payload['words'], duration)
     if 'speech_spans' in payload or item.requires_compute_admission:

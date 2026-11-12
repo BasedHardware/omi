@@ -18,18 +18,45 @@ Map<String, dynamic> _object(String body) {
 String _id(String id) => Uri.encodeComponent(id);
 
 Future<ApiResult<PendingWorkSnapshot>> getPendingWork() => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/pending-work', method: 'GET'),
+      request: ApiRequest(
+          url: '${Env.apiBaseUrl}v1/pending-work', method: 'GET', headers: const {'X-Omi-Home-Ownership': '1'}),
       decode: (body) => PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot.fromJson(_object(body))),
     );
 
-Future<ApiResult<AttentionItemsPage>> getAttentionItems() => executeApi(
+// The ledger contract requires identity/kind/retry only. Older generated DTOs
+// require display metadata too; supply absent metadata without inventing UI text.
+Map<String, dynamic> _attentionWireObject(Map<String, dynamic> json) => {
+      'enabled': true,
+      'unseen_count': 0,
+      ...json,
+      'items': [
+        for (final item in (json['items'] as List? ?? const []))
+          if (item is Map)
+            {
+              'created_at': '1970-01-01T00:00:00Z',
+              'duration_seconds': 0,
+              'failure_code': '',
+              'seen': false,
+              'started_at': null,
+              'title': null,
+              ...Map<String, dynamic>.from(item),
+            }
+      ],
+    };
+
+Future<ApiResult<AttentionItemsPage>> getAttentionItems({ApiSend? send}) => executeApi(
+      send: send,
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/attention-items', method: 'GET'),
-      decode: (body) => AttentionItemsPage.fromGenerated(wire.GeneratedAttentionItemsPage.fromJson(_object(body))),
+      decode: (body) => AttentionItemsPage.fromGenerated(
+          wire.GeneratedAttentionItemsPage.fromJson(_attentionWireObject(_object(body)))),
     );
 
 /// The server claims the retry once per failed attempt: a repeated or concurrent call returns the
 /// same operation and starts no second paid run.
-Future<ApiResult<AttentionRetryResult>> retryAttentionItem(String id, {required String idempotencyKey}) => executeApi(
+Future<ApiResult<AttentionRetryResult>> retryAttentionItem(String id,
+        {required String idempotencyKey, ApiSend? send}) =>
+    executeApi(
+      send: send,
       request: ApiRequest(
         url: '${Env.apiBaseUrl}v1/attention-items/${_id(id)}/retry',
         method: 'POST',

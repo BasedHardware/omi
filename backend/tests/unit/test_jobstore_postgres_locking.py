@@ -8,6 +8,7 @@ missing key, four concurrent schedulers leasing every job once) is in
 from __future__ import annotations
 
 from contextlib import contextmanager
+import math
 
 import pytest
 
@@ -37,6 +38,7 @@ class Conn:
         yield
 
     def execute(self, sql, params=()):
+        sql = sql.as_string() if hasattr(sql, 'as_string') else sql
         self.sql.append(sql)
         if self.fail and self.fail[0] in sql:
             raise self.fail[1]
@@ -63,6 +65,24 @@ class SqlError(Exception):
 
 def store(conn):
     return pg.PostgresStore('batch_pipeline_test_lock', pool=Pool(conn), customer_client=None)
+
+
+@pytest.mark.parametrize('method', ['oldest', 'oldest_retry'])
+def test_queue_age_skips_dispositions_and_reports_saturated_scans_as_unknown(method):
+    class AgeConn(Conn):
+        def __init__(self, rows):
+            super().__init__()
+            self.rows = rows
+
+        def execute(self, sql, params=()):
+            assert params[-1] == 501
+            return Result(rows=self.rows)
+
+    disposed = {'state': 'quarantined'}
+    active = {'state': 'result_ready', 'terminal_disposition': {'state': 'completed'}}
+    assert getattr(store(AgeConn([(1, disposed), (2, active)])), method)(0) == 2
+    assert getattr(store(AgeConn([(1, disposed)])), method)(0) is None
+    assert math.isnan(getattr(store(AgeConn([(1, disposed)] * 501)), method)(0))
 
 
 def test_transactions_run_read_committed_with_a_bounded_lock_wait():

@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit
 from google.cloud import firestore
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
 
+from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
 from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
 import database.mcp_cache_integrity as mcp_cache_integrity
@@ -59,14 +60,14 @@ MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS",
 MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
-PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
+PUBLIC_CHATGPT_CLIENT_IDS = set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])
 # Read scopes the first-party ChatGPT directory experience assumes a ChatGPT
-# grant carries (mirrors the mobile app's `chatGptRequiredScopes`). ChatGPT's
+# grant carries (served to clients by the connector-access contract). ChatGPT's
 # directory authorization flow requests only ``memories.read``, which would
 # leave every grant below this floor and the app's screens permanently showing
 # "Needs more access", so narrow explicit requests from these clients are
 # widened to the floor at scope-normalization time.
-CHATGPT_READ_SCOPE_FLOOR = frozenset({"memories.read", "conversations.read", "action_items.read", "goals.read"})
+CHATGPT_READ_SCOPE_FLOOR = frozenset(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["required_scopes"])
 PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
@@ -441,6 +442,20 @@ def validate_resource(client: Dict[str, Any], resource: str) -> bool:
 def client_id_is_first_party_chatgpt(client_id: object) -> bool:
     """True for the first-party ChatGPT directory client ids (prod and dev)."""
     return isinstance(client_id, str) and client_id in PUBLIC_CHATGPT_CLIENT_IDS
+
+
+def implied_client_scopes(client_id: object) -> frozenset[str]:
+    """Scopes every grant held by ``client_id`` carries, regardless of what it requested.
+
+    First-party ChatGPT grants carry the standard read floor. Grants approved
+    before the floor existed (memories.read only) are upgraded on their next
+    refresh by ``rotate_refresh_token``, so raising the floor here upgrades
+    every live ChatGPT grant within one access-token lifetime, with no
+    reconnect. Write and opt-in scopes are never implied.
+    """
+    if client_id_is_first_party_chatgpt(client_id):
+        return CHATGPT_READ_SCOPE_FLOOR.intersection(SUPPORTED_SCOPES)
+    return frozenset()
 
 
 def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
@@ -1136,14 +1151,26 @@ def rotate_refresh_token(
                 # so an outage cannot leave a cached token on a revoked grant.
                 transaction.set(ref, {"replay_detected_at": now}, merge=True)
                 return None
+        # Server-side scope upgrade: a grant from a client with implied scopes
+        # (first-party ChatGPT's read floor) that predates them gains them here,
+        # on the grant and on the rotated token family, so older narrow grants
+        # get the full read set without the user reconnecting.
+        implied = implied_client_scopes(client_id)
+        family_scopes = set(data.get("scopes") or []) | implied
+        grant_scopes = set(grant.get("scopes") or [])
         try:
             requested_scopes: List[str] = (
-                normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
+                normalize_scopes(scope, {"allowed_scopes": sorted(family_scopes)}) if scope else sorted(family_scopes)
             )
         except ValueError:
             return None
-        if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
+        requested_scopes = sorted(set(requested_scopes) | implied)
+        if not set(requested_scopes).issubset(family_scopes):
             return None
+        if not implied.issubset(grant_scopes):
+            upgraded_grant_scopes = sorted(grant_scopes | implied)
+            grant["scopes"] = upgraded_grant_scopes
+            transaction.set(grant_ref, {"scopes": upgraded_grant_scopes, "scopes_upgraded_at": now}, merge=True)
         (
             access_token,
             new_refresh_token,

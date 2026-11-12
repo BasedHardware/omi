@@ -12,7 +12,7 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | 3 |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | restore baseline/min 6 and max 12 if GPU queue depth or ready_units climbs back past 50k |
 | L4 node pool minimum | GKE `batch-pipeline-pool` (operator-managed, not in this repo) | lead / op1 | previous minimum |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -22,6 +22,36 @@ All of these are config, not code constants. Changing one is a values or
 config-train change, never a code change.
 
 ## GPU floor
+
+**Current bounds (2026-11-06, David D4 / coordinator ask bc18db): baseline/min 4,
+max 8.** cl2-deploy patched the live HPA at 00:50Z after the transcription
+backlog drained. The chart preserves those bounds; Helm's existing lookup
+preserves the live replica count on upgrades. Rollback: restore baseline/min 6
+and max 12 if GPU queue depth or ready_units climbs back past 50k.
+
+These approved bounds are not full-volume capacity qualification. The historical
+3.7x replay's 4/16 hot-minute and catch-up witnesses retain their original
+bounds. Even with the former 6/12, the synthetic 12 chain-second/second step
+does not catch up within the model's 90-minute window (12 workers at its 0.93 per-worker ceiling
+provide 11.16 chain-seconds/second). Assess actual demand, scheduling and
+throughput before expansion; do not change the live bounds to clear a replay.
+
+Current operator checklist:
+
+1. Before a worker roll, confirm HPA min 4 / max 8 and at least 4 Ready on-demand
+   L4 nodes. A later change needs a new lead decision and a fresh capacity read.
+2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 4 together, with
+   `maxReplicas` 8. Let Helm preserve the live replica count; never force it to
+   the baseline during an outage.
+3. Use the current chart's scale-in policy. The older sizing, prices,
+   recommendations and scale-in procedures below are dated evidence only.
+
+### Earlier four-worker sizing (2026-11-01)
+
+**Historical evidence only: every value and procedural recommendation in this
+subsection is superseded by the current checklist above. Do not execute these
+older rollout, floor-change or scale-in instructions. This historical subsection
+ends at `provider-stt queue`.**
 
 David's requirement (11-01): keep GPUs even when a vendor is cheaper, because
 Modulate has outages. Modulate had six hard or degraded events in six weeks;
@@ -166,7 +196,7 @@ paid-intent violations and no `failed_held` with a vendor cause:
 | All vendors down | only `vendor_held` and the GPU ring; nothing terminal |
 | Recovery | half-open probe, close, auto-redrive drains holds at the queue rate |
 | Late result after failover | merges once; the late token settles as superseded |
-| L4 stockout (no scale-up) | floor of 4 keeps serving; HPA does not hammer scale-up |
+| L4 stockout (no scale-up) | configured standing floor keeps serving; HPA does not hammer scale-up |
 
 **Prod drill (step 2, 1% cohort, lead-run, low peak).** Force the Modulate
 breaker open for the cohort through slice C's thresholds config, hold for 30
@@ -203,8 +233,10 @@ predicates:
   due plus the stale grace), so a dead redrive still alerts. The lead decides
   the bound before it is coded.
 - **F4 (in-cluster batch verdict):** `batch_pipeline_store.oldest()` skips
-  only allowance holds and fails toward the oldest hold past 500 holds, so a
-  large `vendor_held` population drives `uncommitted_job_age_over_30m`.
+  allowance/vendor holds and dispositioned rows; past 500 exempt rows it reports
+  an incomplete NaN age (BLIND). Overdue vendor redrives still count as real
+  commitments; a saturated live-hold prefix pages the blind alarm instead of
+  inventing `uncommitted_job_age_over_30m` from a hold.
 
 Provider units never enter `ready_for_capacity`, so they cannot buy GPUs
 through the HPA. `vendor_held` units that reroute to the ring do.
@@ -214,8 +246,8 @@ through the HPA. `vendor_held` units that reroute to the ring do.
 Follows vendorscope-ops section 5. Each step is one write to roll back.
 
 0. Preconditions: #24222 queues live; slices A–D merged dormant; F1, F2 and
-   F3 adopted (above); staging drill table green; staging ladder receipt; floor 4
-   live with at least 4 Ready OD nodes.
+   F3 adopted (above); staging drill table green; staging ladder receipt; current
+   floor 4 live with at least 4 Ready OD nodes, HPA max 8.
 1. Shadow at the current batch percent: decisions counted, routing unchanged.
 2. 1% vendor routing with floor share on, plus the prod drill.
 3. 5% → 25% in lockstep with the batch and draining-cohort steps (vendor
@@ -265,14 +297,78 @@ failover). Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
 
-Table to serve (same JSON on backend-sync and backend-integration):
-`selection: ordered`, rows `gpu_supported: [gpu, modulate, soniox]` and
-`*: [modulate, soniox]`, Soniox `failover_only`, a Modulate
-`daily_audio_hours_cap` as the durable daily budget, and `gpu_floor_percent`
-for the share that always waits for GPU. Arm with env
-`BATCH_VENDOR_ROUTING_PERCENT` (clamped to the batch percent); do not seed
-`batch-vendor-routing` in `_ramp` while the actuator's `ramp_set` predates
-nested names.
+Modulate overflow is a supported failover path for GPU stockouts and outages
+(David 065da8, 2026-11-04), not an emergency step.
+
+Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
+`en-overflow-1104b` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow).
+- `selection: ordered`, rows `en: [gpu, modulate, soniox]`, `gpu_supported: [gpu]`,
+  `gpu_unsupported: [modulate, soniox]`, `*: [gpu]`. Fresh English overflows to
+  Modulate once the ring is saturated. Other GPU-capable languages stay on
+  GPU. Languages Parakeet cannot serve start on Modulate (unchanged).
+- Soniox stays `failover_only` (cap 1,000 audio-h/day), exactly as in the earlier
+  prod-gpu-first-v1 table: a Modulate outage fails English and unsupported
+  languages over to Soniox, else holds them with their audio. Overflow never
+  starts on Soniox.
+- Modulate carries a runaway-only `daily_audio_hours_cap` of 3,000 (lead2,
+  Luna P1 on #24637). gpu_unsupported needs about 900 audio-h/day, which
+  leaves about 2,100 audio-h/day of overflow before anything holds (about
+  $180/day worst case). A trip marks Modulate unhealthy for every language
+  and holds units with their audio until the window resets; nothing drops.
+  `price_usd_per_audio_hour` 0.06 (list) makes $ table-driven.
+- Alert: overflow spend above $50/day (David 49b7e4 episode bound) pages. The
+  kill is manual: cohort percent 0 or `BATCH_VENDOR_OVERFLOW_ENABLED=false`.
+- `gpu_floor_percent` 0. Overflow throughput is capped by `provider-stt`'s
+  10 dispatches/s.
+- Triggers (defaults): saturated when the oldest admissible fresh unit is
+  `BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (1200 s) old with at least
+  `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (300) waiting; released below half of
+  each. Only fresh units overflow, at admission. The existing recent/deep
+  backlog is never routed to a vendor.
+
+**Served durably** from the prod runtime overlay as `BATCH_VENDOR_ROUTE_TABLE`
+on backend-sync, backend-sync-backfill and backend-integration, so every
+backend train re-applies it. `tests/unit/test_batch_vendor_route_table_prod.py`
+pins the overlay value to the file's compact JSON and runs the real selection
+over it. Healthy and unsaturated, it routes every language exactly as
+`resolve_route` does, including blank, `multi` and unknown.
+`tests/unit/test_batch_vendor_outage_drills.py` drives the real sampler: with
+zero GPU workers, English overflows once the fresh backlog passes the enter
+age, returns to GPU after capacity drains it, and the kill switch keeps
+everything on GPU. Arming is the cohort percent through the runtime ramp
+(`batch-vendor-routing`), never env.
+
+Break-glass only (the overlay is the source; a hand-set value is replaced at the
+next train): set the same compact JSON on backend-sync, backend-sync-backfill and
+backend-integration. A comma-free delimiter is needed because the JSON
+contains commas:
+
+```
+TABLE=$(jq -c . backend/deploy/batch-pipeline/vendor_route_table.prod.json)
+if [ -z "$TABLE" ]; then
+  echo "STOPPED: table did not parse; nothing updated"
+else
+  for s in backend-sync backend-sync-backfill backend-integration; do
+    if ! gcloud run services update "$s" --region us-central1 --project based-hardware \
+        --update-env-vars "^@^BATCH_VENDOR_ROUTE_TABLE=$TABLE"; then
+      echo "STOPPED at $s: run the rollback on the services updated before it"
+      break
+    fi
+  done
+fi
+```
+
+Each update is checked explicitly (not with `set -e`, which a `||` or `if`
+around it would suspend). The loop stops at the first failure and says where,
+so the services never stay split between two tables without notice.
+
+Once served, Soniox failover is live for vendor-routed units even at routing
+percent 0, because the stage reads the served table. Overflow needs the cohort
+too. Arm it through the runtime ramp `batch-vendor-routing` (`ramp_set`, lead2
+2026-11-04: 0, then 25, then 100); `BATCH_VENDOR_ROUTING_PERCENT` env is only the
+fallback when no ramp row exists (clamped to the batch percent). Rollback: `--remove-env-vars
+BATCH_VENDOR_ROUTE_TABLE` serves the builtin table (today's routing); the
+durable rollback is removing the overlay line in a backend train.
 
 Watch: `omi_batch_pipeline_vendor_gpu_overflow_active`,
 `omi_batch_pipeline_vendor_gpu_backlog_age_seconds`,

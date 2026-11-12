@@ -1,3 +1,13 @@
+"""Live STT provider sockets: fallback connection chains, per-language/surface
+provider selection, and the process-local health circuit.
+
+The chain must advance to the next configured provider when a primary cannot
+open a socket -- one dead provider otherwise took entire deployments' live
+transcription down (#11695, #11752). The full incident narratives and routing
+rationale live in backend/utils/stt/ARCHITECTURE.md so this file stays under
+the product-file line ratchet.
+"""
+
 from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect
@@ -20,7 +30,6 @@ from deepgram.clients.live.v1 import LiveOptions
 from config.stt_provider_policy import (
     DEEPGRAM_PROVIDERS,
     MODULATE_PROVIDER,
-    PARAKEET_PROVIDER,
     SONIOX_PROVIDER,
     STTServingSurface,
     deepgram_provider_for_runtime,
@@ -30,6 +39,7 @@ from config.stt_provider_policy import (
     parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
+    model_is_enabled,
     supports_live_multilingual_mode,
 )
 from config.policy.listen import service_models, account_circuit_cooldown
@@ -310,7 +320,7 @@ def _primary_streaming_service() -> Optional[STTService]:
             return STTService.deepgram
         if provider == MODULATE_PROVIDER:
             return STTService.modulate
-        if provider == PARAKEET_PROVIDER:
+        if provider == STTService.parakeet.value:
             return STTService.parakeet
         if provider == SONIOX_PROVIDER:
             return STTService.soniox
@@ -855,9 +865,11 @@ def validate_streaming_stt_env(env: Any = None) -> None:
     a next hop in the documented chain. Do not print secret values.
     """
     source = os.environ if env is None else env
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
     models = source.get('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS))
     listed = [model.strip() for model in models.split(',') if model.strip()]
-    if 'soniox' in listed and not (source.get('SONIOX_API_KEY') or '').strip():
+    if ('soniox' in listed or gpu_fleet_off(source)) and not (source.get('SONIOX_API_KEY') or '').strip():
         raise RuntimeError(
             'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
             'remove soniox from the serving chain or set the key'
@@ -906,10 +918,10 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
+    """RNNT fallback eligibility, including the operator-restored model slot."""
     return (
         STTService.parakeet.value in (model.strip() for model in service_models(stt_service_models))
-        and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+        and model_is_enabled('parakeet', STTServingSurface.STREAMING)
         and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
     )
@@ -969,7 +981,7 @@ def get_stt_service_for_language(
     )
     if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
         language_profile,
-        service_models(stt_service_models),
+        service_models(stt_service_models, surface=surface),
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
@@ -998,7 +1010,11 @@ def get_stt_service_for_language(
                 if language in deepgram_nova3_languages:
                     return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
-            if model == 'parakeet-window' and surface == STTServingSurface.STREAMING:
+            if (
+                model == 'parakeet-window'
+                and surface == STTServingSurface.STREAMING
+                and model_is_enabled(model, surface)
+            ):
                 if not window_allocation(window_uid):
                     parakeet_fallback_reason = 'allocation_rejected'
                 elif not window_language_supported(language, requested_language, window_uid):
@@ -1008,7 +1024,7 @@ def get_stt_service_for_language(
                 else:
                     parakeet_fallback_reason = 'config_incomplete'
             if model == 'parakeet':
-                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                if model_is_enabled(model, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
                         return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
                     else:
@@ -1052,7 +1068,7 @@ def get_stt_service_for_language(
                 outcome='degraded',
             )
 
-    models = service_models(stt_service_models)
+    models = service_models(stt_service_models, surface=surface)
     if configured_chain_enabled() and window_uid is None:
         models = [model for model in models if model.strip() != 'parakeet-window']
     selected, parakeet_fallback_reason = select(models)

@@ -15,7 +15,9 @@ DUE = datetime(2026, 9, 20, 15, tzinfo=timezone.utc)
 
 def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=None):
     cancelled = []
-    monkeypatch.setattr(conversations_router.conversations_db, 'get_conversation', source_lookup or (lambda *a: {}))
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'get_conversation_raw_snapshot', source_lookup or (lambda *a, **kw: {})
+    )
     monkeypatch.setattr(conversations_router.conversation_tombstones, 'record_deletion', lambda *a: None)
     monkeypatch.setattr(conversations_router, 'delete_owner_prompt_embedding_cache', lambda *a: None)
     vectors = []
@@ -108,7 +110,7 @@ def test_donor_inventory_read_only_when_canonical_bucket_configured(monkeypatch,
         monkeypatch.delenv('BUCKET_CANONICAL_AUDIO', raising=False)
     reads = []
 
-    def lookup(uid, cid):
+    def lookup(uid, cid, **kwargs):
         reads.append((uid, cid))
         return {'sync_merged_from': ['donor']}
 

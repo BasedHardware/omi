@@ -103,6 +103,9 @@ void main() {
 
     // A slow filesystem must keep this assertion waiting for the actual
     // timer callback, not a wall-clock guess about when fsync will finish.
+    // Await the Future the drain callback returned (finalize, audio write,
+    // then WAL index save) instead of a fixed sleep: under CI load a 150 ms
+    // sleep ended before the flush landed and the copy still read as mem.
     diskSpace = Completer<int>();
     diskCheckStarted = Completer<void>();
     scheduler.elapse(const Duration(seconds: 10));
@@ -131,8 +134,13 @@ void main() {
       if (sync.testWals.any((wal) => wal.storage == WalStorage.disk) && !durable.isCompleted) durable.complete();
     };
     sync.didChangeAppLifecycleState(AppLifecycleState.paused);
+    // The pause seal is fire-and-forget, so no timer Future tracks it; await
+    // the buffer queue it was enqueued on and the durability callback instead
+    // of a fixed sleep. This only observes the seal — it must not drain
+    // anything itself, which is exactly the production contract under test.
     await durable.future;
     listener.updated = null;
+    await sync.testWalIoQuiescent;
 
     expect(sync.testWals, hasLength(1));
     final wal = sync.testWals.single;
@@ -146,6 +154,7 @@ void main() {
     captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
+    // Same deterministic drain await as the first test — no wall-clock sleeps.
     await scheduler.waitForCallbackIo();
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);

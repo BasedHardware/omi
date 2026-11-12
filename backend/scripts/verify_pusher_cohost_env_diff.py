@@ -79,6 +79,8 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
+# Only the listen receive loop promotes unexpected local-preview audio.
+_PREVIEW_CUSTODY_LISTEN_ONLY = frozenset({'LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED'})
 # Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
 # admitted jobs; this kill switch must not disable their finalization/retries.
 _RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
@@ -98,6 +100,15 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
+        # pusher does not run the held maintenance loop or worker failure writer.
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_CONTROL_CANDIDATE_FANOUT',
+        'BATCH_ADMISSION_PARALLEL_CALLS',
+        'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
+        # Listen admits/suppresses managed live STT; pusher only retains audio.
+        'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_UID_ALLOWLIST',
         'BATCH_PIPELINE_SERVING_ENABLED',
@@ -134,7 +145,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
-            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
@@ -148,7 +158,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
-            "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Fleet live routing and runway polling run on backend-listen only.
             "STT_NO_TEXT_SECONDS",
@@ -222,6 +231,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
@@ -230,18 +240,19 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
-            "MOBILE_STANDARD_BATCH_UIDS",
-            # Only listen reads the mobile server-batch-only cohort: server_batch.selected via
+            # Only listen reads the mobile/web server-batch-only cohorts: server_batch.selected via
             # request_eligible and via eligible <- create_in_progress_conversation, both called only
             # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
             "SERVER_BATCH_ONLY_MOBILE_PERCENT",
+            # Same listen-only admission path for learned auto-language mobile/web captures.
+            "SERVER_BATCH_ONLY_AUTO_LANGUAGE_PERCENT",
+            "SERVER_BATCH_ONLY_WEB_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
             "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
-            "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED",
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
             "PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS",
@@ -265,7 +276,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_NO_TEXT_RESCUE_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
-            "STT_MULTI_LANGUAGE_HINTS",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
             # Staged sync-lineage rollout: the live revision fence runs in listen
             # transcript writes; pusher reaches no sync intake or live-write site.
@@ -304,7 +314,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "GCP_LOCATION",
             "GEMINI_API_KEY",
             "HOSTED_PUSHER_API_URL",
-            "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
             "LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED",
             "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS",
@@ -342,6 +351,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
     | _FINALIZATION_REPLAY_LISTEN_ONLY,
@@ -363,10 +373,15 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST", "PUSHER_STORAGE_PCM_BUDGET_MB"}),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
+            # Only pusher owns closed recording workers and their eviction proof.
+            "PUSHER_MAX_CLOSED_RECORD_DRAINS",
+            "PUSHER_ABANDON_EVICTED_TOKENS",
+            "PUSHER_MAX_ABANDON_RECORD_DRAINS",
+            "PUSHER_STORAGE_PCM_BUDGET_MB",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             # Pusher alone writes PCM chunk batches (upload_audio_chunks_batch).
@@ -642,7 +657,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or '').partition('\n')[0])
     parser.add_argument(
         "--root",
         type=Path,

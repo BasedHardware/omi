@@ -39,6 +39,11 @@ VENDOR_AUDIO_SECONDS = Counter(
     'Audio seconds sent to the prerecorded vendor per POST',
     ['provider', 'endpoint', 'outcome'],
 )
+VENDOR_PAYLOAD_BYTES = Counter(
+    'omi_prerecorded_vendor_payload_bytes_total',
+    'Audio payload bytes attempted per prerecorded POST, including retries; excludes HTTP/TLS overhead',
+    ['provider', 'endpoint'],
+)
 
 _clock = time.monotonic
 
@@ -49,6 +54,10 @@ class ModulateQuotaError(RuntimeError):
     Stays a RuntimeError subclass with the historical 'Modulate transcription failed'
     prefix in raisers so existing callers and retryable-failure semantics are unchanged.
     """
+
+    def __init__(self, message: str, *, breaker_open: bool = False):
+        super().__init__(message)
+        self.breaker_open = breaker_open
 
 
 def is_quota_error(exc: BaseException) -> bool:
@@ -199,9 +208,30 @@ def record_breaker_other_failure(endpoint: str) -> None:
             state.opened_at = _clock()
 
 
-def record_vendor_burn(endpoint: str, outcome: str, seconds: float) -> None:
+def record_vendor_burn(endpoint: str, outcome: str, seconds: float, *, provider: str = MODULATE_PROVIDER) -> None:
+    """Count one bounded vendor attempt; existing callers retain the Modulate default."""
+    if (
+        provider not in {MODULATE_PROVIDER, 'soniox'}
+        or endpoint not in {ENDPOINT_STT, ENDPOINT_LID}
+        or outcome not in {'ok', 'error'}
+    ):
+        return
     try:
-        VENDOR_AUDIO_SECONDS.labels(MODULATE_PROVIDER, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
+        VENDOR_AUDIO_SECONDS.labels(provider, endpoint, outcome).inc(max(0.0, float(seconds or 0.0)))
+    except Exception:
+        pass
+
+
+def record_vendor_payload(provider: str, endpoint: str, size: int) -> None:
+    """Count the unchanged audio body at the POST boundary, never content or identity.
+
+    This is attempted payload, not confirmed network delivery: a connection failure
+    can send fewer bytes. Fixed pairs bound cardinality independently of callers.
+    """
+    if (provider, endpoint) not in {('modulate', 'stt'), ('modulate', 'lid'), ('parakeet', 'v1'), ('parakeet', 'v2')}:
+        return
+    try:
+        VENDOR_PAYLOAD_BYTES.labels(provider, endpoint).inc(max(0, size))
     except Exception:
         pass
 

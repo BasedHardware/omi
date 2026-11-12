@@ -7,6 +7,8 @@ oldest-age gauge reads 0, which is true: nothing is held). Each slice records on
 collectors through the helpers below, which never raise on a serving path.
 """
 
+from typing import Any
+
 from prometheus_client import Counter, Gauge
 
 from utils.batch_pipeline import vendor_route_contracts as contracts
@@ -42,7 +44,10 @@ PAID_INTENT_VIOLATIONS = Counter(
 )
 HOLD_TRANSITIONS = Counter(contracts.METRIC_HOLD_TRANSITIONS, 'vendor_held transitions', ['outcome'])
 HELD_UNITS = Gauge(contracts.METRIC_HELD_UNITS, 'Units parked in vendor_held', ['reason'])
-HELD_OLDEST_AGE = Gauge(contracts.METRIC_HELD_OLDEST_AGE, 'Oldest vendor_held unit age; alert above 2h')
+# Literal for the alert emitter scan; frozen-name equality is covered by the contract test.
+HELD_OLDEST_AGE = Gauge(
+    'omi_batch_pipeline_vendor_held_oldest_age_seconds', 'Oldest vendor_held unit age; alert above 2h'
+)
 HEALTH_DECISIONS = Counter(contracts.METRIC_HEALTH_DECISIONS, 'VendorHealth.allows answers', ['provider', 'reason'])
 BREAKER_STATE = Gauge(
     contracts.METRIC_BREAKER_STATE, 'Vendor breaker state, 1 for the current one', ['provider', 'state']
@@ -50,6 +55,12 @@ BREAKER_STATE = Gauge(
 AUDIO_HOURS_USED = Gauge(contracts.METRIC_AUDIO_HOURS_USED, 'Vendor audio hours used today, cross-pod', ['provider'])
 AUDIO_HOURS_CAP = Gauge(contracts.METRIC_AUDIO_HOURS_CAP, 'Configured vendor daily audio-hour cap', ['provider'])
 CAP_HITS = Counter(contracts.METRIC_CAP_HITS, 'Vendor sends refused at a spend cap', ['provider', 'reason'])
+# A literal name so the alert contract's emitter scan finds it; pinned equal to contracts.METRIC_OVERFLOW_AUDIO.
+OVERFLOW_AUDIO = Counter(
+    'omi_batch_pipeline_vendor_overflow_audio_seconds_total',
+    'Billed vendor audio seconds for units routed to a vendor over a capable GPU (overflow)',
+    ['route'],
+)
 COLLECTORS = (
     ROUTE_DECISIONS,
     TABLE_LOADS,
@@ -68,6 +79,7 @@ COLLECTORS = (
     AUDIO_HOURS_USED,
     AUDIO_HOURS_CAP,
     CAP_HITS,
+    OVERFLOW_AUDIO,
 )
 
 
@@ -88,6 +100,21 @@ def route_decision(route: str, reason: VendorRouteReason | str) -> None:
         ROUTE_DECISIONS.labels(
             route=_route(route), reason=reason_label(ReasonFamily.VENDOR_ROUTE, reason, VendorRouteReason)
         ).inc()
+    except Exception:
+        pass
+
+
+def overflow_attempt(stt_route: Any, service: str, audio_seconds: float) -> None:
+    """Billed vendor audio for a unit whose route chose a vendor over a capable GPU.
+
+    ``provider_reason == 'none'`` marks exactly that choice (``route_selection._as_stt_route``):
+    a vendor serving a language the GPU cannot is ``unsupported_language`` and BYOK is ``byok``.
+    Under an ordered GPU-first table it is GPU-saturation overflow; the $50/day overflow-spend
+    alert reads this counter.
+    """
+    try:
+        if audio_seconds > 0 and getattr(stt_route, 'provider_reason', None) == 'none':
+            OVERFLOW_AUDIO.labels(route=_route(service)).inc(audio_seconds)
     except Exception:
         pass
 

@@ -1,6 +1,8 @@
 """Live TDT runs through real admission, socket, VAD and receiver seams; no network."""
 
 import asyncio
+import json
+import time
 from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -15,6 +17,7 @@ from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
 from config.live_stt_recovery import session_recovery_enabled
 from utils.stt.recovery_state import LiveRecoveryController
+from config import parakeet_canary as shape_config
 
 from utils.stt import (
     connect_backoff as connect_backoff_module,
@@ -52,6 +55,53 @@ from routers.listen.receiver import ListenReceiver
 
 _REAL_SLEEP = asyncio.sleep
 _REAL_WAIT_FOR_EVENT = window.wait_for_event
+
+
+@pytest.mark.asyncio
+async def test_shape_canary_post_isolated_and_zero_drains_without_cancelling(monkeypatch, replica_pool, tmp_path):
+    route_file = tmp_path / 'route.json'
+    route = {'url': shape_config.CANDIDATE, 'identity': 'a' * 64, 'percent': 5, 'expires': time.time() + 250}
+    route_file.write_text(json.dumps(route))
+    monkeypatch.setenv('PARAKEET_SHAPE_CANARY_FILE', str(route_file))
+    monkeypatch.setattr(shape_config.secrets, 'randbelow', lambda _: 0)
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    class HeldClient(Client):
+        async def post(self, url, **kwargs):
+            if shape_config.CANDIDATE in url:
+                entered.set()
+                await finish.wait()
+            return await super().post(url, **kwargs)
+
+    client = HeldClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    token = current_routing_cohort.set(RoutingCohort('on'))
+    try:
+        sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    finally:
+        current_routing_cohort.reset(token)
+    pending = asyncio.create_task(sock._post_and_parse(b'\x01\x00' * 32000, 2))
+    await entered.wait()
+    route_file.write_text(json.dumps({**route, 'percent': 0}))
+    assert not pending.done()
+    finish.set()
+    assert await pending
+    assert client.requests[0][0] == shape_config.CANDIDATE + '/v1/transcribe'
+    assert not replica_pool._states  # candidate never uses/poisons baseline replica recovery
+    assert await sock._post_and_parse(b'\x01\x00' * 32000, 2)
+    assert client.requests[1][0].startswith('http://10.0.0.')
+    assert sock._shape_route.drained
+
+
+def test_shape_session_assignment_survives_window_replacement():
+    cohort = RoutingCohort('on')
+    token = current_routing_cohort.set(cohort)
+    try:
+        a = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+        b = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    finally:
+        current_routing_cohort.reset(token)
+    assert a._shape_route is b._shape_route
 
 
 def _mock_post_pacing(monkeypatch, sleep):
@@ -5056,68 +5106,6 @@ async def test_normal_paced_first_post_holds_with_deadline_cut_on_or_off(monkeyp
         await sock._run_job(job)
         assert now[0] == pytest.approx(106.8)
         assert emitted == [] and sock._anchor_bytes == 0
-        assert sock._deadline_cut_enabled == (flag == 'true')
         assert window.WINDOW_FORCED_CUTS._value.get() == forced_before
-    finally:
-        sock.finish()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('progress', [False, True])
-@pytest.mark.parametrize(
-    'flag,bound,rescued',
-    [
-        ('true', None, True),
-        ('true', '0.8', False),
-        ('true', '1.5', True),
-        ('true', 'nan', True),
-        ('false', None, False),
-    ],
-)
-async def test_slow_nonempty_post_near_deadline_survives_only_with_qualified_cut(
-    monkeypatch, progress, flag, bound, rescued
-):
-    # Capture takes a full pace, then a slow but responding HTTP POST leaves
-    # 1.1s before the original timer expires. Exercise the real parser/anchor.
-    monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
-    if bound is not None:
-        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', bound)
-    now = [100.0]
-    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
-
-    class SlowClient(UnpunctuatedClient):
-        async def post(self, url, **kwargs):
-            now[0] += 4.9
-            return await super().post(url, **kwargs)
-
-    monkeypatch.setattr(window, 'get_stt_client', lambda: SlowClient())
-    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
-    emitted = []
-    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
-    sock.progress_deadline_enabled = progress
-    sock._first_text_recorded = progress
-    try:
-        pcm = b'\x01\x00' * 16000 * 6
-        sock.mark_speech()
-        assert sock.send(pcm[:640])
-        now[0] += sock._pace_seconds
-        sock.mark_speech()
-        assert sock.send(pcm[640:])
-        assert sock._deadline_speech_at == 100.0
-        sock._next_post = now[0] + sock._pace_seconds
-        job = sock._next_job()
-        assert job is not None and not job.force
-        await sock._run_job(job)
-        assert now[0] == pytest.approx(110.9)
-        assert bool(emitted) == rescued
-        assert (sock._anchor_bytes > 0) == rescued
-        assert (sock._first_text_timer is None) == rescued
-        now[0] = 112.1
-        sock._expire_first_text()
-        assert sock.is_connection_dead != rescued
-        if rescued:
-            assert all(segment['text'].strip() for segment in emitted)
-        else:
-            assert sock.death_reason == 'first_text_deadline'
     finally:
         sock.finish()

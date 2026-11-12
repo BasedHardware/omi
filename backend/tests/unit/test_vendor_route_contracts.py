@@ -15,7 +15,7 @@ from config.stt_provider_policy import (
 )
 from utils.batch_pipeline import vendor_route_contracts as c
 from utils.batch_pipeline import vendor_route_metrics as m
-from utils.batch_pipeline.provider_stt import PARAKEET_MODEL, resolve_route
+from utils.batch_pipeline.provider_stt_admission import PARAKEET_MODEL, resolve_route
 from utils.observability.reasons import (
     VendorAttemptOutcome as Outcome,
     VendorHealthReason,
@@ -380,7 +380,10 @@ def test_flag_names_are_owned_by_one_slice():
 
 def test_metric_names_are_frozen_kept_and_backed_by_collectors():
     names = {value for key, value in vars(c).items() if key.startswith('METRIC_')}
-    assert len(names) == 17  # 15 frozen by slice A + 2 GPU-overflow gauges (slice B follow-up)
+    # 15 frozen by slice A + 2 GPU-overflow gauges (slice B follow-up) + the overflow-spend counter
+    # (#24637, read by the omi-batch-vendor-overflow-spend alert).
+    assert len(names) == 18
+    assert c.METRIC_OVERFLOW_AUDIO in names
     assert all(name.startswith('omi_batch_pipeline_vendor_') for name in names)
     collected = {collector._name for collector in m.COLLECTORS}
     assert {name.removesuffix('_total') for name in names} == collected

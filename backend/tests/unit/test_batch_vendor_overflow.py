@@ -438,6 +438,10 @@ async def test_intake_offers_overflow_to_fresh_units_only(monkeypatch, priority,
         assert seen['gpu_saturated'] is None
 
 
+def test_the_overflow_audio_counter_keeps_its_contract_name():
+    assert m.OVERFLOW_AUDIO._name + '_total' == c.METRIC_OVERFLOW_AUDIO
+
+
 def _fallbacks(monkeypatch):
     recorded = []
     monkeypatch.setattr(intake, 'record_fallback', lambda **labels: recorded.append(labels))

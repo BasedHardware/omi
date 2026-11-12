@@ -1,3 +1,10 @@
+// The phone's single audio-custody ledger (wals.json + .bin files) and its
+// upload drain: every captured byte the server has not confirmed lives here,
+// and every upload path funnels through this ledger's gate.
+//
+// One ledger and one uploader is the contract that makes crash, retry and
+// account-change safe -- producers hand finished files to addExternalWal and
+// never upload, poll or delete audio on their own (CUSTODY.md).
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'native_custody_diagnostics.dart';
@@ -41,6 +48,8 @@ import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/backend/http/api/sync_upload_refusal.dart';
+import 'package:omi/services/wals/recording_wait_deferrals.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -291,6 +300,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+  late final RecordingWaitDeferrals _recordingWaits = RecordingWaitDeferrals(_now);
 
   Future<void> _sleep(Duration duration) => (_sleepOverride ?? Future<void>.delayed)(duration);
 
@@ -386,6 +396,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @visibleForTesting
   List<Wal> get testRetiredWals => _retiredWals;
+
+  /// Test seam: a future that completes when every WAL buffer operation
+  /// already enqueued (seals, drains, flushes, index saves) has finished.
+  /// Lets tests await fire-and-forget paths such as the lifecycle-pause seal
+  /// deterministically, without wall-clock sleeps and without performing the
+  /// work themselves.
+  @visibleForTesting
+  Future<void> get testWalIoQuiescent => _bufferQueue;
 
   @override
   void cancelSync() {
@@ -2057,6 +2075,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
+              !_recordingWaits.isWaiting(wal.conversationId) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
@@ -2343,7 +2362,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
-        if (e.statusCode >= 500 && (e.retryAfterSeconds ?? 0) <= 0) {
+        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
+        final recordingWait =
+            scopedWait && _recordingWaits.defer(batchConversationId, e.recordingWaitSeconds ?? e.retryAfterSeconds);
+        if (e.statusCode >= 500 && !recordingWait && (scopedWait || (e.retryAfterSeconds ?? 0) <= 0)) {
           // Unscoped 5xx (e.g. platform shedding under load): the server gave
           // no pacing, so the drain pauses briefly and grows the pause with
           // each consecutive refusal instead of immediately re-uploading the

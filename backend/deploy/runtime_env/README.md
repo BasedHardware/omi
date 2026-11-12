@@ -3,6 +3,10 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
+runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
+defaults to `true`; rollback sets it to `false` on those same hosts and charts.
+
 Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
 deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
 Keep it out of deployment defaults and use the
@@ -70,7 +74,7 @@ mixed identity cannot be established. No actual resource is configured here.
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
 surfaces explicitly declare all 20 current keys. The guard flag-offs leave
-`memory_list_index_window:0`, `batch_privacy_memoize:0`,
+`memory_list_index_window:0`,
 `people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
@@ -107,3 +111,12 @@ with `usage_month_total:0` while leaving maintenance on; after any old writer,
 keep readers off until all writers qualify and a new common epoch is selected.
 Count net reads plus writes and seed scans in D+1 billing; this config alone
 establishes no realized savings.
+
+Batch worker control-loop settings are declared in the worker chart (including
+explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
+and `firestoreReadLevers: '{}'`. The three control knobs
+also have matching base declarations on serving batch hosts; pusher does not run
+the batch scheduler/pump and the co-host contract classifies them listen-only.
+The retired WQ12 privacy lever is absent from worker and serving-role literals.
+Worker rollback: 64 / false / 2 / `{}` respectively. See
+[the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.

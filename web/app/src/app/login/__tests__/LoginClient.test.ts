@@ -4,7 +4,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let query = '';
-let authUser: { uid: string } | null = null;
+let authUser: {
+  uid: string;
+  email?: string;
+  providerData?: { providerId: string }[];
+} | null = null;
 const routerHarness = vi.hoisted(() => ({ push: vi.fn() }));
 const referralHarness = vi.hoisted(() => ({
   claim: vi.fn(),
@@ -37,6 +41,11 @@ vi.mock('@/components/auth/AuthProvider', () => ({
 
 vi.mock('@/lib/firebase', () => ({
   isFirebaseAuthConfigured: false,
+  auth: {
+    get currentUser() {
+      return authUser;
+    },
+  },
 }));
 
 vi.mock('@/lib/referrals', async () => ({
@@ -57,6 +66,7 @@ import { LoginClient } from '@/app/login/LoginClient';
 
 describe('LoginClient geometry', () => {
   beforeEach(() => {
+    vi.stubGlobal('navigator', { userAgent: 'desktop' });
     query = '';
     authUser = null;
     referralHarness.claim.mockReset();
@@ -83,7 +93,7 @@ describe('LoginClient geometry', () => {
     const markup = renderToStaticMarkup(createElement(LoginClient));
 
     expect(markup).toContain('One free month of Omi Pro');
-    expect(markup).toContain('Create your account to claim it');
+    expect(markup).toContain('Create your account through this link to claim it');
     expect(markup).toContain('text-center font-display text-2xl');
     expect(markup).toContain('Continue with Apple');
     expect(markup).toContain('Continue with Google');
@@ -99,6 +109,60 @@ describe('LoginClient geometry', () => {
 
     await waitFor(() => expect(referralHarness.claim).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(referralHarness.navigate).toHaveBeenCalledTimes(1));
+  });
+
+  it.each([
+    [
+      'iPhone',
+      'apple.com',
+      'Get Omi for iPhone',
+      'https://apps.apple.com/app/id6502156163',
+    ],
+    [
+      'Android',
+      'google.com',
+      'Get Omi for Android',
+      'https://play.google.com/store/apps/details?id=com.friend.ios',
+    ],
+  ])(
+    'keeps a %s recipient on a confirmed account-bound mobile destination',
+    async (ua, providerId, label, href) => {
+      vi.stubGlobal('navigator', { userAgent: ua });
+      query = 'referral=ref1.test.code&environment=prod';
+      authUser = {
+        uid: 'phone-user',
+        email: 'friend@example.com',
+        providerData: [{ providerId }],
+      };
+      referralHarness.claim.mockResolvedValue({ claimed: true, trial_days: 30 });
+      const view = render(createElement(LoginClient));
+      expect((await view.findByRole('link', { name: label })).getAttribute('href')).toBe(
+        href,
+      );
+      expect(view.getByText(/friend@example.com/)).toBeTruthy();
+      expect(view.getByText('Your free month is active')).toBeTruthy();
+      for (let i = 0; i < 3; i++) view.rerender(createElement(LoginClient));
+      expect(referralHarness.claim).toHaveBeenCalledTimes(1);
+      expect(referralHarness.navigate).not.toHaveBeenCalled();
+      authUser = { uid: 'other-user' };
+      referralHarness.claim.mockResolvedValue({ claimed: false, trial_days: 30 });
+      view.rerender(createElement(LoginClient));
+      await view.findByText(/We could not confirm a new activation/);
+      expect(view.queryByText('Your free month is active')).toBeNull();
+    },
+  );
+
+  it('does not call a repeated claim success on a phone', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone' });
+    query = 'referral=ref1.test.code&environment=prod';
+    authUser = { uid: 'phone-user' };
+    referralHarness.claim.mockResolvedValue({ claimed: false, trial_days: 30 });
+    const view = render(createElement(LoginClient));
+    await view.findByText(/may already have been used/);
+    expect(view.queryByText('Your free month is active')).toBeNull();
+    expect(
+      view.getByRole('link', { name: 'Get Omi for iPhone' }).getAttribute('href'),
+    ).toBe('https://apps.apple.com/app/id6502156163');
   });
 
   it('a failed claim exposes a working retry without an automatic retry loop', async () => {
@@ -121,7 +185,7 @@ describe('LoginClient geometry', () => {
     referralHarness.claim.mockRejectedValue(new ReferralClaimError('Rejected', false));
     const view = render(createElement(LoginClient));
     await view.findByText(
-      'This referral could not be applied to your account. You can continue to Omi.',
+      'We could not confirm activation for this account. Check your plan in Omi using this same account.',
     );
     expect(view.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(referralHarness.claim).toHaveBeenCalledTimes(1);
@@ -158,7 +222,9 @@ describe('LoginClient geometry', () => {
 
     await waitFor(() =>
       expect(
-        view.getByText('This free month is only available to new accounts.'),
+        view.getByText(
+          'We could not confirm a new activation. This link is for new accounts and may already have been used. Check your plan in Omi using this same account.',
+        ),
       ).toBeTruthy(),
     );
     expect(referralHarness.navigate).not.toHaveBeenCalled();

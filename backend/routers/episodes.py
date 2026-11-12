@@ -1,12 +1,12 @@
 """Episodes API: the live occasion overlay the mobile app lists and opens.
 
 ``enabled`` in every read is the server capability. With ``EPISODES_ENABLED``
-off (or outside the ramp cohort) it is false and the app keeps today's
+off it is false and the app keeps today's
 per-conversation UI; a server that predates this router answers 404, which
 the app treats the same way.
 
-A call is admitted when the uid is in the cohort *and* the request's
-``X-Omi-App-Channel`` is in ``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
+A call is admitted when the request's ``X-Omi-App-Channel`` is in
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
 store, missing or unknown channel answers ``enabled: false`` (404 for writes),
 so that client keeps today's UI. Every admitted call is also the
 client-capability signal: it leaves the sticky ``episodes:client_seen:{uid}``
@@ -19,9 +19,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from models.recording_speakers import (
+    RecordingSpeakerRequest,
+    RecordingSpeakerResponse,
+    RecordingSpeakerConflict,
+    RecordingSpeakerLimit,
+)
 
-from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
+
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
 from models.episode import (
     EpisodeListResponse,
@@ -126,6 +134,8 @@ def get_episode(
     projected = home_read.project_episode(uid, episode)
     if projected is None:
         raise HTTPException(status_code=404, detail='Episode not found')
+    # Opening the page is the trigger for a late episode's deferred compose.
+    home_read.schedule_opened_compose(uid, episode)
     return projected
 
 
@@ -155,3 +165,28 @@ def dismiss_episode_item(
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
     return home_read.wire_episode(episode)
+
+
+@router.patch(
+    '/v1/episodes/{episode_id}/assign-speaker',
+    response_model=RecordingSpeakerResponse,
+    responses={
+        409: {'model': RecordingSpeakerConflict, 'description': 'Recording rename disabled or speaker selection stale'},
+        413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'},
+    },
+)
+def assign_episode_speaker(
+    episode_id: str,
+    body: RecordingSpeakerRequest,
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    _require(uid, channel)
+    from routers.recording_speakers import edit
+
+    episode = service.episode_by_id(uid, episode_id)
+    if not episode or not episode.get('conversation_ids'):
+        raise HTTPException(status_code=404, detail='Episode not found')
+    anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
+    return edit(uid, anchor, body, background_tasks, episode_id=episode_id)

@@ -81,8 +81,22 @@ class WorkItem:
     privacy_generation: int | None = None
     requires_compute_admission: bool = False
     shadow: bool = False
+    # CPU admission provenance, never inferred from record-origin speaker scopes.
+    timing_store: str | None = None
+    language_receipt_enabled: bool | None = None
+
+    def to_dict(self):
+        """Serialize optional receipt state without widening legacy job documents."""
+        from dataclasses import asdict
+
+        value = asdict(self)
+        if self.language_receipt_enabled is None:
+            value.pop('language_receipt_enabled')
+        return value
 
     def __post_init__(self):
+        if self.timing_store not in {None, 'batch', 'sync'}:
+            raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
         if not self.owner_id or '/' in self.owner_id or len(self.owner_id.encode()) > 256:
@@ -105,6 +119,8 @@ class WorkItem:
             raise ValueError('requires_compute_admission must be boolean')
         if type(self.shadow) is not bool:
             raise ValueError('shadow must be boolean')
+        if self.language_receipt_enabled is not None and self.language_receipt_enabled is not True:
+            raise ValueError('language_receipt_enabled must be true or absent')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')
@@ -267,6 +283,7 @@ class WorkResult:
     segment_id: str
     result_uri: str
     outcome: str = 'success'
+    language_receipt: dict | None = field(default=None, compare=False)
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -275,6 +292,31 @@ class WorkResult:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
+        if self.language_receipt is not None:
+            from utils.batch_pipeline.language_receipt import validate
+
+            validate(self.language_receipt)
+
+    def to_dict(self):
+        from dataclasses import asdict
+
+        value = asdict(self)
+        # Preserve the persisted representation of pre-receipt workers and
+        # completed results, including idempotent retries across a rolling deploy.
+        if self.language_receipt is None:
+            value.pop('language_receipt')
+        return value
+
+    def matches_persisted(self, value):
+        """Compare core results while tolerating an absent optional rolling-deploy receipt."""
+        if not isinstance(value, dict):
+            return False
+        expected = self.to_dict()
+        existing = dict(value)
+        if expected.get('language_receipt') is None or existing.get('language_receipt') is None:
+            expected.pop('language_receipt', None)
+            existing.pop('language_receipt', None)
+        return existing == expected
 
 
 @dataclass(frozen=True)

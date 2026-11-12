@@ -515,6 +515,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # FolderEntity serialization for the Developer API folder response;
+        # this path neither reads a Conversation nor feeds intelligence.
+        DumpSite('routers/developer.py', 'get_user_folders', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).
@@ -569,8 +572,17 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/goals.py', 'suggest_goal', 'dict'),
         DumpSite('database/goals.py', 'normalize_goal_storage', 'model_dump'),
         DumpSite('database/goals.py', '_new_goal_payload', 'model_dump'),
-        DumpSite('database/goals.py', 'update_goal', 'model_dump'),
+        DumpSite('database/goals.py', 'update_document', 'model_dump'),
         DumpSite('database/goals.py', 'apply', 'model_dump'),
+        # A2a repository serialization: the task list's key only extracts sort
+        # fields from ActionItemEntity; goal CAS maps GoalEntity's stored fields,
+        # and progress methods map GoalProgressEvent storage/wire values. None
+        # serializes a Conversation or supplies conversation content to intelligence.
+        DumpSite('database/action_items.py', 'key', 'model_dump'),
+        DumpSite('database/goals.py', 'update', 'model_dump'),
+        DumpSite('database/goals.py', 'update_progress_document', 'model_dump'),
+        DumpSite('database/goals.py', 'append_progress_event', 'model_dump'),
+        DumpSite('database/goals.py', 'list_progress_events', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_intervention', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'publish', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_feedback', 'model_dump'),
@@ -588,6 +600,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/apps.py', 'generate_persona_desc', 'dict'),
         DumpSite('utils/task_intelligence/backend_capture.py', 'policy_signals', 'model_dump'),
         DumpSite('utils/task_intelligence/conversation_capture.py', 'canonical_fields', 'model_dump'),
+        # These serialize TaskDue, CandidateCreateRequest and ReminderOrigin only.
+        # None can carry Conversation.client_processing or display projections.
+        DumpSite('utils/task_intelligence/conversation_capture.py', '_capture_decision', 'model_dump'),
+        DumpSite('utils/task_intelligence/conversation_capture.py', 'process_before_legacy', 'model_dump'),
         # Daily-summary stats payload (not Conversation); scanner matches any model_dump.
         DumpSite('utils/llm/external_integrations.py', '_basic_daily_summary', 'model_dump'),
         DumpSite('utils/llm/external_integrations.py', 'generate_comprehensive_daily_summary', 'model_dump'),
@@ -613,6 +629,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-computed recording and episode metadata, not display projections.
         'recorded_start',
         'recorded_end',
+        # Source-clock timezone metadata, not client-authored display text.
+        'capture_timezone',
         'arrival_at',
         'clock',
         'episode_id',
@@ -654,6 +672,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Retained by persistence/transcript-edit sinks and app views; explicitly
         # stripped as private capture metadata by the integration redactor.
         'capture_coverage',
+        # Server-authored projection of the manual speaker receipt's still-
+        # winning whole-voice not_a_person exclusions. First-party capture
+        # reconciliation signal, not client-authored display; stripped by the
+        # integration redactor like capture_coverage.
+        'excluded_speakers',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',
@@ -729,6 +752,12 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-authored counts/enums/durations/ids only; no client display
         # projection. Internal metadata, excluded from API and integrations.
         'owner_recognition_diagnostics',
+        # Server-computed Home row contract stamp on list reads
+        # (utils/conversations/home_step.py): a read-time wire projection of
+        # the processing step, never stored and never client-authored. NOT
+        # projection-family — it must survive the integration redactor so
+        # clients receive it; the model serializer omits it when unset.
+        'home_step',
     }
 )
 

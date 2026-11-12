@@ -1,4 +1,4 @@
-"""Read-only pod inventory proof for abandoned recording producers; no TTL."""
+"""Read-only pod/abandon proof plus opt-in server-observed token leases."""
 
 from datetime import datetime
 import hashlib
@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 import time
 from config.record_audio import PRODUCER_START_MARGIN_SECONDS
+from config import record_seal_rules as lease
 
 NAMESPACE = 'prod-omi-backend'
 
@@ -71,31 +72,73 @@ def parse_pusher_pod_proof(payload, captured_at):
     }
 
 
-def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
+def producer_tokens_dead(tokens, proof, *, producers_stopped=False, uid=None, row=None, job=None, lease_shadow=False):
     if not isinstance(tokens, dict):
         return False
-    if proof is not None:
-        if (
-            proof.get('namespace') != NAMESPACE
-            or not isinstance(proof.get('pods'), dict)
-            or not 0 <= time.time() - proof.get('captured_at', 0) <= 300
-        ):
-            return False
+    proof_valid = proof is not None and (
+        proof.get('namespace') == NAMESPACE
+        and isinstance(proof.get('pods'), dict)
+        and 0 <= time.time() - proof.get('captured_at', 0) <= 300
+    )
+    if proof is not None and not proof_valid and not tokens:
+        return False  # Cluster repair also uses the empty map to validate inventory freshness.
+    use_lease = lease.token_lease_serving(uid) or (lease_shadow and lease.token_lease_mode() != 'off')
+    now = time.time()
     for value in tokens.values():
         if value is True:
-            if not producers_stopped:
+            if not producers_stopped or (proof is not None and not proof_valid):
                 return False
             continue  # Explicit operator fallback for pre-identity tokens only.
-        if not isinstance(value, dict) or proof is None:
+        if not isinstance(value, dict):
             return False
         pod, started = value.get('pod'), value.get('process_started_at')
         if (
-            not isinstance(pod, str)
-            or not pod
-            or not isinstance(started, (int, float))
+            not isinstance(started, (int, float))
             or isinstance(started, bool)
             or not math.isfinite(started)
             or not 0 < started
+        ):
+            return False
+        # Only serve can mint the podless custody fence. Its own observed
+        # lease remains its exit after rollback; frame pod proof is unchanged.
+        if pod == '' and value.get('signal_source') == 'custody_append':
+            if not lease.token_lease_lapsed(value, now, row=row, job=job):
+                return False
+            continue
+        if use_lease:
+            clocks = lease.token_lease_clocks(value, row=row, job=job)
+            if clocks:
+                signal = lease.lease_timestamp(value.get('last_signal_at'))
+                abandoned = lease.lease_timestamp(value.get('abandoned_at'))
+                # Observed activity supersedes earlier stoppage evidence, even
+                # if a stale token still carries that evidence after renewal.
+                # A computed stock seed is never evidence of activity.
+                if signal and (
+                    (abandoned and abandoned >= started and signal > abandoned)
+                    or (proof_valid and signal > proof['captured_at'])
+                ):
+                    return False
+                if lease.token_lease_lapsed(value, now, row=row, job=job):
+                    continue
+                # A custody uploader can outlive its pusher. Actual server
+                # signals re-fence an abandoned/gone identity. A computed stock
+                # seed is not a live signal and preserves the original proofs.
+                if 'last_signal_at' in value:
+                    return False
+        if 'abandoned_at' in value:
+            abandoned = value['abandoned_at']
+            if (
+                not isinstance(abandoned, (int, float))
+                or isinstance(abandoned, bool)
+                or not math.isfinite(abandoned)
+                or abandoned < started
+            ):
+                return False
+            continue  # Producer attested stoppage after settling all executor I/O.
+        if (
+            not isinstance(pod, str)
+            or not pod
+            or not proof_valid
             or started + PRODUCER_START_MARGIN_SECONDS > proof['captured_at']
         ):
             return False
@@ -105,3 +148,21 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
         if current_start is None or current_start <= started + PRODUCER_START_MARGIN_SECONDS:
             return False
     return True
+
+
+def leases_would_release(tokens, proof, *, uid=None, row=None, job=None, producers_stopped=False):
+    """Content-free shadow diagnostic; never grants write authority."""
+    return bool(
+        tokens
+        and lease.token_lease_mode() != 'off'
+        and producer_tokens_dead(
+            tokens,
+            proof,
+            uid=uid,
+            row=row,
+            job=job,
+            producers_stopped=producers_stopped,
+            lease_shadow=True,
+        )
+        and any(lease.token_lease_lapsed(value, time.time(), row=row, job=job) for value in tokens.values())
+    )

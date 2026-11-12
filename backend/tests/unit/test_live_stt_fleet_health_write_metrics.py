@@ -235,7 +235,12 @@ async def test_cost_result_written_counter_increments_after_a_cas_commit(monkeyp
     from utils.stt.live_gate import GateState
 
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    health = FleetHealth(clock=lambda: 1000.0)
+
+    class Redis:
+        async def mget(self, keys):
+            return [None] * len(keys)
+
+    health = FleetHealth(clock=lambda: 1000.0, redis_client=Redis())
     monkeypatch.setattr(health, '_check_identity', lambda: 'stable')
 
     async def server_now(_identity):

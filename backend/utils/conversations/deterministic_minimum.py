@@ -17,8 +17,6 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
-from config.summary_guarantee import enabled
-from config.merge_before_processing import enabled as merge_before_processing_enabled
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
@@ -150,12 +148,11 @@ def build_deterministic_minimum_structured(
     the category's fallback emoji, no action items, no events. Every other field
     keeps its model default.
 
-    ``uid`` is the owner. Stamp raw-title provenance for the first-summary
-    cohort or pre-processing merge admission, so a minimum never masquerades
-    as historical full processing. An unknown owner (None) gets no stamp.
+    ``uid`` is the owner. Stamp raw-title provenance for every known owner,
+    so a minimum never masquerades as historical full processing.
+    An unknown owner (None) gets no stamp.
     """
-    in_cohort = uid is not None and enabled(uid)
-    raw_provenance = in_cohort or (uid is not None and merge_before_processing_enabled())
+    raw_provenance = uid is not None
     metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
     return Structured(
         **metadata,
@@ -177,3 +174,19 @@ def build_deterministic_minimum_structured(
         action_items=[],
         events=[],
     )
+
+
+def build_deferred_structured(conversation: Any) -> Structured:
+    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
+    the first few words of the transcript so the conversation list stays usable until the user
+    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
+    marks the conversation discarded in `_get_conversation_obj`."""
+    text = ''
+    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
+        seg_text = (getattr(seg, 'text', '') or '').strip()
+        if seg_text:
+            text = seg_text
+            break
+    words = text.split()
+    title = ' '.join(words[:8]).strip() if words else ''
+    return Structured(title=title or 'Recording')

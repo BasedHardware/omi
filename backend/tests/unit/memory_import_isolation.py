@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import os
 import sys
@@ -74,7 +76,23 @@ def make_database_client_stub() -> ModuleType:
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_customer_firestore_client = lambda: client_mod.db
-    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
+    in_body = ContextVar("memory_test_transaction_body", default=False)
+
+    @contextmanager
+    def transaction_body():
+        token = in_body.set(True)
+        try:
+            yield
+        finally:
+            in_body.reset(token)
+
+    def run_transactional(client, operation, *args, transient=False, **kwargs):
+        with transaction_body():
+            return operation(client.transaction(), *args, **kwargs)
+
+    client_mod.run_transactional = run_transactional
+    client_mod.transaction_body = transaction_body
+    client_mod.in_transaction_body = in_body.get
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
@@ -111,7 +129,6 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
@@ -150,6 +167,8 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 CLIENT_BINDING_DATABASE_MODULES = (
     "database.notifications",
     "database.conversations",
+    "database.transcript_pointer",
+    "database.conversation_terminal_title",
     "database.redis_db",
     "database.users",
     "database.memories",
@@ -276,7 +295,6 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
 
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
     subscription_mod.should_defer_desktop_processing = lambda uid: False
     subscription_mod.request_has_llm_byok_key = lambda: False
     subscription_mod.should_skip_omi_paid_postprocessing = lambda uid, uses_custom_stt=False, source=None: False
@@ -464,7 +482,6 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
     vector_db_mod.upsert_memory_vector = MagicMock()
     vector_db_mod.delete_memory_vector = MagicMock()
     vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     vector_db_mod.delete_memory_vectors_batch = MagicMock()
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
@@ -547,7 +564,6 @@ def install_ws_m_heavy_import_stubs() -> list[str]:
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
     vector_db_mod.delete_canonical_memory_vectors = MagicMock(return_value=True)
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     sys.modules["database.vector_db"] = vector_db_mod
     touched.append("database.vector_db")
 

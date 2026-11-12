@@ -76,7 +76,13 @@ With several serving instances, the periodic ticks (the supervisor and metrics
 scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
 quarantine discovery, lease recovery and the result-ready drain) on one instance
 per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
-gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+local samplers stay per instance. Fleet queue gauges use an independent
+20-second `queue_metrics` lease in the same store (default sample cadence 40s,
+60s export freshness bound). GPU queue queries use the 60s per-pod fallback
+because autoscaling also consumes per-pod freshness. Set
+`FIRESTORE_READ_LEVERS` entry `batch_metrics_oldest_leader` to 0 to restore
+per-instance sampling; see [queue sample ownership](runbooks/batch-queue-safety.md#fleet-queue-sample-ownership).
+Explicit `POST /reconcile` and the
 post-recovery drain always run. Every guarded step is already idempotent and
 transaction-fenced, so the lease saves reads and enqueues only. A lease-store
 error fails open to every instance running, and
@@ -426,12 +432,13 @@ re-upload of the same content (`durable_status`) used to answer `failed` with
 looped. Kill switch `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` (default on)
 answers instead:
 
-- `completed` with an empty result and `reason_code: batch_unit_held` when every
+- `processing` with an empty result and `reason_code: batch_unit_held` when every
   failed unit is `failed_held` with no open `speech_redrive`,
   `terminal_disposition` or `silence_disposition` intent, and every other unit
-  is `committed`. Released apps ACK the WAL. A re-upload cannot change the
-  outcome, and the held unit's encrypted audio stays server-side for the
-  operator path above. Committed siblings are already projected; no
+  is `committed`. Phones retain their WALs without re-uploading or consuming
+  retry budget, with a five-minute poll hint even for an open surface. A server
+  artifact is not proof that the phone's independent copy may be released.
+  Committed siblings are already projected; no
   conversation ID is named. Nothing is written: the ledger, jobs and
   retention keep their held state.
 - `processing` when such an intent is open or a sibling is still in flight.
@@ -465,11 +472,12 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   recorded time, is never re-issued: its key may have expired, and that speech
   is outside the 7-day fair-use read anyway. Accounting returns nothing
   while any unit can still change, so an ineligible upload is never charged.
-- **Client.** The status poll and a re-upload answer `completed` with
+- **Client.** The status poll and a re-upload answer `processing` with
   `reason_code: batch_unit_held`, the partial result, and
-  `failed_segments` set to the held count. Released apps ACK the WAL. A
-  conversation the user has since deleted answers `conversation_deleted`, as
-  it does for a completed row.
+  `failed_segments` set to the held count and `poll_after_ms: 300000`. Phones
+  keep custody, including after 30 minutes; projected transcripts remain
+  visible independently. Deleting one projected sibling cannot acknowledge
+  unresolved siblings. Actual all-unit completion permits acknowledgement.
 - **Nothing else moves.** There is no provider call, and no job, intent,
   merge-head, owner-revision or retention write. The held units' encrypted
   audio stays for a reviewed redrive, and parked siblings keep
@@ -485,7 +493,45 @@ or `silence_disposition` intent still blocks it. Every other unit must have a
   held span. A completed row is never re-partialed. Partial writes are
   idempotent: a replay of the same state writes nothing.
 - **Rollback.** Setting the kill switch to false stops new partials. Existing
-  partial rows keep answering `completed` and can still upgrade.
+  partial rows keep answering `processing` and can still upgrade.
+
+### Metadata-proven missing artifacts
+
+`scripts/batch_pipeline_artifact_missing.py` is dry-run by default. It accepts
+only a fresh, owner/segment-bound, generation-pinned GCS metadata 404; no
+`alt=media`, decryption, provider call, completion or deletion. Its CAS keeps
+the unit `quarantined/failed_held`, records `artifact_disposition.state=missing`
+and adds a content-scoped repair hint. A client advertising
+`X-Omi-Custody-Repair-Protocol: 1` receives retryable
+`failed/batch_artifact_missing` and the original `total_files` count before
+either completed or partial handling. Other clients receive `processing` with
+five-minute polling and retain custody; they must never receive completion.
+Healthy siblings can still publish through the ordinary partial transaction.
+
+An exact-content re-upload retains the original ledger/job owner and bindings.
+Only absent spans are staged and requeued; projected jobs, projection receipts,
+processed segment IDs, paid recovery intents and charge checkpoints remain.
+The decoder must reproduce every original capture/duration boundary; changed
+input, privacy, ownership, open operator intents or decoder drift refuse the
+repair without acknowledgement. Native/provider record repairs are excluded.
+The capable client persists the original job and file count across restarts,
+keeps that bundle separate from new recordings, and sends `repair_job_id`.
+The server rejects a changed content ID (including a surviving subset) before
+ordinary admission. Missing local members hold the repair while unrelated new
+recordings can upload; they cannot establish that the lost bytes are recoverable.
+Already accepted audio may outlive the new-upload lookback: only an exact
+existing content/job-owner match crosses that age boundary, verified before
+any original-archive write. Normal stale uploads keep their age refusal.
+An already-ACKed phone WAL is not automatically resent merely because its bytes
+still exist: the phone cleared that job handle. Verify original archives or a
+separate client recovery path before promising recovery for those recordings.
+
+Roll the readers to every status-serving role before any operator apply.
+Applies remain off until a capable client is live. The rollout lead owns apply
+and deployment; a public app release needs David's separate authorization.
+Old readers can ACK held partials, so preserve the custody contract during
+rollback. Never infer audio presence
+from a missing metadata permission, timeout, or a new object generation.
 
 The record lane's capture listing (`list_audio_chunks(require_archive=True)`)
 raises when the raw-archive pack listing fails. It never returns only the
@@ -1075,7 +1121,11 @@ content/client completion on the deployed release before expanding admission.
 ### Owner-chain wake after recovery
 
 `BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED` defaults to `true` (kill
-switch: `false` restores the generic sweep after recovery). A settled recovery
+switch: `false` disables the request's owner-chain walk). With
+`BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED` on, the recovered result receipt
+remains durable and the periodic projection sweep handles it when this flag is
+off; ordinary global reconciliation still runs its generic sweep in that call.
+A settled recovery
 re-enters the ordered merge and commits at its owner's log tail, behind that
 owner's unprojected rows, which the per-instance cursors may already have
 passed. Waiting for the assignment and follow-up cursors to come back around
@@ -1084,8 +1134,11 @@ took 5–12 minutes for one backlog owner during the 5% ramp. After
 reconcile now drains that owner's merge and walks the owner's result log from
 its `projection_watermark`, following `previous_segment_id` links (and erased
 receipts) in chain order. It stops at the first row whose assignment does not
-advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
-afterwards as before, and any error in the wake falls back to it.
+advance the watermark, or after 64 rows or 30 seconds. The generic sweep
+continues after owner projection on ordinary global reconciliation. Owner-only
+recovery requests do not run a generic sweep; the independent periodic serving
+owner handles global scans and retries. Any interrupted projection remains in
+the durable receipt for that sweep.
 
 `BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` defaults to `true` (kill
 switch: `false`). The wake's merge drain releases the recovered unit at once.
@@ -1175,6 +1228,43 @@ page by default (its kill switch restores the mixed page). All three pages
 use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
 
+### Finish backoff (dark, default off)
+
+`BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
+enable) bounds the replay the finish page does for already-projected work. Off,
+the page is exactly the one above and no result field is written.
+
+On, a finish walk that changed nothing writes `projection_finish_due_at` and
+`projection_finish_backoff_step` on the row. The page then asks for
+`projection_state in (persisted, ready)` **and** `projection_finish_due_at <=
+now`: a no-change row is retried after 60 s, then 300 s, then 900 s (capped),
+instead of being re-read and re-fenced on every tick. A row that moved state is
+a changed row and is not deferred. The `pending` assignment page is untouched,
+so new work is never delayed.
+
+The range filter must lead the ordering, so that page uses the second declared
+results index `(projection_state, projection_finish_due_at, committed_at,
+__name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
+before the lever have no clock and are outside every range filter: the first
+pass after enablement is the unfiltered legacy page, which stamps them, and
+only then does the page filter. Every `projection_state` write (session
+receipts and part summaries, quarantine hold and restore, release, sibling
+wake, completion) writes both fields in the same transaction: a move into
+`persisted`/`ready` stamps due now and step 0, and any other state deletes
+them, so no obligation waits on a stale clock. A blocked or failed survey walk
+also stamps the row, because the filtered page cannot see a row without a
+clock. A failed stamp keeps the survey open and restarts the unfiltered walk
+from the front. Rollback is the one switch; the fields are additive and unread
+when off, so no backfill is needed.
+
+The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
+introduced by this lever: the oldest-age max is already saturated by a
+multi-week held obligation, and the over-SLA stock is large enough that a few
+hundred units crossing the boundary is inside its noise. The finish-page
+reads-per-completion ratio (`omi_batch_projection_finish_reads_total` over
+`omi_batch_projection_finish_completed_total`) is the guard that can move; see
+`charts/monitoring/batch-projection/alerts.yaml`.
+
 ### Per-owner projection drain (Phase 1)
 
 The sweep-shared 30 s walk budget gave each heavy owner a shrinking share of
@@ -1211,6 +1301,47 @@ below have their own switches; all three off is the pre-drain behaviour):
 - Log lines: `event=batch_projection action=owner_drain outcome=turn steps=
   advanced= more= elapsed_ms=` per turn, and `action=owner_chain
   outcome=claim_busy`.
+
+### Follow-up desync (2026-11-05)
+
+Every serving process runs its own async follow-up discovery over the same
+`(projection_state, committed_at, __name__)` page. After a roll, all processes
+started at the head together and walked it in lockstep. Each retried the same
+unchanged blocked receipts and skipped rows that a peer had just claimed. On
+2026-11-05 the persisted/ready backlog grew past 45k over SLA while CPU stayed
+near 45 % (`data/run-2026-11-04-gpueff/projection-backlog-2026-11-05.md` in
+the workspace).
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS` (default `900`; `0` is
+the kill switch; negative, NaN or above 3600 keeps 900):
+- **Invariant.** Every row committed at or before a pass's mark is offered
+  within that pass, ties at the mark included. A pass begins at the head, at
+  the seed, or with no mark, and its mark is the projector clock at that moment
+  (wall clock if the projector clock fails). It ends at the page's own wrap or
+  once the cursor is strictly past the mark. Desync requires keyset pagination:
+  with `BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED=false` every page is the
+  head, so offset, backoff and pass bounds stay off.
+- **Offset.** A process's first discovery page starts at a hashed point between
+  the oldest persisted/ready commit and now. The hash covers host, pid and
+  start time, and the seed costs one 1-row read. The page still
+  wraps to the head at its end, and every pass also wraps as soon as its cursor
+  reaches rows committed after that pass began (a high-water mark, re-armed
+  on each wrap). Arrivals that keep every page full can therefore neither
+  starve rows older than the seed nor strand a row skipped in backoff. A
+  failed seed read falls back to head-first.
+- **Backoff.** A row this process saw `blocked`, `retry`, `timeout`,
+  `incomplete` (content not finishable yet) or `claim_busy` is skipped in this
+  process's discovery. The skip is 60 s, doubling per repeat up to the ceiling.
+  `claim_busy` never escalates, and any other outcome clears the entry. The skip
+  lives in process memory only (at most 20,000 rows; dropping an entry only
+  retries sooner). Targeted and owed wakes bypass it, and other processes do
+  not see it. The durable row and its fences are unchanged.
+- **Counter.** `omi_batch_pipeline_projection_followup_outcomes_total{outcome}`
+  counts `completed`, `incomplete`, `blocked`, `retry`, `timeout`,
+  `claim_busy`, `coalesced`, `sync_owned`, `backoff_skipped` and `seeded`.
+
+`BATCH_PIPELINE_PROJECTION_FOLLOWUP_SLOTS` (default `4`, range 1–16; unset or
+out-of-range keeps 4) sets the concurrent follow-ups per process.
 
 `BATCH_PIPELINE_PROJECTION_PREFETCH` (default `4`; `0` is the kill switch;
 malformed or above 8 keeps 4). A budgeted walk reads the next N rows ahead on

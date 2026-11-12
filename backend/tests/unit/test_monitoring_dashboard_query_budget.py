@@ -125,10 +125,10 @@ def _ptt_exprs(doc):
 def test_ptt_timeseries_are_scoped_to_cloud_run_application_metrics():
     """Zero-init cartesian children on listen/pusher/gateway must not enter PTT graphs.
 
-    Live 24h traffic for realtime_voice is only on cloud-run-application-metrics.
-    rate() on idle zero-init series spikes on scrape/reset and draws phantom
-    desktop_linux / incomplete_attempt / unknown lines. The job filter is the
-    load-bearing honesty fix; grouping by outcome|issue_class|client_kind stays.
+    November 7 production evidence has no realtime_voice journey. Keep the
+    Cloud Run scope on these queries pending a confirmed mapping; absence must
+    never read as healthy traffic. Grouping by outcome|issue_class|client_kind
+    stays so instrumentation, if restored, retains its diagnostic detail.
     """
 
     missing = []
@@ -146,3 +146,18 @@ def test_ptt_timeseries_are_scoped_to_cloud_run_application_metrics():
         "PTT PromQL must restrict selectors to the Cloud Run scrape job so "
         "listen/pusher/gateway zero-init children cannot appear:\n  " + "\n  ".join(missing)
     )
+
+
+def test_unmeasured_ptt_stats_never_supply_a_success_fallback():
+    stats = []
+    for panel in _iter_panels(dashboard().get("panels", [])):
+        if not any(PTT_JOURNEY in (t.get("expr") or "") for t in panel.get("targets", [])):
+            continue
+        assert 'not measured' in panel.get('description', ''), panel.get('id')
+        for target in panel['targets']:
+            expr = target.get('expr', '')
+            assert 'or vector(' not in expr and 'or 0 *' not in expr, panel.get('id')
+        if panel.get('type') == 'stat':
+            stats.append(panel['id'])
+            assert panel['fieldConfig']['defaults']['noValue'] == 'not measured', panel['title']
+    assert set(stats) == {36, 37, 38, 39}

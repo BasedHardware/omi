@@ -28,6 +28,10 @@ class Target:
     replay: ReplayLimits | None = None
 
     def capable(self, language: str | None, features: frozenset[str] = frozenset({'streaming'})) -> bool:
+        from config.stt_provider_policy import provider_is_enabled
+
+        if not provider_is_enabled(self.family, STTServingSurface.STREAMING):
+            return False
         lang = (language or 'multi').lower().split('-', 1)[0]
         if not features.issubset(self.features) or (self.languages and lang not in self.languages):
             return False
@@ -76,7 +80,7 @@ def routing_on(uid: str | None) -> bool:
 
 DEFAULT_TARGETS = (
     Target('parakeet-window', 'parakeet', 0.02),
-    Target('modulate-velma-2', 'modulate', 0.055),
+    Target('modulate-velma-2', 'modulate', 0.055, ramp_percent=0),
     Target('soniox', 'soniox', 0.0754),
 )
 DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}

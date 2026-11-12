@@ -368,10 +368,15 @@ def test_android_internal_publishers_hold_changes_for_console_review():
     assert "release_promotion" not in publisher["google_play"]
 
     build_script = workflow["scripts"][-1]["script"]
-    assert build_script.index("flutter build appbundle") < build_script.index(".omi-android-prod-internal-build-identity")
+    assert build_script.index("flutter build appbundle") < build_script.index(
+        ".omi-android-prod-internal-build-identity"
+    )
     assert 'echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"' in build_script
     assert 'echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"' in build_script
-    assert "printf '%s\\n%s\\n%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\" \"${CM_TAG:?CM_TAG is required}\"" in build_script
+    assert (
+        "printf '%s\\n%s\\n%s\\n%s\\n' \"$BUILD_NAME\" \"$BUILD_NUMBER\" \"${CM_TAG:?CM_TAG is required}\""
+        in build_script
+    )
     assert '"${CM_BUILD_ID:?CM_BUILD_ID is required}"' in build_script
     assert ".omi-android-prod-internal-build-identity\"\n" in workflow["scripts"][0]["script"]
 
@@ -1046,6 +1051,62 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
     )
 
     assert GUARDS.check_firmware_release_metadata() == ["firmware release body smoke failed: exit 9"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "none",
+        "no-stage",
+        "no-promote",
+        "no-publish",
+        "comment-only",
+        "unguarded-publish",
+        "no-helper",
+        "rename-zip",
+        "omit-zip",
+        "corrupt-zip",
+    ),
+)
+def test_firmware_ota_guard_follows_workflow_and_exercises_assets(tmp_path, monkeypatch, mutation):
+    workflow = tmp_path / ".github/workflows/firmware_release.yml"
+    helper = tmp_path / "omi/firmware/scripts/ci/cv1_release.py"
+    boot_helper = helper.with_name("cv1_bootloader.py")
+    policy = tmp_path / "omi/firmware/bootloader/cv1-bootloader-policy.json"
+    for target in (workflow, helper, boot_helper, policy):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / target.relative_to(tmp_path), target)
+    if mutation.startswith("no-") and mutation != "no-helper":
+        command = mutation.removeprefix("no-")
+        workflow.write_text(workflow.read_text().replace(f"cv1_release.py {command}", "cv1_release.py prepare"))
+    elif mutation == "comment-only":
+        workflow.write_text(
+            workflow.read_text().replace(
+                "run: python3 omi/firmware/scripts/ci/cv1_release.py publish",
+                "run: echo skipped # python3 omi/firmware/scripts/ci/cv1_release.py publish",
+            )
+        )
+    elif mutation == "unguarded-publish":
+        workflow.write_text(workflow.read_text().replace("${{ inputs.publish == 'publish' }}", "${{ always() }}"))
+    elif mutation == "no-helper":
+        helper.unlink()
+    elif mutation == "rename-zip":
+        helper.write_text(helper.read_text().replace("Omi_CV1_OTA_v{ver}.zip", "wrong_v{ver}.bin"))
+    elif mutation == "omit-zip":
+        helper.write_text(
+            helper.read_text().replace("for name in asset_names(ver)),", "for name in asset_names(ver)[1:]),")
+        )
+    elif mutation == "corrupt-zip":
+        helper.write_text(
+            helper.read_text().replace(
+                "out.writestr(item['file'], archive.read(item['file']))", "out.writestr(item['file'], b'corrupt')"
+            )
+        )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+
+    errors = GUARDS.check_firmware_ota_assets(workflow)
+
+    assert bool(errors) == (mutation != "none"), errors
 
 
 def test_desktop_promotion_guard_rejects_reintroduced_qualification_trigger(tmp_path, monkeypatch):

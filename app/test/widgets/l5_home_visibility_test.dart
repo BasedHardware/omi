@@ -256,7 +256,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(ConversationListItem), findsNothing);
     expect(find.byType(ProcessingConversationRow), findsOneWidget);
-    expect(find.text('Wrapping up lunch'), findsOneWidget);
+    // Processing rows say what is happening, not the provisional title.
+    expect(find.text('Processing…'), findsOneWidget);
     final completed = ServerConversation.fromJson({...member.toJson(), 'status': 'completed'});
     history.removeProcessingConversation(member.id);
     await history.addConversation(completed);
@@ -343,14 +344,16 @@ void main() {
         expect(find.textContaining('parts'), findsNothing);
         expect(find.byType(ConversationListItem), findsOneWidget);
         final row = find.byType(ConversationListItem);
-        expect(find.descendant(of: row, matching: find.text('10m')), findsOneWidget);
-        expect(find.descendant(of: row, matching: find.text(' • ')), findsOneWidget);
+        expect(find.descendant(of: row, matching: find.text('• 10m')), findsOneWidget);
         await tester.tap(find.text('Planning the garden'));
       }
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('episode_page')), findsOneWidget);
-      expect(find.text('Finished meeting'), findsOneWidget);
-      expect(find.text('Was in progress'), findsOneWidget);
+      // A processing member can keep animating after the route opens.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 450));
+      final episodePage = find.byKey(const Key('episode_page'));
+      expect(episodePage, findsOneWidget);
+      expect(find.descendant(of: episodePage, matching: find.text('Finished meeting')), findsOneWidget);
+      expect(find.descendant(of: episodePage, matching: find.text('Was in progress')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       debugDefaultTargetPlatformOverride = null;

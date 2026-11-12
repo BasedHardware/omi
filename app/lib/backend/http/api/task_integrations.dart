@@ -26,8 +26,15 @@ class TaskIntegrationsResponse {
 }
 
 /// Get all task integrations for the current user
-Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/task-integrations', headers: {}, method: 'GET', body: '');
+Future<TaskIntegrationsResponse?> getTaskIntegrations({bool Function()? canSend}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/task-integrations',
+    headers: {},
+    method: 'GET',
+    body: '',
+    canSend: canSend,
+    signOutOn401: canSend == null,
+  );
 
   if (response == null) return null;
 

@@ -1701,7 +1701,8 @@ enum ConversationActionAction {
   open("open"),
   select("select"),
   copyConversationId("copy_conversation_id"),
-  testPrompt("test_prompt");
+  testPrompt("test_prompt"),
+  exportTranscript("export_transcript");
   const ConversationActionAction(this.wireName);
   final String wireName;
 }
@@ -3022,6 +3023,42 @@ final class PaywallVariantFallback extends RegisteredEvent {
   Map<String, Object> get properties => {"variant": variant.wireName, "reason": reason.wireName};
 }
 
+final class PaywallMonthlyFallbackShown extends RegisteredEvent {
+  const PaywallMonthlyFallbackShown({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Shown";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
+}
+
+enum PaywallMonthlyFallbackAcceptedOutcome {
+  purchased("purchased"),
+  cancelled("cancelled"),
+  failed("failed");
+  const PaywallMonthlyFallbackAcceptedOutcome(this.wireName);
+  final String wireName;
+}
+
+final class PaywallMonthlyFallbackAccepted extends RegisteredEvent {
+  const PaywallMonthlyFallbackAccepted({required this.trial, required this.outcome});
+  final bool trial;
+  final PaywallMonthlyFallbackAcceptedOutcome outcome;
+  @override
+  String get wireName => "Paywall Monthly Fallback Accepted";
+  @override
+  Map<String, Object> get properties => {"trial": trial, "outcome": outcome.wireName};
+}
+
+final class PaywallMonthlyFallbackDismissed extends RegisteredEvent {
+  const PaywallMonthlyFallbackDismissed({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Dismissed";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
+}
+
 final class OnboardingWebviewShown extends RegisteredEvent {
   const OnboardingWebviewShown();
   @override
@@ -3332,4 +3369,28 @@ final class WalUploadRefused extends RegisteredEvent {
   String get wireName => "WAL Upload Refused";
   @override
   Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
+}
+
+final class SubscriptionPaymentIssueShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueShown();
+  @override
+  String get wireName => "Subscription Payment Issue Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueUpdateTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueUpdateTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Update Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
+  const SubscriptionPaymentIssuePortalOpened();
+  @override
+  String get wireName => "Subscription Payment Issue Portal Opened";
+  @override
+  Map<String, Object> get properties => {};
 }

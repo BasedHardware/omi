@@ -17,9 +17,13 @@ from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
+from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
+from database import rpc_deadline
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
+from database.batch_privacy_attempt import current_attempt
+from database import privacy_check_metrics
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
@@ -32,8 +36,13 @@ HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
 
 
-def delete_batch_object(uid: str, uri: str) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed."""
+def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
+    no SDK retry, bounded by the time left; ``storage_client`` lets such a
+    caller reuse a client whose session is bound to that deadline.
+    """
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
     allowed_buckets = {
@@ -56,17 +65,28 @@ def delete_batch_object(uid: str, uri: str) -> None:
     ):
         raise ValueError('batch object reference outside configured owner storage')
     generation = int(parsed.fragment) if parsed.fragment else None
-    from utils.other.local_storage import create_storage_client
+    if storage_client is None:
+        from utils.other.local_storage import create_storage_client
 
-    storage_client: Any = create_storage_client()
+        storage_client = create_storage_client()
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
+    left = rpc_deadline.remaining()
     try:
-        blob.delete(if_generation_match=generation)
+        if left is not None:
+            if left <= 0:
+                raise rpc_deadline.RpcDeadlineExceeded('object delete not sent: unit deadline passed')
+            # The generation-match default retry runs for 120 s; a gate holder gets one bounded attempt.
+            blob.delete(if_generation_match=generation, timeout=min(timeout or left, left), retry=None)
+        elif timeout is None:
+            blob.delete(if_generation_match=generation)
+        else:
+            # A caller that bounds the call wants one attempt, not the 120 s generation retry.
+            blob.delete(if_generation_match=generation, timeout=timeout, retry=None)
     except NotFound:
         pass
 
 
-def register_batch_artifact(
+def _register_batch_artifact(
     store: Any,
     uid: str,
     segment_id: str,
@@ -247,7 +267,7 @@ def register_batch_artifact(
     return artifact_id
 
 
-def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+def _expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
     """Arm cleanup only after C has durably checkpointed successful projection."""
     client, namespace = store.client, store.namespace
     completed_at = datetime.fromtimestamp(now, timezone.utc)
@@ -444,28 +464,54 @@ def cleanup_completed_artifacts(
     return cleaned
 
 
-def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
-    """B's required authorize(item) callback, using uncached transactional reads."""
+def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
+    """Authorize artifact IO; full-row exports always use live transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
-    @firestore.transactional
     def authorize(transaction):
         loaded = {}
+        # The ordinary artifact callback returns only ProtectionContext, whose
+        # protection level is read live below. It does not export full rows.
+        # Staging/enrichment callers requesting snapshots retain the exact walk.
+        decision_only = (
+            snapshots is None
+            and current_attempt() is not None
+            and (
+                lever_enabled('bpp_generation_memo', item.owner_id)
+                or lever_enabled('privacy_checks_shadow', item.owner_id)
+            )
+        )
         generation = assert_batch_write_allowed(
             store.client,
             transaction,
             item.owner_id,
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
-            snapshots=loaded,
+            snapshots=None if decision_only else loaded,
+            read_budget=read_budget,
         )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
-        user = loaded['user']
+        user = (
+            privacy_check_metrics.read_snapshot(
+                'batch',
+                store.client.collection('users').document(item.owner_id),
+                uid=item.owner_id,
+                transaction=transaction,
+                read_budget=read_budget,
+            ).to_dict()
+            or {}
+            if decision_only
+            else loaded['user']
+        )
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
-    return authorize(store.client.transaction())
+    if read_budget is not None:
+        from database.batch_pipeline_reads import read_snapshot
+
+        return read_snapshot(store, lambda tx: authorize(tx.transaction), read_budget)
+    return firestore.transactional(authorize)(store.client.transaction())
 
 
 def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context: Any) -> None:
@@ -490,3 +536,28 @@ def purge_batch_storage_owner(uid: str, namespace: str) -> None:
             pass
     if list(bucket.list_blobs(prefix=prefix, versions=True, max_results=1)):
         raise RuntimeError('batch owner storage purge did not converge')
+
+
+def register_batch_artifact(
+    store: Any,
+    uid: str,
+    segment_id: str,
+    uri: str,
+    kind: str,
+    expected_generation: int,
+    *,
+    item: Any = None,
+) -> str:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _register_batch_artifact."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _register_batch_artifact(store, uid, segment_id, uri, kind, expected_generation, item=item)
+
+
+def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) -> bool:
+    """Scoped entry point (lever bpp_attempt_scope, key = uid); see _expire_completed_segment."""
+    from database.batch_privacy_attempt import scoped_privacy_attempt
+
+    with scoped_privacy_attempt(uid):
+        return _expire_completed_segment(store, uid, segment_id, now)

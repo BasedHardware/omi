@@ -223,6 +223,8 @@ def router():
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         "utils.retrieval.tools.calendar_tools": _pkg("utils.retrieval.tools.calendar_tools"),
         "utils.retrieval.tools.google_utils": _pkg("utils.retrieval.tools.google_utils"),
+        # Detail escalation is outside these bounds tests; keep its outbox behind a stubbed seam.
+        "utils.episodes.member_notes": _pkg("utils.episodes.member_notes"),
         "utils.request_validation": request_validation,
     }
 
@@ -589,6 +591,8 @@ class _FakeActionItem:
         self.completed = False
         self.created_at = None
         self.completed_at = None
+        # Unlinked row: the mirror keeps the legacy description-wide path.
+        self.target_task_id = None
 
     def model_dump(self):
         return {"description": self.description, "completed": self.completed}

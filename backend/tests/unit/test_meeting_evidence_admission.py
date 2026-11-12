@@ -46,6 +46,9 @@ def _environment(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('MEETING_NOTES_EVIDENCE_WAIT_SECONDS', '25')
     monkeypatch.setenv('BUCKET_SCREEN_FRAMES', BUCKET)
+    # These meetings have no live episode; keep the enabled scheduling prelude.
+    monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', raising=False)
+    monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *args: False)
     monkeypatch.setattr(admission, 'get_meeting_note_screenshots_enabled', lambda uid, **kw: True)
 
     async def inline(_pool, fn, *args, **kwargs):
@@ -238,6 +241,8 @@ def _finalize_until_geolocation(monkeypatch, status):
             return data
         if function is finalizer.reserve_recording:
             return function(*args, **kwargs)
+        if function is finalizer.member_notes.waits:
+            return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             calls.append('geolocation')
             raise _Stop()
@@ -333,6 +338,8 @@ def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
         if function is finalizer.conversations_db.get_conversation:
             return next(reads)
         if function is finalizer.reserve_recording:
+            return function(*args, **kwargs)
+        if function is finalizer.member_notes.waits:
             return function(*args, **kwargs)
         if function is finalizer.apply_call_metadata:
             return function(*args, **kwargs)

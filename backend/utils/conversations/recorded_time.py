@@ -4,7 +4,21 @@ import math
 from datetime import datetime, timedelta
 from typing import Any, Mapping, Sequence
 
-from models.conversation_continuity import DEFAULT_GAP_SECONDS
+from config.recorded_time_tolerances import CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS
+
+
+def _placed_interval(segment: Mapping[str, Any]) -> tuple[float, float] | None:
+    """The interval a segment proves, or ``None`` when it proves no position."""
+    if segment.get('audio_alignment') == 'unplaced':
+        return None
+    if not all(
+        isinstance(segment.get(k), (int, float)) and not isinstance(segment[k], bool) and math.isfinite(segment[k])
+        for k in ('start', 'end')
+    ):
+        return None
+    if not segment['end'] > segment['start']:
+        return None
+    return float(segment['start']), float(segment['end'])
 
 
 def recorded_span(
@@ -12,16 +26,7 @@ def recorded_span(
 ) -> tuple[datetime, datetime] | None:
     if started_at is None:
         return None
-    intervals = [
-        (float(s['start']), float(s['end']))
-        for s in segments
-        if s.get('audio_alignment') != 'unplaced'
-        and all(
-            isinstance(s.get(k), (int, float)) and not isinstance(s[k], bool) and math.isfinite(s[k])
-            for k in ('start', 'end')
-        )
-        and s['end'] > s['start']
-    ]
+    intervals = [interval for interval in (_placed_interval(s) for s in segments) if interval is not None]
     if not intervals:
         return None
     try:
@@ -73,6 +78,22 @@ def _timing_row(value: Any) -> Mapping[str, Any]:
     return {field: getattr(value, field, None) for field in fields}
 
 
+def _normalized_segments(row: Any) -> list[Mapping[str, Any]]:
+    """Segments as mappings, never the typed ``recorded_start``/``recorded_end``.
+
+    Both extent readers share this normalisation so they cannot drift. The
+    typed span fields are deliberately ignored here: a caller asking for
+    segment extent must not be answered by a stored envelope.
+    """
+    segments = row.get('transcript_segments')
+    if not isinstance(segments, list):
+        return []
+    return [
+        s if isinstance(s, Mapping) else {key: getattr(s, key, None) for key in ('start', 'end', 'audio_alignment')}
+        for s in segments
+    ]
+
+
 def conversation_span(row: Any):
     """Typed read, with lazy legacy derivation and no write/backfill side effect.
 
@@ -94,15 +115,7 @@ def conversation_span(row: Any):
     if row.get('recorded_start') is not None or row.get('recorded_end') is not None:
         return None
     origin = utc(row.get('started_at'))
-    segments = row.get('transcript_segments')
-    segments = (
-        [
-            s if isinstance(s, Mapping) else {key: getattr(s, key, None) for key in ('start', 'end', 'audio_alignment')}
-            for s in segments
-        ]
-        if isinstance(segments, list)
-        else []
-    )
+    segments = _normalized_segments(row)
     placed = recorded_span(origin, segments)
     if origin is None:
         return None
@@ -121,6 +134,34 @@ def conversation_span(row: Any):
     start = placed[0] if placed else origin
     end = max(start, end or start)
     return RecordedSpan(recorded_start=start, recorded_end=end, arrival_at=arrival, clock=RecordedClock.legacy)
+
+
+def segment_span(row: Any) -> tuple[datetime, datetime] | None:
+    """Extent proven by placed transcript segments; a wall-clock envelope is not.
+
+    ``conversation_span`` may derive a legacy row's end from ``finished_at``
+    when no placed segment proves the recording. That envelope is a coarse
+    hint, so a caller that needs captured-audio proof reads this instead and
+    refuses when either side has no placed segment. The typed
+    ``recorded_start``/``recorded_end`` fields are deliberately ignored: they
+    are a stored envelope, not segment evidence.
+    """
+    from utils.conversations.lifecycle_clocks import utc
+
+    row = _timing_row(row)
+    return recorded_span(utc(row.get('started_at')), _normalized_segments(row))
+
+
+def segment_span_is_exact(row: Any) -> bool:
+    """Whether every segment proves a position, so the extent is the whole row.
+
+    ``recorded_span`` drops segments it cannot place: ``audio_alignment ==
+    'unplaced'``, non-finite offsets, and empty intervals. A caller that must
+    account for all of a row's speech reads this to refuse a row whose extent
+    covers only part of what it carries.
+    """
+    segments = _normalized_segments(_timing_row(row))
+    return bool(segments) and all(_placed_interval(segment) is not None for segment in segments)
 
 
 def span_fields(row: Mapping[str, Any]) -> dict[str, Any]:

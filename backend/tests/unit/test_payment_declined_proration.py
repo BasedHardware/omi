@@ -20,7 +20,7 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -95,6 +95,7 @@ def _install_stub_modules() -> None:
     db_mod.action_items = _shared_mock()
 
     redis_mod = sys.modules["database.redis_db"]
+    redis_mod.claim_payment_recovery_notification = _shared_mock()
     redis_mod.set_credits_invalidation_signal = _shared_mock()
 
     locked_content_mod = sys.modules["database.locked_content"]
@@ -120,7 +121,6 @@ def _install_stub_modules() -> None:
     sub_mod.filter_plans_for_user = _shared_mock()
     sub_mod.should_show_new_plans = _shared_mock()
     sub_mod.adapt_plans_for_legacy_client = _shared_mock()
-    sub_mod.clear_trial_paywall_cache = _shared_mock()
     sub_mod.find_active_paid_subscription_for_user = _shared_mock()
     sub_mod.price_ids_match_plan_and_interval = _shared_mock(return_value=False)
     sub_mod.desktop_to_consumer_plan_change_error = _shared_mock(return_value=None)
@@ -137,6 +137,12 @@ def _install_stub_modules() -> None:
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = _shared_mock()
     sys.modules["utils.observability.subscription_events"] = subscription_events_mod
+
+    # The webhook seam imports this sibling; preload it so the parent package
+    # is not executed against the incomplete fallback stub above.
+    renewal_observations_mod = types.ModuleType("utils.observability.renewal_observations")
+    renewal_observations_mod.observe_verified_event = AsyncMock()
+    sys.modules["utils.observability.renewal_observations"] = renewal_observations_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"

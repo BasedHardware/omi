@@ -27,7 +27,32 @@ from prometheus_client import Counter
 REASON_VALUE_MAX_LENGTH = 40
 
 
+class ServerBatchSuppressionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    SUPPRESSED = 'suppressed'
+    LANGUAGE_AUTO = 'language_auto'
+    LANGUAGE_UNSUPPORTED = 'language_unsupported'
+    PROFILE_MISMATCH = 'profile_mismatch'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    PHONE_CALL = 'phone_call'
+    ONBOARDING = 'onboarding'
+    PUSHER_UNAVAILABLE = 'pusher_unavailable'
+    CAPTURE_NOT_OWNED = 'capture_not_owned'
+    PLATFORM_UNSELECTED = 'platform_unselected'
+    NOT_ENABLED = 'not_enabled'
+
+
+class MemoryL1Reason(StrEnum):
+    NOISE = 'noise'
+    SHORT_OWNER_SPEECH = 'short_owner_speech'
+    UNKNOWN = 'unknown'
+
+
 class ReasonFamily(StrEnum):
+    MEMORY_L1 = 'memory_l1'
+    PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
@@ -53,6 +78,25 @@ class ReasonFamily(StrEnum):
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
     VENDOR_ROUTE = 'vendor_route'
+    DELIVERY = 'delivery'
+    BATCH_FINAL_PASS = 'batch_final_pass'
+    RECURRING_VOICE = 'recurring_voice'
+    RECORD_GAP_FILL = 'record_gap_fill'
+    RECORD_RETAINED_ACK = 'record_retained_ack'
+    PIPELINE_LEDGER = 'pipeline_ledger'
+
+
+class PusherPcmStage(StrEnum):
+    UNKNOWN = 'unknown'
+    LIVE = 'live'
+    TAIL = 'tail'
+
+
+class PusherPcmErrorReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ACQUIRE = 'acquire'
+    RELEASE = 'release'
+    LATE_STORAGE = 'late_storage'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -70,6 +114,48 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class RecordGapFillOutcome(StrEnum):
+    """One closed-record gap-fill attempt (``utils.batch_pipeline.record_gap_fill``)."""
+
+    UNKNOWN = 'unknown'
+    WRITTEN = 'written'
+    SKIPPED_GATE = 'skipped_gate'
+    SKIPPED_RECENT = 'skipped_recent'
+    SKIPPED_MARKER = 'skipped_marker'
+    SKIPPED_NO_PENDING = 'skipped_no_pending'
+    SKIPPED_RETAINED = 'skipped_retained'
+    SKIPPED_NO_GAP = 'skipped_no_gap'
+    SKIPPED_NO_AUDIO = 'skipped_no_audio'
+    SKIPPED_NOT_CONTIGUOUS = 'skipped_not_contiguous'
+    SKIPPED_COLLISION = 'skipped_collision'
+    SKIPPED_BUSY = 'skipped_busy'
+    RACED = 'raced'
+    FAILED = 'failed'
+
+
+class RecordRetainedAckOutcome(StrEnum):
+    """One option A byte-exact retained-copy proof (``utils.batch_pipeline.record_retained_ack``)."""
+
+    UNKNOWN = 'unknown'
+    ACKED = 'acked'
+    SKIPPED_FILL = 'skipped_fill'
+    SKIPPED_UNCOVERED = 'skipped_uncovered'
+    SKIPPED_LOSSY_SOURCE = 'skipped_lossy_source'
+    SKIPPED_BYTES_DIFFER = 'skipped_bytes_differ'
+    SKIPPED_OUTSIDE_RECORD = 'skipped_outside_record'
+    SKIPPED_BOUNDS = 'skipped_bounds'
+    SKIPPED_PRIVACY = 'skipped_privacy'
+    FAILED = 'failed'
+
+
+class DeliveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DELIVERED = 'delivered'
+    NO_OP = 'no_op'
+    DEFERRED = 'deferred'
+    FAILED = 'failed'
 
 
 class SyncProcessingHoldOutcome(StrEnum):
@@ -155,6 +241,30 @@ class TransitionTailOutcome(StrEnum):
     SEALED = 'sealed'
 
 
+class HeldRecoverySkipOutcome(StrEnum):
+    """Why a processing choice skipped a backlog item without any recovery attempt."""
+
+    UNKNOWN = 'unknown'
+    OUT_OF_SCOPE = 'out_of_scope'
+    UNKNOWN_ORIGIN = 'unknown_origin'
+    TEXT_OUT_OF_SCOPE = 'text_out_of_scope'
+    # Intended: Free owners never recover (David, 2026-11-01). Kept out of the recovery gate.
+    NOT_PAID = 'not_paid'
+
+
+class BacklogChoiceOutcome(StrEnum):
+    """Result of a "Process waiting recordings" tap or a Stripe trial's one-time grant."""
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    OUT_OF_SCOPE = 'out_of_scope'
+    NOT_PAID = 'not_paid'
+    CAPPED = 'capped'
+    NOTHING_WAITING = 'nothing_waiting'
+    STALE_INTENT = 'stale_intent'
+    ERROR = 'error'
+
+
 class StagingRetryOutcome(StrEnum):
     """Disposition of a held-audio staging attempt, including volatile custody."""
 
@@ -179,13 +289,15 @@ class SyncCaptureTimeReason(StrEnum):
 
     Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
     capture whose phone clock runs ahead of the server within tolerance;
-    `rejected_future`/`rejected_early` are implausible stamps (bogus device
-    clock marker, pre-2024 fragment) that stay refused.
+    `accepted_early_clamped` is a reset-clock stamp normalized to receipt time.
+    `rejected_early` remains available when its kill switch is off;
+    malformed stamps and beyond-tolerance future clocks stay refused.
     """
 
     UNKNOWN = 'unknown'
     ACCEPTED = 'accepted'
     ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    ACCEPTED_EARLY_CLAMPED = 'accepted_early_clamped'
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'
@@ -236,6 +348,29 @@ class WorkOutcome(StrEnum):
     SUCCESS = 'success'
     SILENCE = 'silence'
     NO_RECOVERABLE_SPEECH = 'no_recoverable_speech'
+
+
+class BatchFinalPassOutcome(StrEnum):
+    """Fallback outcomes of the batch whole-conversation pass (`utils/conversations/final_pass_batch.py`)."""
+
+    UNKNOWN = 'unknown'
+    SKIPPED_BUDGET = 'skipped_budget'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SHARED_UNIT = 'skipped_shared_unit'
+    REQUEUE = 'failed_requeue'
+    SLOT_EXHAUSTED = 'skipped_slot_exhausted'
+    RETRY_EXHAUSTED = 'skipped_retry_exhausted'
+    FAILED_DEPENDENCY = 'failed_dependency'
+    SKIPPED_NO_CHANGES = 'skipped_no_changes'
+    TOO_LONG = 'failed_too_long'
+    READ_BUDGET = 'failed_read_budget'
+    INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'
+    PARTIAL_COVERAGE = 'partial_coverage'
+    BATCH_AUDIO = 'failed_batch_audio'
+    INCOMPATIBLE_SPACE = 'failed_incompatible_space'
+    REVOKED = 'failed_revoked'
+    UNASSIGNED_WORDS = 'failed_unassigned_words'
 
 
 class QuarantineReason(StrEnum):
@@ -430,6 +565,21 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class LocalPreviewEngineUnavailableReason(StrEnum):
+    """LivePreviewReason failure wire values; unknown client input folds to OTHER."""
+
+    UNKNOWN = 'unknown'
+    OS_TOO_OLD = 'os_too_old'
+    OS_ENGINE_UNAVAILABLE = 'os_engine_unavailable'
+    LOCALE_UNSUPPORTED = 'locale_unsupported'
+    LOCALE_ASSET_MISSING = 'locale_asset_missing'
+    SPEECH_PERMISSION_DENIED = 'speech_permission_denied'
+    BUNDLED_NOT_INSTALLED = 'bundled_not_installed'
+    BUNDLED_NOT_BUILT = 'bundled_not_built'
+    ENGINE_ERROR = 'engine_error'
+    OTHER = 'other'
+
+
 class LocalPreviewOutcome(StrEnum):
     """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
 
@@ -461,6 +611,7 @@ class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 
     UNKNOWN = 'unknown'
+    FETCH_DECODE = 'fetch_decode'
     VAD_WINDOWS = 'vad_windows'
     WORD_CLOCKS = 'word_clocks'
     ASSEMBLE_WORDS = 'assemble_words'
@@ -471,6 +622,7 @@ class WorkerValidationReason(StrEnum):
     """Worker validation failure reasons."""
 
     UNKNOWN = 'unknown'
+    STAGED_AUDIO_INVALID = 'staged_audio_invalid'
     WORD_SHAPE = 'word_shape'
     WORD_CLOCK = 'word_clock'
     WORD_SEQUENCE = 'word_sequence'
@@ -641,3 +793,52 @@ def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> st
     except Exception:
         pass
     return result
+
+
+class RecurringProfileOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    CREATED = 'created'
+    PROMOTED = 'promoted'
+    REFRESHED = 'refreshed'
+    BOUND = 'bound'
+    REJECTED = 'rejected'
+    EXPIRED = 'expired'
+    EVICTED_CAP = 'evicted_cap'
+
+
+class RecurringMatchOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    MATCHED = 'matched'
+    NEW_CANDIDATE = 'new_candidate'
+    ABSTAINED_MARGIN = 'abstained_margin'
+    OWNER_EXCLUDED = 'owner_excluded'
+    NO_OWNER_PRINT = 'no_owner_print'
+    CAP = 'cap'
+
+
+class IdentitySpeechOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OWNER = 'owner'
+    PERSON = 'person'
+    RECURRING = 'recurring'
+    UNNAMED = 'unnamed'
+
+
+class PipelineLedgerOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    ERROR = 'error'
+    DISABLED = 'disabled'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    ILLEGAL = 'illegal'
+    TERMINAL = 'terminal'
+
+
+class PipelineLedgerFailureReason(StrEnum):
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    UNAVAILABLE = 'unavailable'
+    PERMISSION = 'permission'
+    INVALID = 'invalid'
+    OTHER = 'other'

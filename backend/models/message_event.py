@@ -113,6 +113,8 @@ class MessageServiceStatusEvent(MessageEvent):
 
     # Additive capability: absent on old servers means live-only on new clients.
     mobile_standard_batch: Optional[bool] = None
+    # Explicit server custody mode; provider-less deferred streams are not batch-only.
+    server_batch_only: Optional[bool] = None
     # Mobile local-preview lane: journal ALL pendant audio for batch (visible or
     # not) and render the on-device preview. Absent means today's live transcript.
     local_preview: Optional[bool] = None

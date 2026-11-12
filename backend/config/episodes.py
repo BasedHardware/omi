@@ -11,19 +11,9 @@ rather than silently keeping it running. Off makes the episodes API report
 ``enabled: false``: released and current apps then show today's
 per-conversation UI, and no episode state is read, written or computed.
 
-``EPISODES_PERCENT`` (default 100) and
-``EPISODES_UID_ALLOWLIST`` select the admitted cohort: a stable salted uid
-bucket below the percentage, or a listed uid, is admitted. Invalid percentages
-admit nobody beyond the allowlist.
-
-Admission alone never spends money. Episode work (the per-moment listen update
-and the finalizer's tail and reconciliation) also requires an inferred client
-capability: the user's app called a ``/v1/episodes`` route within
-``CLIENT_SEEN_TTL_SECONDS``, recorded as the Redis marker
-``episodes:client_seen:{uid}`` (``utils/episodes/client_gate.py``). Old mobile
-builds, the desktop app and web never call that API, so their users cost
-nothing. The API itself stays available to every admitted uid, since it is what
-sets the marker. The allowlist bypasses the percentage, not the marker.
+Every nonempty owner is admitted while the kill switch is on. Admission alone
+never spends money: episode work still requires the existing recent capable-client
+marker.
 
 ``EPISODES_CLIENT_CHANNELS`` (default ``beta``) is the client cohort. The app
 sends ``X-Omi-App-Channel: beta|store`` on every request (TestFlight and
@@ -44,22 +34,37 @@ import os
 from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
-from config.jev_decisions import percentage, uid_bucket
+from config.app_channel import APP_CHANNELS, app_channel
+from config.jev_decisions import JEV_CLIENT_TIMEOUT_SECONDS, percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
-EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
-EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
 HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
+HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
+HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
+HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
+HOME_EMPTY_OUTPUT_NOISE_ENV = 'HOME_EMPTY_OUTPUT_NOISE'
+HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
+DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS = 21600
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
+EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
-APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
-APP_CHANNELS = frozenset({'beta', 'store'})
+EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+
+
+EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
+EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV = 'EPISODE_LATE_COMPOSE_GRACE_HOURS'
+# A recording repaired or synced more than this long after capture is "late": it
+# composes when its page is first opened, not at finalize.
+DEFAULT_LATE_COMPOSE_AFTER_HOURS = 48.0
+# The read-side safety net still composes a deferred episode after this long, so a
+# client that never opens the page cannot leave notes unwritten forever.
+DEFAULT_LATE_COMPOSE_GRACE_HOURS = 168.0
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
-_COHORT_SALT = 'episodes-v1'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -70,22 +75,8 @@ def episodes_enabled() -> bool:
 
 
 def episodes_enabled_for(uid: str) -> bool:
-    """The kill switch first, then the cohort (allowlist or stable uid bucket).
-
-    Admission only: callers that spend money also need ``client_gate.client_seen``.
-    """
-    if not uid or not episodes_enabled():
-        return False
-    allowlist = {item.strip() for item in os.getenv(EPISODES_UID_ALLOWLIST_ENV, '').split(',') if item.strip()}
-    if uid in allowlist:
-        return True
-    return uid_bucket(uid, _COHORT_SALT) < percentage(EPISODES_PERCENT_ENV, default=100.0)
-
-
-def app_channel(raw: str | None) -> str:
-    """The request's ``X-Omi-App-Channel`` as a bounded label: ``beta``, ``store`` or ``unknown``."""
-    value = (raw or '').strip().lower()
-    return value if value in APP_CHANNELS else 'unknown'
+    """All owners are admitted while the independent kill switch is on."""
+    return bool(uid and episodes_enabled())
 
 
 def episodes_client_channels() -> frozenset[str]:
@@ -112,6 +103,53 @@ def episode_hard_cap_across_conversations_enabled() -> bool:
     return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
 
 
+def home_hide_episode_members_enabled() -> bool:
+    """Hide only members covered by a client-held, extant episode projection."""
+    return modes_default_on(HOME_HIDE_EPISODE_MEMBERS_ENV)
+
+
+def home_neutral_minimum_titles_enabled() -> bool:
+    """Replace provisional transcript-echo Home titles without changing storage."""
+    return modes_default_on(HOME_NEUTRAL_MINIMUM_TITLES_ENV)
+
+
+def home_step_projection_enabled() -> bool:
+    """Default-on Home row contract field on list reads; off omits ``home_step``."""
+    return modes_default_on(HOME_STEP_PROJECTION_ENV)
+
+
+def home_empty_output_noise_enabled() -> bool:
+    """Default-on: no-output terminal summaries are noise regardless of title provenance."""
+    return modes_default_on(HOME_EMPTY_OUTPUT_NOISE_ENV)
+
+
+def home_processing_max_age_seconds() -> int | None:
+    """6h by default; None tells the reader to count invalid config and use 6h.
+
+    Nonpositive values are invalid, never a way to disable the age bound.
+    Normal finalization takes minutes; 6h leaves headroom over the 2h batch SLA.
+    """
+    try:
+        seconds = int(os.getenv(HOME_PROCESSING_MAX_AGE_SECONDS_ENV, str(DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS)))
+    except ValueError:
+        return None
+    return seconds if seconds > 0 else None
+
+
+def home_transcription_presentation_gate_enabled() -> bool:
+    """Default-on batch transcription presentation; off restores stored status/title."""
+    return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_deadline_seconds() -> int:
+    """New captures get 2h (batch timeliness SLA); invalid or nonpositive values use 2h."""
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', '7200'))
+    except ValueError:
+        return 7200
+    return seconds if seconds > 0 else 7200
+
+
 def home_hide_below_floor_rows_enabled() -> bool:
     """Whether Home leaves out short captures under the notes floor."""
     return modes_default_on(HOME_HIDE_BELOW_FLOOR_ROWS_ENV)
@@ -133,6 +171,62 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_compose_settle_enabled() -> bool:
+    """Default-on cost control; off restores the original trigger and retry behavior."""
+    return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_compose_keep_paid_enabled() -> bool:
+    """Default-on: keep paid composes instead of discarding them.
+
+    On, a parse failure gets one repair retry over the bad output alone, a short
+    episode may ship a title and lede with no chapters, a superseded result is
+    stored and the episode marked pending, and paid failures stop at two per
+    evidence. Off restores the previous discard-and-retry behavior and the
+    four-failure cap.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def episode_single_member_compose_enabled() -> bool:
+    """Default-on: a one-conversation episode is built from that conversation's notes in code.
+
+    Off restores the paid composer for single-member episodes. The shortcut never
+    calls a model, so it has no lease, backoff or settle window.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def episode_late_compose_enabled() -> bool:
+    """Default-on: a late episode composes on its first open instead of at finalize.
+
+    Off restores today's behavior: every closed episode composes as soon as its
+    members finish, however old the capture is.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def _positive_hours(name: str, default: float) -> float:
+    """A positive hour count; invalid, non-finite or nonpositive values use the default."""
+    try:
+        hours = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    if hours != hours or hours in (float('inf'), float('-inf')) or hours <= 0:
+        return default
+    return hours
+
+
+def episode_late_compose_after_hours() -> float:
+    """48h by default: capture age at finalize above which a compose waits for the first open."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, DEFAULT_LATE_COMPOSE_AFTER_HOURS)
+
+
+def episode_late_compose_grace_hours() -> float:
+    """7 days by default: how long a deferred episode may wait before a read composes it anyway."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, DEFAULT_LATE_COMPOSE_GRACE_HOURS)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -206,6 +300,39 @@ COMPOSER_MIN_SECTION_SECONDS = 60
 MOVED_ON_THRESHOLD = 0.2
 JEV_LANE = 'episode_boundary'
 JEV_TIMEOUT_SECONDS = 2.5
+
+# --------------------------------------------------------------------------- episode join variant F
+
+# Variant F settles an uncertain recorded-time join (a live owner 2 to 30 minutes after its last speech)
+# with Jev over the previous member's transcript and the new speech, no summary or time features.
+# The cohort is the Omi flag store rule ``episode_f_join`` (``utils/episodes/f_join.py``): ramp and
+# kill it at runtime with ``scripts/omi_flags.py``. Without a rule the env ``EPISODE_F_JOIN_PERCENT``
+# (default 0) buckets uids. ``EPISODE_F_JOIN_ENABLED`` (unset is on; off/false/0/no) overrides both.
+EPISODE_F_JOIN_ENABLED_ENV = 'EPISODE_F_JOIN_ENABLED'
+EPISODE_F_JOIN_PERCENT_ENV = 'EPISODE_F_JOIN_PERCENT'
+F_JOIN_FLAG_KEY = 'episode_f_join'
+F_JOIN_VARIANT = 'f'
+F_JOIN_JEV_LANE = 'episode_boundary_f'
+F_JOIN_PREVIOUS_CHARS = 12_000
+F_JOIN_NEW_CHARS = 8_000
+F_JOIN_PEOPLE_READ_LIMIT = 8
+# The gateway's own provider deadline (JEV_GATEWAY_REQUEST_MS, 2.5 s) is authoritative; the client
+# waits just past it so a slow provider surfaces as a gateway timeout. One attempt, as today.
+F_JOIN_TIMEOUT_SECONDS = JEV_CLIENT_TIMEOUT_SECONDS
+F_JOIN_SALT = 'episode-f-join-v1'
+
+
+def f_join_enabled() -> bool:
+    """Unset is on; an explicit on-value stays on; anything else (including a typo) turns F off."""
+    raw = os.getenv(EPISODE_F_JOIN_ENABLED_ENV, '').strip().lower()
+    return not raw or raw in _ON
+
+
+def f_join_env_admitted(uid: str) -> bool:
+    """The env fallback cohort: a stable salted uid bucket below the percent; invalid admits nobody."""
+    return bool(uid) and uid_bucket(uid, F_JOIN_SALT) < percentage(EPISODE_F_JOIN_PERCENT_ENV, default=0.0)
+
+
 # Without a Jev answer, a source change or a gap this long still closes.
 
 # --------------------------------------------------------------------------- compact state budget
@@ -251,15 +378,30 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 # The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
 # per throttle window, per process.
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
-# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
-COMPOSER_LEASE_SECONDS = 240
+# Every logical turn permits two 90s provider attempts plus 30s retry/processing
+# headroom. The lease covers all permitted turns plus a final-write margin.
+COMPOSER_MAX_PAID_TURNS = 2  # initial + optional repair; L9 extends this bound
+COMPOSER_CALL_BUDGET_SECONDS = COMPOSER_TIMEOUT_SECONDS * 2 + 30
+COMPOSER_LEASE_SECONDS = COMPOSER_MAX_PAID_TURNS * COMPOSER_CALL_BUDGET_SECONDS + 60
+COMPOSER_SETTLE_SECONDS = 10 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
+# With EPISODE_COMPOSER_THRIFT on, one attempt plus one repair retry is the whole budget:
+# a third paid failure on the same evidence cannot produce a different result.
+COMPOSER_MAX_PAID_FAILURES = 2
+# A short episode (at most this much recorded member time) may ship a title and lede with
+# no chapters: the lede is the page, and a sectionless reply is not a failed compose.
+COMPOSER_SHORT_EPISODE_SECONDS = 15 * 60
 # Wire budget per composed paragraph (to_wire serves bullets up to this length).
 COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 # A composed moment's points (each with a few supporting details) are the episode page's sections.
 COMPOSER_MAX_POINTS = 6
 COMPOSER_MAX_DETAILS = 4
 COMPOSER_MAX_POINT_CHARS = 400
+
+# Extra reads caused by Home projection, independent of page/member counts.
+HOME_MEMBERSHIP_EPISODE_READ_LIMIT = 5
+HOME_IDLE_CLOSES_PER_READ = 2
