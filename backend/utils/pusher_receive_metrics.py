@@ -7,11 +7,31 @@ from typing import Iterator, Literal
 
 from prometheus_client import Counter, Gauge, Histogram
 
-Stage = Literal['record_begin', 'custody_commit', 'projection_enqueue', 'inline_finish', 'drain']
+Stage = Literal[
+    'record_begin',
+    'custody_commit',
+    'projection_enqueue',
+    'inline_finish',
+    'drain',
+    'drain_readback',
+    'drain_upload',
+    'drain_refresh',
+]
 CloseReason = Literal[
     'peer', 'receive_timeout', 'queue_wait_timeout', 'application_error', 'cancelled', 'protocol_error', 'rejected'
 ]
-STAGES = ('record_begin', 'custody_commit', 'projection_enqueue', 'inline_finish', 'drain')
+# drain_* split one live projection flush (read-back, encoded upload, playback
+# refresh) so a slow drain names its slow step; 'drain' stays the close drain.
+STAGES = (
+    'record_begin',
+    'custody_commit',
+    'projection_enqueue',
+    'inline_finish',
+    'drain',
+    'drain_readback',
+    'drain_upload',
+    'drain_refresh',
+)
 AGE_BUCKETS = ('<5m', '5m_to_30m', '30m_plus')
 FRAME_KINDS = ('heartbeat', 'audio', 'control', 'invalid')
 CLOSE_REASONS = (
@@ -43,7 +63,7 @@ SOCKET_CLOSED = Counter(
 )
 
 # Zero baselines distinguish an observed zero from a missing scrape. Maximum
-# exposition: 225 series/process, including *_created and histogram +Inf.
+# exposition: 270 series/process, including *_created and histogram +Inf.
 for _kind in FRAME_KINDS:
     for _age in AGE_BUCKETS:
         SOCKET_FRAMES.labels(_kind, _age)

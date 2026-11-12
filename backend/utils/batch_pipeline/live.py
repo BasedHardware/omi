@@ -107,10 +107,42 @@ def _retry_reason(error: BaseException) -> str:
     return text.replace(' ', '_').replace('/', '_') if text in _RETRY_REASONS else 'other'
 
 
+BATCH_LEDGER_OWNERS = frozenset({OWNER, 'batch_sync_v1'})
+
+
+def observe_admitted(uid: str, conversation: dict, *, now=None) -> bool:
+    """Fail-open C1 admission: the capture entered the in-flight ledger.
+
+    The row is created at the durable admission that gives this capture a batch
+    owner, so the census gets a denominator row even when the capture never
+    reaches a later stage. A later repair that admits after the seal already
+    wrote ``sealed`` keeps that forward stage: the ledger is forward-only and
+    refuses the rewind. A reconnect or finalizer replay can only produce a
+    duplicate, a forward refusal, or an illegal-transition refusal; never a
+    second admission. A deleted capture gets no row, matching the seal's fence.
+    """
+    capture_id = conversation.get('id')
+    if not isinstance(capture_id, str) or not capture_id or conversation.get('deleted'):
+        return False
+    try:
+        from database import pipeline_ledger
+
+        return pipeline_ledger.advance(
+            uid, capture_id, pipeline_ledger.CAPTURING, now=time.time() if now is None else now
+        )
+    except Exception as error:  # The real admission is already authoritative.
+        logger.warning('event=batch_live_ledger outcome=error stage=capturing exception_type=%s', type(error).__name__)
+        return False
+
+
 def reserve_recording(uid: str, conversation: dict) -> str | None:
     """Cover captures already in progress at enablement, before legacy admission."""
     owner = conversation.get('record_lane_owner')
     if owner:
+        # A lane claimed on a streaming path is still an admission; the writer is
+        # idempotent, and a sealed or later row keeps its forward stage.
+        if owner in BATCH_LEDGER_OWNERS:
+            observe_admitted(uid, conversation)
         return owner
     policy = resolve_batch_policy(uid)
     if conversation.get('status') not in {'in_progress', 'processing'} or not record_capture_eligible(
@@ -123,6 +155,7 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     if revision is None:
         raise RecordOwnerContention('record route snapshot changed')
     conversation.update(record_lane_owner=OWNER, updated_at=revision)
+    observe_admitted(uid, conversation)
     return OWNER
 
 
