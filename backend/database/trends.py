@@ -11,8 +11,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_trends_data() -> List[Dict[str, Any]]:
-    trends_ref = db.collection('trends')
+def get_trends_data(*, firestore_client: Any = None) -> List[Dict[str, Any]]:
+    client = firestore_client if firestore_client is not None else db
+    trends_ref = client.collection('trends')
     trends_docs = [doc for doc in trends_ref.stream(retry=Retry())]
     trends_data: List[Dict[str, Any]] = []
     for category in trends_docs:
@@ -60,8 +61,9 @@ def get_trends_data() -> List[Dict[str, Any]]:
     return trends_data
 
 
-def save_trends(memory_id: str, trends: List[Trend]) -> None:
-    trends_coll_ref = db.collection('trends')
+def save_trends(memory_id: str, trends: List[Trend], *, firestore_client: Any = None) -> None:
+    client = firestore_client if firestore_client is not None else db
+    trends_coll_ref = client.collection('trends')
 
     for trend in trends:
         category = trend.category.value
