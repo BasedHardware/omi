@@ -840,7 +840,7 @@ class ConversationProvider extends ChangeNotifier {
           conversation == null ||
           !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
-          _isHiddenByDelete(conversation.id) ||
+          isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -859,9 +859,9 @@ class ConversationProvider extends ChangeNotifier {
           !pageConversationIds.contains(row.id) &&
           (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
     }
-    conversations.removeWhere((row) => _isHiddenByDelete(row.id));
+    conversations.removeWhere((row) => isHiddenByDelete(row.id));
     for (final conversation in completedById.values) {
-      if (_isHiddenByDelete(conversation.id)) continue;
+      if (isHiddenByDelete(conversation.id)) continue;
       final index = conversations.indexWhere((existing) => existing.id == conversation.id);
       if (index == -1) {
         conversations.insert(0, conversation);
@@ -991,7 +991,7 @@ class ConversationProvider extends ChangeNotifier {
           conversation == null ||
           !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
-          _isHiddenByDelete(conversation.id) ||
+          isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -1002,7 +1002,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     for (final conversation in conversations) {
       if (!_isHomeListRow(conversation)) continue;
-      if (_isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
+      if (isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
       // A changed live object wins over a stale page object even when the
@@ -1012,7 +1012,7 @@ class ConversationProvider extends ChangeNotifier {
         completedById[conversation.id] = conversation;
       }
     }
-    completedById.removeWhere((id, _) => _isHiddenByDelete(id));
+    completedById.removeWhere((id, _) => isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     // Only use cache when no folder filter is applied
@@ -1115,7 +1115,7 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
-      if (_isHiddenByDelete(convo.id)) return false;
+      if (isHiddenByDelete(convo.id)) return false;
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
@@ -1465,7 +1465,7 @@ class ConversationProvider extends ChangeNotifier {
   final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation, {bool preserveHomeStep = true}) {
     conversation = _homeReplacement(conversation, preserveHomeStep);
-    if (_isHiddenByDelete(conversation.id)) return;
+    if (isHiddenByDelete(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
@@ -1571,14 +1571,14 @@ class ConversationProvider extends ChangeNotifier {
   /// delete still reaches the server about 5 s after the swipe.
   static const pendingDeleteWindow = Duration(seconds: 10);
 
-  bool _isHiddenByDelete(String id) =>
+  bool isHiddenByDelete(String id) =>
       memoriesToDelete.containsKey(id) || SharedPreferencesUtil().isConversationDeleteConfirmed(id);
 
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     _mergedAwayConversationIds.addAll(items.where((c) => c.isMergedDonor).map((c) => c.id));
     return items
         .where((c) =>
-            !c.deleted && !c.isMergedDonor && !_isHiddenByDelete(c.id) && !_mergedAwayConversationIds.contains(c.id))
+            !c.deleted && !c.isMergedDonor && !isHiddenByDelete(c.id) && !_mergedAwayConversationIds.contains(c.id))
         .toList();
   }
 
@@ -2253,7 +2253,7 @@ class ConversationProvider extends ChangeNotifier {
       _mergedAwayConversationIds.addAll(removed);
       mergingConversationIds.removeAll({...removed, mergedConversationId});
       conversations.removeWhere((c) => removed.contains(c.id) || c.id == target.id);
-      if (!_isHiddenByDelete(target.id) && _matchesActiveConversationFilters(target)) {
+      if (!isHiddenByDelete(target.id) && _matchesActiveConversationFilters(target)) {
         conversations.insert(0, target);
       }
       searchedConversations.removeWhere((c) => removed.contains(c.id));
@@ -2286,7 +2286,7 @@ class ConversationProvider extends ChangeNotifier {
       for (final id in removed) {
         SiriIntegration.current.queueDelete('conversation', id);
       }
-      if (!_isHiddenByDelete(target.id)) SiriIntegration.current.queueUpsertConversations([target]);
+      if (!isHiddenByDelete(target.id)) SiriIntegration.current.queueUpsertConversations([target]);
       PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removed.toList());
       notifyListeners();
     });
