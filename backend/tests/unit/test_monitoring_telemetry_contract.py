@@ -367,6 +367,7 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
     'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_conversation_finalization_dead_letter_total/',
     'prometheus.googleapis.com/omi_backlog_state_transitions_total/',
     'prometheus.googleapis.com/omi_capture_retry_cap_total/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
