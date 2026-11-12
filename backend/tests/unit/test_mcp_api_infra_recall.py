@@ -200,6 +200,7 @@ def memory_core():
                 'utils.memory.memory_api_contract',
                 MemoryApiExposure=SimpleNamespace(CANONICAL='canonical'),
                 memory_api_payload=lambda m, _: m,
+                memory_provenance_timestamps=lambda _: {'source_at': None, 'extracted_at': None},
             ),
             'utils.memory.memory_service': module('utils.memory.memory_service', MemoryService=service_cls),
             'utils.memory.memory_system': module(
