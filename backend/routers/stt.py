@@ -20,6 +20,7 @@ from typing import BinaryIO
 
 import httpx
 from config.live_stt_gpu_fleet import gpu_fleet_off
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.stt.proxy_vendor import vendor_proxy_payload
 from utils.stt.modulate_batch import ModulateBatchError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -134,6 +135,7 @@ def _safe_upstream_filename(filename) -> str:
 
 
 @router.post('/v1/stt/transcribe', tags=['stt'])
+@allowance_operation('one_shot', live=False)
 async def stt_transcribe(
     request: Request,
     file: UploadFile = File(...),
@@ -181,6 +183,9 @@ async def stt_transcribe(
     except OSError:
         raise HTTPException(status_code=503, detail='Audio duration probe unavailable') from None
     await file.seek(0)
+    allowance_scope = current_allowance_operation.get()
+    if allowance_scope is not None:
+        allowance_scope.seconds = seconds
     source = request.headers.get('x-app-platform')
     await _admit(uid, source, seconds)
 
@@ -211,7 +216,10 @@ async def stt_transcribe(
 
         from utils.stt.allowance_watch import observe_async
 
-        await observe_async(uid, 'one_shot', provider, seconds)
+        if allowance_scope is not None:
+            await allowance_scope.reserve_async(provider)
+        else:
+            await observe_async(uid, 'one_shot', provider, seconds)
         if retired:
             try:
                 payload = await vendor_proxy_payload(

@@ -5518,6 +5518,8 @@
     }
   ],
   "fieldOverrides": [
+    {"collectionGroup": "free_allowance_receipts", "fieldPath": "expires_at", "ttl": true, "indexes": []},
+    {"collectionGroup": "free_allowance_operations", "fieldPath": "expires_at", "ttl": true, "indexes": []},
     {
       "collectionGroup": "channel_waitlist",
       "fieldPath": "expires_at",

@@ -97,3 +97,28 @@ def allowance_decision_reason(allowance) -> DispatchReason:
 
 def record_allowance_decision(path: DispatchPath, allowance) -> bool:
     return record_decision(path, allowance.managed, allowance_decision_reason(allowance))
+
+
+def observe_billed_batch(client, uid, segment_ids, seconds, now):
+    """Bound shadow settlement after durable projection; serving never waits on its DB pool."""
+    from datetime import datetime, timezone
+    from database import free_allowance_leases
+    from utils.executors import free_allowance_executor
+
+    def settle():
+        stamp = datetime.fromtimestamp(now, timezone.utc)
+        references = [free_allowance_leases.reference(uid, f'batch-unit:{sid}', stamp) for sid in segment_ids]
+        for index in range(0, len(references), 32):
+            free_allowance_leases.settle_billed(
+                references[index : index + 32],
+                seconds if index == 0 else 0,
+                now=stamp,
+                registered_only=True,
+                source='batch',
+                firestore_client=client,
+            )
+
+    try:
+        free_allowance_executor.submit(settle).result(timeout=2.5)
+    except Exception:
+        logger.warning('event=free_allowance_lease decision=settlement_unavailable')

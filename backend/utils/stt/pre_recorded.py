@@ -521,7 +521,12 @@ def deepgram_prerecorded_from_bytes(
         source: Dict[str, Any] = {"buffer": audio_buffer, "mimetype": mimetype}
 
         rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
-        observe_request('prerecorded', 'deepgram')
+        duration = (
+            len(audio_bytes) / (sample_rate * channels * 2)
+            if encoding == 'linear16' and sample_rate > 0 and channels > 0
+            else _wav_duration_seconds(audio_bytes)
+        )
+        observe_request('prerecorded', 'deepgram', duration)
         response = rest_client.transcribe_file(source, options, timeout=_verification_timeout(_DG_TIMEOUT))
 
         # Extract words from response
@@ -1151,14 +1156,14 @@ def parakeet_prerecorded_from_bytes(
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
             with observe_parakeet_request('v2' if use_v2 else 'v1'):
                 record_vendor_payload('parakeet', 'v2' if use_v2 else 'v1', len(audio_bytes))
-                observe_request('prerecorded', 'parakeet')
+                observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                 response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
                 with observe_parakeet_request('v1'):
                     record_vendor_payload('parakeet', 'v1', len(audio_bytes))
-                    observe_request('prerecorded', 'parakeet')
+                    observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                     response = observe_sync_call(
                         'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
                     )

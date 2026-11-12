@@ -108,13 +108,14 @@ def monthly_store():
 
     return StrictFirestore(
         {
+            ('users', 'u'): {},
             ('users', 'u', 'monthly_usage_totals', '2026-11'): {
                 'schema_version': 1,
                 'epoch': 'v1',
                 'ready': True,
                 'totals': {'transcription_seconds': 18001},
                 'days': {'12': {'transcription_seconds': 18001}},
-            }
+            },
         }
     )
 
@@ -153,7 +154,7 @@ def test_direct_reader_does_not_rebuild_or_synthesize_zero(monthly_store, monkey
     with pytest.raises(ValueError, match='unverified'):
         watch._monthly_seconds('u', datetime(2026, 11, 12, tzinfo=timezone.utc), firestore_client=monthly_store)
     assert monthly_store.rows == before
-    assert monthly_store.transactions == []
+    assert all(not tx.has_written for tx in monthly_store.transactions)
 
 
 @pytest.mark.asyncio
@@ -232,14 +233,16 @@ async def test_gpu_observations_cannot_starve_another_authorization(monkeypatch)
     monkeypatch.setattr(admission, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=lambda: 1.0))
     observations = []
 
-    async def observe(*args, **kwargs):
+    async def observe(self, *args, **kwargs):
         assert all(
             store.rows['jobs', name].get('compute_admission_token') == lease.token for name in ('segment', 'second')
         )
         observations.append((args, kwargs))
         clock[0] += 5  # Even spending the entire remaining budget cannot undo either decision.
 
-    monkeypatch.setattr(watch, 'observe_async', observe)
+    from utils.stt.allowance_session import Operation
+
+    monkeypatch.setattr(Operation, 'reserve_async', observe)
     receipt = await admission.authorize(store, requests, now=1)
     assert receipt == {'allowed': ['segment', 'second'], 'retry_after': {}, 'held_reason': {}}
     assert len(observations) == 1

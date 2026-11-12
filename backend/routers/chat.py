@@ -7,6 +7,7 @@ bounded provider retries -- while prompt assembly and tool loops live in
 utils.chat_turn (backend/docs/chat-system.md).
 """
 
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.chat_turn import (
     run_chat_turn,
     TurnOptions,
@@ -567,6 +568,7 @@ def create_voice_message_stream(
         504: {"model": TranscriptionErrorResponse, "description": "Provider timeout"},
     },
 )
+@allowance_operation('ptt', live=False)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
@@ -667,6 +669,9 @@ async def transcribe_voice_message(
             del audio_bytes
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.seconds = duration_ms / 1000
         attempt = TranscriptionAttempt(
             route='voice_rest_pcm',
             provider=stt_provider,
@@ -713,6 +718,8 @@ async def transcribe_voice_message(
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+            if scope is not None:
+                await run_blocking(db_executor, scope.billed, duration_ms / 1000, daily_ptt=True)
             parity_capture.persist()
             del audio_bytes
 
@@ -743,6 +750,7 @@ async def transcribe_voice_message(
     transcripts = []
     detected_languages = []
     attempt: TranscriptionAttempt | None = None
+    daily_budget_seconds = None
 
     def _record_multipart_preparation_failure(failure: TranscriptionFailure) -> None:
         """Emit a typed terminal result for rejected multipart audio."""
@@ -804,6 +812,10 @@ async def transcribe_voice_message(
         if not allowed:
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
+        daily_budget_seconds = total_duration_ms / 1000
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.seconds = daily_budget_seconds
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
             route='voice_rest_multipart',
@@ -883,6 +895,9 @@ async def transcribe_voice_message(
     finally:
         if attempt is not None and not attempt.finished:
             attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+        scope = current_allowance_operation.get()
+        if scope is not None and daily_budget_seconds is not None:
+            await run_blocking(db_executor, scope.billed, daily_budget_seconds, daily_ptt=True)
         # retrieve_file_paths and conversion can both allocate uid-scoped
         # inputs. Clean every path even when preprocessing fails before the
         # previous provider-only try/finally boundary.
@@ -912,6 +927,7 @@ class _PTTStreamSession:
 
 
 @router.websocket("/v2/voice-message/transcribe-stream")
+@allowance_operation('ptt', live=True)
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
     uid: str = Depends(auth.get_current_user_uid_ws_listen),
@@ -1015,6 +1031,9 @@ async def transcribe_voice_message_stream(
     usage_recorded = False
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
+    allowance_scope = current_allowance_operation.get()
+    if allowance_scope is not None:
+        allowance_scope.clock = lambda: compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels) / 1000
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
     # Providers that already died for this session; the failover chain excludes
     # them so a rebuild never lands on the provider that just failed.
@@ -1264,7 +1283,13 @@ async def transcribe_voice_message_stream(
         from utils.stt_cap_dispatch import customer_funded
 
         provider = serving_provider()
-        await observe_async(uid, 'ptt', provider, actual_duration_ms / 1000, customer_funded=customer_funded(provider))
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            await run_blocking(db_executor, scope.billed, actual_duration_ms / 1000, daily_ptt=True)
+        else:
+            await observe_async(
+                uid, 'ptt', provider, actual_duration_ms / 1000, customer_funded=customer_funded(provider)
+            )
 
     def refund_reservation_once() -> None:
         """Release an unused reservation when the session never drained successfully."""

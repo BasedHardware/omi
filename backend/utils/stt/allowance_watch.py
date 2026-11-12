@@ -16,7 +16,7 @@ from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
 PATHS = frozenset(
-    {'live_open', 'live_billing', 'prerecorded', 'batch_gpu', 'batch_provider', 'one_shot', 'ptt', 'processing'}
+    {'live_open', 'live_billing', 'prerecorded', 'batch_gpu', 'batch_provider', 'one_shot', 'ptt', 'processing', 'sync'}
 )
 PROVIDERS = frozenset({'deepgram', 'soniox', 'modulate', 'parakeet', 'llm'})
 DECISIONS = Counter(
@@ -29,6 +29,17 @@ SECONDS = Counter(
     'Observed seconds by decision; requests are estimates, billing observations are separate',
     ['path', 'provider', 'decision'],
 )
+
+LEASE_DECISIONS = Counter(
+    'omi_free_allowance_lease_decisions', 'Shared shadow reservation decisions; no serving effect', ['path', 'reason']
+)
+SETTLED_SECONDS = Counter(
+    'omi_free_allowance_settled_seconds', 'Confirmed billing seconds joined to a shadow operation', ['path']
+)
+
+
+def enabled() -> bool:
+    return os.getenv('STT_FREE_ALLOWANCE_WATCH_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
 @dataclass(frozen=True)
@@ -51,40 +62,60 @@ def _monthly_seconds(uid: str, now: datetime, *, firestore_client: Any = None) -
     A projection without a verified baseline is unavailable, not zero. This
     reader never scans account data, rebuilds a projection, or creates a user.
     """
-    from database import monthly_usage_totals
+    from database import free_allowance_leases
 
-    return monthly_usage_totals.read_verified_transcription_seconds(uid, now, firestore_client=firestore_client)
+    return free_allowance_leases.chargeable_seconds(uid, now, firestore_client=firestore_client)
 
 
-def snapshot(uid: str | None, *, customer_funded: bool = False, now: datetime | None = None) -> Snapshot:
-    """One strict answer for all watch points. No flag, source or cohort input.
-
-    Paying plans (including Stripe trials on those plans) are exempt from this
-    free-only policy. A request key exempts only the provider actually using it;
-    callers decide that at the actual provider boundary.
-    """
+def entitlement(uid: str | None, *, customer_funded: bool = False) -> tuple[str, float | None]:
+    """Free-only billing entitlement, with no launch-date/cohort/rollout gate."""
     if customer_funded:
-        return Snapshot('customer_funded')
+        return 'customer_funded', None
     if not uid:
-        return Snapshot('identity_unavailable')
+        return 'identity_unavailable', None
     try:
         users, policy = _policy()
         if policy.is_marketplace_reviewer(uid) or uid == policy.RELEASE_PROBE_UID:
-            return Snapshot('exempt')
+            return 'exempt', None
         subscription = users.get_user_valid_subscription(uid, provision=False)
         if subscription is None:
-            return Snapshot('subscription_unavailable')
+            return 'subscription_unavailable', None
         if policy.is_paid_plan(subscription.plan):
-            return Snapshot('paid_or_trial')
+            return 'paid_or_trial', None
         if getattr(subscription.plan, 'value', subscription.plan) != 'basic':
-            return Snapshot('subscription_unavailable')
+            return 'subscription_unavailable', None
         limit = policy.transcription_allowance_seconds(subscription.plan)
         if type(limit) not in (int, float) or not math.isfinite(limit) or limit < 0:
-            return Snapshot('subscription_unavailable')
+            return 'subscription_unavailable', None
+        return 'free', float(limit)
+    except Exception:
+        return 'subscription_unavailable', None
+
+
+def snapshot(uid: str | None, *, customer_funded: bool = False, now: datetime | None = None) -> Snapshot:
+    """Speech and processing observe identical billed seconds plus in-flight holds."""
+    decision, limit = entitlement(uid, customer_funded=customer_funded)
+    if limit is None:
+        return Snapshot(decision)
+    try:
+        if uid is None:
+            return Snapshot('identity_unavailable')
         used = _monthly_seconds(uid, now or datetime.now(timezone.utc))
         return Snapshot('free', max(0, limit - used))
     except Exception:
         return Snapshot('usage_unavailable')
+
+
+def emit(path: str, provider: Any, decision: str, seconds: float) -> None:
+    if path not in PATHS:
+        return
+    provider = getattr(provider, 'value', provider)
+    provider = provider if provider in PROVIDERS else 'unknown'
+    DECISIONS.labels(path, provider, decision).inc()
+    SECONDS.labels(path, provider, decision).inc(seconds)
+    logger.info(
+        'event=free_allowance_watch path=%s provider=%s decision=%s seconds=%s', path, provider, decision, seconds
+    )
 
 
 def observe(
@@ -100,7 +131,7 @@ def observe(
     The kill switch disables instrumentation, not any existing admission check.
     Requested seconds and billed seconds must never be summed together.
     """
-    if os.getenv('STT_FREE_ALLOWANCE_WATCH_ENABLED', 'true').strip().lower() in {'false', '0', 'off', 'no'}:
+    if not enabled():
         return
     try:
         if path not in PATHS:
@@ -116,15 +147,29 @@ def observe(
                 decision = 'usage_unavailable'
             else:
                 decision = 'would_refuse' if result.remaining == 0 or seconds > result.remaining else 'would_allow'
-        DECISIONS.labels(path, provider, decision).inc()
-        SECONDS.labels(path, provider, decision).inc(seconds)
-        logger.info(
-            'event=free_allowance_watch path=%s provider=%s decision=%s seconds=%s', path, provider, decision, seconds
-        )
+        emit(path, provider, decision, seconds)
     except Exception:
         # Instrumentation must not become an accidental enforcement rollout.
         # This is a missing observation, never an allow decision.
         logger.warning('event=free_allowance_watch decision=observation_failed')
+
+
+def observe_unbound(uid: str | None, path: str, provider: Any, seconds: float = 0, *, customer_funded=False) -> None:
+    """A new/unwired spend path cannot turn a snapshot into reservation permission."""
+    if not enabled() or path not in PATHS:
+        return
+    decision, limit = entitlement(uid, customer_funded=customer_funded)
+    if decision in {'customer_funded', 'paid_or_trial', 'exempt'}:
+        emit(path, provider, decision, 0)
+        return
+    reason = 'billing_scope_unavailable' if limit is not None else decision
+    LEASE_DECISIONS.labels(path, reason).inc()
+    emit(
+        path,
+        provider,
+        'would_refuse',
+        seconds if type(seconds) in (int, float) and math.isfinite(seconds) and seconds > 0 else 0,
+    )
 
 
 def observe_request(path: str, provider: str, seconds: float = 0) -> None:
@@ -133,7 +178,15 @@ def observe_request(path: str, provider: str, seconds: float = 0) -> None:
         from utils.byok import get_byok_uid
         from utils.stt_cap_dispatch import customer_funded
 
-        observe(get_byok_uid(), path, provider, seconds, customer_funded=customer_funded(provider))
+        from utils.stt.allowance_session import current
+
+        scope = current.get()
+        if scope is not None:
+            if scope.seconds is None and seconds > 0:
+                scope.seconds = seconds
+            scope.reserve(provider, customer_funded=customer_funded(provider))
+        else:
+            observe_unbound(get_byok_uid(), path, provider, seconds, customer_funded=customer_funded(provider))
     except Exception:
         logger.warning('event=free_allowance_watch decision=observation_failed')
 
@@ -147,11 +200,28 @@ async def observe_async(
     customer_funded: bool = False,
     timeout: float = 2.5,
 ) -> None:
-    from utils.executors import db_executor, run_blocking
+    if not enabled():
+        return
+    from utils.stt.allowance_session import current
+    from utils.stt_cap_dispatch import customer_funded as actual_customer_funded
 
+    scope = current.get()
+    if scope is not None and path in {'prerecorded', 'batch_provider', 'one_shot', 'live_open'}:
+        if uid is not None and uid != scope.uid:
+            emit(path, provider, 'identity_mismatch', 0)
+            return
+        if scope.seconds is None and seconds > 0:
+            scope.seconds = seconds
+        await scope.reserve_async(provider, customer_funded=actual_customer_funded(provider), timeout=timeout)
+        return
+    from utils.executors import db_executor, free_allowance_executor, run_blocking
+
+    spend_point = path in {'prerecorded', 'batch_provider', 'batch_gpu', 'one_shot', 'live_open'}
+    observer = observe_unbound if spend_point else observe
+    executor = free_allowance_executor if spend_point else db_executor
     try:
         await asyncio.wait_for(
-            run_blocking(db_executor, observe, uid, path, provider, seconds, customer_funded=customer_funded),
+            run_blocking(executor, observer, uid, path, provider, seconds, customer_funded=customer_funded),
             timeout=timeout,
         )
     except Exception:

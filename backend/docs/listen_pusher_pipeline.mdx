@@ -715,15 +715,16 @@ recovery behavior.
 
 ## Funded transcription cap
 
-The SCA-1750 draft adds aggregate-only observation via
-`STT_FREE_ALLOWANCE_WATCH_ENABLED` (default `true`; `false`, `0`, `off`, or `no`
-disables observation). The observer reads verified monthly transcription billing
-seconds without launch-date/cohort fallbacks and cannot change an admission
-result. Async observations wait at most 2.5 seconds; sealed GPU authorization
-observations use at most 100 ms of remaining authorization budget. No wire or
-payload fields change. This is not a shared reservation or enforcement rollout;
-coverage, duration semantics, and remaining work are documented in
-[the change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md).
+The SCA-1750 watch-only phase uses a shared transactional shadow ledger for
+verified monthly billing, operation reservations, and daily-budget PTT settlement.
+`STT_FREE_ALLOWANCE_WATCH_ENABLED` defaults to `true`; `false`, `0`, `off`, or `no`
+stops new observations/reservations. Existing confirmed operations may still settle.
+The core ledger has no cohort or rollout gate. Serving admission results and wire
+payloads remain unchanged. Async observations wait at most 2.5 seconds; sealed GPU
+authorization uses at most 100 ms of remaining authorization budget. The
+[change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md)
+documents billing-unit settlement, conservative expired holds, baseline proof,
+metrics, emulator coverage, and the full-day reconciliation gate before enforcement.
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
