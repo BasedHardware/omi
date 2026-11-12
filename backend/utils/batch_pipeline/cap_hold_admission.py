@@ -20,9 +20,11 @@ import logging
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
-from utils.batch_pipeline.audio import RATE, audio_unit
+from utils.batch_pipeline.audio import RATE, StagedAudioInvalid, audio_unit
 from utils.batch_pipeline.capture_decode import UNIT_FRAMES, canonical_pcm
 from utils.sync.legacy_dark import LegacySyncMode
+
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +90,20 @@ def enabled_for(row: Mapping[str, Any], mode: LegacySyncMode | None = None, *, u
 
 def wav_units(path: str, capture_at: float, max_seconds: float):
     """One held WAV as bounded capture units, on the capture clock (as ``decode_units`` packs WAL)."""
+    if not math.isfinite(max_seconds) or max_seconds > 7200 or max_seconds <= 0:
+        # Same deterministic-refusal contract as ``decode_units``: a hostile
+        # ceiling is never retryable and carries the family type.
+        raise StagedAudioInvalid('invalid dedicated capture-unit ceiling')
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
-    if unit_frames < 1 or max_seconds > 7200:
-        raise ValueError('invalid dedicated capture-unit ceiling')
+    if unit_frames < 1:
+        raise StagedAudioInvalid('invalid dedicated capture-unit ceiling')
     pcm = canonical_pcm(path)
     if not pcm:
-        raise ValueError('empty held audio')
+        # A sealed hold whose canonicalization is empty is deterministic on
+        # the pinned held bytes: a retry decodes the same silence-or-less
+        # again. Typed so the recovery sweep classifies it instead of
+        # collapsing it into the anonymous ValueError cohort.
+        raise StagedAudioInvalid('empty held audio')
     step = unit_frames * 2
     for offset in range(0, len(pcm), step):
         yield audio_unit(capture_at + offset / (2 * RATE), pcm[offset : offset + step])

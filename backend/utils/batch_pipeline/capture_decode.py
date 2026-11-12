@@ -1,13 +1,27 @@
-"""CPU-only strict WAL decoding and bounded capture-clock packing."""
+"""CPU-only strict WAL decoding and bounded capture-clock packing.
+
+Every fault this module raises is deterministic on the pinned stored bytes
+(the same ``.bin`` frames re-parse and re-canonicalize identically on every
+attempt), so every raise site carries the family type ``StagedAudioInvalid``
+-- the same doctrine as ``decode_pcm16_wav``, ``with_context`` and the
+retained-audio decoder wrap sites. Downstream boundaries (admission repair
+holds, cap-hold admission, sync record fences) read the type, never the
+message; a bare ``ValueError``/``wave.Error``/``OverflowError`` here used to
+collapse the whole cohort into the anonymous fault vocabulary the sensor
+books as production errors.
+
+Failure-Class: FC-sync-decode-fault-anonymous-at-typed-boundaries
+"""
 
 import audioop
+import math
 import os
 import struct
 import wave
 from dataclasses import replace
 from collections.abc import Generator
 
-from utils.batch_pipeline.audio import RATE, AudioUnit, audio_unit
+from utils.batch_pipeline.audio import RATE, AudioUnit, StagedAudioInvalid, audio_unit
 from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path
 from utils.sync.capture_clock import is_early_capture_time
 
@@ -20,30 +34,44 @@ def _frame_count(path: str) -> int:
     with open(path, 'rb') as stream:
         while header := stream.read(4):
             if len(header) != 4:
-                raise ValueError('truncated sync audio frame')
+                raise StagedAudioInvalid('truncated sync audio frame')
             size = struct.unpack('<I', header)[0]
             if not 0 < size <= MAX_SYNC_FRAME_BYTES or len(stream.read(size)) != size:
-                raise ValueError('invalid sync audio frame')
+                raise StagedAudioInvalid('invalid sync audio frame')
             count += 1
     if count == 0:
-        raise ValueError('empty sync audio')
+        raise StagedAudioInvalid('empty sync audio')
     return count
 
 
 def _canonical(path: str) -> bytes:
-    with wave.open(path, 'rb') as stream:
-        channels, width, rate = stream.getnchannels(), stream.getsampwidth(), stream.getframerate()
-        if channels not in {1, 2} or width not in {1, 2, 3, 4} or not 8000 <= rate <= 48000:
-            raise ValueError('unsupported sync PCM format')
-        pcm = stream.readframes(stream.getnframes())
-    if width == 1:
-        pcm = audioop.bias(pcm, 1, -128)
-    if width != 2:
-        pcm = audioop.lin2lin(pcm, width, 2)
-    if channels == 2:
-        pcm = audioop.tomono(pcm, 2, 0.5, 0.5)
-    if rate != RATE:
-        pcm, _ = audioop.ratecv(pcm, 2, 1, rate, RATE, None)
+    try:
+        with wave.open(path, 'rb') as stream:
+            channels, width, rate = stream.getnchannels(), stream.getsampwidth(), stream.getframerate()
+            if channels not in {1, 2} or width not in {1, 2, 3, 4} or not 8000 <= rate <= 48000:
+                raise StagedAudioInvalid('unsupported sync PCM format')
+            pcm = stream.readframes(stream.getnframes())
+    except StagedAudioInvalid:
+        raise
+    except (wave.Error, EOFError, struct.error) as error:
+        # A garbage or header-truncated container is deterministic on the
+        # pinned bytes: wave refuses it identically on every attempt, so it
+        # joins the typed family instead of escaping as a bare wave.Error
+        # the boundaries cannot classify.
+        raise StagedAudioInvalid('invalid sync audio container') from error
+    try:
+        if width == 1:
+            pcm = audioop.bias(pcm, 1, -128)
+        if width != 2:
+            pcm = audioop.lin2lin(pcm, width, 2)
+        if channels == 2:
+            pcm = audioop.tomono(pcm, 2, 0.5, 0.5)
+        if rate != RATE:
+            pcm, _ = audioop.ratecv(pcm, 2, 1, rate, RATE, None)
+    except audioop.error as error:
+        # A payload that resamples/folds to nothing is equally deterministic:
+        # every attempt runs the same conversions on the same samples.
+        raise StagedAudioInvalid('invalid sync PCM payload') from error
     return pcm
 
 
@@ -58,9 +86,15 @@ def decode_units(
     coverage_context: dict | None = None,
     received_at: float | None = None,
 ) -> Generator[AudioUnit, None, None]:
+    if not math.isfinite(max_seconds) or max_seconds > 7200 or max_seconds <= 0:
+        # A non-finite or out-of-horizon ceiling can never admit a unit: the
+        # refusal is deterministic on the admission arguments, not on bytes,
+        # and it names the family type like every other never-retryable fault
+        # here (NaN/inf previously escaped as bare ValueError/OverflowError).
+        raise StagedAudioInvalid('invalid dedicated capture-unit ceiling')
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
-    if unit_frames < 1 or max_seconds > 7200:
-        raise ValueError('invalid dedicated capture-unit ceiling')
+    if unit_frames < 1:
+        raise StagedAudioInvalid('invalid dedicated capture-unit ceiling')
     expected = {path.replace('.bin', '.wav'): _frame_count(path) for path in paths}
     frames: dict[str, list[int]] = {}
     wavs = []
@@ -68,7 +102,7 @@ def decode_units(
     try:
         wavs = decode_files_to_wav(paths, frames)
         if set(wavs) != set(expected) or any(len(frames.get(path, [])) != count for path, count in expected.items()):
-            raise ValueError('sync decode did not preserve every uploaded frame')
+            raise StagedAudioInvalid('sync decode did not preserve every uploaded frame')
         from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 
         wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
@@ -108,7 +142,7 @@ def decode_units(
             capture = float(get_timestamp_from_path(path))
             pcm = _canonical(path)
             if not pcm:
-                raise ValueError('empty decoded sync audio')
+                raise StagedAudioInvalid('empty decoded sync audio')
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
             early = path in early_paths
