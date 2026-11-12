@@ -184,6 +184,15 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$MONITOR_GRAFANA_TOKEN"
+          # A service-account token writes only to its own Grafana organization.
+          # From 2026-11-10 to 2026-11-12 this job held a Business-org token as
+          # MONITOR_GRAFANA_TOKEN, created stray copies of the Ops boards there and
+          # passed its own read-back. Refuse to write unless the token's org matches.
+          org_id=$(curl -fsS --max-time 20 -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" https://monitor.omi.me/api/org | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          if [ "$org_id" != "1" ]; then
+            echo "::error::MONITOR_GRAFANA_TOKEN belongs to Grafana org $org_id, expected 1; nothing was written."
+            exit 1
+          fi
           python3 backend/scripts/provision_grafana_dashboards.py \
             --dashboards-dir backend/charts/monitoring/dashboards \
             --grafana-url https://monitor.omi.me \
@@ -205,6 +214,15 @@ jobs:
           if [ -z "${BUSINESS_GRAFANA_TOKEN:-}" ]; then
             echo "::warning::BUSINESS_GRAFANA_TOKEN is not set in the grafana-dashboards-prod environment; the Omi TV boards were not applied and still need the gated prod dispatch."
             exit 0
+          fi
+          # A service-account token writes only to its own Grafana organization.
+          # From 2026-11-10 to 2026-11-12 this job held a Business-org token as
+          # MONITOR_GRAFANA_TOKEN, created stray copies of the Ops boards there and
+          # passed its own read-back. Refuse to write unless the token's org matches.
+          org_id=$(curl -fsS --max-time 20 -H "Authorization: Bearer $BUSINESS_GRAFANA_TOKEN" https://monitor.omi.me/api/org | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          if [ "$org_id" != "2" ]; then
+            echo "::error::BUSINESS_GRAFANA_TOKEN belongs to Grafana org $org_id, expected 2; nothing was written."
+            exit 1
           fi
           python3 .github/scripts/provision_grafana_dashboards.py \
             --dashboards-dir web/admin/grafana/dashboards \
