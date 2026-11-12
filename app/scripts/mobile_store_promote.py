@@ -550,7 +550,7 @@ def submit_android(
     build_number: str,
     notes: str,
     *,
-    status: str = "completed",
+    status: str | None = None,
     user_fraction: float | None = None,
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
@@ -562,8 +562,9 @@ def submit_android(
     status "completed" = fully live; "draft" = Play Console draft; "inProgress"
     = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
     Play Console as a post-release brake. userFraction is rejected for
-    completed/draft releases; a completed release cannot later be halted, so
-    decide the exposure path before writing. extra_codes carries any
+    completed/draft releases; when status is omitted, held-review mode writes a
+    draft and ordinary mode writes completed. A completed release cannot later
+    be halted, so decide the exposure path before writing. extra_codes carries any
     additional versionCodes an existing in-flight release already had (a
     multi-APK rollout must not lose its variants when the track is rewritten).
     base_release is that existing server-returned release: advancing it keeps
@@ -579,6 +580,8 @@ def submit_android(
     retained (one staged release per PUT), and their version codes must not
     overlap the written release's.
     """
+    if status is None:
+        status = "draft" if CHANGES_NOT_SENT_FOR_REVIEW else "completed"
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
     if user_fraction is not None and status not in ("inProgress", "halted"):

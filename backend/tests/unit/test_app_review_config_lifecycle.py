@@ -374,6 +374,16 @@ def test_play_reader_uses_only_production_track_and_deletes_temporary_edit(monke
         held_after_sweep, repairs, clears = lifecycle.reconcile_android_config(held_config, production_codes=codes)
         assert held_after_sweep["hidden_versions"] == [version]
         assert (repairs, clears) == (0, 0)
+    completed_config = {
+        "hidden_versions": ["3.0.2"],
+        "review_submission_entries": [active_entry("android", "3.0.2", code="411")],
+    }
+    completed_after_sweep, repairs, clears = lifecycle.reconcile_android_config(
+        completed_config, production_codes=codes
+    )
+    assert completed_after_sweep["hidden_versions"] == []
+    assert completed_after_sweep["review_submission_entries"] == []
+    assert (repairs, clears) == (0, 1)
     assert len(session.calls) == 3
     assert '/tracks/production' in session.calls[1][1]
     assert '/tracks/internal' not in str(session.calls)
@@ -498,7 +508,9 @@ def test_alert_rules_cover_lifecycle_events_and_dead_sweeper():
     page = rules['omi-app-review-config-alert']
     assert not page['isPaused']
     expression = page['data'][0]['model']['expr']
-    assert 'reason=~"credentials_unavailable|store_api_error"' in expression
+    expected_reasons = "credentials_unavailable|store_api_error|submission_token_unavailable"
+    assert f'reason=~"{expected_reasons}"' in expression
+    assert f'reason=~"{expected_reasons}"' in page['annotations']['threshold']
     assert "reconciliation_repair" not in expression and "live_hide_cleared" not in expression
     deadman = rules['omi-app-review-config-sweep-silent']
     assert deadman['isPaused']

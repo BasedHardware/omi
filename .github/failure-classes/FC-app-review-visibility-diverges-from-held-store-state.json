@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-app-review-visibility-diverges-from-held-store-state",
+  "violated_contract": "Android app-review visibility must reflect a genuinely completed Google Play rollout. A production release committed with changesNotSentForReview=true is still held for review even if its track status is completed, and an unavailable submission token can prevent the hide from being recorded; neither condition may silently clear or omit the review hide.",
+  "canonical_prevention": "While Play changes are held, write a draft production release so completed remains the live signal. Include submission_token_unavailable in the paging rule and document the Secret Manager and Codemagic rotation checks. Contract tests cover the held draft and completed rollout reconciliation, and assert that the token-unavailable reason is paged.",
+  "canonical_prevention_artifact": [
+    "app/scripts/mobile_store_promote_test.py",
+    "backend/tests/unit/test_app_review_config_lifecycle.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/scripts/mobile_store_promote.py",
+    "app/scripts/mobile_store_promote_test.py",
+    "backend/services/app_review_config_lifecycle.py",
+    "backend/tests/unit/test_app_review_config_lifecycle.py",
+    "backend/charts/monitoring/alerts/app-review-config.json"
+  ],
+  "status": "open"
+}

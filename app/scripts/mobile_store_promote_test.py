@@ -86,9 +86,9 @@ class InputTests(unittest.TestCase):
             "--build-id",
             BUILD_ID,
         ]
-        with patch.object(sys, "argv", args), patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
-            promote, "promote_internal_android_to_alpha"
-        ) as run_promotion:
+        with patch.object(sys, "argv", args), patch.object(
+            promote, "play_edit", return_value=(client, "edit")
+        ), patch.object(promote, "promote_internal_android_to_alpha") as run_promotion:
             self.assertEqual(promote.main(), 0)
         run_promotion.assert_called_once_with(client, "edit", "1.2.3", "23", BUILD_TAG, BUILD_ID)
 
@@ -222,7 +222,13 @@ class IOSChecks(unittest.TestCase):
                     {"id": "v563", "attributes": {"versionString": "1.0.563"}},
                 ]
             self.assertEqual(args, ("app-store-versions", "localizations", "v563"))
-            return {"data": [{"attributes": {"locale": "en-US"}}, {"attributes": {"locale": "fr-FR"}}, {"attributes": {"locale": "en-US"}}]}
+            return {
+                "data": [
+                    {"attributes": {"locale": "en-US"}},
+                    {"attributes": {"locale": "fr-FR"}},
+                    {"attributes": {"locale": "en-US"}},
+                ]
+            }
 
         with patch.object(promote, "cli_json", side_effect=lookup):
             self.assertEqual(promote.ios_live_locales(), ["en-US", "fr-FR"])
@@ -297,6 +303,30 @@ class AndroidChecks(unittest.TestCase):
         self.assertEqual(promote.production_release_version(f"{BUILD_TAG} [{BUILD_ID}]"), "1.2.3")
         self.assertIsNone(promote.production_release_version("not-a-version"))
         self.assertIsNone(promote.production_release_version("1.0"))
+
+    def test_manual_cli_keeps_held_android_release_as_draft(self):
+        client = Mock()
+        argv = [
+            "promote.py",
+            "--confirm",
+            "submit-for-review",
+            "--platform",
+            "android",
+            "--version",
+            "1.2.3",
+            "--android-build",
+            "23",
+        ]
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True), patch.object(
+            promote, "require_notes", return_value="New line"
+        ), patch.object(promote, "prepare_android", return_value=(client, "edit-id")), patch.object(sys, "argv", argv):
+            self.assertEqual(promote.main(), 0)
+
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["status"], "draft")
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
+        )
 
     def test_internal_to_alpha_promotes_only_exact_completed_build_and_holds_commit(self):
         client = Mock()
@@ -430,9 +460,7 @@ class AndroidChecks(unittest.TestCase):
             side_effect=[
                 {
                     "track": "internal",
-                    "releases": [
-                        {"name": f"{BUILD_TAG} [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}
-                    ],
+                    "releases": [{"name": f"{BUILD_TAG} [{BUILD_ID}]", "versionCodes": ["23"], "status": "completed"}],
                 },
                 {"track": "alpha", "releases": []},
             ],
@@ -441,7 +469,7 @@ class AndroidChecks(unittest.TestCase):
                 promote.promote_internal_android_to_alpha(client, "edit-id", "1.2.3", "23", BUILD_TAG, BUILD_ID)
         client.edits().commit.assert_not_called()
 
-    def test_promotion_updates_only_production_using_existing_code_and_derived_notes(self):
+    def test_held_manual_promotion_writes_draft_and_holds_commit(self):
         client = Mock()
         promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
         client.edits().tracks().update.assert_called_once_with(
@@ -454,7 +482,7 @@ class AndroidChecks(unittest.TestCase):
                     {
                         "name": "1.2.3",
                         "versionCodes": ["23"],
-                        "status": "completed",
+                        "status": "draft",
                         "releaseNotes": [{"language": "en-US", "text": "New line"}],
                     }
                 ],
@@ -464,6 +492,14 @@ class AndroidChecks(unittest.TestCase):
             packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
         )
         self.assertFalse(client.edits().bundles.upload.called)
+
+    def test_unheld_manual_promotion_writes_completed(self):
+        client = Mock()
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
+            promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["status"], "completed")
+        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
 
     def test_staged_and_halted_are_the_alternatives_to_completed(self):
         client = Mock()
@@ -491,7 +527,14 @@ class AndroidChecks(unittest.TestCase):
         client.edits().commit.assert_called_once()
         with self.assertRaisesRegex(promote.PromotionError, "unique"):
             promote.submit_android(
-                Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
+                Mock(),
+                "edit-id",
+                "1.2.3",
+                "23",
+                "New line",
+                status="inProgress",
+                user_fraction=0.25,
+                extra_codes=("23",),
             )
 
     def test_retained_releases_ride_along_unchanged(self):
@@ -562,7 +605,13 @@ class AndroidChecks(unittest.TestCase):
             ],
         }
         promote.submit_android(
-            client, "edit-id", "1.2.3", "23", "ignored when notes exist", status="inProgress", user_fraction=0.25,
+            client,
+            "edit-id",
+            "1.2.3",
+            "23",
+            "ignored when notes exist",
+            status="inProgress",
+            user_fraction=0.25,
             base_release=staged,
         )
         release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]

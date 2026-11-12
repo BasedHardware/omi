@@ -37,6 +37,11 @@ uses a 60-second in-process secret cache, so rotation can take up to 60 seconds
 to reach every backend instance. To rotate, update the Secret Manager version
 and Codemagic group to the same new value, wait at least 60 seconds (or restart
 all backend instances), verify a receipt in staging, then revoke the old value.
+If the backend cannot load the active token during rotation, the `submission_token_unavailable`
+reason fires the app-review lifecycle paging rule. Check the Secret Manager
+version and accessor binding, confirm the Codemagic group has the matching
+value, and verify a fresh staging receipt after the cache refresh before
+revoking the old value.
 Receipts carry the submission time and are accepted only for 15 minutes after
 submission (with at most five minutes of future clock skew); replaying an old
 receipt cannot create a fresh lease. Repeated receipts for an active lease do
