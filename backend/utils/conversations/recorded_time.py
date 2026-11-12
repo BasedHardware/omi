@@ -123,6 +123,29 @@ def conversation_span(row: Any):
     return RecordedSpan(recorded_start=start, recorded_end=end, arrival_at=arrival, clock=RecordedClock.legacy)
 
 
+def segment_span(row: Any) -> tuple[datetime, datetime] | None:
+    """Extent proven by placed transcript segments; a wall-clock envelope is not.
+
+    ``conversation_span`` may derive a legacy row's end from ``finished_at``
+    when no placed segment proves the recording. That envelope is a coarse
+    hint, so a caller that needs captured-audio proof reads this instead and
+    refuses when either side has no placed segment.
+    """
+    from utils.conversations.lifecycle_clocks import utc
+
+    row = _timing_row(row)
+    segments = row.get('transcript_segments')
+    segments = (
+        [
+            s if isinstance(s, Mapping) else {key: getattr(s, key, None) for key in ('start', 'end', 'audio_alignment')}
+            for s in segments
+        ]
+        if isinstance(segments, list)
+        else []
+    )
+    return recorded_span(utc(row.get('started_at')), segments)
+
+
 def span_fields(row: Mapping[str, Any]) -> dict[str, Any]:
     span = conversation_span(row)
     return span.model_dump() if span is not None else {}

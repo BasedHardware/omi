@@ -1,8 +1,9 @@
 """Metadata-only live overlap admission; never treats a near-time stub as proof."""
 
 import os
+from datetime import timedelta
 
-from utils.conversations.recorded_time import conversation_span
+from utils.conversations.recorded_time import conversation_span, segment_span
 
 from config import refactor_modes
 from utils.capture.identity import compatible_keys, same_explicit_key
@@ -41,6 +42,30 @@ def _strict_overlap_seconds(row: dict, incoming: dict, *, require_device: bool =
         0.0,
         (min(left.recorded_end, right.recorded_end) - max(left.recorded_start, right.recorded_start)).total_seconds(),
     )
+
+
+def span_contained(donor: dict, target: dict, *, tolerance_seconds: float = 0.0) -> bool:
+    """Whether the donor's whole recorded span lies inside the target's.
+
+    Both sides must prove their extent with placed transcript segments. A row
+    whose only span is the ``finished_at`` wall-clock envelope is a coarse hint,
+    not proof the target captured the donor's speech, so it refuses rather than
+    authorizes the merge and the donor stays standalone.
+
+    Tolerance tightens the target window and never loosens it, so it can only
+    refuse more. Shrinking the donor span is never acceptable: a donor holding
+    speech just outside the target would then pass and its audio would be lost.
+    """
+    donor_span = segment_span(donor)
+    target_span = segment_span(target)
+    if donor_span is None or target_span is None:
+        return False
+    tolerance = timedelta(seconds=max(0.0, tolerance_seconds))
+    donor_start, donor_end = donor_span
+    target_start, target_end = target_span
+    if target_end - tolerance < target_start + tolerance:
+        return False
+    return donor_start >= target_start + tolerance and donor_end <= target_end - tolerance
 
 
 def live_overlap_seconds(row: dict, incoming: dict) -> float:
@@ -102,7 +127,9 @@ def _live_binding_score(row: dict, incoming: dict) -> float:
     return live_overlap_seconds(row, incoming)
 
 
-def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = None) -> str | None:
+def choose_live_overlap(
+    rows: list[dict], incoming: dict, *, uid: str | None = None, record_comparison: bool = True
+) -> str | None:
     # refactor: superseded by this module's keyed path when CAPTURE_COVERAGE_MODE=serve
     legacy = _legacy_choose_live_overlap(rows, incoming)
     if not refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE'):
@@ -111,5 +138,9 @@ def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = N
     proposed = (
         min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id'] if eligible else None
     )
-    compare('live_bind', 'agree' if proposed == legacy else 'disagree')
+    if record_comparison:
+        # A caller that must stay side-effect-inert (the contained-donor shadow
+        # pass) opts out: it may not inject live_bind disagreement samples into
+        # the capture-coverage rollout's own evidence.
+        compare('live_bind', 'agree' if proposed == legacy else 'disagree')
     return proposed if refactor_modes.serving_for('CAPTURE_COVERAGE_MODE', uid) else legacy
