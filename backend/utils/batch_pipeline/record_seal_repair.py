@@ -12,6 +12,7 @@ from google.cloud import firestore
 from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_enabled
 
 from database._client import run_transactional
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
@@ -308,13 +309,18 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
         observation = {}
+        ledger_revision = 0
 
         @firestore.transactional
         def commit(tx):
+            nonlocal ledger_revision
             observation.clear()  # Only the final transaction attempt may emit.
+            ledger_revision = 0
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
-            row = ref.get(transaction=tx).to_dict() or {}
+            row_snapshot = ref.get(transaction=tx)
+            row = row_snapshot.to_dict() or {}
+            ledger_revision = pipeline_ledger.source_revision(row_snapshot)
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = seal_refusal(
@@ -343,6 +349,21 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         try:
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
+            if result == 'upload_failed_cleared':
+                # A proven repair clears the sticky failure; the ledger must
+                # follow it out of the failed terminal or the repaired capture
+                # stays classified as terminally failed until expiry. Fail-open:
+                # the authoritative repair already committed.
+                pipeline_ledger.advance(
+                    uid,
+                    cid,
+                    pipeline_ledger.SEALED,
+                    revision=max(1, ledger_revision),
+                    reopen=True,
+                    source_ref=ref,
+                    owner_ref=store.client.collection('users').document(uid),
+                    firestore_client=store.client,
+                )
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

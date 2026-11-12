@@ -137,6 +137,19 @@ def test_mark_record_upload_failed_persists_the_firing_clock(records, monkeypatc
     assert records.rows[PATH]['record_upload_failed_at'] == 1234.5
 
 
+def test_upload_failure_marker_writes_the_ledger_terminal(records, monkeypatch):
+    # A failed upload never reaches a later seal, so the marker itself must
+    # write the terminal or the capture stays absent from the ledger.
+    monkeypatch.setattr(record_audio_db.time, 'time', lambda: 1234.5)
+    assert mark_record_upload_failed('uid-at', 'record', firestore_client=records)
+    ledger = records.rows[('users', 'uid-at', 'pipeline_ledger', 'record')]
+    assert ledger['stage'] == 'failed:upload_failed'
+    assert ledger['terminal'] is True
+    assert ledger['terminal_reason'] == 'failed:upload_failed'
+    assert ledger['end_type'] == 'unknown'
+    assert ledger['end_at'] == 1234.5
+
+
 def test_missing_row_never_recreated(records):
     records.rows.clear()
     assert seal_record_audio('uid-at', 'record', firestore_client=records) == 'deleted'

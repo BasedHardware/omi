@@ -1,6 +1,6 @@
 """Transactional record-audio closure and cross-session upload custody metadata."""
 
-from typing import Literal
+from typing import Any, Literal
 import time
 
 from google.cloud import firestore
@@ -237,6 +237,8 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
     """Persist a terminal upload/drop refusal before the session forgets it."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    owner_ref = client.collection('users').document(uid)
+    observed: dict[str, Any] = {}
     try:
         ledger_enabled = pipeline_ledger_enabled()
     except Exception:
@@ -244,7 +246,9 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
 
     @firestore.transactional
     def commit(tx):
-        row = ref.get(transaction=tx).to_dict()
+        observed.clear()
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict()
         if row is None:
             return False  # Never recreate a deleted conversation.
         if row.get('record_lane_owner') not in {None, 'batch_live_v1', 'batch_sync_v1'}:
@@ -260,10 +264,30 @@ def mark_record_upload_failed(uid: str, conversation_id: str, *, firestore_clien
         # conversation payload is restored.
         if ledger_enabled:
             patch['record_upload_failed_at'] = time.time()
+        observed['revision'] = pipeline_ledger.source_revision(snapshot)
+        observed['failed_at'] = patch.get('record_upload_failed_at')
         tx.update(ref, patch)
         return True
 
-    return run_transactional(client, commit, transient=True)
+    written = run_transactional(client, commit, transient=True)
+    if written:
+        # The failure marker is the authoritative loss; write its terminal here
+        # rather than waiting for a later seal attempt that a failed upload
+        # never makes. Fail-open: the marker already committed.
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.failed_stage('upload_failed'),
+            reason='upload_failed',
+            end_type='unknown',
+            end_at=observed.get('failed_at') if observed.get('failed_at') is not None else time.time(),
+            revision=max(1, int(observed.get('revision') or 0)),
+            reopen=True,
+            source_ref=ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
+        )
+    return written
 
 
 def renew_record_token_lease(

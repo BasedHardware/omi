@@ -203,6 +203,19 @@ def test_proven_dead_producer_can_be_cleared_with_tail_proof_and_plan_digest(sou
     assert client.rows[PATH]['record_audio_closed']
 
 
+def test_upload_failed_repair_reopens_the_ledger(source):
+    store, client, artifacts = source
+    client.rows[('users', 'synthetic')] = {'id': 'synthetic'}
+    client.rows[PATH]['record_upload_failed'] = True
+    result = repair.plan_seals(store, ['pending'], object(), artifacts, repair_upload_failed=True)
+    assert result['entries'][0]['disposition'] == 'eligible'
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'upload_failed_cleared': 1}
+    assert client.rows[PATH]['record_upload_failed'] is False
+    ledger = client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]
+    assert ledger['stage'] == 'sealed'
+    assert ledger['terminal'] is False
+
+
 def test_producer_proof_change_or_new_token_requires_fresh_plan(source, monkeypatch):
     store, client, artifacts = source
     monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 1000)
