@@ -572,12 +572,11 @@ async def accept_upload(
             priority_for(lane, recording_age_seconds),
             requires_compute_admission=True,
             conversation_id=conversation_id,
+            privacy_generation=_coalescing_group['privacy_generation'] if _coalescing_group is not None else None,
         )
         phase = 'authorization'
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
-        if _coalescing_group is not None and context.generation != _coalescing_group['privacy_generation']:
-            raise BatchPrivacyBlocked('coalescing_generation_changed')
         user = snapshots['user']
         target = snapshots.get('conversations', {}).get(conversation_id) or {}
         if _coalescing_group is not None:

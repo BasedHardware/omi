@@ -182,7 +182,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
     # This source item is a deletion-outbox identity, never a scheduler job.
     item = replace(
         seed,
-        segment_id=rows.digest(['held-source', arguments['content_id']]),
+        segment_id=await run_blocking(sync_executor, rows.digest, ['held-source', arguments['content_id']]),
         capture_at=start,
         duration_seconds=seconds,
         privacy_generation=context.generation,
@@ -213,7 +213,9 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'language': language,
     }
     # Metadata is hashed for identity; private context remains encrypted in body.
-    key = rows.digest(
+    key = await run_blocking(
+        sync_executor,
+        rows.digest,
         [
             arguments['uid'],
             session,
@@ -230,7 +232,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
             int(seed.priority),
             sorted({tuple(Path(p).name.split('_')[1:4]) for p in arguments['paths']}),
             upload_context.get('geolocation'),
-        ]
+        ],
     )
     admitted = await run_blocking(db_executor, rows.enqueue, store, member, key, now)
     if admitted == 'wait':
@@ -309,7 +311,7 @@ async def drain_group(store, artifacts, group_id, *, admit_upload=None, now=None
             args = dict(batch[0][0])
             args['paths'] = [path for _, paths in batch for path in paths]
             if group['mode'] == 'merged':
-                content = rows.digest([group['id'], 'merged'])
+                content = await run_blocking(sync_executor, rows.digest, [group['id'], 'merged'])
                 args.update(job_id=content, content_id=content)
                 args['intake_context'] = {
                     **(args.get('intake_context') or {}),
