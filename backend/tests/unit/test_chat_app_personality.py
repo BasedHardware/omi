@@ -86,6 +86,8 @@ def _prompt(app=None, *, template_text=TEMPLATE_TEXT, template_error=None, platf
     with patch.object(llm_chat, "get_user_name", MagicMock(return_value="Alice")), patch.object(
         llm_chat.notification_db, "get_user_time_zone", MagicMock(return_value="UTC")
     ), patch.object(llm_chat.goals_db, "get_user_goals", MagicMock(return_value=[])), patch.object(
+        llm_chat.users_db, "get_custom_instructions", MagicMock(return_value=None)
+    ), patch.object(
         langsmith_prompts, "get_agentic_system_prompt_template", getter
     ):
         return llm_chat._get_agentic_qa_prompt(
@@ -172,6 +174,8 @@ def test_core_sections_and_platform_survive_the_overlay():
     with patch.object(llm_chat, "get_user_name", MagicMock(return_value="Alice")), patch.object(
         llm_chat.notification_db, "get_user_time_zone", MagicMock(return_value="UTC")
     ), patch.object(llm_chat.goals_db, "get_user_goals", MagicMock(return_value=[goal])), patch.object(
+        llm_chat.users_db, "get_custom_instructions", MagicMock(return_value=None)
+    ), patch.object(
         langsmith_prompts, "get_agentic_system_prompt_template", MagicMock(side_effect=Exception("down"))
     ):
         prompt = llm_chat._get_agentic_qa_prompt(

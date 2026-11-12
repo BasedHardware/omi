@@ -1486,3 +1486,15 @@ def test_custom_instructions_invalid_storage_response_is_ignored(monkeypatch, st
 
     monkeypatch.setattr(users_router.users_db, 'get_custom_instructions', lambda _uid: stored)
     assert get_custom_instructions_section('uid-invalid-storage') == ''
+
+
+def test_custom_instructions_storage_failure_propagates_without_logging_raw_exception(monkeypatch, caplog):
+    from utils.llm.chat import get_custom_instructions_section
+
+    def failing_get(_uid):
+        raise RuntimeError('sensitive firestore failure detail')
+
+    monkeypatch.setattr(users_router.users_db, 'get_custom_instructions', failing_get)
+    with caplog.at_level('WARNING'), pytest.raises(RuntimeError, match='sensitive firestore failure detail'):
+        get_custom_instructions_section('uid-storage-error')
+    assert 'sensitive firestore failure detail' not in caplog.text

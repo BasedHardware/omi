@@ -471,7 +471,6 @@ def get_custom_instructions_section(
 ) -> str:
     """Return a <user_custom_instructions> block when custom instructions are enabled and non-empty.
 
-    Fails open (returns '') if storage retrieval fails or if custom instructions are disabled/empty.
     Escapes XML-sensitive characters so user text cannot close system prompt tags.
     """
     if enabled_override is False:
@@ -480,14 +479,10 @@ def get_custom_instructions_section(
         getter = getattr(users_db, 'get_custom_instructions', None)
         if not callable(getter):
             return ""
-        try:
-            loaded_instructions = getter(uid)
-            if not isinstance(loaded_instructions, dict):
-                return ""
-            custom_instructions = loaded_instructions
-        except Exception as e:
-            logger.warning("Failed to load custom instructions for uid=%s: %s", uid, e)
+        loaded_instructions = getter(uid)
+        if not isinstance(loaded_instructions, dict):
             return ""
+        custom_instructions = loaded_instructions
     if enabled_override is None and not bool(custom_instructions.get("enabled", True)):
         return ""
     about_me = str(custom_instructions.get("about_me") or custom_instructions.get("about_user") or "").strip()
