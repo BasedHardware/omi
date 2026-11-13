@@ -41,9 +41,21 @@ MAX_CAPTURE_GAP_EVENT_SECONDS = 8 * 60 * 60
 
 
 def _as_utc(value) -> Optional[datetime]:
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith('Z'):
+            raw = f'{raw[:-1]}+00:00'
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
     if not isinstance(value, datetime):
         return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def event_attendance_excluded(event: Dict[str, Any]) -> bool:
@@ -87,7 +99,12 @@ def select_overlapping_calendar_event(
     best_match: Optional[Dict[str, Any]] = None
     best_overlap_seconds = 0
 
-    conversation_duration = (conversation_end - conversation_start).total_seconds()
+    conv_start = _as_utc(conversation_start)
+    conv_end = _as_utc(conversation_end)
+    if conv_start is None or conv_end is None:
+        return None
+
+    conversation_duration = (conv_end - conv_start).total_seconds()
 
     for event in events:
         if require_accepted and event_attendance_excluded(event):
@@ -96,12 +113,14 @@ def select_overlapping_calendar_event(
         if not isinstance(start_raw, dict) or 'dateTime' not in start_raw:
             continue
 
-        event_start, event_end = parse_event_times(event)
+        event_start_raw, event_end_raw = parse_event_times(event)
+        event_start = _as_utc(event_start_raw)
+        event_end = _as_utc(event_end_raw)
         if event_start is None or event_end is None:
             continue
 
-        overlap_start = max(event_start, conversation_start)
-        overlap_end = min(event_end, conversation_end)
+        overlap_start = max(event_start, conv_start)
+        overlap_end = min(event_end, conv_end)
         overlap_duration = (overlap_end - overlap_start).total_seconds()
 
         if overlap_duration <= 0:
@@ -156,7 +175,9 @@ def select_capture_gaps(
             continue
         if str(event.get('status', 'confirmed')).strip().lower() != 'confirmed':
             continue
-        event_start, event_end = parse_event_times(event)
+        event_start_raw, event_end_raw = parse_event_times(event)
+        event_start = _as_utc(event_start_raw)
+        event_end = _as_utc(event_end_raw)
         if event_start is None or event_end is None:
             continue
         event_duration = (event_end - event_start).total_seconds()
@@ -211,10 +232,12 @@ async def get_overlapping_calendar_event(
     if not access_token:
         return None
 
-    if conversation_start.tzinfo is None:
-        conversation_start = conversation_start.replace(tzinfo=timezone.utc)
-    if conversation_end.tzinfo is None:
-        conversation_end = conversation_end.replace(tzinfo=timezone.utc)
+    conv_start = _as_utc(conversation_start)
+    conv_end = _as_utc(conversation_end)
+    if conv_start is None or conv_end is None:
+        return None
+    conversation_start = conv_start
+    conversation_end = conv_end
 
     search_start = conversation_start - timedelta(minutes=30)
     search_end = conversation_end + timedelta(minutes=30)
