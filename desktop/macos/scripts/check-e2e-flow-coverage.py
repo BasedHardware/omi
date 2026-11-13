@@ -10,7 +10,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 
 DESKTOP_SWIFT_ROOT = Path("desktop/macos/Desktop/Sources")
@@ -163,6 +163,25 @@ def formatted_swift_source(formatter: Formatter, source: str, path: str) -> str 
         text=True,
     )
     return result.stdout if result.returncode == 0 else None
+
+
+def lazy_formatter(root: Path, value: str) -> Callable[[], Formatter | None]:
+    """Resolve the formatter on first use, so a Swift-free diff never bootstraps it.
+
+    `resolve_formatter` shells out to the pinned swift-format wrapper's
+    `bootstrap`, a from-source build measured at ~20 minutes on a cold hosted
+    runner. Scoped manifest checks (nightly inventory, `--changed-files`) still
+    run this checker when any desktop path is in scope, so resolving eagerly
+    billed that bootstrap to runs whose diff contains no desktop Swift source.
+    """
+    resolved: list[Formatter | None] = []
+
+    def get() -> Formatter | None:
+        if not resolved:
+            resolved.append(resolve_formatter(root, value))
+        return resolved[0]
+
+    return get
 
 
 def default_base(root: Path) -> str | None:
@@ -330,7 +349,7 @@ def swift_semantic_fingerprint(source: str) -> str:
 
 
 def semantic_changed_files(
-    root: Path, files: list[str], baseline: str, staged: bool, formatter: Formatter | None
+    root: Path, files: list[str], baseline: str, staged: bool, formatter_for: Callable[[], Formatter | None]
 ) -> list[str]:
     """Exclude tracked Swift files whose only delta is formatting or comments."""
     changed: list[str] = []
@@ -353,6 +372,7 @@ def semantic_changed_files(
         if current_contents is None:
             changed.append(path)
             continue
+        formatter = formatter_for()
         if formatter:
             formatted_baseline = formatted_swift_source(formatter, baseline_contents, path)
             if formatted_baseline != current_contents:
@@ -363,10 +383,12 @@ def semantic_changed_files(
     return changed
 
 
-def changed_files_from_git(root: Path, base: str | None, staged: bool, formatter: Formatter | None) -> list[str]:
+def changed_files_from_git(
+    root: Path, base: str | None, staged: bool, formatter_for: Callable[[], Formatter | None]
+) -> list[str]:
     if staged:
         files = run_git(root, ["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
-        return semantic_changed_files(root, files, "HEAD", staged=True, formatter=formatter)
+        return semantic_changed_files(root, files, "HEAD", staged=True, formatter_for=formatter_for)
     files: list[str] = []
     resolved_base = base or default_base(root)
     if resolved_base:
@@ -377,7 +399,11 @@ def changed_files_from_git(root: Path, base: str | None, staged: bool, formatter
     files.extend(run_git(root, ["ls-files", "--others", "--exclude-standard", str(DESKTOP_SWIFT_ROOT)]))
     baseline = merge_base(root, resolved_base) if resolved_base else "HEAD"
     unique_files = sorted(dict.fromkeys(files))
-    return semantic_changed_files(root, unique_files, baseline, staged=False, formatter=formatter) if baseline else unique_files
+    if not baseline:
+        return unique_files
+    return semantic_changed_files(
+        root, unique_files, baseline, staged=False, formatter_for=formatter_for
+    )
 
 
 def canonical_path(value: str | Path) -> str:
@@ -540,8 +566,8 @@ def print_report(root: Path, flows: list[FlowCoverage], changed: list[str], stri
 def main() -> int:
     args = parse_args()
     root = repo_root(args.root)
-    formatter = resolve_formatter(root, args.formatter_binary)
-    changed = args.changed_files or changed_files_from_git(root, args.base, args.staged, formatter)
+    formatter_for = lazy_formatter(root, args.formatter_binary)
+    changed = args.changed_files or changed_files_from_git(root, args.base, args.staged, formatter_for)
     flows = load_flows(root, Path(args.flows_dir))
     return print_report(root, flows, changed, args.strict)
 
