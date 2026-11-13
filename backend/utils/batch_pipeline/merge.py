@@ -8,6 +8,7 @@ from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 from config.batch_pipeline import (
     merge_catch_up_depth,
     merge_head_wait_seconds,
+    provider_backlog_release_enabled,
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
 )
@@ -50,6 +51,17 @@ def _catch_up(job: dict) -> bool:
         job.get('fresh_capture') is None
         and (job.get('stt_route') or {}).get('stt_route') == 'provider'
         and provider_merge_membership_enabled()
+    )
+
+
+def _backlog_held(job: dict) -> bool:
+    """A provider catch-up row while provider backlog release is off: it stays ready and
+    uncommitted so only the owner's fresh rows reach projection."""
+    return (
+        (job.get('stt_route') or {}).get('stt_route') == 'provider'
+        and _catch_up(job)
+        and provider_merge_membership_enabled()
+        and not provider_backlog_release_enabled()
     )
 
 
@@ -308,6 +320,11 @@ class OrderedMerge:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
                 return None
+            if not fresh_first and not released.get('recovered') and _backlog_held(candidate):
+                # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.
+                held['catch_up'] = True
+                held['backlog'] = True
+                return None
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
@@ -365,6 +382,8 @@ class OrderedMerge:
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
+        # A backlog hold needs the fresh probe even when the depth hold is switched off.
+        strict_backlog = bool(held.get('backlog'))
         if held.get('over_cap'):
             self.held_owners.add(owner_id)
         else:
@@ -373,7 +392,9 @@ class OrderedMerge:
             # A fenced catch-up head must not hide the owner's ready fresh rows;
             # any other fence keeps its strict-order behaviour.
             raise fenced
-        if entry is None and depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced):
+        if entry is None and (
+            strict_backlog or (depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
+        ):
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
@@ -474,7 +495,7 @@ class OrderedMerge:
                 return None
             except HeadWaitUnavailable:
                 return self._head_wait_unavailable()
-            if held:
+            if held and not held.get('backlog'):
                 # The released ready row is catch-up and the owner is at depth.
                 self.held_owners.add(owner_id)
         if entry:

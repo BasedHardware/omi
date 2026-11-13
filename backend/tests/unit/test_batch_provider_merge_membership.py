@@ -34,6 +34,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.serving import Serving
 
 SWITCH = 'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED'
+RELEASE = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
 # admit() runs at 100.0 with 5 s units, so a capture at 10 is fresh.
 FRESH_CAPTURE = 10
 
@@ -137,6 +138,7 @@ def _legacy_backlog(world, monkeypatch, count):
 
 def test_unstamped_ready_row_passes_an_unready_head_once_its_settle_is_a_head_wait_old(world, monkeypatch):
     """A row settled before the ready_at stamp has only its intent's settled_at to wait from."""
+    monkeypatch.setenv(RELEASE, 'true')
     _, store = world
     monkeypatch.setenv(SWITCH, 'false')
     admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
@@ -158,6 +160,7 @@ def _project_through(store, segment):
 
 
 def test_fresh_provider_row_passes_the_owners_unstamped_backlog(world, monkeypatch):
+    monkeypatch.setenv(RELEASE, 'true')
     store, names = _legacy_backlog(world, monkeypatch, 6)
     admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
     settle(store, 'new', now=200.0)
@@ -172,6 +175,77 @@ def test_fresh_provider_row_passes_the_owners_unstamped_backlog(world, monkeypat
     rest = drain(merge, 202.0)
     assert [e['segment_id'] for e in rest] == names[4:]
     assert all(e['late_capture'] is True for e in rest)
+
+
+def test_backlog_release_is_off_by_default_and_only_fresh_rows_commit(world, monkeypatch):
+    """2026-11-13: owner wakes released 230k backlog rows an hour into projection and delayed
+    every user's fresh results. By default the backlog stays ready and only fresh rows commit."""
+    store, names = _legacy_backlog(world, monkeypatch, 6)
+    admit(monkeypatch, store, [item('new1', 90), item('new2', 95)], 'content-new', JA)
+    settle(store, 'new1', now=200.0)
+    settle(store, 'new2', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=4)
+    entries = drain(merge, 201.0)
+    assert [e['segment_id'] for e in entries] == ['new1', 'new2']
+    assert all(e['fresh_first'] is True for e in entries)
+    assert all(job(store, name)['state'] == 'result_ready' and job(store, name)['merge_pending'] for name in names)
+    # Not a depth hold: no durable marker and no in-memory re-offer for maintenance to churn on.
+    assert merge.held_owners == set()
+    assert not store.run(lambda tx: tx.get('merge_holds', owner_key(OWNER))).get('held')
+    # However far projection advances and however long the backlog waits, it stays put.
+    _project_through(store, 'new2')
+    assert drain(merge, 10_000.0) == []
+    # Opting in releases it under the usual depth hold, appended as late captures.
+    monkeypatch.setenv(RELEASE, 'true')
+    rest = drain(merge, 10_001.0)
+    assert [e['segment_id'] for e in rest] == names[:4]
+    assert all(e['late_capture'] is True for e in rest)
+
+
+def test_fresh_rows_pass_a_held_backlog_even_with_the_depth_hold_switched_off(world, monkeypatch):
+    store, names = _legacy_backlog(world, monkeypatch, 3)
+    admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
+    settle(store, 'new', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=0)
+    assert [e['segment_id'] for e in drain(merge, 201.0)] == ['new']
+    assert [job(store, name)['state'] for name in names] == ['result_ready'] * 3
+
+
+def test_a_stale_capture_admitted_now_is_backlog_too(world, monkeypatch):
+    """A provider row stamped not-fresh at admission waits for the metered release like the rest."""
+    _, store = world
+    late = item('old', FRESH_CAPTURE)
+    binding = ProjectionBinding(OWNER, 'bp_content-old', 'content-old', ('old',), language='ja')
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
+    batch_pipeline_intake.admit(store, [late], binding, 7300.0, namespace=store.namespace, enqueue=enqueue)
+    assert job(store, 'old')['fresh_capture'] is False
+    settle(store, 'old', now=7400.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert drain(merge, 7401.0) == []
+    monkeypatch.setenv(RELEASE, 'true')
+    assert [e['segment_id'] for e in drain(merge, 7402.0)] == ['old']
+
+
+def test_a_ready_backlog_row_does_not_pass_an_unready_head_while_release_is_off(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv(SWITCH, 'false')
+    admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
+    admit(monkeypatch, store, [item('old', 20)], 'content-old', JA)
+    settle(store, 'old', now=200.0)
+    monkeypatch.delenv(SWITCH)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 10_000.0) is None
+    assert merge.held_owners == set() and job(store, 'old')['state'] == 'result_ready'
+
+
+def test_gpu_catch_up_rows_are_not_held_by_the_provider_backlog_switch():
+    from utils.batch_pipeline.merge import _backlog_held
+
+    assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is True
+    assert _backlog_held({'stt_route': {'stt_route': 'provider'}, 'fresh_capture': False}) is True
+    assert _backlog_held({'stt_route': {'stt_route': 'provider'}, 'fresh_capture': True}) is False
+    assert _backlog_held({'stt_route': {'stt_route': 'parakeet'}, 'fresh_capture': False}) is False
+    assert _backlog_held({'fresh_capture': False}) is False
 
 
 def test_switch_off_keeps_the_unstamped_backlog_in_plain_order(world, monkeypatch):
