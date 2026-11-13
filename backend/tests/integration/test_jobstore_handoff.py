@@ -228,6 +228,28 @@ def test_fs_unknown_writer_fails_closed_and_unbound_default_is_dark(context):
     assert ref.get().to_dict() == {'dark': True}
 
 
+def test_selected_store_transaction_checks_authority_and_namespace(context):
+    from database.batch_pipeline_store import FirestoreStore
+
+    handoff, uid = context
+    authority = FirestoreAuthority(handoff.client, Epoch(handoff.ticket.namespace, 0))
+    authority.ref.set({'namespace': handoff.ticket.namespace, 'epoch': 0, 'state': 'FS_OPEN', 'protocol': 1})
+    store = FirestoreStore(handoff.ticket.namespace, firestore_client=handoff.client, queue_authority=authority)
+    store.run(
+        lambda tx: tx.put(
+            'jobs', 'one', {'owner_id': uid, 'conversation_id': 'c', 'privacy_generation': 0, 'state': 'ready'}
+        )
+    )
+    ref = handoff.client.collection(store.namespace + '_jobs').document('one')
+    assert ref.get().to_dict()['state'] == 'ready'
+    authority.transition('FS_OPEN', 'FS_CLOSING', 'close-store')
+    with pytest.raises(AuthorityRefused):
+        store.run(lambda tx: tx.put('jobs', 'one', {'state': 'leased'}))
+    assert ref.get().to_dict()['state'] == 'ready'
+    with pytest.raises(ValueError, match='match the store namespace'):
+        FirestoreStore(store.namespace + 'x', firestore_client=handoff.client, queue_authority=authority)
+
+
 def test_deferred_bulk_flush_keeps_binding_after_scope_and_rejects_switch(context):
     handoff, _ = context
     authority = FirestoreAuthority(handoff.client, Epoch(handoff.ticket.namespace, 0))

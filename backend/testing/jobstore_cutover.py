@@ -179,10 +179,18 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.owners <= 200 or not 1 <= args.jobs <= 10 or not 1 <= args.seconds <= 120:
         parser.error('local workload bound: owners 1..200, jobs 1..10, seconds 1..120')
+    source_root = Path(__file__).resolve().parents[2]
+    changes = subprocess.check_output(
+        ['git', 'status', '--porcelain', '--untracked-files=normal', '--', 'backend', '.github', 'scripts'],
+        cwd=source_root,
+        text=True,
+    ).splitlines()
     receipt = {
         'scenario': args.scenario,
         'seed': args.seed,
         'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+        'source_dirty': bool(changes),
+        'source_changes': changes,
     }
     try:
         local_only()
