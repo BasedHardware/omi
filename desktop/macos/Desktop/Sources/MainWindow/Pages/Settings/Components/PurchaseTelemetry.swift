@@ -16,7 +16,8 @@ final class PurchaseObservation {
   func allowance(_ reached: Bool, kind: String, surface: String, reason: String, block: Bool = false) {
     let event: PurchaseEvent = block ? .allowanceBlockShown : .allowanceReached
     let raw = PurchaseContract.properties(event, ["allowance_kind": kind, "surface": surface, "reason": reason])
-    let key = event.rawValue + (raw["allowance_kind"] ?? "unknown") + (raw["surface"] ?? "unknown")
+    let key = [event.rawValue, raw["allowance_kind"] ?? "unknown", raw["surface"] ?? "unknown"]
+      .joined(separator: "\u{1F}")
     if !reached {
       active.remove(key)
       return
@@ -82,6 +83,9 @@ final class PurchaseCheckoutObservation {
     properties["result"] = "client_navigation_completed"
     sink(.checkoutCompleted, PurchaseContract.properties(.checkoutCompleted, properties))
   }
+  /// A failed navigation is not a terminal outcome: the sheet can still retry and
+  /// complete, so this deliberately leaves the latch armed.
+  func navigationFailed() {}
   /// Strict observation only. The legacy matcher below still owns product resolution.
   static func verifiedMatches(_ url: URL, completionURL: URL) -> Bool {
     guard let actual = URLComponents(url: url, resolvingAgainstBaseURL: false),

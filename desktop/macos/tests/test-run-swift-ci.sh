@@ -19,7 +19,12 @@ PIN_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["
 PIN_BUILD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$PIN_FILE")"
 PIN_APP_NAME="Xcode_${PIN_VERSION}.app"
 
-TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-swift-ci-test.XXXXXX")"
+# Strip a trailing slash: GitHub's macOS runners export TMPDIR with one, and BSD
+# mktemp echoes the resulting "//" back while $PWD normalizes it, so the
+# purchase-exposure path assertion below would never match.
+TMP_ROOT="${TMPDIR:-/tmp}"
+TMP_ROOT="${TMP_ROOT%/}"
+TMPDIR="$(mktemp -d "$TMP_ROOT/omi-swift-ci-test.XXXXXX")"
 cleanup() {
   rm -rf "$TMPDIR"
 }

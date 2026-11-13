@@ -113,6 +113,17 @@ struct CoordinatorTests {
       }
       precondition(completed == 0)
     }
+    // A transient navigation failure must not latch: a later verified completion still counts.
+    do {
+      var completed = 0
+      let observation = PurchaseCheckoutObservation(
+        context: PurchaseCheckoutContext(plan: "plus", interval: "month", source: "macos_billing"),
+        sink: { event, _ in if event == .checkoutCompleted { completed += 1 } })
+      observation.opened()
+      observation.navigationFailed()
+      observation.finish(success: true)
+      precondition(completed == 1)
+    }
     print(
       "PASS: actual native BillingWebView coordinator success/cancel/dismiss boundaries and SwiftUI modifier compile")
   }

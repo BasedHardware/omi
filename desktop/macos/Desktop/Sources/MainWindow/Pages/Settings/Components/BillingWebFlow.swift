@@ -135,10 +135,13 @@ struct BillingWebView: NSViewRepresentable {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
-      purchase?.finish(success: false)
+      // A provisional failure is usually a redirect or network blip, not a terminal
+      // outcome: latching here would suppress checkout_completed for a retry that
+      // succeeds in the same sheet. Only .completed/.cancelled/.dismissed latch.
+      purchase?.navigationFailed()
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
-      purchase?.finish(success: false)
+      purchase?.navigationFailed()
     }
 
     func finish(_ outcome: BillingWebFlowOutcome, verifiedNavigation: Bool = false) {
