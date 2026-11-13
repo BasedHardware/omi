@@ -697,14 +697,12 @@ class Projector:
             if result.get('reason_code') != 'source_deleted':
                 with projection_phase('publication', policy):
                     self.publish(binding, result)
-            from utils.batch_pipeline.retention import expire_completed_segment
-
             for sibling in binding.segment_ids:
                 retained = self.store.ref('results', sibling).get().to_dict() or {}
                 if retained.get('projection_state') == 'erased':
                     continue
                 with projection_phase('retention', policy):
-                    if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
+                    if not self.store.retain_completed(binding.owner_id, sibling, self.clock()):
                         raise ProjectionBlocked('completion retention receipt unavailable')
                     self.store.acknowledge(sibling, binding, self.clock(), policy=policy)
         return result

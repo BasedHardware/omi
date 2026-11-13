@@ -33,11 +33,11 @@
     {
       "collection": "jobstore_handoffs",
       "owner": "pgfoundation / SCA-1959 dark D custody",
-      "unit": "one handoff cycle with one attempt per phase",
-      "reads_per_unit_budget": 9,
+      "unit": "one explicit handoff/projection transaction attempt with at most 128 siblings",
+      "reads_per_unit_budget": 1000,
       "reads_per_day_budget": 1,
       "basis": "planning-bound",
-      "source": "Explicit Handoff source: stage 2 reads (authority/intent), deliver 1 intent, export 2 (authority/completion), project 3 (authority/completion/receipt), ack 1 receipt = 9 reads per cycle with one attempt per phase. Replay/conflict attempts are separately counted; customer/privacy reads belong to their existing budgets. Queue-writer guards add a handoff authority read per attempt and require a measured writer-volume budget before activation. No production selector: expected 0/day, 1/day sentinel only. Measured cycle/conflict/recovery/writer volume and a replacement reviewed daily budget are required before activation; local synthetic receipts book no savings.",
+      "source": "SCA-1959 dark source planning bound: generic handoff cycle remains 9 reads with one attempt per phase. Typed projection adds a private view: guard reads 2n sibling docs plus authority/root/cursor; completion repeats the guard for the actual session and reads the sibling receipts/accounting, bounded by 7n+20 <=916 reads per attempt for n<=128. Retries/redeliveries are separately counted. Privacy/customer ledger/outbox reads belong to their respective families. tests/integration/test_jobstore_provider_projection.py counts actual direct reads for the two-sibling real projection path. No production selector: expected 0/day, existing 1/day sentinel only. Measured fleet/conflict/recovery/writer volume and a replacement reviewed daily budget remain required before activation; source delivery books no savings.",
       "reviewed": "2026-11-13"
     },
     {
@@ -61,6 +61,19 @@
       "reviewed": "2026-11-13"
     }
   ],
-  "dynamic": [],
+  "dynamic": [
+    {
+      "site": "backend/database/jobstore/provider_projection.py",
+      "expression": "self.handoff.ticket.namespace + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "pgfoundation / SCA-1959 dark provider projection",
+      "unit": "one explicit recording projection transaction attempt",
+      "reads_per_unit_budget": 3,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Reuses the original intake receipt, never creates another intake family: one read per guard, at most two guards per customer transaction plus one accounting/preflight read. Retries/redeliveries counted separately. Synthetic two-sibling direct-read counter is in test_jobstore_provider_projection.py. No runtime selection or activation: 0 expected production reads/day, 1/day sentinel. Actual fleet/recording transaction volume and reviewed daily budget are gates before activation.",
+      "reviewed": "2026-11-13"
+    }
+  ],
   "exempt": []
 }

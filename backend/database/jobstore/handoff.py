@@ -154,6 +154,8 @@ class Handoff:
         with self.pool.connection() as conn, conn.transaction():
             row = self._required_row(conn, identity)
             self._guard(conn, row)
+            if (row.get('completion') or {}).get('protocol') == 'typed_provider_v1':
+                raise AuthorityRefused('typed provider requires its concrete completion publication')
             if row['completion_hash'] is None:
                 raise AuthorityRefused('completion not committed')
             packet = bounded(
@@ -207,6 +209,8 @@ class Handoff:
             self._guard(conn, expected)
             if expected['completion_hash'] is None:
                 raise AuthorityRefused('completion not committed')
+            if (expected.get('completion') or {}).get('protocol') == 'typed_provider_v1':
+                raise AuthorityRefused('typed provider requires its concrete customer projection adapter')
 
         @firestore.transactional
         def commit(transaction):
@@ -269,18 +273,29 @@ class Handoff:
             raise AuthorityRefused('durable projection receipt required')
         with self.pool.connection() as conn, conn.transaction():
             row = self._required_row(conn, identity)
-            self._guard(conn, row)
-            row = self._required_row(conn, identity)
-            self._verify_receipt(receipt, row)
-            digest = fingerprint(receipt)
-            if row['phase'] == 'acked':
-                if row['projection_receipt'] != digest:
-                    raise AuthorityRefused('acknowledged receipt changed')
-                return False
-            if row['phase'] != 'completed':
-                raise AuthorityRefused('uncompleted handoff')
-            conn.execute(
-                "UPDATE queue_handoffs SET phase='acked',projection_receipt=%s " 'WHERE namespace=%s AND identity=%s',
-                (digest, self.ticket.namespace, identity),
-            )
-            return True
+            if (row.get('completion') or {}).get('protocol') == 'typed_provider_v1':
+                raise AuthorityRefused('typed provider requires its grouped acknowledgement')
+            return self.ack_in_transaction(conn, identity, receipt)
+
+    def ack_in_transaction(self, conn, identity, receipt):
+        """Join a concrete queue adapter's grouped acknowledgement COMMIT."""
+        row = self._required_row(conn, identity)
+        self._guard(conn, row)
+        row = self._required_row(conn, identity)
+        self._verify_receipt(receipt, row)
+        if (row.get('completion') or {}).get('protocol') == 'typed_provider_v1' and receipt.get(
+            'projection_protocol'
+        ) != 'typed_provider_v1':
+            raise AuthorityRefused('concrete provider customer receipt required')
+        digest = fingerprint(receipt)
+        if row['phase'] == 'acked':
+            if row['projection_receipt'] != digest:
+                raise AuthorityRefused('acknowledged receipt changed')
+            return False
+        if row['phase'] != 'completed':
+            raise AuthorityRefused('uncompleted handoff')
+        conn.execute(
+            "UPDATE queue_handoffs SET phase='acked',projection_receipt=%s " 'WHERE namespace=%s AND identity=%s',
+            (digest, self.ticket.namespace, identity),
+        )
+        return True

@@ -11,14 +11,17 @@ The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4,
 0008 adds immutable handoffs, 0009 closes raw-SQL authority bypasses, and 0010
 adds transactional close-drain tasks and paid-attempt admission binding.
 0011 binds original typed provider source metadata and terminal sealing.
+0012 enforces grouped typed acknowledgement at SQL COMMIT.
 No old migration was edited. No staging, production, IAM, provisioning or runtime
 configuration was touched. Runtime SQL grants are an operator-rendered source
 file, never executed remotely by the harness.
 
 The ordinary provider admission/terminal continuation is inventoried in
 `d-provider-integration-inventory.md`. It binds the real upload transaction to
-typed Units and seals full-recording completion atomically; real customer
-projection/receipt/ack and paid provider dispatch remain unimplemented. This
+typed Units and seals full-recording completion atomically. An explicitly
+injected recording view now invokes the real customer assignment/usage/ledger
+transactions with a same-transaction receipt and grouped PG acknowledgement.
+Production runners, retained-copy cleanup/purge and paid dispatch remain gates. This
 reduces the first P1's admission/completion gap without closing that P1.
 
 ## Implemented surface

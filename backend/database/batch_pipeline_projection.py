@@ -72,6 +72,13 @@ class ProjectionStore:
     def __init__(self, store: FirestoreStore):
         self.store = store
 
+    @classmethod
+    def for_provider_handoff(cls, handoff, identity):
+        """Explicit customer-role adapter; no runtime selector or worker activation."""
+        from database.jobstore.provider_projection import ProviderProjection
+
+        return ProviderProjection(handoff, identity)
+
     @property
     def client(self):
         return self.store.client
@@ -317,6 +324,11 @@ class ProjectionStore:
             return True
 
         return bool(self.run(commit))
+
+    def retain_completed(self, uid, segment_id, now):
+        from utils.batch_pipeline.retention import expire_completed_segment
+
+        return expire_completed_segment(self.store, uid, segment_id, now)
 
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 
@@ -626,6 +638,14 @@ class ProjectionStore:
             ),
         }
 
+    def _prepare_completion_receipt(self, transaction, binding):
+        """Optional injected custody adapter: read its receipt before any writes."""
+        return None
+
+    def _write_completion_receipt(self, transaction, binding, result, context):
+        """Optional injected custody adapter: join the customer completion COMMIT."""
+        pass
+
     def complete(
         self, segment_id: str, binding: ProjectionBinding, now: float, accounting: dict, *, policy=None
     ) -> dict | None:
@@ -638,6 +658,12 @@ class ProjectionStore:
             coalescing_receipts.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            receipt_context = self._prepare_completion_receipt(transaction, binding)
+
+            def finish(value, changed, seconds):
+                self._write_completion_receipt(transaction, binding, value, receipt_context)
+                return value, changed, seconds
+
             members = coalescing_completion.prepare(
                 self.client, self.store.namespace, transaction, binding, session.ledger
             )
@@ -727,9 +753,9 @@ class ProjectionStore:
                         # This job was already terminated. Repairing its output
                         # is not a new completion and must not count again.
                         coalescing_completion.write(transaction, members, suppressed, now)
-                        return suppressed, False, 0
+                        return finish(suppressed, False, 0)
                     coalescing_completion.write(transaction, members, suppressed, now)
-                    return suppressed, False, 0
+                    return finish(suppressed, False, 0)
                 if deleted_output_count:
                     # Preserve historical usage; publish only destinations that
                     # remain visible after the user's output deletion.
@@ -740,7 +766,7 @@ class ProjectionStore:
                         'deleted_output_segments': deleted_output_count,
                     }
                 coalescing_completion.write(transaction, members, old, now)
-                return old, False, 0
+                return finish(old, False, 0)
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
             seconds = sum(
@@ -775,7 +801,7 @@ class ProjectionStore:
                     {'projection_state': 'ready', **projection_finish_state_fields('ready', now)},
                 )
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
-            return result, True, captured_seconds
+            return finish(result, True, captured_seconds)
 
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)

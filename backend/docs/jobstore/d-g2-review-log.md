@@ -56,3 +56,26 @@ This does not qualify customer projection or paid provider dispatch. See
 `d-provider-integration-inventory.md` for the concrete production seams and
 remaining cohort adapters. The first P1 remains blocking; no further review
 round, merge, runtime activation or savings claim is requested.
+
+## Ordinary customer projection source binding
+
+`ProviderProjection` binds the sealed recording to the actual Projector,
+ProjectionStore/Session, conversation assignment, enrichment, usage and content
+ledger transactions. Private recording cursors never authorize through a cold
+legacy queue. A concrete receipt shares customer completion COMMIT; grouped
+SQL acknowledgement rechecks the full original terminal seal and atomically
+updates handoff, recording, custody and outbox. Migration 0012 makes isolated
+raw-SQL handoff acknowledgement fail at COMMIT.
+
+Benign F self-rotations require fresh E1 A1/walk/A2 admission (G2 4.9), while the
+original paid admission remains unchanged and must still pass its P/PC fence.
+Original generations/change sequence cannot be adopted after restore. New
+retained metadata has an exact source-deadline/ref manifest, no legacy queue TTL
+and no grant to extend original object lifetimes. Its full cleanup/purge runner
+is still required. Process-exit tests exercise both sides of real customer and
+PG acknowledgement commits, including bounded redelivery after abandoned FS
+server read leases. Existing deadline/retry policies remain unchanged.
+
+This reduces the first P1; it does not close production dispatch/cohort, purge,
+reverse certificate, runtime scheduling, fleet/budget or full matrix gaps. No
+new review round, merge, activation or savings claim is requested.
