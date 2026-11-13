@@ -6066,7 +6066,7 @@
             {
               "selector": "date",
               "text": "date",
-              "type": "timestamp"
+              "type": "timestamp_epoch"
             },
             {
               "selector": "all",
