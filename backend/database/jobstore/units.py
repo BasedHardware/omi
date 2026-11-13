@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from database.jobstore.authority import Epoch, acquire, fingerprint, AuthorityRefused
 from database.jobstore.postgres_store import jsonb
-from database.privacy_fence.protocol import _one
+from database.privacy_fence.protocol import row_dict
 
 
 class Units:
@@ -20,7 +20,7 @@ class Units:
         self.namespace = ticket.namespace
 
     def _unit(self, conn, identity):
-        return _one(
+        return row_dict(
             conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s FOR UPDATE', (self.namespace, identity)
         )
 
@@ -57,7 +57,7 @@ class Units:
             owner_turn=owner_turn,
         )
         digest = fingerprint(immutable)
-        existing = _one(
+        existing = row_dict(
             conn,
             'SELECT * FROM queue_custody WHERE namespace=%s AND identity=%s FOR UPDATE',
             (self.namespace, identity),
@@ -71,13 +71,14 @@ class Units:
             'VALUES (%s,%s,%s,%s,%s) ON CONFLICT (namespace,recording_id) DO NOTHING',
             (self.namespace, recording, owner, units_total, capture_at),
         )
-        binding = _one(
+        binding = row_dict(
             conn,
             'SELECT * FROM recordings WHERE namespace=%s AND recording_id=%s FOR UPDATE',
             (self.namespace, recording),
         )
         if (
-            binding['owner_key'] != owner
+            binding is None
+            or binding['owner_key'] != owner
             or binding['units_total'] != units_total
             or binding['projection_state'] == 'revoked'
         ):
@@ -122,6 +123,8 @@ class Units:
                 ).fetchall()
                 for (identity,) in rows:
                     job = self._unit(conn, identity)
+                    if job is None:
+                        raise AuthorityRefused('queried unit disappeared')
                     self.fence.check_work_write(conn, job['owner_key'], job['admission'])
                     if job['attempt_token']:
                         # Unknown paid outcome is custody, never authority to send
@@ -180,7 +183,7 @@ class Units:
                 'WHERE namespace=%s AND unit_id=%s',
                 (state, jsonb(result) if result is not None else None, self.namespace, identity),
             )
-            recording = _one(
+            recording = row_dict(
                 conn,
                 'UPDATE recordings SET units_final=units_final+1,projection_state=CASE '
                 "WHEN %s='privacy_blocked' THEN 'revoked' ELSE projection_state END "

@@ -33,7 +33,7 @@ class AdmissionChanged(FenceRefused):
     """Retry the full A1/walk/A2 protocol in a NEW transaction; never upgrade."""
 
 
-def _one(conn, query, params=()):
+def row_dict(conn, query, params=()):
     cursor = conn.execute(query, params)
     row = cursor.fetchone()
     if row is None:
@@ -50,13 +50,13 @@ def lock(conn, owner, *, exclusive=False):
 
 
 def _owner(conn, owner):
-    return _one(conn, 'SELECT * FROM privacy_owner_fence WHERE owner_key=%s', (owner,))
+    return row_dict(conn, 'SELECT * FROM privacy_owner_fence WHERE owner_key=%s', (owner,))
 
 
 def _targets(conn, owner, keys):
     result = {}
     for key in sorted(set(keys)):
-        row = _one(
+        row = row_dict(
             conn,
             'SELECT generation,state FROM privacy_conversation_fence ' 'WHERE owner_key=%s AND conversation_key=%s',
             (owner, key),
@@ -173,6 +173,8 @@ class Fence:
                     (owner, key),
                 )
         current = _owner(conn, owner)
+        if current is None:
+            raise AdmissionChanged()
         targets = _targets(conn, owner, keys)
         now = conn.execute('SELECT now()').fetchone()[0]
         return {
@@ -226,6 +228,8 @@ class Fence:
                     (owner, reason),
                 )
                 row = _owner(conn, owner)
+            if row is None:
+                raise FenceRefused()
             if row['state'] == 'erased':
                 raise FenceRefused('privacy_blocked')
             seq = row['change_seq'] + 1
@@ -302,7 +306,7 @@ class Fence:
 
     def _effect(self, conn, owner, effect):
         lock(conn, owner)
-        return _one(
+        return row_dict(
             conn,
             'SELECT * FROM privacy_effect_inflight WHERE owner_key=%s AND effect_id=%s FOR UPDATE',
             (owner, effect),

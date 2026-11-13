@@ -13,7 +13,7 @@ import logging
 from google.cloud.firestore_v1.types import Document, DocumentMask, DocumentTransform, Precondition, Value, Write
 
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS
-from database.batch_privacy_write_fence import _authority_path
+from database.batch_privacy_write_fence import authority_path
 from database.privacy_fence.protocol import owner_key, conversation_key
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ def classify(write):
     masked = Write.pb(write).HasField('update_mask')
     fields = write.update.fields
     transforms = [*write.update_transforms, *write.transform.field_transforms]
-    touched = {_authority_path(p)[0] for p in write.update_mask.field_paths}
-    touched.update(_authority_path(t.field_path)[0] for t in transforms)
-    transform_fields = {_authority_path(t.field_path)[0] for t in transforms}
+    touched = {authority_path(p)[0] for p in write.update_mask.field_paths}
+    touched.update(authority_path(t.field_path)[0] for t in transforms)
+    transform_fields = {authority_path(t.field_path)[0] for t in transforms}
     if family == 'account_deletions' and len(bits) == 2:
         safe = (
             masked

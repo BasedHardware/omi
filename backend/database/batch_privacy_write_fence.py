@@ -47,7 +47,7 @@ _AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_val
 g2_coordinator: ContextVar[Any] = ContextVar('g2_coordinator', default=None)
 
 
-def _authority_path(path: str) -> tuple[str, ...]:
+def authority_path(path: str) -> tuple[str, ...]:
     try:
         return FieldPath.from_api_repr(path).parts
     except ValueError:
@@ -60,13 +60,13 @@ def _validate_authority_write(write: Any) -> None:
         raise ValueError('batch privacy authority must survive deletion')
     transforms = [*write.update_transforms, *write.transform.field_transforms]
     for transform in transforms:
-        if _authority_path(transform.field_path)[0] in _AUTHORITY_STATE_TYPES:
+        if authority_path(transform.field_path)[0] in _AUTHORITY_STATE_TYPES:
             raise ValueError('batch privacy authority state requires explicit typed values')
     if not write.update.name:
         return
     fields = write.update.fields
     if Write.pb(write).HasField('update_mask'):
-        paths = [_authority_path(path) for path in write.update_mask.field_paths]
+        paths = [authority_path(path) for path in write.update_mask.field_paths]
         state = set()
         for path in paths:
             if path[0] in _AUTHORITY_STATE_TYPES:
@@ -192,6 +192,7 @@ def _wrap_commit(original: Any) -> Any:
         async def async_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
             coordinator = g2_coordinator.get()
+            receipts = []
             if coordinator is not None:
                 prepared = CommitRequest(prepared)
                 receipts = await asyncio.to_thread(coordinator.prepare, prepared)
@@ -213,6 +214,7 @@ def _wrap_commit(original: Any) -> Any:
         def sync_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
             coordinator = g2_coordinator.get()
+            receipts = []
             if coordinator is not None:
                 prepared = CommitRequest(prepared)
                 receipts = coordinator.prepare(prepared)
