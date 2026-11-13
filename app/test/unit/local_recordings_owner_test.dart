@@ -266,4 +266,11 @@ void main() {
     expect(isAutoUploadEligible(restored), isFalse);
     expect(await File('${dir.path}/$overflow').exists(), isTrue);
   });
+  test('an uninitialized view refresh remains a no-op without a ledger service', () async {
+    final view = LocalRecordingsProvider(initialize: false);
+    await view.refresh();
+    expect(view.recordings, isEmpty);
+    expect(view.isLoading, isFalse);
+    view.dispose();
+  });
 }

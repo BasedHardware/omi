@@ -101,6 +101,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   String? _refreshOwner;
   int? _refreshSession;
   Future<void> refresh() {
+    if (!_subscribed && _ledgerOverride == null) return Future.value();
     final active = _refreshInFlight;
     final uid = SharedPreferencesUtil().uid;
     final session = _ledger.sessionGeneration;
