@@ -1,0 +1,601 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%lld open": {
+      "comment": "How many tasks are open, in the Up next widget's header.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld offen"
+          }
+        }
+      }
+    },
+    "%lld tasks": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Aufgabe"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Aufgaben"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld task"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld tasks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "+%lld more": {
+      "comment": "Other tasks Omi works on at the same time, after the shown task's step.",
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld weitere"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld weitere"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld more"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld more"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "All caught up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alles erledigt"
+          }
+        }
+      }
+    },
+    "Apple Watch": {
+      "comment": "Recording Live Activity: Recording source: the watch's microphone",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Watch"
+          }
+        }
+      }
+    },
+    "Battery": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akku"
+          }
+        }
+      }
+    },
+    "Book the flights": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flüge buchen"
+          }
+        }
+      }
+    },
+    "Call the dentist": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zahnarzt anrufen"
+          }
+        }
+      }
+    },
+    "Done": {
+      "comment": "Omi at work Live Activity: Island title beside the camera once Omi finished a task",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        }
+      }
+    },
+    "End": {
+      "comment": "Recording Live Activity: Button: end the recording and save the conversation",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden"
+          }
+        }
+      }
+    },
+    "Finished": {
+      "comment": "Recording Live Activity: Title while the ended card fades out",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        }
+      }
+    },
+    "Getting started…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legt los …"
+          }
+        }
+      }
+    },
+    "Latest": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes"
+          }
+        }
+      }
+    },
+    "Listening": {
+      "comment": "Recording Live Activity: Title while the recording is transcribed live (Flutter: Listening)",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hört zu"
+          }
+        }
+      }
+    },
+    "Low battery": {
+      "comment": "Accessibility label for the warning icon next to a low battery level.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akku fast leer"
+          }
+        }
+      }
+    },
+    "No Omi paired": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Omi gekoppelt"
+          }
+        }
+      }
+    },
+    "No conversations yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Gespräche"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verbunden"
+          }
+        }
+      }
+    },
+    "Omi": {
+      "comment": "The product name; do not translate.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi"
+          }
+        }
+      }
+    },
+    "Omi couldn't finish": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi kam nicht weiter"
+          }
+        }
+      }
+    },
+    "Omi finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi ist fertig"
+          }
+        }
+      }
+    },
+    "Omi is working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi arbeitet daran"
+          }
+        }
+      }
+    },
+    "Omi pendant": {
+      "comment": "Recording Live Activity: Recording source: the Omi wearable",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Omi-Anhänger"
+          }
+        }
+      }
+    },
+    "Open Omi to continue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne Omi, um weiterzumachen"
+          }
+        }
+      }
+    },
+    "Open Omi to reconnect": {
+      "comment": "Recording Live Activity: Title once Omi stopped refreshing the card",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne Omi, um die Verbindung wiederherzustellen"
+          }
+        }
+      }
+    },
+    "Overdue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überfällig"
+          }
+        }
+      }
+    },
+    "Pause recording": {
+      "comment": "Recording Live Activity: Intent behind Stop",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme pausieren"
+          }
+        }
+      }
+    },
+    "Paused": {
+      "comment": "Recording Live Activity: Title after the user tapped Stop; the conversation stays open",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausiert"
+          }
+        }
+      }
+    },
+    "Planning the product launch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Planung des Produktstarts"
+          }
+        }
+      }
+    },
+    "Recording": {
+      "comment": "Recording Live Activity: Title while audio is saved on the phone to transcribe later",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme"
+          }
+        }
+      }
+    },
+    "Recording duration": {
+      "comment": "Recording Live Activity: Accessibility label of the recording's clock",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauer"
+          }
+        }
+      }
+    },
+    "Resume recording": {
+      "comment": "Recording Live Activity: Intent behind Start",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme fortsetzen"
+          }
+        }
+      }
+    },
+    "Send the pricing draft": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preisentwurf verschicken"
+          }
+        }
+      }
+    },
+    "Start": {
+      "comment": "Recording Live Activity: Button: bring the audio back after Stop",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starten"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "comment": "Recording Live Activity: Button: hold the audio back, keep the conversation open",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopp"
+          }
+        }
+      }
+    },
+    "Stop recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme beenden"
+          }
+        }
+      },
+      "comment": "Recording Live Activity: Intent behind End"
+    },
+    "Stuck": {
+      "comment": "Omi at work Live Activity: Island title beside the camera when Omi could not finish a task",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hängt fest"
+          }
+        }
+      }
+    },
+    "Tap to open the task": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippe, um die Aufgabe zu öffnen"
+          }
+        }
+      }
+    },
+    "Tap to see what Omi did": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippe, um zu sehen, was Omi erledigt hat"
+          }
+        }
+      }
+    },
+    "Time working": {
+      "comment": "Omi at work Live Activity: Accessibility label of the run's clock",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitszeit"
+          }
+        }
+      }
+    },
+    "Tomorrow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Morgen"
+          }
+        }
+      }
+    },
+    "Transcribe Later": {
+      "comment": "Recording Live Activity: Subtitle detail while saved on the phone",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Später transkribieren"
+          }
+        }
+      }
+    },
+    "Transcribing live": {
+      "comment": "Recording Live Activity: Subtitle detail while transcribed live",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkription"
+          }
+        }
+      }
+    },
+    "Untitled conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch ohne Titel"
+          }
+        }
+      }
+    },
+    "Up next": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes"
+          }
+        }
+      }
+    },
+    "Working": {
+      "comment": "Omi at work Live Activity: Island title beside the camera while Omi works on a task",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet"
+          }
+        }
+      }
+    },
+    "Yesterday": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestern"
+          }
+        }
+      }
+    },
+    "Your Omi's charge at a glance.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Akku deines Omi auf einen Blick."
+          }
+        }
+      }
+    },
+    "Your latest conversation in Omi.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein neuestes Gespräch in Omi."
+          }
+        }
+      }
+    },
+    "Your next tasks from Omi.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine nächsten Aufgaben aus Omi."
+          }
+        }
+      }
+    },
+    "iPhone microphone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone-Mikrofon"
+          }
+        }
+      },
+      "comment": "Recording Live Activity: Recording source: the phone's microphone"
+    }
+  },
+  "version": "1.0"
+}

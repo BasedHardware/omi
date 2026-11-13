@@ -1,0 +1,45 @@
+diff --git a/scripts/dev-harness/dev_harness/config.py b/scripts/dev-harness/dev_harness/config.py
+index 264a93f6..b218be07 100644
+--- a/scripts/dev-harness/dev_harness/config.py
++++ b/scripts/dev-harness/dev_harness/config.py
+@@ -371,6 +371,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
+         "FIRESTORE_DATABASE_ID": cfg.database_id,
+         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
+         "MEMORY_MODE": "read",
++        # The backend reads MEMORY_ENABLED now (config/memory_rollout.py) and fails closed when it is
++        # unset, which pauses memory writes and fails every conversation's processing.
++        "MEMORY_ENABLED": "on",
+         "MEMORY_CANONICAL_CONSOLIDATION_ENABLED": "true",
+         "REDIS_DB_HOST": cfg.redis_host,
+         "REDIS_DB_PORT": str(cfg.redis_port),
+@@ -384,7 +387,8 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
+         "TYPESENSE_PROTOCOL": "http",
+         "BASE_API_URL": cfg.backend_url,
+         "API_BASE_URL": cfg.backend_url,
+-        "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
++        # A developer may front the gateway with a local proxy (e.g. to serve lanes it has no route for).
++        "OMI_LLM_GATEWAY_URL": os.environ.get("OMI_DEV_LLM_GATEWAY_URL", "").strip() or cfg.llm_gateway_url,
+         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
+         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
+         # Production ships default-off and turns this on deliberately; the harness is
+diff --git a/scripts/dev-harness/dev_harness/safety.py b/scripts/dev-harness/dev_harness/safety.py
+index 96543401..3a9e326c 100644
+--- a/scripts/dev-harness/dev_harness/safety.py
++++ b/scripts/dev-harness/dev_harness/safety.py
+@@ -81,6 +81,16 @@ _ALLOWED_ENV_KEYS = {
+     "LC_ALL",
+     "LOGNAME",
+     "NODE_ENV",
++    # A local OpenAI-compatible endpoint (e.g. a proxy for developers without an OpenAI key).
++    "OPENAI_BASE_URL",
++    # Which server STT providers serve live capture (lets real mode run without STT keys).
++    "STT_SERVICE_MODELS",
++    # A local speaker-embedding service (voice profiles) in place of the hosted one.
++    "HOSTED_SPEAKER_EMBEDDING_API_URL",
++    # A local pusher service (finalizes conversations the server ends itself).
++    "HOSTED_PUSHER_API_URL",
++    # The notes v2 conversation writer (production default since 2026-09-01).
++    "CONVERSATION_NOTES_V2_ENABLED",
+     "PATH",
+     "PWD",
+     "PYTHONPATH",

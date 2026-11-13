@@ -8,6 +8,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 |---|---|
 | Backend | `backend/AGENTS.md` |
 | Flutter app | `app/AGENTS.md` |
+| Native iOS / Android apps | `native_mobile_apps/README.md` |
 | macOS desktop | `desktop/macos/AGENTS.md` |
 | Windows/Linux desktop | `desktop/windows/AGENTS.md` |
 | Web app / admin | `web/app/AGENTS.md` / `web/admin/AGENTS.md` |
