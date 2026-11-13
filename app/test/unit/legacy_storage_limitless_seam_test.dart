@@ -280,6 +280,21 @@ void main() {
     await sync.stop();
   });
 
+  test('FlashPage: pending cleanup retains the recording and reports unsupported deletion', () async {
+    final pending = Wal(
+        timerStart: 123,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.flashPage,
+        device: 'limitless-1');
+    final sync = FlashPageWalSyncImpl(_Listener())..testWals = [pending];
+    await expectLater(sync.deleteWal(pending), throwsStateError);
+    expect(await sync.getMissingWals(), contains(pending));
+    await expectLater(sync.deleteAllPendingWals(), throwsStateError);
+    expect(await sync.getMissingWals(), contains(pending));
+  });
+
   test('StorageSync: rejected delete reports failure while invalidating unsafe positional indexes', () async {
     final card = _FakeStorageDevice(script: [])..deleteConfirmed = false;
     final target = storageWal();

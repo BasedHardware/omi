@@ -56,7 +56,7 @@ void main() {
       storageWal(timerStart: 2000, fileNum: 1, status: WalStatus.miss),
     ];
 
-    await sync.deleteAllPendingWals();
+    await expectLater(sync.deleteAllPendingWals(), throwsStateError);
 
     expect((await sync.getMissingWals()).map((w) => w.timerStart), [1000, 2000]);
   });
@@ -69,7 +69,7 @@ void main() {
     ];
     sync.testWals = rows;
 
-    await sync.deleteAllSyncedWals();
+    await expectLater(sync.deleteAllSyncedWals(), throwsStateError);
 
     expect(rows.every(sync.owns), isTrue);
   });

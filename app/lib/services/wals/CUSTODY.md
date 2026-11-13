@@ -168,6 +168,7 @@ Guard: `test/unit/sync_attention_policy_test.dart` and
 - [x] Saved Custom STT coverage uses the recorded session mode, independent of later preferences.
 - [x] Covered phone copies enter synced retention; partial, held, on-device and unlinked audio remains recoverable.
 - [x] Targeted/grouped and bulk cleanup check selected identities, report retained/unconfirmed entries, and refresh after partial failure.
+- [x] Unsupported pending flash-page cleanup retains the row and reports failure; processed-page ACK errors propagate.
 - [x] Legacy positional indexes are invalidated after attempted deletion without treating a rejected command as success.
 - [x] Regression coverage: `capture_transcript_coverage_test`, `l5_capture_committed_test`, `offline_sync_recording_blocks_test`, and device deletion protocol suites.
 - [ ] App release containing the verified fix (tracked separately from source merge).
