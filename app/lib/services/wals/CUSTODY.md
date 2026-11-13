@@ -52,7 +52,12 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
    or when a Watch copy is proven redundant (invariant 5).
    With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
-   source-frame receipts replace the live transcript heuristic. Unknown/false keeps the heuristic.
+   source-frame receipts replace the live transcript heuristic for Omi audio sessions. Live Custom STT
+   uses HTTP transcript submission instead of frame receipts: only a confirmation carrying the
+   captured session mode may use saved transcript coverage for its stamped phone safety copies.
+   Current preferences never supply this authority. Partial/interrupted, held, on-device and
+   unlinked copies remain recoverable, and the transfer coordinator still honors the upload choice.
+   Unknown/false keeps the heuristic.
    Receipt ranges are journaled durably per owner even in shadow; comparisons emit
    `event=refactor_shadow lane=L5 check=custody_release outcome=agree|disagree`. The union must cover
    the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
@@ -157,3 +162,12 @@ not imply success or renew a pending span. All backlog counts remain available.
 
 Guard: `test/unit/sync_attention_policy_test.dart` and
 `test/providers/sync_provider_needs_attention_retry_test.dart`.
+
+## Offline Sync cleanup acceptance (#24783)
+
+- [x] Saved Custom STT coverage uses the recorded session mode, independent of later preferences.
+- [x] Covered phone copies enter synced retention; partial, held, on-device and unlinked audio remains recoverable.
+- [x] Targeted/grouped and bulk cleanup check selected identities, report retained/unconfirmed entries, and refresh after partial failure.
+- [x] Legacy positional indexes are invalidated after attempted deletion without treating a rejected command as success.
+- [x] Regression coverage: `capture_transcript_coverage_test`, `l5_capture_committed_test`, `offline_sync_recording_blocks_test`, and device deletion protocol suites.
+- [ ] App release containing the verified fix (tracked separately from source merge).
