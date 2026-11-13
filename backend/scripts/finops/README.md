@@ -691,7 +691,12 @@ The loader writes two dark-able tables:
   without backfilling.
 
 Optional by design: a missing key, a 401/403, or a transport/shape failure
-writes `status=skipped` with a reason and never fails the daily job. The TV
+writes `status=skipped` with a reason and never fails the daily job. The reason
+is a fixed token — `key_unavailable`, `permission_unavailable`,
+`redirect_refused`, `http_error`, `transport_error` or `invalid_response` — plus
+an integer `http_status` on `http_error`; the daily job copies that token (never
+free text, a URL, a header or a response body) onto its own stderr, because the
+run's `pull.log` is ephemeral on Cloud Run. The TV
 (`fetchVendorBalanceHistory`) shows Soniox as **measured** with its as-of
 date only once **≥2 snapshots** exist; before that the labelled, dated
 console constant (read 2026-10-16, STALE after 14 days) stays as the
