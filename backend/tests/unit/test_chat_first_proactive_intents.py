@@ -213,7 +213,7 @@ class _Firestore:
     def collection(self, name):
         return _Collection(self, (name,))
 
-    def transaction(self):
+    def transaction(self, max_attempts=None):
         self.transaction_count += 1
         return _Transaction(self)
 

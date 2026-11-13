@@ -99,8 +99,8 @@ class _GroupClient:
     def document(self, path):
         return self.database.document(path)
 
-    def transaction(self):
-        return self.database.transaction()
+    def transaction(self, max_attempts=None):
+        return self.database.transaction(max_attempts=max_attempts)
 
 
 @pytest.fixture

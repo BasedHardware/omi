@@ -1312,12 +1312,26 @@ def test_sweep_helper_signatures_stay_keyword_only_for_threads():
 
 def test_no_new_debt_markers_in_the_prod_diff():
     """The sweep family stays debt-free: the changed prod files carry no
-    unfinished-work markers (the test file's own prose is out of scope)."""
+    unfinished-work markers (the test file's own prose is out of scope).
+
+    The diff is scoped through git pathspecs to the same three prod
+    directories the loop accepts, so the guard's cost stays proportional to
+    the prod diff: grid ticks add millions of test-file lines to the branch
+    diff, and this guard used to pay its per-line loop cost on all of them
+    before the file filter skipped them (1.23s CPU against the 1.0s
+    fast-unit ceiling on a 3.3M-line diff, failing the file on a clean run).
+    """
     import subprocess as sp
 
     import re as re_module
 
-    diff = sp.run(['git', 'diff', 'HEAD'], capture_output=True, text=True, cwd='.', check=False).stdout
+    diff = sp.run(
+        ['git', 'diff', 'HEAD', '--', 'utils', 'routers', 'database'],
+        capture_output=True,
+        text=True,
+        cwd='.',
+        check=False,
+    ).stdout
     current_file = None
     bad: list[str] = []
     for line in diff.splitlines():

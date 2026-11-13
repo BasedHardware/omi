@@ -1,5 +1,6 @@
 """Candidate integration outbox: claim, complete, list, redrive, and malformed dead-letter."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 from uuid import uuid4
@@ -14,11 +15,28 @@ from database.candidates import (
     TASK_INTELLIGENCE_CONTROL_COLLECTION,
     TASK_INTELLIGENCE_CONTROL_DOCUMENT,
 )
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.durable_queue import ProcessOutcome, QueuePolicy, decide_attempt, redrive_patch
 from database.read_boundary import parse_snapshot_strict
 from models.task_intelligence import TaskWorkflowControl
 
 CANDIDATE_INTEGRATION_OUTBOX_COLLECTION = 'candidate_integration_outbox'
+
+# Static operation labels for the bounded contention channel. One per
+# transactional entry, so an exhausted chain names the flow that burned
+# its budget instead of surfacing as an anonymous fault.
+CANDIDATE_OUTBOX_CLAIM_LABEL = 'candidate_outbox_claim'
+CANDIDATE_OUTBOX_LEASE_REFRESH_LABEL = 'candidate_outbox_lease_refresh'
+CANDIDATE_OUTBOX_PROVIDER_NOTE_LABEL = 'candidate_outbox_provider_note'
+CANDIDATE_OUTBOX_COMPLETE_LABEL = 'candidate_outbox_complete'
+CANDIDATE_OUTBOX_REDRIVE_LABEL = 'candidate_outbox_redrive'
+CANDIDATE_OUTBOX_MALFORMED_DEAD_LETTER_LABEL = 'candidate_outbox_malformed_dead_letter'
+CANDIDATE_OUTBOX_SWEEP_CURSORS_LABEL = 'candidate_outbox_sweep_cursors'
+CANDIDATE_OUTBOX_ABANDON_LABEL = 'candidate_outbox_abandon'
+CANDIDATE_OUTBOX_GENERATION_MISMATCH_LABEL = 'candidate_outbox_generation_mismatch'
+CANDIDATE_OUTBOX_RECORDED_EXPORT_LABEL = 'candidate_outbox_recorded_export'
+
+logger = logging.getLogger(__name__)
 CANDIDATE_INTEGRATION_POLICY = QueuePolicy(max_attempts=5, base_backoff_seconds=30, max_backoff_seconds=1800)
 # Claim protocol only. The sweeper does not reclaim a processing row on this
 # timer; see candidate_integration_sweeper.SWEEP_RECLAIM_AFTER.
@@ -186,7 +204,6 @@ def claim_candidate_integration_dispatch(
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction) -> _ClaimApply:
@@ -292,7 +309,12 @@ def claim_candidate_integration_dispatch(
         )
         return _ClaimApply(lease_token=lease_token)
 
-    applied = apply(transaction)
+    applied = run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_CLAIM_LABEL,
+        logger=logger,
+    )
     if applied.exported_task_id is not None:
         bump_action_items_list_version(uid)
         dream_dirty.notify(uid, [('action_items', applied.exported_task_id)])
@@ -317,7 +339,6 @@ def refresh_candidate_integration_lease(
     refresh_time = now or datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -336,7 +357,12 @@ def refresh_candidate_integration_lease(
         )
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_LEASE_REFRESH_LABEL,
+        logger=logger,
+    )
 
 
 def note_candidate_integration_provider_attempt(
@@ -366,7 +392,6 @@ def note_candidate_integration_provider_attempt(
     noted_at = now or datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -385,7 +410,12 @@ def note_candidate_integration_provider_attempt(
         write_transaction.update(outbox_ref, patch)
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_PROVIDER_NOTE_LABEL,
+        logger=logger,
+    )
 
 
 def complete_candidate_integration_dispatch(
@@ -405,7 +435,6 @@ def complete_candidate_integration_dispatch(
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -471,7 +500,12 @@ def complete_candidate_integration_dispatch(
         write_transaction.update(outbox_ref, _stamp_attempt(patch))
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_COMPLETE_LABEL,
+        logger=logger,
+    )
 
 
 def redrive_candidate_integration_dead_letter(
@@ -484,7 +518,6 @@ def redrive_candidate_integration_dead_letter(
     """Move a dead-lettered integration item back to ready by identity."""
     completion_time = now or datetime.now(timezone.utc)
     outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -499,7 +532,12 @@ def redrive_candidate_integration_dead_letter(
         write_transaction.update(outbox_ref, redrive_patch(now=completion_time))
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        db,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_REDRIVE_LABEL,
+        logger=logger,
+    )
 
 
 def dead_letter_malformed_candidate_integration(
@@ -513,7 +551,6 @@ def dead_letter_malformed_candidate_integration(
     """Park a malformed outbox row to dead_letter instead of retrying it forever."""
     completion_time = now or datetime.now(timezone.utc)
     outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -537,7 +574,12 @@ def dead_letter_malformed_candidate_integration(
         )
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        db,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_MALFORMED_DEAD_LETTER_LABEL,
+        logger=logger,
+    )
 
 
 def current_task_account_generation(uid: str, *, firestore_client: Any = None) -> int:
@@ -571,14 +613,18 @@ def write_candidate_integration_sweep_cursors(
     client = _firestore(firestore_client)
     ref = client.collection(SWEEP_CURSOR_COLLECTION).document(SWEEP_CURSOR_DOCUMENT)
     payload = {status: path for status, path in cursors.items() if path}
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
         write_transaction.set(ref, payload)
         return True
 
-    apply(transaction)
+    run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_SWEEP_CURSORS_LABEL,
+        logger=logger,
+    )
 
 
 def _sweep_row(snapshot: Any) -> Optional[dict[str, Any]]:
@@ -657,7 +703,6 @@ def abandon_candidate_integration_dispatch(
     completion_time = now or datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -682,7 +727,12 @@ def abandon_candidate_integration_dispatch(
         write_transaction.update(outbox_ref, patch)
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_ABANDON_LABEL,
+        logger=logger,
+    )
 
 
 def dead_letter_candidate_integration_generation_mismatch(
@@ -701,7 +751,6 @@ def dead_letter_candidate_integration_generation_mismatch(
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
     control_ref = _control_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -731,7 +780,12 @@ def dead_letter_candidate_integration_generation_mismatch(
         )
         return 'dead_letter'
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_GENERATION_MISMATCH_LABEL,
+        logger=logger,
+    )
 
 
 def complete_candidate_integration_recorded_export(
@@ -746,7 +800,6 @@ def complete_candidate_integration_recorded_export(
     completion_time = now or datetime.now(timezone.utc)
     client = _firestore(firestore_client)
     outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -775,7 +828,12 @@ def complete_candidate_integration_recorded_export(
         )
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CANDIDATE_OUTBOX_RECORDED_EXPORT_LABEL,
+        logger=logger,
+    )
 
 
 def list_candidate_integration_dispatches(

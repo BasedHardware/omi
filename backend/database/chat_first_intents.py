@@ -11,6 +11,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database import chat_first_delivery_attempts as delivery_attempts
 from database.chat_first_intent_queue import drain_intent_batch, sort_ready_intents
 from database.durable_queue import ProcessOutcome
@@ -73,6 +74,24 @@ STALE_CAPTURE_DEAD_LETTER_REASON = 'stale_capture_receipt'
 SUPERSEDED_CAPTURE_DEAD_LETTER_REASON = 'superseded_capture_receipt'
 PERMANENT_REJECTION_CODES = frozenset({'invalid_intent', 'identity_conflict'})
 _SYNTHETIC_RECONCILIATION_RECEIPT_PREFIX = 'cfi_reconciled_'
+
+# Static operation labels for the bounded contention channel. One per
+# transactional entry, so an exhausted chain names the flow that burned
+# its budget instead of surfacing as an anonymous fault.
+CHAT_FIRST_INTENT_JUDGMENT_ADMIT_LABEL = 'chat_first_intent_judgment_admit'
+CHAT_FIRST_INTENT_JUDGMENT_RELEASE_LABEL = 'chat_first_intent_judgment_release'
+CHAT_FIRST_INTENT_CREATE_LABEL = 'chat_first_intent_create'
+CHAT_FIRST_INTENT_COLD_START_CREATE_LABEL = 'chat_first_intent_cold_start_create'
+CHAT_FIRST_INTENT_COLD_START_TERMINAL_ACK_LABEL = 'chat_first_intent_cold_start_terminal_ack'
+CHAT_FIRST_INTENT_FETCH_ADVANCE_LABEL = 'chat_first_intent_fetch_advance'
+CHAT_FIRST_INTENT_MALFORMED_DEAD_LETTER_LABEL = 'chat_first_intent_malformed_dead_letter'
+CHAT_FIRST_INTENT_CAPTURE_RECEIPT_RETIRE_LABEL = 'chat_first_intent_capture_receipt_retire'
+CHAT_FIRST_INTENT_MATERIALIZATION_REJECT_LABEL = 'chat_first_intent_materialization_reject'
+CHAT_FIRST_INTENT_MATERIALIZATION_DEFER_LABEL = 'chat_first_intent_materialization_defer'
+CHAT_FIRST_INTENT_MATERIALIZATION_ACK_LABEL = 'chat_first_intent_materialization_ack'
+CHAT_FIRST_INTENT_DEFERRAL_RECORD_LABEL = 'chat_first_intent_deferral_record'
+CHAT_FIRST_INTENT_DEFERRAL_MALFORMED_RELEASE_LABEL = 'chat_first_intent_deferral_malformed_release'
+CHAT_FIRST_INTENT_DEFERRAL_RELEASE_LABEL = 'chat_first_intent_deferral_release'
 
 
 @dataclass(frozen=True)
@@ -320,7 +339,6 @@ def admit_agent_judgment(
     )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> AgentJudgmentAdmission:
@@ -349,7 +367,12 @@ def admit_agent_judgment(
         write_transaction.set(budget_ref, reserved.model_dump(mode='python'))
         return AgentJudgmentAdmission(existing_intent=None, newly_reserved=True)
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_JUDGMENT_ADMIT_LABEL,
+        logger=logger,
+    )
 
 
 def release_agent_judgment_admission(
@@ -376,7 +399,6 @@ def release_agent_judgment_admission(
     )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> None:
@@ -394,7 +416,12 @@ def release_agent_judgment_admission(
             budget_ref, budget.model_copy(update={'reservations': reservations}).model_dump(mode='python')
         )
 
-    apply(transaction)
+    run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_JUDGMENT_RELEASE_LABEL,
+        logger=logger,
+    )
 
 
 def create_intent(
@@ -429,7 +456,6 @@ def create_intent(
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     dead_ref = _dead_letter_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
@@ -478,7 +504,12 @@ def create_intent(
             write_transaction.set(budget_ref, reserved.model_dump(mode='python'))
         return intent, True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_CREATE_LABEL,
+        logger=logger,
+    )
 
 
 def get_or_create_cold_start_intent(
@@ -520,7 +551,6 @@ def get_or_create_cold_start_intent(
         created_at=now,
     )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
@@ -539,7 +569,12 @@ def get_or_create_cold_start_intent(
         write_transaction.set(intent_ref, _intent_payload(intent))
         return intent, True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_COLD_START_CREATE_LABEL,
+        logger=logger,
+    )
 
 
 def has_cold_start_intent_created_on(
@@ -595,7 +630,6 @@ def acknowledge_sparse_cold_start_sequence_terminal(
         continuity_key=sequence_id,
     )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
@@ -629,7 +663,12 @@ def acknowledge_sparse_cold_start_sequence_terminal(
         write_transaction.set(intent_ref, _intent_payload(terminalized))
         return terminalized
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_COLD_START_TERMINAL_ACK_LABEL,
+        logger=logger,
+    )
 
 
 def has_active_sparse_cold_start_sequence(
@@ -710,7 +749,6 @@ def _advance_fetched_intent(
 ) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
     intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
     attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent | None, IntentLifecycleEvent | None]:
@@ -791,7 +829,12 @@ def _advance_fetched_intent(
         )
         return fetched, event
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_FETCH_ADVANCE_LABEL,
+        logger=logger,
+    )
 
 
 def _dead_letter_malformed_intent(
@@ -804,7 +847,6 @@ def _dead_letter_malformed_intent(
     """Terminalize one still-active malformed row without racing a newer writer."""
 
     intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> None:
@@ -829,7 +871,12 @@ def _dead_letter_malformed_intent(
             write_transaction.set(_dead_letter_ref(uid, intent_id, firestore_client=firestore_client), dead_payload)
             write_transaction.delete(intent_ref)
 
-    apply(transaction)
+    run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_MALFORMED_DEAD_LETTER_LABEL,
+        logger=logger,
+    )
 
 
 def _requeue_transient_dead_letter(
@@ -878,7 +925,6 @@ def _retire_capture_receipt(
 
     intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
     attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> bool:
@@ -908,7 +954,12 @@ def _retire_capture_receipt(
         )
         return True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_CAPTURE_RECEIPT_RETIRE_LABEL,
+        logger=logger,
+    )
 
 
 def fetch_ready_intent_batch(
@@ -1137,7 +1188,6 @@ def record_materialization_rejection(
     client = _db(firestore_client)
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent | None, str | None]:
@@ -1190,7 +1240,12 @@ def record_materialization_rejection(
             )
         return rejected, reason
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_MATERIALIZATION_REJECT_LABEL,
+        logger=logger,
+    )
 
 
 def record_materialization_deferral(
@@ -1206,7 +1261,6 @@ def record_materialization_deferral(
     client = _db(firestore_client)
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
@@ -1248,7 +1302,12 @@ def record_materialization_deferral(
         )
         return intent.model_copy(update={'first_deferred_at': first_deferred_at, 'last_deferral_at': now})
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_MATERIALIZATION_DEFER_LABEL,
+        logger=logger,
+    )
 
 
 def acknowledge_materialization(
@@ -1266,7 +1325,6 @@ def acknowledge_materialization(
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
     attempt_ref = _delivery_attempt_ref(uid, intent_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
@@ -1314,7 +1372,12 @@ def acknowledge_materialization(
             write_transaction.set(attempt_ref, {'requeue_count': 1}, merge=True)
         return delivered
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_MATERIALIZATION_ACK_LABEL,
+        logger=logger,
+    )
 
 
 def record_deferral(
@@ -1345,7 +1408,6 @@ def record_deferral(
         due_at=now + _DEFERRAL_DUE_AFTER,
     )
     ref = _deferral_ref(uid, deferral_id, firestore_client=client)
-    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[DeferralReceipt, bool]:
@@ -1368,7 +1430,12 @@ def record_deferral(
         write_transaction.set(ref, deferral.model_dump(mode='python'))
         return DeferralReceipt(deferral_id=deferral_id, due_at=deferral.due_at, state='pending'), True
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_DEFERRAL_RECORD_LABEL,
+        logger=logger,
+    )
 
 
 def _terminalize_malformed_deferral(
@@ -1383,7 +1450,6 @@ def _terminalize_malformed_deferral(
     if not deferral_id:
         return
     ref = _deferral_ref(uid, deferral_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> None:
@@ -1398,7 +1464,12 @@ def _terminalize_malformed_deferral(
         except ChatFirstMalformedDocument:
             write_transaction.set(ref, {**raw, 'state': 'released'})
 
-    apply(transaction)
+    run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_DEFERRAL_MALFORMED_RELEASE_LABEL,
+        logger=logger,
+    )
 
 
 def release_due_deferrals(
@@ -1517,7 +1588,6 @@ def _release_deferral_transaction(
     )
     deferral_ref = _deferral_ref(uid, deferred.deferral_id, firestore_client=firestore_client)
     intent_ref = _intent_ref(uid, intent_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
@@ -1542,7 +1612,12 @@ def _release_deferral_transaction(
         write_transaction.set(deferral_ref, released.model_dump(mode='python'))
         return intent
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_INTENT_DEFERRAL_RELEASE_LABEL,
+        logger=logger,
+    )
 
 
 def iter_ready_intent_ids(

@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from database.firestore_index_registry import CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.read_boundary import MalformedDocError, parse_payload_strict, parse_snapshot_strict
 from models.chat_first import DeadLetteredProactiveIntent, ProactiveIntent
 
@@ -23,6 +24,9 @@ TRANSIENT_DEAD_LETTER_REASONS = frozenset({UNACKNOWLEDGED_DEAD_LETTER_REASON, KE
 UNACKNOWLEDGED_FETCH_BUDGET = 20
 
 logger = logging.getLogger(__name__)
+
+# Static operation label for the bounded contention channel.
+CHAT_FIRST_TRANSIENT_REQUEUE_LABEL = 'chat_first_intent_transient_requeue'
 
 
 class ChatFirstMalformedDeliveryAttempt(RuntimeError):
@@ -143,7 +147,6 @@ def requeue_transient_dead_letter(
     dead_ref = dead_letter_ref(uid, intent_id, firestore_client=firestore_client)
     active_ref = intent_ref(uid, intent_id, firestore_client=firestore_client)
     attempt_ref = delivery_attempt_ref(uid, intent_id, firestore_client=firestore_client)
-    transaction = firestore_client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
@@ -207,7 +210,12 @@ def requeue_transient_dead_letter(
         write_transaction.delete(dead_ref)
         return requeued
 
-    return apply(transaction)
+    return run_bounded_lane_transaction(
+        firestore_client,
+        apply,
+        operation_name=CHAT_FIRST_TRANSIENT_REQUEUE_LABEL,
+        logger=logger,
+    )
 
 
 def repair_transient_dead_letters(
