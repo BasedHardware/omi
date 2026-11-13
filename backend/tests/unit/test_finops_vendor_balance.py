@@ -55,6 +55,37 @@ def test_parse_balance_accepts_numeric_amounts_leniently(vb):
     assert parsed["available_usd"] == "0"
 
 
+NUMERIC_RE = r"^\d{1,29}(\.\d{1,9})?$"  # what a BigQuery NUMERIC load accepts from JSON text
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("10427.6212345678901234", "10427.621234568"),  # more than nine fractional digits rounds
+        ("0.0000000005", "0.000000001"),  # half rounds up, the table's documented policy
+        ("0.0000000004", "0.000000000"),
+        ("1E-12", "0.000000000"),  # exponent notation never reaches the table
+        ("1E+3", "1000"),
+        ("12.5", "12.5"),  # short values keep their digits
+        ("0", "0"),
+        ("99999999999999999999999999999.9999999994", "99999999999999999999999999999.999999999"),
+    ],
+)
+def test_parse_balance_renders_numeric_safe_strings(vb, raw, expected):
+    parsed = vb.parse_balance({**BALANCE, "used_balance_usd": raw, "available_balance_usd": raw})
+    assert parsed["used_usd"] == expected and parsed["available_usd"] == expected
+    import re
+
+    assert re.match(NUMERIC_RE, parsed["used_usd"])
+
+
+@pytest.mark.parametrize("raw", ["100000000000000000000000000000", "1E+40"])
+def test_parse_balance_rejects_values_outside_the_numeric_range(vb, raw):
+    with pytest.raises(vb.BalanceError) as err:
+        vb.parse_balance({**BALANCE, "used_balance_usd": raw})
+    assert err.value.reason == "invalid_response"
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -408,6 +439,47 @@ def test_loader_dark_paths(vb, tmp_path, monkeypatch):
     loaded = lb.load_vendor_balance(tmp_path, "r1", "t", ensure_table, load_replace, bq_query)
     assert created == ["vendor_balance_snapshot"]
     assert loaded == {"vendor_balance_snapshot": 1}
+
+
+def test_loader_only_sends_numeric_safe_money_to_bigquery(vb, tmp_path):
+    """Regression for the first real daily run: the vendor's decimals carried more
+    than nine fractional digits and BigQuery rejected used_usd as an invalid NUMERIC.
+    Even an artifact written by an older image must be re-rendered before the load."""
+    import re
+
+    lb = load("load_bigquery")
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "vendor": "soniox",
+                "ts": "2026-10-23T14:30:00Z",
+                "used_usd": "10571.8812345678901234",
+                "available_usd": "1428.1187654321098766",
+                "invoice_billing_enabled": False,
+            }
+        )
+    )
+    sent = {}
+
+    def load_replace(name, rows, dates, extra_delete=""):
+        sent[name] = rows
+        return len(rows)
+
+    def bq_query(args, stdin=None):
+        return json.dumps(
+            [
+                {"ts": "2026-10-22T14:30:00Z", "used_usd": "10427.620000000"},
+                {"ts": "2026-10-23T14:30:00Z", "used_usd": "10571.881234568"},
+            ]
+        )
+
+    lb.load_vendor_balance(tmp_path, "r1", "t", lambda n: None, load_replace, bq_query)
+    row = sent["vendor_balance_snapshot"][0]
+    assert row["used_usd"] == "10571.881234568" and row["available_usd"] == "1428.118765432"
+    assert re.match(NUMERIC_RE, row["used_usd"]) and re.match(NUMERIC_RE, row["available_usd"])
+    for spend in sent["vendor_balance_spend_daily"]:
+        assert spend["usd"] is None or re.match(NUMERIC_RE, spend["usd"])
 
 
 def test_loader_rejects_tampered_artifacts(vb, tmp_path):

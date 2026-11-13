@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 import json
 import os
 import pathlib
@@ -78,6 +78,31 @@ def usd(value) -> Decimal:
     return amount
 
 
+# BigQuery NUMERIC holds 29 integer and 9 fractional digits. The vendor sends
+# more fractional digits than that (its first real snapshot was rejected with
+# "Invalid NUMERIC value" on used_usd), so money is rounded half-up to nine
+# decimals at the artifact boundary, the same policy the derived daily spend
+# already uses (README: "NUMERIC outputs round to nine decimal places").
+NUMERIC_SCALE = Decimal("0.000000001")
+NUMERIC_LIMIT = Decimal(10) ** 29
+
+
+def numeric_usd(amount: Decimal) -> str:
+    """Render a parsed balance as a plain decimal string BigQuery NUMERIC accepts.
+
+    Values with at most nine fractional digits keep their digits (``12.5`` stays
+    ``12.5``). Longer ones round half-up to nine places. Never exponent notation,
+    and a value outside the NUMERIC range is an invalid response, not a load error.
+    """
+    if amount >= NUMERIC_LIMIT:
+        raise BalanceError("invalid_response", "balance value out of range")
+    if amount.as_tuple().exponent < -9:
+        with localcontext() as ctx:
+            ctx.prec = 60
+            amount = amount.quantize(NUMERIC_SCALE, rounding=ROUND_HALF_UP)
+    return format(amount, "f")
+
+
 def parse_balance(payload) -> dict:
     """Validate the balance document and return parsed numbers only."""
     if not isinstance(payload, dict):
@@ -88,8 +113,8 @@ def parse_balance(payload) -> dict:
     if not isinstance(invoice, bool):
         raise BalanceError("invalid_response", "balance response missing invoice_billing_enabled")
     return {
-        "used_usd": str(used),
-        "available_usd": str(available),
+        "used_usd": numeric_usd(used),
+        "available_usd": numeric_usd(available),
         "invoice_billing_enabled": invoice,
     }
 
