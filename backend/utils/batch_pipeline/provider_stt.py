@@ -34,6 +34,7 @@ import wave
 
 from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
+from config.batch_pipeline import provider_merge_membership_enabled
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -379,6 +380,10 @@ class ProviderSttStore:
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
                 job.update(state='result_ready', result=WorkResult(segment_id, result_uri or '', outcome).to_dict())
+                if provider_merge_membership_enabled():
+                    # As Scheduler.complete stamps it: the merge's head wait orders by ready_at, and
+                    # a row without one can never commit past an unready head.
+                    job['ready_at'] = now
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)
@@ -1201,8 +1206,28 @@ class ProviderSttConsumer:
     lease_seconds: ClassVar[float] = 1800.0
     heartbeat_seconds: ClassVar[float] = 0.0
 
-    def __init__(self, stage_factory: Callable[[], ProviderSttStage] = _service_stage, clock=time.time):
+    def __init__(
+        self,
+        stage_factory: Callable[[], ProviderSttStage] = _service_stage,
+        clock=time.time,
+        *,
+        settled: Callable[[str], None] | None = None,
+    ):
         self.stage_factory, self.clock = stage_factory, clock
+        # Called with the owner id after a delivery that changed the owner's merge order (a result,
+        # or a terminal unit leaving it), so the host can wake that owner's ordered merge. Only the
+        # serving route passes one; a hint, never a dependency of the delivery.
+        self.settled = settled
+
+    def _wake_merge(self, owner_id: str, unit: UnitOutcome) -> None:
+        if self.settled is None or (unit.outcome, unit.reason) != ('done', 'processed'):
+            return
+        try:
+            self.settled(owner_id)
+        except Exception as error:
+            logger.warning(
+                'event=batch_provider_stt action=merge_wake outcome=failed exception_type=%s', type(error).__name__
+            )
 
     def _segment(self, claim: Claim) -> str | None:
         segment_id = claim.payload.get('segment_id')
@@ -1230,4 +1255,6 @@ class ProviderSttConsumer:
         if segment_id is None:
             return Result(Outcome.DISCARDED, ConsumerReason.UNKNOWN)
         stage = await run_sync(self.stage_factory)
-        return self._result(await stage.run_async(segment_id, run_sync))
+        unit = await stage.run_async(segment_id, run_sync)
+        self._wake_merge(claim.owner_id, unit)
+        return self._result(unit)

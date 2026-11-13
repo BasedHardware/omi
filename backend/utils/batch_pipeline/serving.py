@@ -128,6 +128,20 @@ class Serving:
                 break
 
     @with_batch_privacy_attempt
+    async def drain_settled_async(self, owner_id: str) -> None:
+        """A provider unit of ``owner_id`` settled: commit the owner's ready rows and walk its chain.
+
+        The owner-only half of a recovery wake without a recovered unit, so no row skips the head
+        wait or the catch-up depth hold. Global maintenance stays with the periodic owner.
+        """
+        priority = await run_blocking(sync_executor, self._reconcile_owner, owner_id, None)
+        if self.projector:
+            if priority:
+                await self.projector.start_followups(priority, discover=False)
+            if getattr(self.projector, 'owes_index', False) is True:
+                self.projector.schedule_index_flush(owner_id)
+
+    @with_batch_privacy_attempt
     async def reconcile_async(
         self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
     ):

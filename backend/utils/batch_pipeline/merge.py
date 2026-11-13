@@ -5,7 +5,12 @@ import time
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 
-from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds, recovered_merge_release_enabled
+from config.batch_pipeline import (
+    merge_catch_up_depth,
+    merge_head_wait_seconds,
+    provider_merge_membership_enabled,
+    recovered_merge_release_enabled,
+)
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -37,7 +42,15 @@ def _wait_bucket(seconds: float) -> str:
 
 def _catch_up(job: dict) -> bool:
     # Only rows classified at admission; record-lane and older rows keep the plain order.
-    return job.get('fresh_capture') is False
+    if job.get('fresh_capture') is False:
+        return True
+    # Provider rows admitted before provider admission stamped the class are backlog by now:
+    # without this they would commit in plain order ahead of the owner's fresh rows.
+    return (
+        job.get('fresh_capture') is None
+        and (job.get('stt_route') or {}).get('stt_route') == 'provider'
+        and provider_merge_membership_enabled()
+    )
 
 
 def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None, dict | None]:
