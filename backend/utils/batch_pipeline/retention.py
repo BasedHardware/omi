@@ -258,7 +258,9 @@ def register_batch_artifact(
         # replays commit-time aborts on its one transaction id.
         register(client.transaction())
     else:
-        run_retention_transaction(client, register, operation_name='batch_artifact_register')
+        run_retention_transaction(
+            client, register, operation_name='batch_artifact_register', storm_damper=_store_storm_damper(store)
+        )
     mirror_refresh(namespace, [('artifacts', artifact_id)])  # A2 shadow: no-op unless shadow mode
     return artifact_id
 
@@ -315,14 +317,30 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
             transaction.update(artifact.reference, {'cleanup_after': completed_at + retention})
         return True
 
-    expired = run_retention_transaction(client, expire)
+    expired = run_retention_transaction(client, expire, storm_damper=_store_storm_damper(store))
     if touched:
         mirror_refresh(namespace, list(touched))  # A2 shadow: no-op unless shadow mode; never raises
     return expired
 
 
+def _store_storm_damper(store: Any) -> Any:
+    """The store's process storm damper, or ``None`` for any non-store primary.
+
+    Only the real ``FirestoreStore`` carries the damper contract — and its
+    two kill switches resolve inside the accessor — so simulator and harness
+    primaries keep the bare ladder byte-for-byte.
+    """
+    from database.batch_pipeline_store import FirestoreStore
+
+    return store.contention_storm_damper if isinstance(store, FirestoreStore) else None
+
+
 def run_retention_transaction(
-    client: Any, operation: Callable[[Any], Any], *, operation_name: str = 'batch_retention'
+    client: Any,
+    operation: Callable[[Any], Any],
+    *,
+    operation_name: str = 'batch_retention',
+    storm_damper: Any = None,
 ) -> Any:
     """Run a retention transaction with the projection path's bounded retries.
 
@@ -334,17 +352,81 @@ def run_retention_transaction(
     body rereads every document, so a fresh transaction replays it safely.
     ``operation_name`` keeps the shared contention logs attributable per
     caller; the default preserves the completion phase's historical label.
+
+    The retention write touches the same hot ``jobs``/``results`` rows the
+    batch-store labels storm on, so an armed storm damper spaces this chain
+    exactly like the store and projection lanes: the entry consult sleeps out
+    the label's residual window (fleet-adopted, spill share-capped), every
+    rung after a measured collision re-peeks the residual and, from the third
+    failed rung on, spaces itself by the same capped wave ladder, an
+    exhaustion stamps the applied window onto ``retry_after`` for a caller
+    that schedules its own re-offer, and a commit clears the ladder only when
+    no concurrent arm bumped the generation. The first attempt is never
+    gated, and with ``storm_damper`` ``None`` — the kill switches off, or a
+    non-store primary — the schedule is byte-for-byte the bare ladder.
+
+    Failure-Class: FC-retention-contention-chain-collides-inside-armed-storm-window
     """
     from database._client import run_transactional
-    from database.firestore_transaction_retry import run_with_transaction_contention_retry
-
-    return run_with_transaction_contention_retry(
-        # One SDK commit attempt per transaction: the outer helper is the only
-        # commit-contention budget (5 bodies, not 5 x 5).
-        lambda: client.transaction(max_attempts=1),
-        lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
-        operation_name=operation_name,
+    from database.batch_pipeline_store import FirestoreStore
+    from database.firestore_transaction_retry import (
+        FirestoreContentionExhausted,
+        run_with_transaction_contention_retry,
     )
+
+    label = operation_name
+    latest_generation = 0
+
+    def mid_ladder_gate(failed_attempt: int) -> float:
+        nonlocal latest_generation
+        if storm_damper is None:
+            return 0.0
+        residual, gate_generation = storm_damper.peek(label, client=client)
+        latest_generation = gate_generation
+        wait = residual
+        if failed_attempt >= FirestoreStore.WAVE_ENGAGEMENT_ATTEMPT:
+            wait = max(residual, storm_damper.wave_rung_wait(failed_attempt))
+        if wait <= 0.0:
+            return 0.0
+        logger.info(
+            'event=%s_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
+            label,
+            label,
+            failed_attempt,
+            round(wait * 1000),
+        )
+        return wait
+
+    if storm_damper is not None:
+        waited, generation = storm_damper.consult(label, client=client)
+        if waited > 0:
+            logger.info(
+                'event=%s_backoff operation=%s waited_ms=%d',
+                label,
+                label,
+                round(waited * 1000),
+            )
+        latest_generation = generation
+
+    try:
+        result = run_with_transaction_contention_retry(
+            # One SDK commit attempt per transaction: the outer helper is the only
+            # commit-contention budget (5 bodies, not 5 x 5).
+            lambda: client.transaction(max_attempts=1),
+            lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
+            operation_name=operation_name,
+            inter_attempt_gate=mid_ladder_gate,
+        )
+    except FirestoreContentionExhausted as error:
+        # This label just burned its whole budget against the hot rows:
+        # space out the next re-strike instead of colliding immediately,
+        # and carry the applied window for the caller's own schedule.
+        if storm_damper is not None:
+            error.retry_after = storm_damper.arm(label, client=client)
+        raise
+    if storm_damper is not None:
+        storm_damper.note_success(label, latest_generation)
+    return result
 
 
 def _flag_invalid_cleanup_receipt(artifact: Any, now: datetime, reason: str) -> bool:

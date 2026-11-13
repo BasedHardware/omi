@@ -1322,7 +1322,7 @@ def test_completion_expiry_still_uses_the_shared_helper(monkeypatch):
 
     calls = []
 
-    def run(client, operation, *, operation_name='batch_retention'):
+    def run(client, operation, *, operation_name='batch_retention', storm_damper=None):
         calls.append(operation_name)
 
     monkeypatch.setattr(retention_module, 'run_retention_transaction', run)

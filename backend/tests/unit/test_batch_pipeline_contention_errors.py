@@ -176,7 +176,7 @@ def test_retention_commit_contention_budget_is_five_bodies_not_twenty_five(no_sl
 def test_expire_completed_segment_runs_through_the_bounded_retry(monkeypatch):
     calls = []
 
-    def run(client, operation):
+    def run(client, operation, *, operation_name='batch_retention', storm_damper=None):
         calls.append(client)
         return 'ran'
 
