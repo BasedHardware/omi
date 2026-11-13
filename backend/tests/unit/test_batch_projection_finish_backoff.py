@@ -19,6 +19,7 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionStor
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STEP_FIELD,
+    projection_finish_entry_fields,
     projection_finish_state_fields,
 )
 from database.batch_pipeline_store import projection_page
@@ -413,8 +414,6 @@ def test_new_replicas_and_reenable_trust_shared_completion(monkeypatch):
 
 
 def test_flag_off_writer_fields_remain_discoverable_on_listen_host(monkeypatch):
-    from database.batch_pipeline_projection_finish import projection_finish_entry_fields
-
     monkeypatch.setenv(LEVER, 'false')
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')

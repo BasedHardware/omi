@@ -12,6 +12,7 @@ from database.batch_pipeline_projection_finish_backfill import (
     backfill_ref,
     stamp_page,
 )
+from scripts import batch_pipeline_projection_finish_backfill as cli
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
@@ -78,8 +79,6 @@ def test_only_current_version_complete_marker_is_trusted(marker):
     ],
 )
 def test_cli_rejects_unsafe_or_unbounded_invocation_before_opening_store(monkeypatch, arguments):
-    from scripts import batch_pipeline_projection_finish_backfill as cli
-
     monkeypatch.delenv('GCP_AGENT_TIER', raising=False)
     monkeypatch.setattr(cli.sys, 'argv', ['backfill', *arguments])
     constructor = Mock()
