@@ -131,6 +131,7 @@ __all__ = [
 def main() -> int:
     parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
+    parser.add_argument('--service', action='append', dest='services', help='Limit live validation to these services.')
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument(
         '--cloud-run-state',
@@ -167,6 +168,7 @@ def main() -> int:
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
+        services=args.services,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)

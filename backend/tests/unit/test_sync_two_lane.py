@@ -352,16 +352,19 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
         assert "'platform' || 'dispatch'" in workflow
-        assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
+        assert (
+            '${{ steps.sync-backfill.outputs.sync_backfill_env_vars || steps.sync-routing.outputs.sync_backfill_env_vars }}'
+            in workflow
+        )
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
         assert 'firestore_project_id: ${{ inputs.runtime_gcp_project_id }}' in composite
-        assert '--wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
-        assert 'gcloud run services update-traffic backend-sync-backfill' in workflow
-        assert '--cloud-run-service backend-sync-backfill' in workflow
-        assert (
-            '--expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}' in workflow
-        )
+        # Commands consume the validated service scope; executable coverage lives
+        # in test_backend_deploy_services.py, including worker-only selection.
+        assert 'revision_args+=(--wait-revision-ready "$service=$service-' in workflow
+        assert 'gcloud run services update-traffic "$service"' in workflow
+        assert 'report_args+=(--cloud-run-service "$service")' in workflow
+        assert 'expected_traffic+=(--expect-cloud-run-traffic "$service=$service-' in workflow
 
     assert "default: 'false'" in composite
     assert 'sync_backfill_budget_alerts:' in composite
@@ -432,7 +435,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     composite = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
     steps = composite['runs']['steps']
     lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
-    assert 'if' not in lane
+    assert lane['if'] == "${{ inputs.services == '' }}"  # Explicit selections skip shared provisioning.
     mode = lane['with']['mode']
     assert "deploy_profile == 'auto-dev'" in mode
     assert "deploy_targets == 'all'" in mode
@@ -456,7 +459,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     assert "provision_budget_alerts == 'true'" in abort['if']
 
     resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
-    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    assert resolver['if'] == "${{ inputs.mode != 'routing' }}"  # Includes platform/dispatch; routing is read-only.
     assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
     assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
         '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
@@ -521,10 +524,16 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     by_name = {step.get('name'): step for step in steps}
 
     public_probe = by_name['Gate backend candidate on known audio']
-    assert public_probe['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert (
+        public_probe['if']
+        == "${{ contains(fromJSON(steps.service-scope.outputs.services), 'backend') && inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    )
 
     serving_smoke = by_name['Smoke promoted production serving API']
-    assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
+    assert (
+        serving_smoke['if']
+        == "${{ contains(fromJSON(steps.service-scope.outputs.services), 'backend') && inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
+    )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
     assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
     assert 'firebase-production-serving-token' in serving_smoke['run']
@@ -550,7 +559,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     )
 
     development_smoke = by_name['Smoke What Matters Now datastore query']
-    assert development_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert (
+        development_smoke['if']
+        == "${{ contains(fromJSON(steps.service-scope.outputs.services), 'backend') && inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    )
     assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
     assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
     assert steps.index(development_smoke) < steps.index(
@@ -561,7 +573,7 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         in by_name['Restore Cloud Run traffic snapshot after failed promotion']['if']
     )
     assert (
-        'gcloud run services describe backend --project=${{ inputs.project_id }}'
+        'gcloud run services describe "$service" --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']
     )
 

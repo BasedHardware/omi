@@ -61,9 +61,13 @@ on:
         required: true
         default: false
         type: boolean
+      services:
+        description: 'mode=deploy, cloud-run-only: comma list of backend, backend-sync, backend-sync-backfill, backend-integration (blank = all)'
+        required: false
+        default: ''
       # Plan B B2 opt-in; blank changes nothing. See backend/docs/runbooks/role-image-cutover.md.
       service_images:
-        description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)'
+        description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = selected services use the release backend image)'
         required: false
         default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
@@ -145,11 +149,26 @@ env:
 
 jobs:
   validate-production-boundary:
-    if: >-
-      github.event.inputs.mode == 'deploy' ||
-      github.event.inputs.mode == 'build-only'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Checkout immutable deployment input controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Validate service selection before side effects
+        env:
+          SERVICES: ${{ inputs.services }}
+          WORKFLOW_MODE: ${{ inputs.mode }}
+          TARGETS: ${{ inputs.deploy_targets }}
+          GATEWAY: ${{ inputs.deploy_gateway }}
+          SERVICE_IMAGES: ${{ inputs.service_images }}
+        run: |
+          python3 backend/scripts/backend_deploy_services.py \
+            --services "$SERVICES" --mode "$WORKFLOW_MODE" --targets "$TARGETS" \
+            --gateway "$GATEWAY" --service-images "$SERVICE_IMAGES"
       - name: Reject unsupported production deployment boundary before side effects
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -196,6 +215,7 @@ jobs:
           fi
 
   repair-traffic:
+    needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'repair-traffic-only'
@@ -739,6 +759,7 @@ jobs:
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
+          services: ${{ github.event.inputs.services }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
           # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).

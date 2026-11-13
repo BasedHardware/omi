@@ -23,7 +23,7 @@ def action(request):
     assert resolver['env']['CLOUD_RUN_REGION'] == '${{ inputs.region }}'
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
     if suffix == 'sync-backfill':
-        assert 'if' not in resolver  # Must also run when reconciling platform/dispatch.
+        assert resolver['if'] == "${{ inputs.mode != 'routing' }}"  # Runs for worker/platform/dispatch.
         assert deploy['if'] == "${{ inputs.mode == 'worker' }}"
         assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
     return resolver, 'custom-' + suffix, fallback

@@ -3,7 +3,7 @@ description: Deploy and provision the bounded backend-sync-backfill worker lane
 
 inputs:
   mode:
-    description: 'worker (deploy backfill revision), platform (queue/IAM/TTL/alerts), or dispatch (queue reconciliation + dispatch-abort alert only)'
+    description: 'routing (read-only sync dispatch overlay), worker (deploy backfill revision), platform (queue/IAM/TTL/alerts), or dispatch (queue reconciliation + dispatch-abort alert only)'
     required: true
   project_id:
     description: GCP project ID
@@ -88,7 +88,7 @@ runs:
   using: composite
   steps:
     - name: Resolve ops-owned backfill queues
-      if: ${{ inputs.mode == 'worker' }}
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'routing' }}
       id: ops-queues
       shell: bash
       env:
@@ -120,7 +120,7 @@ runs:
         echo "worker_queue=$worker_queue" >> "$GITHUB_OUTPUT"
 
     - name: Resolve backfill service URL
-      if: ${{ inputs.mode == 'worker' }}
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'routing' }}
       id: backfill-service
       shell: bash
       env:
@@ -189,6 +189,7 @@ runs:
         fi
 
     - name: Resolve live sync-backfill maxScale
+      if: ${{ inputs.mode != 'routing' }}
       id: live-max-scale
       shell: bash
       env:

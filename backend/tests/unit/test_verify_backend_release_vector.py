@@ -381,10 +381,10 @@ def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
     text = backend_deploy_contract_text('gcp_backend.yml')
 
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
-    assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
+    assert '${{ steps.service-scope.outputs.migration_args }}' in text
+    assert text.index('Migrate legacy public Cloud Run bindings') < text.index(
+        'Deploy ${{ inputs.service }} to Cloud Run'
+    )
 
 
 def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:
@@ -393,12 +393,12 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
     assert 'environment: development' in text
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
-    assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
+    assert '${{ steps.service-scope.outputs.migration_args }}' in text
+    assert text.index('Migrate legacy public Cloud Run bindings') < text.index(
+        'Deploy ${{ inputs.service }} to Cloud Run'
+    )
     assert '--check-runtime-bindings' in text
-    assert text.index('migrate-legacy-public-binding') < text.index('--check-runtime-bindings')
+    assert text.index('Migrate legacy public Cloud Run bindings') < text.index('--check-runtime-bindings')
     assert text.index('--check-runtime-bindings') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
     check_bindings = production_text[
         production_text.index('Check development Cloud Run runtime bindings') : production_text.index(
@@ -1582,8 +1582,7 @@ def test_backend_promotions_are_phase_aware_and_restore_the_recorded_traffic_sna
         snapshot_step = text[snapshot : text.index('\n    - name:', snapshot + 1)]
         assert 'cloud_run_traffic_snapshot.py' in snapshot_step
         assert ' capture' in snapshot_step
-        for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-            assert f'--service {service}' in snapshot_step
+        assert '${{ steps.service-scope.outputs.service_args }}' in snapshot_step
 
         restore_step = text[restore : text.index('\n    - name:', restore + 1)]
         for fragment in (
@@ -1619,7 +1618,9 @@ def test_production_cloud_run_only_boundary_smokes_serving_after_promotion():
     assert workflow.index('validate-production-boundary') < workflow.index('  firestore_readiness:')
     assert 'needs: validate-production-boundary' in workflow
     assert 'needs: [validate-production-boundary, firestore_readiness, record_break_glass]' in workflow
-    for forbidden in ('actions/checkout', 'google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
+    assert 'ref: ${{ github.workflow_sha }}' in boundary
+    assert 'persist-credentials: false' in boundary
+    for forbidden in ('google-github-actions/auth', 'docker build', 'docker push', 'gcloud run'):
         assert forbidden not in boundary
 
     snapshot = workflow.index('Capture Cloud Run pre-promotion traffic snapshot')
