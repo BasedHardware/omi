@@ -603,6 +603,9 @@ def held_merge_owners(
     return owners
 
 
+FRESH_PROBE_PAGES = 4
+
+
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
     """The owner's earliest-captured pending fresh rows, ready or not (fresh-first merge).
 
@@ -618,32 +621,25 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
     skip = held_poll_skip_enabled()
     if skip:
         query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
-    try:
-        return _fresh_pages(query, limit)
-    except (FailedPrecondition, InvalidArgument):
-        if not skip:
-            raise
-        return _fresh_pages(base, limit)
-
-
-# The fresh probe reads on while a full page holds no ready row, so a run of unready fresh rows
-# longer than one page cannot hide the ready ones behind it. Same query and index, more pages.
-FRESH_PROBE_PAGES = 4
-
-
-def _fresh_pages(query: Any, limit: int) -> list[dict]:
+    # The probe reads on while a full page holds no ready row, so a run of unready fresh rows
+    # longer than one page cannot hide the ready ones behind it. Same query and index, more pages.
     size = max(1, min(limit, 32))
-    ordered = query.order_by('capture_at').order_by('segment_id')
-    rows: list[dict] = []
-    last = None
-    for _ in range(FRESH_PROBE_PAGES):
-        page = ordered.limit(size) if last is None else ordered.start_after(last).limit(size)
-        docs = list(page.stream())
-        rows.extend(doc.to_dict() for doc in docs)
-        if len(docs) < size or any(row.get('state') == 'result_ready' for row in rows):
-            break
-        last = docs[-1]
-    return rows
+    for attempt in (query, base) if skip else (query,):
+        ordered = attempt.order_by('capture_at').order_by('segment_id')
+        rows: list[dict] = []
+        last = None
+        try:
+            for _ in range(FRESH_PROBE_PAGES):
+                docs = list((ordered if last is None else ordered.start_after(last)).limit(size).stream())
+                rows.extend(doc.to_dict() for doc in docs)
+                if len(docs) < size or any(row.get('state') == 'result_ready' for row in rows):
+                    break
+                last = docs[-1]
+            return rows
+        except (FailedPrecondition, InvalidArgument):
+            if attempt is base:
+                raise
+    return []
 
 
 def ready_predecessor(
