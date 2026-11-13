@@ -1399,12 +1399,13 @@ def _real_health(clock):
     )
 
 
-def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
+def _silent_abandon(store, artifacts, vendor, health, segment_id, started, inspected=None):
+    inspected = SILENCE if inspected is None else inspected
     first = ProviderSttStage(
         store,
         artifacts,
         stt=vendor,
-        inspect=lambda *_: SILENCE,
+        inspect=lambda *_: inspected,
         clock=lambda: started,
         health=health,
         armed=lambda: True,
@@ -1414,7 +1415,13 @@ def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
     artifacts.fail_persist = False
     late = started + ABANDON_SECONDS + 1
     replay = ProviderSttStage(
-        store, artifacts, stt=vendor, inspect=lambda *_: SILENCE, clock=lambda: late, health=health, armed=lambda: True
+        store,
+        artifacts,
+        stt=vendor,
+        inspect=lambda *_: inspected,
+        clock=lambda: late,
+        health=health,
+        armed=lambda: True,
     )
     return replay.run(segment_id)
 
@@ -1505,6 +1512,18 @@ def test_an_abandoned_skipped_intent_settles_as_silence_without_billing(world, m
     outcomes = [a.get('outcome') for a in row.get('provider_attempts') or []]
     assert 'abandoned' not in outcomes and outcomes[-1] == 'silence'
     assert all(a.get('audio_seconds', 0) == 0 for a in row['provider_attempts'])
+
+
+def test_an_abandoned_short_speech_intent_counts_the_skipped_audio(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    name = 'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'
+    before = _sample(name, {'provider': 'modulate'})
+    outcome = _silent_abandon(store, artifacts, vendor, _real_health(lambda: 200.0), 'p1', 200.0, SHORT_SPEECH)
+    assert outcome.reason == 'processed' and vendor.calls == 0
+    assert job(store, 'p1')['result']['outcome'] == 'silence'
+    assert _sample(name, {'provider': 'modulate'}) - before == pytest.approx(5.0)
 
 
 def test_a_burst_of_abandoned_silent_intents_never_opens_a_healthy_vendors_breaker(world, monkeypatch):

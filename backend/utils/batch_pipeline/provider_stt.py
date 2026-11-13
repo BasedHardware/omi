@@ -1202,6 +1202,9 @@ class ProviderSttStage:
             return UnitOutcome('retry', 'dependency_warming', provider_reason=route.provider_reason)
         if settled:
             vendor_metrics.attempt(intent['service'], VendorAttemptOutcome.SILENCE, 0.0)
+            if (intent.get('measured_vad_speech_seconds') or 0) > 0:
+                # A short-speech skip (spans under the threshold), not true silence.
+                vendor_metrics.short_speech_skip(intent['service'], item.duration_seconds)
         self._log('settled' if settled else 'superseded', 'skipped_silence')
         return UnitOutcome('done', 'processed' if settled else 'superseded', provider_reason=route.provider_reason)
 
