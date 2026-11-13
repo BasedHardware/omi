@@ -17,6 +17,7 @@ NONTERMINAL = (
     'retry',
     'result_ready',
     'record_pending',
+    'record_recovery_waiting',
     'held',
     'provider_pending',
     'provider_running',
@@ -163,6 +164,7 @@ def test_both_index_shapes_are_in_the_generated_registry():
 
 
 def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
+    from database.record_recovery_gate import WAITING_STATE
     from tests.support.lifecycle_state_table import STATES
     from utils.batch_pipeline.provider_stt import PENDING, RUNNING, SUPERSEDED
 
@@ -172,7 +174,10 @@ def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
     assert set(TERMINAL) == lifecycle | dispositions | {SUPERSEDED}
     from scripts.batch_pipeline_poll_state_census import KNOWN_STATES
 
-    known = batch | {PENDING, RUNNING, SUPERSEDED}
+    # record_recovery_waiting is a job state but is written with merge_pending
+    # False, so it is in the known vocabulary without appearing in this
+    # merge-pending complement.
+    known = batch | {PENDING, RUNNING, SUPERSEDED, WAITING_STATE}
     assert set(KNOWN_STATES) == known
     assert known - set(TERMINAL) == set(NONTERMINAL) - {'held', 'future_state'}
 
