@@ -167,4 +167,64 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
+    # W3 census (SCA-1921): declarative only, no live index creation.
+    # Settled-not-delivered count and the exact custody clock of unmerged results.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_census_settled_not_delivered',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('provider_intent.settled_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    # Fresh-capture wait gauge per state; fresh_capture is stamped at admission.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_census_fresh_oldest',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('fresh_capture'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    # Provider outbox census oldest age and the 31-day custody leg.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_census_provider_outbox_created',
+            f'batch_pipeline_{stage}_provider_stt_outbox',
+            'COLLECTION',
+            (_asc('state'), _asc('created_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    # Runnable-vs-parked provider stock; due_at is the wake clock.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_census_provider_outbox_due',
+            f'batch_pipeline_{stage}_provider_stt_outbox',
+            'COLLECTION',
+            (_asc('state'), _asc('due_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    # Custody horizon for assignment and quarantine holds on result receipts.
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_census_projection_held_deadline',
+            f'batch_pipeline_{stage}_results',
+            'COLLECTION',
+            (_asc('projection_state'), _asc('held_deadline_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    # Fleet-wide memory-outbox census. The existing same-field index is
+    # COLLECTION-scoped and serves only the per-user worker page; rows live under
+    # {user_root}/memory_outbox, so the census needs the group-scoped twin.
+    FirestoreIndexRequirement(
+        'memory_outbox_group_status_available_at',
+        'memory_outbox',
+        'COLLECTION_GROUP',
+        (_asc('status'), _asc('available_at'), _asc('__name__')),
+    ),
 )
