@@ -91,12 +91,34 @@ The read-only acceptance gate is:
 python3 backend/scripts/verify_yearly_switch_retention.py --read-only --require-live --require-mature-holdout
 ```
 
-Without `YEARLY_SWITCH_RETENTION_RECEIPT` (a local protected receipt file), this
-exits 2/WAITING. `--receipt PATH` is equivalent. It never queries any service or
-writes a file. Receipts come from an authorized aggregate verifier; this parser
-does not authenticate their issuer. Their source/serving/approval references
-must be independently checked by that verifier. Synthetic receipts only test
-the parser and cannot prove deployment.
+Live mode always exits 2/WAITING: **authenticated receipt provenance is not
+available in this implementation**. `YEARLY_SWITCH_RETENTION_RECEIPT` (a local
+protected receipt file) or `--receipt PATH` supplies untrusted assertions only.
+The literal authority name, evidence URLs, an approval name, synthetic/live
+labels or a caller-supplied signature cannot establish trust. Even a complete,
+fresh, mature schema-valid receipt remains WAITING with all metrics withheld.
+The command never queries a service or writes a file.
+
+Bounded measurement gap: an authorized m5 verifier/owner must identify an existing
+trusted mechanism to authenticate the receipt producer and independently resolve
+its exact serving release, David approval, operational checks and protected
+aggregate evidence. An owner-authorized adapter and regression tests at that
+boundary are required before this entry point can ever return LIVE/exit 0. No
+such adapter, new signing key, payer ledger, exporter, credential access or
+production read is authorized by this PR. Source/render review may proceed;
+this gap cannot be counted as live acceptance or retention lift.
+
+Fixtures can separately exercise the schema, chronology, coverage and suppression
+rules with:
+
+```sh
+python3 backend/scripts/verify_yearly_switch_retention.py --read-only --schema-only --receipt PATH
+```
+
+Only schema mode may exit 0/SCHEMA_VALID, and it emits `live_acceptance: false`
+with no metric table. It cannot be combined with either live/maturity flag.
+SCHEMA_VALID means only that the supplied assertions satisfy the rules; it is
+never evidence of deployment, approval, authorization or observed outcomes.
 
 The receipt vocabulary and positive/negative examples are executable in
 `backend/tests/unit/test_verify_yearly_switch_retention.py`. Required fields:

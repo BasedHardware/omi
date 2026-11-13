@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read an authorized aggregate receipt; never contact a service or write data.
+"""Validate an untrusted aggregate receipt; never contact a service or write data.
 
-Receipts are evidence supplied by an authorized verifier, not authenticated by
-this parser. Local fixtures prove the gate, never deployment or causal lift.
+Receipt fields and evidence references are untrusted assertions. No authorized
+provenance adapter is configured here: live acceptance always returns WAITING.
+Schema-only validation can exercise fixtures, never deployment or causal lift.
 No raw receipt content, IDs, small cells or recoverable complements are printed.
 """
 
@@ -19,6 +20,8 @@ EXPERIMENT = 'EXP-006-yearly-switch-retention'
 
 
 def timestamp(value):
+    if not isinstance(value, str):
+        raise ValueError('timestamp must be a string')
     parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
     if parsed.tzinfo is None:
         raise ValueError('timezone required')
@@ -34,11 +37,10 @@ def interval(value):
     )
 
 
-def verify(receipt, *, source_revision, now=None, render_digest=None, copy_digest=None):
-    """Return only allowlisted protected fields. All gates are required."""
+def validate_schema(receipt, *, source_revision, now=None, render_digest=None, copy_digest=None):
+    """Validate untrusted assertions for fixture/schema checks, never live acceptance."""
     now = now or datetime.now(timezone.utc)
     waiting = []
-    report = {}
 
     def require(condition, name):
         if not condition:
@@ -118,7 +120,6 @@ def verify(receipt, *, source_revision, now=None, render_digest=None, copy_diges
             # Complete by-arm outcomes are needed for final acceptance. Missing
             # linkage remains unknown: never put excluded UIDs in a zero bucket.
             require(counts == [n, 0, 0, 0, 0], 'complete authorized outcome linkage')
-            protected = type(n) is int and n >= 10
             for metric in ('take_up', 'effective_ends_30', 'effective_ends_60'):
                 value = values[metric]
                 count = value['count']
@@ -126,7 +127,6 @@ def verify(receipt, *, source_revision, now=None, render_digest=None, copy_diges
                 require(cell_safe, f'protected {metric}')
                 ci = value['ci95']
                 require(interval(ci) and 0 <= ci[0] <= count / n <= ci[1] <= 1, f'{metric} uncertainty')
-                protected = protected and cell_safe
             require(
                 values['effective_ends_30']['count'] <= values['effective_ends_60']['count'], 'cumulative paid ends'
             )
@@ -143,13 +143,6 @@ def verify(receipt, *, source_revision, now=None, render_digest=None, copy_diges
                 and revenue['ci95'][0] <= mean <= revenue['ci95'][1],
                 'revenue uncertainty',
             )
-            # Suppress the entire table if any cell/complement is unsafe or any
-            # coverage/maturity gate fails. No partial totals permit recovery.
-            if protected:
-                report[arm] = {'enrolled': n}
-                for key in ('take_up', 'effective_ends_30', 'effective_ends_60'):
-                    report[arm][key] = {'count': values[key]['count'], 'ci95': values[key]['ci95']}
-                report[arm]['revenue_per_uid'] = {'mean_usd': mean, 'ci95': revenue['ci95']}
         # Inter-arm uncertainty is supplied by the authorized aggregate analysis,
         # including UID linkage sensitivity; the parser does not invent intervals.
         require(
@@ -168,31 +161,38 @@ def verify(receipt, *, source_revision, now=None, render_digest=None, copy_diges
         waiting.append('missing or malformed authorized receipt fields')
     if waiting:
         return {'status': 'WAITING', 'waiting': sorted(set(waiting)), 'metrics': 'SUPPRESSED_OR_UNAVAILABLE'}
+    # No aggregate values are emitted for untrusted schema inputs.
+    return {'status': 'SCHEMA_VALID', 'live_acceptance': False, 'metrics': 'SUPPRESSED_OR_UNAVAILABLE'}
+
+
+def verify(receipt, *, source_revision):
+    """Live gate. Self-declared authority, URLs, signatures and flags confer no trust.
+
+    No existing authorized mechanism authenticates this receipt and its referenced
+    serving/approval/aggregate evidence. Until an owner-authorized adapter checks
+    those facts independently, *every* local receipt is unverifiable. Do not add
+    a receipt field, CLI override or fixture bypass to promote it to live evidence.
+    """
+    result = validate_schema(receipt, source_revision=source_revision)
+    waiting = result.get('waiting', [])
     return {
-        'status': 'LIVE_MATURE_EVIDENCE',
-        'unit': 'uid',
-        'arms': report,
-        'comparison_ci95': {
-            key: receipt['comparison_ci95'][key]
-            for key in (
-                'take_up_difference',
-                'effective_ends_30_difference',
-                'effective_ends_60_difference',
-                'revenue_per_uid_difference',
-            )
-        },
-        'limitations': 'UID randomization; linked accounts/duplicate customers may contaminate arms. '
-        'Annual upfront collections are not recurring-revenue lift or observed annual renewal retention.',
+        'status': 'WAITING',
+        'waiting': sorted(set(waiting + ['authenticated receipt provenance unavailable'])),
+        'metrics': 'SUPPRESSED_OR_UNAVAILABLE',
     }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--read-only', action='store_true', required=True)
-    parser.add_argument('--require-live', action='store_true', required=True)
-    parser.add_argument('--require-mature-holdout', action='store_true', required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--require-live', action='store_true')
+    mode.add_argument('--schema-only', action='store_true', help='validate assertions only; never live acceptance')
+    parser.add_argument('--require-mature-holdout', action='store_true')
     parser.add_argument('--receipt', type=Path, default=os.getenv('YEARLY_SWITCH_RETENTION_RECEIPT'))
     args = parser.parse_args()
+    if args.require_live != args.require_mature_holdout:
+        parser.error('live mode requires --require-live --require-mature-holdout; schema mode accepts neither')
     if args.receipt is None:
         print(
             json.dumps(
@@ -214,12 +214,12 @@ def main():
         result = (
             {'status': 'WAITING', 'waiting': ['clean exact source checkout']}
             if dirty
-            else verify(receipt, source_revision=revision)
+            else (validate_schema if args.schema_only else verify)(receipt, source_revision=revision)
         )
     except (OSError, ValueError, subprocess.SubprocessError):
         result = {'status': 'WAITING', 'waiting': ['readable authorized aggregate receipt']}
     print(json.dumps(result, sort_keys=True, allow_nan=False))
-    return 0 if result['status'] == 'LIVE_MATURE_EVIDENCE' else 2
+    return 0 if args.schema_only and result['status'] == 'SCHEMA_VALID' else 2
 
 
 if __name__ == '__main__':

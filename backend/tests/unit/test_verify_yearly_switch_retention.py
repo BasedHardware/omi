@@ -1,6 +1,10 @@
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import importlib.util
+import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -73,12 +77,12 @@ def receipt():
     }
 
 
-def test_complete_synthetic_receipt_only_exercises_acceptance_parser():
+def test_complete_synthetic_receipt_only_validates_schema():
     assert (
-        verifier.verify(receipt(), source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture')[
-            'status'
-        ]
-        == 'LIVE_MATURE_EVIDENCE'
+        verifier.validate_schema(
+            receipt(), source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture'
+        )['status']
+        == 'SCHEMA_VALID'
     )
 
 
@@ -101,15 +105,149 @@ def test_complete_synthetic_receipt_only_exercises_acceptance_parser():
 def test_missing_immature_ambiguous_or_recoverable_cells_fail_closed(mutation):
     data = receipt()
     mutation(data)
-    result = verifier.verify(data, source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture')
+    result = verifier.validate_schema(
+        data, source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture'
+    )
     assert result['status'] == 'WAITING'
     assert 'arms' not in result
 
 
 def test_empty_receipt_is_waiting_not_zero():
     assert (
-        verifier.verify({}, source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture')[
-            'status'
-        ]
+        verifier.validate_schema(
+            {}, source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture'
+        )['status']
         == 'WAITING'
     )
+
+
+@pytest.fixture(scope='module')
+def clean_checkout(tmp_path_factory):
+    # Run the real CLI from a clean committed checkout so dirty-source or missing
+    # packet gates cannot conceal a provenance bypass. No services or credentials.
+    root = tmp_path_factory.mktemp('verifier-checkout')
+    script = root / 'backend/scripts/verify_yearly_switch_retention.py'
+    script.parent.mkdir(parents=True)
+    shutil.copyfile(Path(verifier.__file__), script)
+    packet = '.agent-artifacts/ui-evidence/yearly-retention'
+    shutil.copytree(Path(__file__).parents[3] / packet, root / packet)
+    for command in (
+        ['git', 'init', '-q'],
+        ['git', 'add', '.'],
+        [
+            'git',
+            '-c',
+            'user.name=Fixture',
+            '-c',
+            'user.email=fixture@example.invalid',
+            '-c',
+            'core.hooksPath=/dev/null',
+            'commit',
+            '-qm',
+            'fixture',
+        ],
+    ):
+        subprocess.run(command, cwd=root, check=True, capture_output=True)
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+    return script, revision
+
+
+def ready_schema(revision):
+    data = receipt()
+    now = datetime.now(timezone.utc)
+    data['generated_at'] = now.isoformat()
+    data['observed_through'] = now.isoformat()
+    data['cohort_start'] = (now - timedelta(days=90)).isoformat()
+    data['cohort_end'] = (now - timedelta(days=80)).isoformat()
+    data['release'].update(
+        backend_commit=revision, client_commit=revision, deployed_at=(now - timedelta(days=100)).isoformat()
+    )
+    data['approval']['source_commit'] = revision
+    packet = Path(__file__).parents[3] / '.agent-artifacts/ui-evidence/yearly-retention'
+    for key, name in [('render_sha256', 'render-manifest.json'), ('copy_sha256', 'copy.json')]:
+        data['approval'][key] = verifier.hashlib.sha256((packet / name).read_bytes()).hexdigest()
+    return data
+
+
+@pytest.mark.parametrize('provenance', ['synthetic', 'missing', 'forged', 'unknown'])
+def test_unverifiable_receipts_never_pass_live_cli(clean_checkout, tmp_path, provenance):
+    script, revision = clean_checkout
+    data = ready_schema(revision)
+    if provenance == 'missing':
+        data.pop('authority')
+        data.pop('evidence_ref')
+    elif provenance == 'forged':
+        # Plausible refs and self-declared signatures/approval are still untrusted.
+        data.update(
+            evidence_ref='https://evidence.example.invalid/receipts/123',
+            synthetic=False,
+            live=True,
+            provenance_verified=True,
+            provenance={'issuer': 'authorized_aggregate_verifier', 'signature': 'forged', 'verified': True},
+        )
+        data['approval']['issue_comment_ref'] = 'https://example.invalid/comments/approved'
+        data['release']['serving_evidence_ref'] = 'https://example.invalid/serving/release'
+        data['gates']['evidence_ref'] = 'https://example.invalid/gates'
+        data['measurement']['billing_linkage_evidence_ref'] = 'https://example.invalid/aggregates'
+    elif provenance == 'unknown':
+        data['evidence_ref'] = 'unknown-receipt-987'
+        data['provenance'] = {'issuer': 'unknown', 'verified': True}
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(data))
+    schema = verifier.validate_schema(data, source_revision=revision)
+    if provenance != 'missing':
+        assert schema['status'] == 'SCHEMA_VALID'
+    result = verifier.verify(data, source_revision=revision)
+    assert result['status'] == 'WAITING'
+    assert 'authenticated receipt provenance unavailable' in result['waiting']
+    assert 'arms' not in result
+    process = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            '--read-only',
+            '--require-live',
+            '--require-mature-holdout',
+            '--receipt',
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert process.returncode == 2, process.stderr
+    output = json.loads(process.stdout)
+    assert output['status'] == 'WAITING'
+    assert 'authenticated receipt provenance unavailable' in output['waiting']
+    assert output['metrics'] == 'SUPPRESSED_OR_UNAVAILABLE'
+    assert 'arms' not in output and 'comparison_ci95' not in output
+    assert 'evidence.example' not in process.stdout
+    assert 'clean exact source checkout' not in output['waiting']
+
+
+def test_schema_cli_success_is_never_live_acceptance(clean_checkout, tmp_path):
+    script, revision = clean_checkout
+    path = tmp_path / 'receipt.json'
+    path.write_text(json.dumps(ready_schema(revision)))
+    command = [sys.executable, str(script), '--read-only', '--schema-only', '--receipt', str(path)]
+    process = subprocess.run(command, capture_output=True, text=True)
+    assert process.returncode == 0, process.stderr
+    assert json.loads(process.stdout) == {
+        'status': 'SCHEMA_VALID',
+        'live_acceptance': False,
+        'metrics': 'SUPPRESSED_OR_UNAVAILABLE',
+    }
+    for incompatible in [['--require-live'], ['--require-mature-holdout']]:
+        process = subprocess.run(command + incompatible, capture_output=True, text=True)
+        assert process.returncode == 2
+        assert 'SCHEMA_VALID' not in process.stdout
+
+
+@pytest.mark.parametrize('value', [None, False, 123, [], {}])
+def test_malformed_timestamp_fails_closed(value):
+    data = receipt()
+    data['generated_at'] = value
+    result = verifier.validate_schema(
+        data, source_revision='fixture', now=NOW, render_digest='fixture', copy_digest='fixture'
+    )
+    assert result['status'] == 'WAITING'
+    assert 'arms' not in result
