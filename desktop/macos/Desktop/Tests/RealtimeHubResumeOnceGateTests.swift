@@ -1,24 +1,8 @@
 import Foundation
+import OmiSupport
 import XCTest
 
 @testable import Omi_Computer
-
-private final class LockedCounter: @unchecked Sendable {
-  private let lock = NSLock()
-  private var value = 0
-
-  func increment() {
-    lock.lock()
-    value += 1
-    lock.unlock()
-  }
-
-  var currentValue: Int {
-    lock.lock()
-    defer { lock.unlock() }
-    return value
-  }
-}
 
 final class RealtimeHubResumeOnceGateTests: XCTestCase {
   func testOnlyTheFirstContinuationCanResume() {
@@ -45,6 +29,6 @@ final class RealtimeHubResumeOnceGateTests: XCTestCase {
     }
 
     group.wait()
-    XCTAssertEqual(winnerCount.currentValue, 1)
+    XCTAssertEqual(winnerCount.count, 1)
   }
 }

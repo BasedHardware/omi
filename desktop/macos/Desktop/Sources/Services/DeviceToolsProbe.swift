@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Hermetic probe for the on-device tool surface, driven by the automation
 /// bridge action `device_tools_probe`.
@@ -61,6 +62,8 @@ enum DeviceToolsProbe {
       detail["sendValidation"] = "unexpected_error"
     }
 
+    detail.merge(await sendCheckDetail()) { _, new in new }
+
     do {
       let result = try AppleScriptRunner.run(
         script: "on run argv\nreturn item 1 of argv\nend run",
@@ -80,6 +83,34 @@ enum DeviceToolsProbe {
     detail["contactsStatus"] = await MainActor.run { ChatToolExecutor.contactsPermissionStatus() }
 
     detail["ok"] = "true"
+    return detail
+  }
+
+  /// The send check run against the absent store with a stand-in send that
+  /// delivers nothing. The store is pinned to `absentStorePath` whatever the
+  /// caller names, so the probe never reads a real history, and its clock
+  /// moves only when the check sleeps, so it never waits. An unreadable history must read as
+  /// unconfirmed, never as failed, and the stand-in send must run exactly once.
+  static func sendCheckDetail() async -> [String: String] {
+    let standInSends = LockedCounter()
+    // A clock that moves only when the check sleeps, so the probe never waits.
+    let start = Date()
+    let sleeps = LockedCounter()
+    var detail: [String: String] = [:]
+    do {
+      let (_, confirmation) = try await MessageSendConfirmer.sendThenConfirm(
+        handle: "+10000000000",
+        text: "probe",
+        history: .store(URL(fileURLWithPath: absentStorePath)),
+        now: { start.addingTimeInterval(Double(sleeps.count) * MessageSendConfirmer.pollInterval) },
+        sleep: { _ in sleeps.increment() },
+        send: { standInSends.increment() })
+      detail["sendCheckStatus"] = confirmation.status.rawValue
+      detail["sendCheckReason"] = confirmation.unconfirmedReason?.rawValue ?? ""
+    } catch {
+      detail["sendCheckStatus"] = "unexpected_error"
+    }
+    detail["sendCheckSends"] = "\(standInSends.count)"
     return detail
   }
 }
