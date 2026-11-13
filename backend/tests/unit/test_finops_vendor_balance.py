@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import re
 import urllib.error
 
 import pytest
@@ -74,8 +75,6 @@ NUMERIC_RE = r"^\d{1,29}(\.\d{1,9})?$"  # what a BigQuery NUMERIC load accepts f
 def test_parse_balance_renders_numeric_safe_strings(vb, raw, expected):
     parsed = vb.parse_balance({**BALANCE, "used_balance_usd": raw, "available_balance_usd": raw})
     assert parsed["used_usd"] == expected and parsed["available_usd"] == expected
-    import re
-
     assert re.match(NUMERIC_RE, parsed["used_usd"])
 
 
@@ -406,8 +405,6 @@ def test_deltas_decimal_string_inputs(vb):
 
 
 def test_deltas_never_emit_exponent_notation_or_overflow_the_context(vb):
-    import re
-
     # a zero delta quantizes to 0E-9 without the renderer; the readback strings are NUMERIC text
     zero = vb.daily_deltas([snap("2026-10-20", "100.000000000"), snap("2026-10-21", "100.000000000")])
     assert re.match(NUMERIC_RE, zero[0]["usd"]) and "E" not in zero[0]["usd"]
@@ -490,8 +487,6 @@ def test_loader_only_sends_numeric_safe_money_to_bigquery(vb, tmp_path):
     """Regression for the first real daily run: the vendor's decimals carried more
     than nine fractional digits and BigQuery rejected used_usd as an invalid NUMERIC.
     Even an artifact written by an older image must be re-rendered before the load."""
-    import re
-
     lb = load("load_bigquery")
     (tmp_path / "vendor_balance_snapshot.json").write_text(
         json.dumps(
