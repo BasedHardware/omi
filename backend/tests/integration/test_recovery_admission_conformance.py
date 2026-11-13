@@ -154,15 +154,7 @@ def test_pl057_lost_result_ack_reconciles_same_object_without_a_second_paid_call
 
 
 @pytest.mark.parametrize('phase', ['prepared', 'after_download'])
-def test_pl072_account_deletion_cancels_recovery_before_paid_work_or_upload(h, phase, request):
-    if h.name in {'sim', 'postgres'}:
-        request.node.add_marker(
-            pytest.mark.xfail(
-                strict=True,
-                raises=AttributeError,
-                reason='https://github.com/BasedHardware/omi/issues/23761: cancellation bypasses Store',
-            )
-        )
+def test_pl072_account_deletion_cancels_recovery_before_paid_work_or_upload(h, phase):
     work = held(h)
     recovery, artifacts, provider, second = coordinator(h)
     prepared = recovery.protocol.prepare(work.segment_id, work.owner_id, T0 + 1)
@@ -179,16 +171,8 @@ def test_pl072_account_deletion_cancels_recovery_before_paid_work_or_upload(h, p
         artifacts.fetch_audio.side_effect = download
     try:
         outcome = recovery.recover(work.segment_id, work.owner_id)
-    except AttributeError as error:
-        # Do not accept a different AttributeError as this known migration gap.
-        expected = {
-            'sim': "'NoneType' object has no attribute 'collection'",
-            'postgres': "'PostgresStore' object has no attribute 'client'",
-        }
-        assert str(error) == expected[h.name]
-        raise
     finally:
-        # These safety assertions run even on the narrowly expected failure.
+        # These safety assertions run across all backends.
         provider.assert_not_called()
         second.assert_not_called()
         artifacts.persist_recovery_result.assert_not_called()

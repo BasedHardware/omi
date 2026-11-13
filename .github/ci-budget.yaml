@@ -68,13 +68,13 @@
       "display_name": "Backend emulator proofs",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day-plus-provisional-replay-path-forecast",
-      "expected_runs_per_day": 20,
+      "expected_runs_per_day": 21,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage.",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage. L1 custody/nojob and lifecycle path coverage provisionally adds one PR run/day (20 to 21 total, with the existing one nightly call unchanged), or 4 Linux runner-minutes/day within existing caps. The existing lifecycle-services install step supports these proofs; retain the 4-minute p50 target and standard runner pending terminal CI measurements.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -980,7 +980,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs.",
+      "rationale": "Conservative cold QA allowance for the documented 20-30 minute SDK/build path replaces the unobserved 5-minute placeholder; publish skips compilation. Build-only runs now also run the CV1 simulator gate (full scenario suite plus 40 fuzz seeds in the same pinned image; not yet measured on a hosted runner), so the p50 allowance rises from 30 to 55 until the first QA run re-seeds it. Manual-only frequency forecast remains zero; no added jobs or automatic runs. CV1 custom MCUboot qualification adds one clean bootloader-only rebuild (parallelism capped at two) and a small public evidence upload inside the same manual job; retain the 55-minute allowance and zero automatic/PR run forecast. No new trigger, runner or job. Compile/proof now precedes the unchanged simulator gate so SDK or bootloader failures surface before consuming simulation time; QA staging still requires both gates.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1797,16 +1797,16 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision-prod-ops-dashboards": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "provision-prod-ops-dashboards",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 3,
-      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main'",
+      "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 5-minute p50 is a reviewed estimate for one Grafana API apply; re-measure with --reseed after the first runs.",
+      "rationale": "Prod Ops dashboard apply on every push to main that matches the workflow trigger paths (approved by David 2026-11-09); the same job applies the Business TV boards once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and warns and skips until then (David 2026-11-12). The apply is idempotent and has no change-detection skip, so a superseded push run cannot drop a dashboard change. Uses the production MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment, which has no required reviewers (the repo-level token is dev-only). expected_runs_per_day 3 is a conservative daily ceiling for merges plus alert and script pushes. The 6-minute p50 is a reviewed estimate for two Grafana API applies (Ops, then Business); re-measure with --reseed after the first runs. The job runs only in BasedHardware/omi.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3404,7 +3404,7 @@
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added.",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added. L1 adds the custody-append/nojob emulator tests and lifecycle simulation/property paths to PR and main-push filters, with the existing lifecycle-services install step supplying redis-server, ffmpeg and libopus0; the job forecast explicitly includes one additional daily PR run.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3415,6 +3415,10 @@
             "backend/utils/llm/memories.py",
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
+            "backend/tests/integration/test_record_custody_append_emulator.py",
+            "backend/tests/unit/test_record_seal_nojob_emulator.py",
+            "backend/testing/lifecycle_properties/**",
+            "backend/testing/lifecycle_sim/**",
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
@@ -3455,6 +3459,10 @@
             "backend/utils/llm/memories.py",
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
+            "backend/tests/integration/test_record_custody_append_emulator.py",
+            "backend/tests/unit/test_record_seal_nojob_emulator.py",
+            "backend/testing/lifecycle_properties/**",
+            "backend/testing/lifecycle_sim/**",
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
@@ -5518,7 +5526,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards stay on the gated prod path until a repo-level business token exists; the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch for alerts and the Ops boards; every push to main that matches the trigger paths applies prod Ops dashboards through provision-prod-ops-dashboards (prod MONITOR_GRAFANA_TOKEN from the grafana-dashboards-prod environment with no required reviewers, approved by David 2026-11-09); the Business TV boards apply from the same no-reviewer job once BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment and stay on the gated prod path until then (David 2026-11-12); the prod-only Business API step reuses the existing job, no new workflow or PR matrix. #24942 adds the omi-tv-funnel.json path and allowlist entry; push runs resolve to dev, and the prod alert step is dispatch-gated.",
       "triggers": {
         "push": {
           "branches": [

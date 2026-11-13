@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -20,6 +22,7 @@ import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/promo_code_field.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
@@ -117,7 +120,9 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _isSwitchingToFree = false;
   final _promoCodeController = TextEditingController();
   String? _promoCodeError;
-  bool _showPromoCodeField = false;
+  bool _isRedeemingCode = false;
+  bool _promoCodeApplied = false;
+  Timer? _codeRetryTimer;
   bool _cancelSelectionTouched = false;
   String? _renewalConfirmation;
   String? _purchaseError;
@@ -168,7 +173,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _selectStorefrontPrice(StorefrontTier tier, StorefrontPrice price) async {
-    if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
+    if (_isUpgrading || _isRedeemingCode || !context.read<UsageProvider>().showSubscriptionUI) return;
     if (_storefrontDecision(tier, price) == StorefrontCheckoutDecision.refuse) return;
     setState(() => _isUpgrading = true);
     selectedTierId = tier.planId;
@@ -210,6 +215,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _handleCancelSubscription() async {
+    if (_isRedeemingCode) return;
     await CancelSubscriptionFlow.show(context);
   }
 
@@ -346,6 +352,7 @@ class _PlansSheetState extends State<PlansSheet> {
     StorefrontPrice? storefrontPrice,
     bool releaseUpgradingLock = true,
   }) async {
+    if (_isRedeemingCode) return;
     final bool isYearly = selectedPlan == 'yearly';
 
     // Get the price ID from the available plans
@@ -724,6 +731,7 @@ class _PlansSheetState extends State<PlansSheet> {
   }
 
   Future<void> _openPaymentPortal() async {
+    if (_isRedeemingCode) return;
     final navigator = Navigator.of(context);
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -756,6 +764,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   @override
   void dispose() {
+    _codeRetryTimer?.cancel();
     _promoCodeController.dispose();
     super.dispose();
   }
@@ -1128,82 +1137,68 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildPromoCodeField() {
-    OutlineInputBorder border(Color color) => OutlineInputBorder(
-          borderRadius: OmiRadius.mdAll,
-          borderSide: BorderSide(color: color),
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(
-          button: true,
-          expanded: _showPromoCodeField,
-          child: InkWell(
-            onTap: () => setState(() => _showPromoCodeField = !_showPromoCodeField),
-            borderRadius: OmiRadius.smAll,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ExcludeSemantics(child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18)),
-                  const SizedBox(width: OmiSpacing.xs),
-                  Text(l10n.promoCode, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                  const SizedBox(width: OmiSpacing.xxs),
-                  ExcludeSemantics(
-                    child: Icon(
-                      _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                      color: OmiColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (_showPromoCodeField) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          TextField(
-            controller: _promoCodeController,
-            style: OmiType.callout,
-            autocorrect: false,
-            enableSuggestions: false,
-            decoration: InputDecoration(
-              hintText: l10n.enterPromoCode,
-              hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-              filled: true,
-              fillColor: OmiColors.surface2,
-              border: border(OmiColors.border),
-              enabledBorder: border(OmiColors.border),
-              focusedBorder: border(OmiColors.accent),
-              errorBorder: border(OmiColors.danger),
-              focusedErrorBorder: border(OmiColors.danger),
-              errorText: _promoCodeError,
-              contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-              suffixIcon: _promoCodeController.text.isNotEmpty
-                  ? OmiIconButton(
-                      icon: const Icon(Icons.clear, size: 20),
-                      label: l10n.clear,
-                      color: OmiColors.textSecondary,
-                      onPressed: () {
-                        setState(() {
-                          _promoCodeController.clear();
-                          _promoCodeError = null;
-                        });
-                      },
-                    )
-                  : null,
-            ),
-            onChanged: (_) {
-              setState(() => _promoCodeError = null);
-            },
-          ),
-        ],
-      ],
-    );
+  Future<void> _applySubscriptionCode() async {
+    final provider = context.read<UsageProvider>();
+    final code = _promoCodeController.text.trim();
+    if (_isRedeemingCode ||
+        _isUpgrading ||
+        _codeRetryTimer != null ||
+        code.isEmpty ||
+        !provider.canRedeemSubscriptionCode) {
+      return;
+    }
+    setState(() {
+      _isRedeemingCode = true;
+      _promoCodeError = null;
+      _promoCodeApplied = false;
+    });
+    try {
+      final result = await provider.redeemUserSubscriptionCode(code);
+      if (!mounted) return;
+      if (result is ApiSuccess<bool> && result.data) {
+        setState(() {
+          _promoCodeApplied = true;
+          _promoCodeController.clear();
+        });
+      } else {
+        final problem = result is ApiFailure<bool> ? result.problem : null;
+        final status = problem?.statusCode;
+        if (status == 429) {
+          _codeRetryTimer = Timer(problem?.retryAfter ?? const Duration(hours: 1), () {
+            if (mounted) setState(() => _codeRetryTimer = null);
+          });
+        }
+        setState(() => _promoCodeError = l10n.subscriptionCodeResult(
+              status == 400 || status == 422
+                  ? 'refused'
+                  : status == 409
+                      ? 'conflict'
+                      : status == 429
+                          ? 'rateLimited'
+                          : 'error',
+            ));
+      }
+    } catch (_) {
+      // No exception text: payment errors may contain codes or identifiers.
+      if (mounted) setState(() => _promoCodeError = l10n.subscriptionCodeResult('error'));
+    } finally {
+      if (mounted) setState(() => _isRedeemingCode = false);
+    }
   }
+
+  Widget _buildPromoCodeField() => PlanPromoCodeField(
+        controller: _promoCodeController,
+        error: _promoCodeError,
+        canApply: context.read<UsageProvider>().canRedeemSubscriptionCode,
+        busy: _isRedeemingCode,
+        applyEnabled: !_isUpgrading && _codeRetryTimer == null,
+        applied: _promoCodeApplied,
+        onApply: _applySubscriptionCode,
+        onChanged: () => setState(() {
+          _promoCodeError = null;
+          _promoCodeApplied = false;
+        }),
+      );
 
   AppLocalizations get l10n => context.l10n;
 

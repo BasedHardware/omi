@@ -40,6 +40,8 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_wr
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -47,7 +49,7 @@ from database.batch_pipeline_store import (
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 import database.jobstore.codec as codec
-from database.jobstore.connection import Pool
+from database.jobstore.connection import Pool, sql
 
 # Mirrors the recovery protocol's state names without binding to its enum.
 # Shared queue predicates above already load Firestore types, but create no client.
@@ -257,9 +259,13 @@ class PostgresStore:
             raise ValueError('only recoverable states may be scanned')
         field = _DUE_FIELDS[state]  # a fixed column name, never caller text
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {} <= %s '
+                'ORDER BY {}, key COLLATE "C" LIMIT %s'
+            ).format(psycopg_sql.Identifier(field), psycopg_sql.Identifier(field))
             rows = conn.execute(
-                f'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {field} <= %s '
-                f'ORDER BY {field}, key COLLATE "C" LIMIT %s',
+                query,
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -394,9 +400,15 @@ class PostgresStore:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            service, active = psycopg_sql.Identifier(f'{p}_service'), psycopg_sql.Identifier(f'{p}_active')
+            available_at = psycopg_sql.Identifier(at)
+            query = psycopg_sql.SQL(
+                'SELECT key, {} FROM control WHERE namespace = %s AND {} AND {} >= 0 '
+                'AND {} <= %s ORDER BY {}, {}, key COLLATE "C" LIMIT %s'
+            ).format(service, active, service, available_at, service, available_at)
             rows = conn.execute(
-                f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
-                f'AND {at} <= %s ORDER BY {p}_service, {at}, key COLLATE "C" LIMIT %s',
+                query,
                 (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
@@ -433,6 +445,32 @@ class PostgresStore:
 
         return self.run(revoke)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revoke a prepared/running recovery when privacy blocks; same fence recheck and revoke-only write as Firestore."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        def cancel(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                tx.check_privacy(
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                cancelled = {**job, 'recovery_state': 'cancelled'}
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, cancelled)
+                return True
+            return False
+
+        return self.run(cancel)
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         """Same fence recheck and available_at-only change as the Firestore privacy defer."""
         from database.batch_pipeline_recovery import privacy_defer_update
@@ -459,26 +497,39 @@ class PostgresStore:
         return self.projection_page(limit)[0]
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
-
-        states = PROJECTION_DISCOVERY_STATES if states is None else states
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
-        size = max(1, min(limit, 100))
-        clause, params = '', [self.namespace, list(states)]
+        size = max(1, min(limit, 200))
+        columns = ['committed_at', 'key COLLATE "C"']
+        fields, clauses = 'key, committed_at', ['committed_at IS NOT NULL']
+        params: list[Any] = [self.namespace, list(states)]
+        if due_before is not None:
+            due = "(doc->>'projection_finish_due_at')::float8"
+            columns.insert(0, due)
+            fields += f', {due}'
+            clauses.append(f'{due} <= %s')
+            params.append(float(due_before))
         if after is not None:
-            clause = 'AND (committed_at, key COLLATE "C") > (%s, %s)'
-            params += [after[0], after[1]]
+            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+                clauses.append(f'{columns[0]} >= %s')
+                params.append(after[0])
+            else:
+                clauses.append(f'({", ".join(columns)}) > ({", ".join(["%s"] * len(columns))})')
+                params.extend(after)
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT key, committed_at FROM results WHERE namespace = %s "
-                f"AND projection_state = ANY(%s) {clause} "
-                'ORDER BY committed_at, key COLLATE "C" LIMIT %s',
+                f'SELECT {fields} FROM results WHERE namespace = %s AND projection_state = ANY(%s) '
+                f'AND {" AND ".join(clauses)} ORDER BY {", ".join(columns)} LIMIT %s',
                 (*params, size),
             ).fetchall()
-        cursor = (rows[-1][1], rows[-1][0]) if len(rows) == size else None
+        cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
         return [row[0] for row in rows], cursor
 
     # -- internals ---------------------------------------------------------------------------
@@ -494,9 +545,11 @@ class PostgresStore:
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
         suffix = ' FOR UPDATE' if lock else ''
         if table in _TYPED:
-            row = conn.execute(
-                f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s{suffix}', (self.namespace, key)
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s{}').format(
+                psycopg_sql.Identifier(table), psycopg_sql.SQL(suffix)
             )
+            row = conn.execute(query, (self.namespace, key))
         else:
             row = conn.execute(
                 f'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s{suffix}',
@@ -525,11 +578,12 @@ class PostgresStore:
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
-            conn.execute(
-                f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
-                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
-                (self.namespace, key, jsonb(value)),
-            )
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
+            ).format(psycopg_sql.Identifier(table))
+            conn.execute(query, (self.namespace, key, jsonb(value)))
         else:
             conn.execute(
                 'INSERT INTO docs (namespace, tbl, key, doc) VALUES (%s, %s, %s, %s) '
@@ -539,7 +593,11 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                psycopg_sql.Identifier(table)
+            )
+            conn.execute(query, (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -548,9 +606,11 @@ class PostgresStore:
     def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
-        row = conn.execute(
-            f'SELECT max(p{priority}_service) FROM control WHERE namespace = %s', (self.namespace,)
-        ).fetchone()
+        psycopg_sql = sql()
+        query = psycopg_sql.SQL('SELECT max({}) FROM control WHERE namespace = %s').format(
+            psycopg_sql.Identifier(f'p{priority}_service')
+        )
+        row = conn.execute(query, (self.namespace,)).fetchone()
         return row[0] if row[0] is not None else 0.0
 
     def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
@@ -569,5 +629,7 @@ class PostgresStore:
         if not self.namespace.startswith('batch_pipeline_test_'):
             raise RuntimeError('only test namespaces may be purged')
         with self._read_conn() as conn:
+            psycopg_sql = sql()
             for table in ('jobs', 'results', 'control', 'docs', 'outbox'):
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s', (self.namespace,))
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s').format(psycopg_sql.Identifier(table))
+                conn.execute(query, (self.namespace,))

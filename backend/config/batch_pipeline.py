@@ -567,6 +567,31 @@ def projection_striping_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
 
 
+PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
+
+
+def projection_finish_backoff_enabled() -> bool:
+    """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
+
+    Dark read lever: with this off the finish page keeps its exact shape and no
+    result field is written. With it on, a finish walk that changed nothing
+    writes a durable next-attempt clock on the row and the page skips rows whose
+    clock has not passed, so a replay of already-projected work costs no reads.
+    A state change clears the clock in the same transaction, so no obligation
+    waits on it. Rollback is this one switch; the field is additive and unused
+    when off, so no backfill is needed.
+    """
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED')
+
+
+def projection_finish_backoff_delay(step: int) -> float:
+    """60 s, then 300 s, then 900 s for a repeatedly unchanged row; capped."""
+    index = max(0, min(int(step), len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1))
+    return PROJECTION_FINISH_BACKOFF_SECONDS[index]
+
+
 PROJECTION_DISCOVERY_STRIPES = 4096
 _projection_discovery_stripe_value: int | None = None
 _PROJECTION_DISCOVERY_LOCK = threading.Lock()

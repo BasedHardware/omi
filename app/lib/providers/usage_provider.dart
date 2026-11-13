@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -12,6 +13,8 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/logger.dart';
+
+typedef SubscriptionCodeRequest = Future<ApiResult<bool>> Function(String code, {bool Function()? canSend});
 
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
@@ -23,16 +26,19 @@ class UsageProvider with ChangeNotifier {
     UsageRequest? usageRequest,
     Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
     ProcessingBacklogRequest? processBacklogRequest,
+    SubscriptionCodeRequest? redeemCodeRequest,
     DateTime Function()? now,
   })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
         _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
         _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
+        _redeemCodeRequest = redeemCodeRequest ?? redeemSubscriptionCode,
         _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
   final Future<UserSubscriptionResponse?> Function() _subscriptionRequest;
+  final SubscriptionCodeRequest _redeemCodeRequest;
   final DateTime Function() _now;
   final ProcessingBacklogRequest _processBacklogRequest;
   String? _backlogIdempotencyKey;
@@ -524,6 +530,53 @@ class UsageProvider with ChangeNotifier {
     } finally {
       if (generation == _sessionGeneration) {
         _isUsageLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// The backend maps both Stripe active and trialing to active. Stripe itself
+  /// rechecks eligibility on redemption; this snapshot never grants a benefit.
+  bool get canRedeemSubscriptionCode {
+    final sub = _subscription?.subscription;
+    return showSubscriptionUI &&
+        sub != null &&
+        sub.plan.isPaid &&
+        sub.status == SubscriptionStatus.active &&
+        !sub.cancelAtPeriodEnd &&
+        sub.stripeSubscriptionId?.isNotEmpty == true;
+  }
+
+  Future<ApiResult<bool>> redeemUserSubscriptionCode(String code) async {
+    if (_isPaymentLoading || !canRedeemSubscriptionCode) {
+      return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400));
+    }
+    final generation = _sessionGeneration;
+    _isPaymentLoading = true;
+    notifyListeners();
+    try {
+      final result = await _redeemCodeRequest(code, canSend: () => generation == _sessionGeneration);
+      if (generation != _sessionGeneration) {
+        return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+      }
+      if (result is ApiSuccess<bool> && result.data) {
+        // Finish any pre-application read before requesting post-application truth.
+        final pending = _subscriptionFetch;
+        if (pending != null) {
+          await pending;
+        }
+        if (generation != _sessionGeneration) {
+          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+        }
+        await fetchSubscription(); // also replaces authoritative allowance cache
+        if (generation != _sessionGeneration) {
+          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+        }
+      }
+      return result;
+    } finally {
+      if (generation == _sessionGeneration) {
+        _isPaymentLoading = false;
         notifyListeners();
       }
     }

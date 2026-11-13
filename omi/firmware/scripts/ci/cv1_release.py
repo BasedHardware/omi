@@ -13,6 +13,9 @@ import struct
 import tempfile
 import zipfile
 
+import cv1_bootloader as bootloader
+from cv1_bootloader import inspect_hex, read_hex, validate_build_bootloader, validate_release_hex, wire_memory, write_hex
+
 WORKFLOW = '.github/workflows/firmware_release.yml'
 ARTIFACT = 'cv1-qa-release'
 SIM_REPORT = 'sim-report.json'
@@ -136,14 +139,22 @@ def stage(build, out, ver, include_network, context, sim_report):
     repackage(build / 'dfu_application.zip', out / names[0], include_network)
     with zipfile.ZipFile(out / names[0]) as archive:
         validate_signed_version(archive, ver)
-        signed_sha256 = hashlib.sha256(archive.read('omi.signed.bin')).hexdigest()
-    shutil.copyfile(build / 'merged.hex', out / names[1])
+        signed_image = archive.read('omi.signed.bin')
+        signed_sha256 = hashlib.sha256(signed_image).hexdigest()
+    # Merge only the pinned MCUboot and exact tested OTA app, excluding every
+    # other sysbuild address (storage, UICR and network are not app-core assets).
+    boot_image = validate_build_bootloader(read_hex(build / 'mcuboot/zephyr/zephyr.hex'))
+    write_hex(out / names[1], wire_memory(signed_image, boot_image))
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
+    boot_regions[names[1]] = validate_release_hex(out / names[1], signed_image)
+    require(boot_regions[names[2]]['kind'] == 'bootloader-free', 'CPUNET HEX must not contain app-core boot bytes')
     shutil.copyfile(sim_report, out / SIM_REPORT)
     provenance = dict(
         context,
         mode='build-only',
+        boot_regions=boot_regions,
         version=ver,
         include_network_core=include_network,
         signed_sha256=signed_sha256,
@@ -182,6 +193,10 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
     names = asset_names(ver)
     require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json', SIM_REPORT}, 'Unexpected QA assets')
     require(data.get('sha256') == {name: digest(out / name) for name in names}, 'QA asset checksum mismatch')
+    # Reparse the actual bytes even if an artifact's provenance was edited too.
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
+    require(boot_regions[names[2]]['kind'] == 'bootloader-free', 'CPUNET HEX must not contain app-core boot bytes')
+    require(data.get('boot_regions') == boot_regions, 'QA boot-region receipt mismatch')
     # The simulator evidence binds to the same run/attempt and source SHA as the bench receipt.
     require(data.get('sim_report_sha256') == digest(out / SIM_REPORT), 'Simulator report checksum mismatch')
     validate_sim_report(json.loads((out / SIM_REPORT).read_text()), run['head_sha'], ver)
@@ -193,6 +208,7 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
             hashlib.sha256(archive.read('omi.signed.bin')).hexdigest() == tested_signed_sha256.lower(),
             'Bench-tested signed image SHA-256 mismatch',
         )
+        validate_release_hex(out / names[1], archive.read('omi.signed.bin'))
 
 
 def gh(*args):

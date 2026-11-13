@@ -147,6 +147,21 @@ enum ConversationReconciliationPolicy {
     )
   }
 
+  /// Detail endpoints on older servers omit the list-only Home projection.
+  /// Keep that failure while the pipeline is still active; terminal status or
+  /// an explicit projection can acknowledge recovery.
+  static func retainingHomeFailure(
+    server: ServerConversation,
+    current: ServerConversation?
+  ) -> ServerConversation {
+    guard server.homeStep == nil, current?.id == server.id, current?.homeStep == "failed",
+      [.inProgress, .processing, .merging].contains(server.status)
+    else { return server }
+    var retained = server
+    retained.homeStep = "failed"
+    return retained
+  }
+
   /// List responses omit `transcript_segments`; that means "not loaded", not
   /// "empty". A row that already holds a loaded transcript (local capture
   /// cache, or a detail fetch) keeps it so a processing row's provisional
@@ -200,6 +215,7 @@ enum ConversationReconciliationPolicy {
       source: serverConversation.source,
       language: serverConversation.language,
       status: serverConversation.status,
+      homeStep: serverConversation.homeStep,
       discarded: serverConversation.discarded,
       deleted: serverConversation.deleted,
       isLocked: serverConversation.isLocked,

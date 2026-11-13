@@ -109,6 +109,11 @@ FACTUAL FIDELITY
 OVERVIEW
 - Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
 
+GIST
+- Also emit `gist`: one line of at most 12 words saying what this conversation was about, in the output
+  language. It is the one-line row label, so make it specific and self-contained; do not repeat the title
+  verbatim, do not add a trailing period, and never write meta-commentary about the transcript.
+
 ACTION ITEMS
 - Keep description timeless, specific, verb-led, and at most 15 words. Keep timing out of description.
 - Put explicit date-and-time deadlines in due_at; retain an explicit date-only request in context

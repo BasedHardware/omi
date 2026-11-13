@@ -1,6 +1,16 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+# Part A only. All repair children inherit a stable release epoch; 0 is
+# dormant while off. The release owner pins the epoch with the shadow flip,
+# then retains it across restarts and later ramp steps.
+recordTokenLease:
+  mode: "off"
+  servePercent: 0
+  seconds: 3600
+  deployedAt: 0
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true

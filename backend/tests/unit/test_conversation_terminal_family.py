@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import _helpers
 from database import conversations as db
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations.relevance_rules import RULES_VERSION
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 PATH = ('users', 'synthetic', 'conversations', 'capture')
@@ -19,10 +20,14 @@ KEEP = dict(
     decided_by='policy',
     reason='lifecycle_terminal_default',
     trigger='lifecycle_terminal',
-    rules_version=4,
+    rules_version=RULES_VERSION,
 )
 DISCARD = dict(
-    verdict='discard', decided_by='policy', reason='already_discarded', trigger='lifecycle_terminal', rules_version=4
+    verdict='discard',
+    decided_by='policy',
+    reason='already_discarded',
+    trigger='lifecycle_terminal',
+    rules_version=RULES_VERSION,
 )
 
 

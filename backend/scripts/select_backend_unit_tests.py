@@ -110,6 +110,7 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/core-features/recording-rules.yaml',
     'backend/charts/backend-secrets/',
     'backend/charts/monitoring/prometheus-adapter/',
     'backend/scripts/diff_prod_adapter.py',
@@ -414,7 +415,9 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_timeliness_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
+            'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',
@@ -684,6 +687,14 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(
             test for test in ('tests/unit/test_generated_compute_inventory_guardrails.py',) if test in all_tests
         )
+    # Add the timeliness contract without classifying an otherwise-unmapped
+    # producer/deploy edit as narrow: retain its existing full-suite fallback.
+    if any(
+        path.startswith(('backend/utils/batch_pipeline/', 'backend/database/batch_pipeline_'))
+        or path == 'backend/deploy/cloud_run_gmp_sync.yaml'
+        for path in changed_paths
+    ):
+        selected.update(test for test in ('tests/unit/test_timeliness_metrics_are_scraped.py',) if test in all_tests)
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):

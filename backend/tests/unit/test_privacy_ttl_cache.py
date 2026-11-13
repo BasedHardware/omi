@@ -185,6 +185,29 @@ def test_external_fence_inside_a_transaction_always_reads_live(world, monkeypatc
     assert len(reads) == 2
 
 
+def test_gate_owner_pass_is_never_cached_for_other_writers(world, monkeypatch):
+    """The owning request may write through its own running gate; that pass must never be reused by others."""
+    import contextvars
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'privacy_ttl60')
+
+    def fresh_writer():
+        with legal_holds.external_write_fence(UID, firestore_client=db):
+            raise AssertionError('a writer outside the owning request must stay fenced')
+
+    with legal_holds.destructive_operation_gate(UID, firestore_client=db):
+        for _ in range(2):
+            with legal_holds.external_write_fence(UID, firestore_client=db):
+                pass
+        for _ in range(3):
+            reads.clear()
+            with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                contextvars.Context().run(fresh_writer)
+            # Live marker + gate reads every time: no cached owner pass.
+            assert MARKER in reads and ('legal_hold_deletion_gates', UID) in reads
+
+
 @pytest.mark.parametrize('cache_lever', ['legal_hold_fence_cache', 'privacy_ttl60'])
 def test_external_revoke_then_check_blocks_cached_allow_within_ttl(world, monkeypatch, cache_lever):
     """P0 qualification: a committed revoke must fence an already cached ALLOW."""

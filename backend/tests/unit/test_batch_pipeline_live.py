@@ -9,11 +9,13 @@ import hashlib
 import io
 import json
 import wave
+from unittest.mock import Mock, call
 
 import pytest
 
 from config.batch_pipeline import live_record_enabled_for
 from database.batch_pipeline_intake import AdmissionDisabled, admit
+from database.batch_pipeline_store import due
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
@@ -193,12 +195,15 @@ def test_record_drain_settings_are_bounded(monkeypatch, raw, batch, concurrency)
 
 
 @pytest.mark.parametrize(
-    'state,limit,expected', [('record_pending', 500, 500), ('record_pending', 999, 500), ('retry', 500, 100)]
+    'state,limit,expected',
+    [
+        ('record_pending', 500, 500),
+        ('record_pending', 999, 500),
+        ('retry', 500, 100),
+        ('record_recovery_waiting', 500, 100),
+    ],
 )
 def test_due_record_page_keeps_available_at_order_and_accepts_larger_batch(state, limit, expected):
-    from unittest.mock import Mock
-    from database.batch_pipeline_store import due
-
     query = Mock()
     query.collection.return_value = query
     query.where.return_value = query
@@ -206,8 +211,16 @@ def test_due_record_page_keeps_available_at_order_and_accepts_larger_batch(state
     query.limit.return_value = query
     query.stream.return_value = []
     assert due(query, 'batch_pipeline_test_live', state, 1000, limit) == []
-    query.order_by.assert_called_once_with('available_at')
-    query.limit.assert_called_once_with(expected)
+    states = ['record_recovery_waiting', state] if state == 'record_pending' else [state]
+    limits = [100, expected] if state == 'record_pending' else [expected]
+    assert query.where.call_args_list == [
+        request
+        for candidate in states
+        for request in (call('state', '==', candidate), call('available_at', '<=', 1000))
+    ]
+    assert query.order_by.call_args_list == [call('available_at')] * len(states)
+    assert query.limit.call_args_list == [call(size) for size in limits]
+    assert query.stream.call_count == len(states)
 
 
 @pytest.mark.asyncio
@@ -428,6 +441,81 @@ def incoming():
             }
         ],
     }
+
+
+def _ledger_documents(monkeypatch, documents):
+    """Route ledger writes through the real transition planner over an in-memory store."""
+    from database import pipeline_ledger
+
+    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, **fields):
+        plan = pipeline_ledger.plan_advance(documents.get((uid, capture_id)), stage, now=now, **fields)
+        if plan.doc is None:
+            return False
+        plan.doc['owner_key'] = pipeline_ledger.owner_key(uid)
+        documents[(uid, capture_id)] = plan.doc
+        return True
+
+    monkeypatch.setattr(pipeline_ledger, 'advance', advance)
+
+
+def _admission_policy(monkeypatch, live, *, claim):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(live, 'resolve_batch_policy', lambda uid: object())
+    monkeypatch.setattr(live, 'record_capture_eligible', lambda uid, conversation, policy=None: True)
+    monkeypatch.setattr(live, 'ramp_admission_policy', lambda uid, policy: SimpleNamespace(live_record_enabled=True))
+    monkeypatch.setattr(live, 'claim_record_lane_owner', lambda *args, **kwargs: claim())
+
+
+def test_admission_writes_capturing_once_and_never_reopens_a_later_stage(monkeypatch):
+    from utils.batch_pipeline import live
+
+    documents = {}
+    _ledger_documents(monkeypatch, documents)
+    _admission_policy(monkeypatch, live, claim=lambda: datetime.fromtimestamp(120, timezone.utc))
+    conversation = recording(
+        status='processing', record_lane_owner=None, updated_at=datetime.fromtimestamp(100, timezone.utc)
+    )
+    assert live.reserve_recording('synthetic', conversation) == 'batch_live_v1'
+    assert documents[('synthetic', 'record')]['stage'] == 'capturing'
+    # A finalizer replay finds the claimed owner and must not count a second admission.
+    assert live.reserve_recording('synthetic', dict(conversation)) == 'batch_live_v1'
+    assert [entry['stage'] for entry in documents[('synthetic', 'record')]['transitions']] == ['capturing']
+    # A capture that already sealed keeps its forward stage; admission never rewinds it.
+    documents[('synthetic', 'record')] = {
+        **documents[('synthetic', 'record')],
+        'stage': 'sealed',
+        'revision': documents[('synthetic', 'record')]['revision'],
+    }
+    assert live.reserve_recording('synthetic', dict(conversation)) == 'batch_live_v1'
+    assert documents[('synthetic', 'record')]['stage'] == 'sealed'
+
+
+def test_admission_ledger_failure_never_blocks_the_real_admission(monkeypatch, caplog):
+    from database import pipeline_ledger
+    from utils.batch_pipeline import live
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic ledger outage')
+
+    monkeypatch.setattr(pipeline_ledger, 'advance', broken)
+    _admission_policy(monkeypatch, live, claim=lambda: datetime.fromtimestamp(120, timezone.utc))
+    conversation = recording(
+        status='processing', record_lane_owner=None, updated_at=datetime.fromtimestamp(100, timezone.utc)
+    )
+    assert live.reserve_recording('synthetic', conversation) == 'batch_live_v1'
+    assert 'event=batch_live_ledger outcome=error stage=capturing' in caplog.text
+
+
+def test_admission_writer_ignores_an_identityless_or_deleted_capture(monkeypatch):
+    from database import pipeline_ledger
+    from utils.batch_pipeline import live
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    assert not live.observe_admitted('synthetic', {'id': None})
+    assert not live.observe_admitted('synthetic', {'id': 'record', 'deleted': True})
+    assert not writes
 
 
 def test_cohort_requires_both_flags_and_uses_the_sync_hash(monkeypatch):
@@ -827,7 +915,7 @@ def test_reference_scope_and_generation_are_fail_closed(change):
 
 
 @pytest.mark.parametrize('server_only', [False, True])
-@pytest.mark.parametrize('barrier_change', [None, 'pending', 'failed', 'resealed', 'protocol_closed'])
+@pytest.mark.parametrize('barrier_change', [None, 'before_read', 'pending', 'failed', 'resealed', 'protocol_closed'])
 @pytest.mark.parametrize('language', ['en', 'multi', 'ca'])
 async def test_native_admission_stages_references_and_drains_after_rollback(
     monkeypatch, server_only, barrier_change, language
@@ -885,6 +973,12 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     content, segment = record_identity('synthetic', 'record')
     pending = store.rows['jobs', segment]
     store.rows['conversations', 'synthetic/record'] = current
+    if barrier_change == 'before_read':
+        # The reservation predates the append. No input was captured yet, so
+        # admission must capture the newer revision, never its old snapshot.
+        current['record_upload_revision'] = 9
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        barrier_change = None
 
     class Reference:
         def collection(self, *args):
@@ -964,6 +1058,10 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
     assert unit_reads
     assert result == {'outcome': 'batch', 'job_id': 'bp_' + content}
     job = store.rows['jobs', segment]
+    if current.get('record_upload_revision') == 9:
+        assert job['record_input_upload_revision'] == 9
+    else:
+        assert 'record_input_upload_revision' not in job
     assert job['state'] == ('provider_pending' if language == 'ca' else 'ready')
     if language == 'ca':
         assert job['stt_route']['provider_service'] == 'modulate'

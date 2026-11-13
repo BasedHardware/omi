@@ -26,4 +26,4 @@ LEGACY_IMPLEMENTATIONS = {
     ),
 }
 
-LEGACY_PROMPT_VERSIONS = {'notes': ('notes-1',), 'l1': ('l1-1',)}
+LEGACY_PROMPT_VERSIONS = {'notes': ('notes-1', 'notes-2', 'notes-3'), 'l1': ('l1-1',)}

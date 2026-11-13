@@ -521,7 +521,7 @@
     },
     {
       "type": "timeseries",
-      "title": "New, returning & lost users",
+      "title": "New, returning, lost",
       "description": "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
@@ -3413,7 +3413,7 @@
     {
       "type": "timeseries",
       "title": "MRR by plan",
-      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3487,7 +3487,7 @@
             "gradientMode": "none",
             "showPoints": "never",
             "pointSize": 5,
-            "spanNulls": true,
+            "spanNulls": false,
             "barAlignment": 0,
             "axisPlacement": "left",
             "axisLabel": "",
@@ -3501,7 +3501,8 @@
             "lineInterpolation": "smooth",
             "thresholdsStyle": {
               "mode": "off"
-            }
+            },
+            "insertNulls": 129600000
           },
           "noValue": "Loading\u2026"
         },

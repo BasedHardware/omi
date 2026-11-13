@@ -26,6 +26,7 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionReplay,
     normalized_binding,
 )
+from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
@@ -91,7 +92,14 @@ class ProjectionSession:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
-            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
+            transaction.update(
+                self.result_ref,
+                {
+                    'projection': receipt,
+                    'projection_state': receipt['state'],
+                    **projection_finish_state_fields(receipt['state'], self.now),
+                },
+            )
             return False
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
@@ -103,11 +111,19 @@ class ProjectionSession:
                     summary.get('state') != 'quarantined' or self.entry.get('projection_state') != 'quarantine_held'
                 )
                 summary['state'] = 'quarantined'
-                changes.update(projection=summary, projection_state='quarantine_held')
+                changes.update(
+                    projection=summary,
+                    projection_state='quarantine_held',
+                    **projection_finish_state_fields('quarantine_held', self.now),
+                )
                 transaction.update(self.result_ref, changes)
                 return sibling_hold_changed
             summary['state'] = 'ready'
-            changes.update(projection=summary, projection_state='ready')
+            changes.update(
+                projection=summary,
+                projection_state='ready',
+                **projection_finish_state_fields('ready', self.now),
+            )
         transaction.update(self.result_ref, changes)
         return False
 
@@ -422,7 +438,10 @@ class ProjectionSession:
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
             if privacy_replay:
-                changes['projection_state'] = 'pending'
+                changes.update(
+                    projection_state='pending',
+                    **projection_finish_state_fields('pending', self.now),
+                )
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
@@ -474,15 +493,17 @@ class ProjectionSession:
                     ),
                     speech_seconds=0.0,
                 )
+            # Proven parts still owe follow-ups after async assignment or a
+            # crash. Keep the outbox discoverable until they are ready.
+            summary_state = (
+                'quarantine_held'
+                if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
+                else 'persisted' if held else str(summary['state'])
+            )
             changes.update(
                 projection=summary,
-                # Proven parts still owe follow-ups after async assignment or
-                # a crash. Keep the outbox discoverable until they are ready.
-                projection_state=(
-                    'quarantine_held'
-                    if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
-                    else 'persisted' if held else summary['state']
-                ),
+                projection_state=summary_state,
+                **projection_finish_state_fields(summary_state, self.now),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
             if not held and self.entry.get('projection_redriven_at'):
@@ -494,6 +515,7 @@ class ProjectionSession:
                 {
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
+                    **projection_finish_state_fields('quarantine_held' if quarantined else receipt['state'], self.now),
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
                     **(
                         {

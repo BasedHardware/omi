@@ -387,6 +387,32 @@ def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(ena
             row[dedupe.L1_HASH] = digest
 
 
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_dependency_qualified_notes_checkpoint_survives_prompt_version_bump(enabled, monkeypatch, flag):
+    from models.structured import Structured
+
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    dependencies = '|'.join(f'{name}:{version}' for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS)
+    before_bump = f'notes-2:{dedupe.routing_digest()}:{dependencies}'
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored work'))
+    hashes = {}
+    with monkeypatch.context() as old_process:
+        old_process.setattr(dedupe, 'implementation_digest', lambda _: before_bump)
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+
+    for _ in range(2):
+        current_hashes = {}
+        output = dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, current_hashes)
+        assert output.title == 'Already paid'
+        assert generate.call_count == 1
+        assert current_hashes[dedupe.NOTES_HASH] != row[dedupe.NOTES_HASH]
+
+    dedupe.notes('u', enabled, {'context': 'changed'}, generate, {})
+    assert generate.call_count == 2
+
+
 @pytest.mark.parametrize('feature', ['notes', 'l1'])
 def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, feature):
     from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
@@ -395,6 +421,21 @@ def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, f
     old = dedupe._fingerprint(feature, inputs, LEGACY_IMPLEMENTATIONS[feature][0])
     monkeypatch.setattr(dedupe, 'routing_digest', lambda: 'new-model-route')
     assert not dedupe._matches(old, feature, inputs, dedupe.fingerprint(feature, inputs))
+
+
+def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypatch):
+    from models.structured import Structured
+
+    original = dedupe.implementation_digest
+    monkeypatch.setattr(dedupe, 'implementation_digest', lambda _: f'notes-1:{dedupe.routing_digest()}')
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored notes'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    monkeypatch.setattr(dedupe, 'implementation_digest', original)
+    assert dedupe.notes('u', enabled, 'unchanged', generate, {}).overview == 'Useful stored notes'
+    assert generate.call_count == 1
 
 
 @pytest.fixture
