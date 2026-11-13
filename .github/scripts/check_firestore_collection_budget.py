@@ -223,10 +223,14 @@ def work_state_token(name: str) -> str | None:
 
 def _excluded(relative: str) -> bool:
     parts = Path(relative).parts
-    # These are repository-owned generated dependency trees, not either
-    # first-party Firestore surface. In particular the OpenAPI runner creates
-    # its environment before CI hygiene scans the working tree.
-    if any(part in {'node_modules', '.next', '.venv', '.openapi-venv'} for part in parts):
+    if 'node_modules' in parts or '.next' in parts:
+        return True
+    # Installed packages are not product code. Every worktree owns backend/.venv
+    # and backend/.openapi-venv, so scanning them reports Firestore's own library
+    # as "computed collection name" sites and rejects every backend push. Only
+    # those two exact roots are skipped: a product directory that happens to be
+    # named venv or site-packages is still scanned.
+    if parts[:2] in (('backend', '.venv'), ('backend', '.openapi-venv')):
         return True
     if '/tests/' in relative or '/__tests__/' in relative or '/.test/' in relative:
         return True

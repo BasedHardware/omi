@@ -497,6 +497,22 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def drain_upload_holds():
+        from utils.batch_pipeline.upload_coalescing import drain as drain_uploads
+
+        while not stop.is_set():
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                await drain_uploads(service.store)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_coalescing outcome=scan_retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=2)
+            except asyncio.TimeoutError:
+                pass
+
     async def run():
         from utils.batch_pipeline.projection_drain import set_recurring_sweep
 
@@ -505,9 +521,9 @@ def start_serving_from_env():
         set_recurring_sweep('pump' if pump_enabled else 'serving')
         try:
             if pump_enabled:
-                await projection_pump()
+                await asyncio.gather(projection_pump(), drain_upload_holds())
             else:
-                await asyncio.gather(supervise(), drain(), dispatch_recovery())
+                await asyncio.gather(supervise(), drain(), dispatch_recovery(), drain_upload_holds())
         finally:
             set_recurring_sweep(None)
 

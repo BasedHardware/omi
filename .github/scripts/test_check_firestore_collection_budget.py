@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_firestore_collection_budget import (
+    _excluded,
     ENABLED_ENV,
     REASON_ENV,
     findings,
@@ -197,6 +198,31 @@ class GuardFixture(unittest.TestCase):
         budgets, exempt, dynamic, errors = load_registry(self.registry)
         self.assertEqual(errors, [])
         return findings(scan_tree(self.root), scan_git_tree(self.root, 'HEAD'), budgets, exempt, dynamic)
+
+
+class VirtualenvExclusionTests(unittest.TestCase):
+    """Installed packages are not product code: a worktree's own backend/.venv and
+    backend/.openapi-venv must never be scanned (they held Firestore's client library
+    and failed every push), while look-alike product directories still are."""
+
+    def test_worktree_virtualenv_roots_are_excluded(self) -> None:
+        for relative in (
+            "backend/.venv/lib/python3.11/site-packages/google/cloud/firestore_v1/client.py",
+            "backend/.openapi-venv/lib/python3.11/site-packages/fake_firestore/client.py",
+        ):
+            self.assertTrue(_excluded(relative), relative)
+
+    def test_product_code_is_still_scanned(self) -> None:
+        for relative in (
+            "backend/database/conversations.py",
+            "backend/utils/venv_helper.py",
+            "backend/venv/queue.py",
+            "backend/domain/site-packages/queue.py",
+            "backend/domain/.venv/queue.py",
+            "web/admin/venv/queue.ts",
+            "web/admin/lib/queue.ts",
+        ):
+            self.assertFalse(_excluded(relative), relative)
 
 
 class LiteralCollectionTests(GuardFixture):

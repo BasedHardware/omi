@@ -6,6 +6,52 @@ FIELD_SITES = {
         ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),
         ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
     ],
+    'database/batch_pipeline_coalescing_completion.py': [
+        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+    ],
+    'utils/batch_pipeline/upload_coalescing.py': [
+        (
+            'member_status',
+            'status',
+            "'completed'",
+            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+        ),
+        (
+            'queued',
+            'status',
+            "'queued'",
+            (
+                'errors',
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
+    'database/batch_pipeline_coalescing.py': [
+        ('checkpoint_completion.commit', 'status', "'completed'", ('expires_at', 'result', 'status')),
+        ('claim.commit', 'state', "'sealed'", ('lease_until', 'state', 'token')),
+        (
+            'enqueue.commit',
+            'state',
+            "'holding'",
+            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+        ),
+        (
+            'enqueue.commit',
+            'status',
+            "'processing'",
+            ('batch_pipeline', 'dispatch_protocol', 'job_id', 'owner_id', 'status'),
+        ),
+        ('finish.commit', 'state', "'done'", ('lease_until', 'state')),
+    ],
     'utils/retrieval/tools/edit_tools.py': [
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),

@@ -19,6 +19,7 @@ from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
 from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
+from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES,
@@ -630,11 +631,19 @@ class ProjectionStore:
     ) -> dict | None:
         """Complete only after every bound sibling persisted and marked enrichment."""
         policy = policy or self.policy(segment_id)
+        coalescing_receipts: list[tuple[str, str]] = []
 
         @firestore.transactional
         def commit(transaction):
+            coalescing_receipts.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
+            members = coalescing_completion.prepare(
+                self.client, self.store.namespace, transaction, binding, session.ledger
+            )
+            coalescing_receipts.extend(
+                ('intakes', member['job_id']) for member in (session.ledger.get('coalescing') or {}).get('members', [])
+            )
             receipts = []
             live_siblings = []
             erased_count = 0
@@ -717,7 +726,9 @@ class ProjectionStore:
                             transaction.update(self.ref('jobs', sibling), {'client_result': suppressed})
                         # This job was already terminated. Repairing its output
                         # is not a new completion and must not count again.
+                        coalescing_completion.write(transaction, members, suppressed, now)
                         return suppressed, False, 0
+                    coalescing_completion.write(transaction, members, suppressed, now)
                     return suppressed, False, 0
                 if deleted_output_count:
                     # Preserve historical usage; publish only destinations that
@@ -728,6 +739,7 @@ class ProjectionStore:
                         'updated_memories': updated,
                         'deleted_output_segments': deleted_output_count,
                     }
+                coalescing_completion.write(transaction, members, old, now)
                 return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
@@ -753,6 +765,7 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
+            coalescing_completion.write(transaction, members, result, now)
             for sibling in live_siblings:
                 # All assignment/enrichment receipts now exist. Wake held
                 # siblings in the same durable completion, including a crash
@@ -766,7 +779,7 @@ class ProjectionStore:
 
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
-        self._mirror(binding)
+        self._mirror(binding, coalescing_receipts)
         if result is not None and result.get('reason_code') != 'source_deleted':
             self._settle_allowance(binding, now, accounting, binding.segment_ids)
         if changed:

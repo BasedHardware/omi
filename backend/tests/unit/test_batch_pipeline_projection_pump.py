@@ -19,6 +19,13 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection_drain, serving
 
 
+async def isolated_pump(pump, holds):
+    # These tests control only projection ticks. Coalescing's independent loop
+    # has a separate real-gather supervision test in test_batch_upload_coalescing.
+    holds.close()
+    return await pump
+
+
 @pytest.mark.parametrize('mode', ['shadow', 'serve'])
 @pytest.mark.parametrize(
     'raw,enabled',
@@ -178,7 +185,11 @@ async def test_pump_only_sweeps_and_hands_drains_to_loop(
         return await awaitable
 
     monkeypatch.setattr(
-        serving, 'asyncio', SimpleNamespace(Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError)
+        serving,
+        'asyncio',
+        SimpleNamespace(
+            Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError, gather=isolated_pump
+        ),
     )
     caplog.set_level(logging.INFO, logger=serving.__name__)
     runtime = serving.start_serving_from_env()
@@ -262,7 +273,11 @@ async def test_pump_logs_failure_and_runs_next_tick(monkeypatch, caplog, failure
         raise asyncio.TimeoutError
 
     monkeypatch.setattr(
-        serving, 'asyncio', SimpleNamespace(Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError)
+        serving,
+        'asyncio',
+        SimpleNamespace(
+            Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError, gather=isolated_pump
+        ),
     )
     caplog.set_level(logging.INFO, logger=serving.__name__)
     runtime = serving.start_serving_from_env()
@@ -379,7 +394,11 @@ async def test_pump_starts_followups_without_serving_sweeps_or_maintenance(monke
         return await awaitable
 
     monkeypatch.setattr(
-        serving, 'asyncio', SimpleNamespace(Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError)
+        serving,
+        'asyncio',
+        SimpleNamespace(
+            Event=asyncio.Event, wait_for=wait_for, TimeoutError=asyncio.TimeoutError, gather=isolated_pump
+        ),
     )
     runtime = serving.start_serving_from_env()
     await asyncio.wait_for(runtime[1], timeout=5)
