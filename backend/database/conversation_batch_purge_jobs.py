@@ -11,11 +11,18 @@ next erasure. Progress (scan position plus the content-free segment ids found
 before any erasure) is checkpointed under that same check; a run hands off
 well before the Cloud Tasks deadline and the next generation resumes from it.
 The obligation is removed only by its owning run after the last phase.
+
+A delete accepted while a same-account delete held the account gate owes its
+whole cascade erasure instead: one ``conversation_erasure_jobs`` obligation,
+written with the tombstone, dispatched and leased the same way (so an older
+consumer that cannot run it answers ``missing`` and it is redriven, never
+dropped), and run serially under the account gate by ``run_erasure_job``.
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -29,7 +36,11 @@ from database import rpc_deadline
 from database import legal_holds
 from database.legal_holds import LegalHoldActive, assert_account_deletion_permitted
 
+logger = logging.getLogger(__name__)
+
 COLLECTION = 'conversation_batch_purge_jobs'
+# Accepted deletes owing their cascade erasure (a collection older code never reads).
+ERASURE_COLLECTION = 'conversation_erasure_jobs'
 SEGMENTS = 'segments'
 TOMBSTONES = 'deleted_conversations'
 # Renewed by every checkpoint/unit; a dead or wedged worker loses ownership after this.
@@ -49,6 +60,8 @@ HOLD_RECHECK_SECONDS = 60 * 60
 UNIT_GATE_WAIT_SECONDS = 30.0
 UNIT_YIELD_SECONDS = 0.6
 GATE_KIND = 'explicit_memory_deletion'
+# An accepted delete's erasure lost the account gate to a same-account erasure: retry soon.
+BUSY_RETRY_SECONDS = 30
 
 
 class RunSuperseded(Exception):
@@ -67,6 +80,29 @@ def job_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection(COLLECTION).document(job_id(uid, conversation_id))
 
 
+def erasure_job_id(uid: str, conversation_id: str) -> str:
+    # Distinct from the batch-purge id, so no consumer can mistake one obligation for the other.
+    return hashlib.sha256(f'erasure\x00{uid}\x00{conversation_id}'.encode()).hexdigest()[:40]
+
+
+def erasure_job_ref(client: Any, uid: str, conversation_id: str) -> Any:
+    return client.collection(ERASURE_COLLECTION).document(erasure_job_id(uid, conversation_id))
+
+
+def accept_fields(
+    uid: str, conversation_id: str, *, audio_source_ids: list[str] | None = None, now: datetime | None = None
+) -> dict[str, Any]:
+    """Fields an accepted delete writes (merge) next to its tombstone; generation/attempts survive re-accepts."""
+    current = now or _now()
+    return {
+        'uid': uid,
+        'conversation_id': conversation_id,
+        'due_at': current,
+        'accepted_at': current,
+        'audio_source_ids': list(audio_source_ids or []),
+    }
+
+
 def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> dict[str, Any]:
     """Fields a delete writes (merge) next to its tombstone; generation/attempts/progress survive re-arms."""
     current = now or _now()
@@ -81,11 +117,13 @@ def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
     return run(client.transaction())
 
 
-def due_jobs(*, now: datetime | None = None, limit: int = 50, firestore_client: Any = None) -> list[Any]:
+def due_jobs(
+    *, now: datetime | None = None, limit: int = 50, firestore_client: Any = None, collection: str = COLLECTION
+) -> list[Any]:
     """Obligations whose next dispatch is due, oldest first (single-field ``due_at`` index)."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     query = (
-        client.collection(COLLECTION)
+        client.collection(collection)
         .where(filter=firestore.FieldFilter('due_at', '<=', now or _now()))
         .order_by('due_at')
         .limit(limit)
@@ -114,11 +152,13 @@ def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
 
-def claim_dispatch(job: str, *, now: datetime | None = None, firestore_client: Any = None) -> tuple[int, int] | None:
+def claim_dispatch(
+    job: str, *, now: datetime | None = None, firestore_client: Any = None, collection: str = COLLECTION
+) -> tuple[int, int] | None:
     """Advance to a new generation and schedule its redrive: (generation, attempts) or None."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
-    ref = client.collection(COLLECTION).document(job)
+    ref = client.collection(collection).document(job)
 
     def body(transaction):
         snapshot = ref.get(transaction=transaction)
@@ -146,10 +186,12 @@ def claim_dispatch(job: str, *, now: datetime | None = None, firestore_client: A
     return _in_transaction(client, body)
 
 
-def defer(job: str, seconds: float, *, now: datetime | None = None, firestore_client: Any = None) -> None:
+def defer(
+    job: str, seconds: float, *, now: datetime | None = None, firestore_client: Any = None, collection: str = COLLECTION
+) -> None:
     """Make an obligation due again soon (e.g. its dispatch could not be enqueued)."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    ref = client.collection(COLLECTION).document(job)
+    ref = client.collection(collection).document(job)
 
     def body(transaction):
         if ref.get(transaction=transaction).exists:
@@ -159,12 +201,17 @@ def defer(job: str, seconds: float, *, now: datetime | None = None, firestore_cl
 
 
 def begin_run(
-    job: str, generation: int, *, now: datetime | None = None, firestore_client: Any = None
+    job: str,
+    generation: int,
+    *,
+    now: datetime | None = None,
+    firestore_client: Any = None,
+    collection: str = COLLECTION,
 ) -> tuple[str, dict[str, Any] | None, str | None]:
     """Take ownership of ``generation``: (run|missing|superseded|in_progress, row, run_token)."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
-    ref = client.collection(COLLECTION).document(job)
+    ref = client.collection(collection).document(job)
     token = uuid4().hex
 
     def body(transaction):
@@ -201,13 +248,14 @@ def finish_run(
     *,
     now: datetime | None = None,
     firestore_client: Any = None,
+    collection: str = COLLECTION,
 ) -> bool:
     """Record the owning run's outcome; only ``completed`` removes the obligation. False if not owner."""
-    if outcome not in {'completed', 'held', 'failed', 'checkpointed'}:
-        raise ValueError('outcome must be completed, held, failed or checkpointed')
+    if outcome not in {'completed', 'held', 'failed', 'checkpointed', 'busy'}:
+        raise ValueError('outcome must be completed, held, failed, checkpointed or busy')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     current = now or _now()
-    ref = client.collection(COLLECTION).document(job)
+    ref = client.collection(collection).document(job)
 
     def body(transaction):
         snapshot = ref.get(transaction=transaction)
@@ -223,6 +271,12 @@ def finish_run(
         if outcome == 'checkpointed':
             # Progress was made: hand off at once and restart the lost-task backoff.
             transaction.update(ref, {**release, 'due_at': current, 'attempts': 0})
+            return False
+        if outcome == 'busy':
+            # A same-account erasure held the gate, so that account is progressing: retry soon.
+            transaction.update(
+                ref, {**release, 'due_at': current + timedelta(seconds=BUSY_RETRY_SECONDS), 'attempts': 0}
+            )
             return False
         wait = HOLD_RECHECK_SECONDS if outcome == 'held' else REDRIVE_SECONDS
         transaction.update(ref, {**release, 'due_at': current + timedelta(seconds=wait)})
@@ -420,18 +474,84 @@ def run_job(
         return 'purged' if finish('completed') else 'superseded'
 
 
+def _lost_gate_to_peer(error: BaseException, uid: str) -> bool:
+    if type(error).__name__ == 'HTTPException' and getattr(error, 'status_code', None) == 409:
+        return True  # the cascade's nested gate mapped a same-account peer to account_gate_busy
+    try:
+        return legal_holds.gate_busy_with_peer(error, uid, kind=GATE_KIND) is True
+    except Exception:  # noqa: BLE001 - an unreadable gate is a plain failure (redriven)
+        return False
+
+
+def run_erasure_job(
+    job: str,
+    generation: int,
+    *,
+    erase: Callable[[str, str, list[str]], None],
+    firestore_client: Any = None,
+) -> str:
+    """Erase one accepted delete: the request's own cascade, serially under the account gate.
+
+    ``erase(uid, conversation_id, audio_source_ids)`` acquires the gate (its
+    acquisition re-checks the hold and refuses an account wipe's gate) and raises
+    when it cannot. The cascade is idempotent, so a duplicate or superseded run
+    only repeats finished steps behind the same gate. Raises on a retryable failure.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    claim, row, token = begin_run(job, generation, firestore_client=client, collection=ERASURE_COLLECTION)
+    if claim != 'run' or row is None or token is None:
+        return claim
+    uid, conversation_id = str(row['uid']), str(row['conversation_id'])
+
+    def finish(outcome: str) -> bool:
+        return finish_run(job, generation, token, outcome, firestore_client=client, collection=ERASURE_COLLECTION)
+
+    try:
+        tombstone = client.collection('users').document(uid).collection(TOMBSTONES).document(conversation_id)
+        if not tombstone.get().exists:
+            # Account deletion supersedes: the wipe removed the subtree, tombstone included.
+            return 'no_tombstone' if finish('completed') else 'superseded'
+        assert_account_deletion_permitted(uid)
+        try:
+            erase(uid, conversation_id, [str(source) for source in row.get('audio_source_ids') or []])
+        except LegalHoldActive:
+            raise
+        except Exception as error:
+            if not _lost_gate_to_peer(error, uid):
+                raise
+            logger.info('conversation erasure waiting for the account gate job=%s', job)
+            finish('busy')
+            return 'busy'
+    except LegalHoldActive:
+        # Stays hidden (tombstone + deleted row) and retained; rechecked hourly.
+        finish('held')
+        return 'held'
+    except BaseException:
+        try:
+            finish('failed')
+        except Exception:
+            pass  # The lease expires; the original failure is what the queue must see.
+        raise
+    return 'erased' if finish('completed') else 'superseded'
+
+
 __all__ = [
     'COLLECTION',
+    'ERASURE_COLLECTION',
     'RunProgress',
     'RunSuperseded',
+    'accept_fields',
     'arm_fields',
     'begin_run',
     'claim_dispatch',
     'defer',
     'due_jobs',
+    'erasure_job_id',
+    'erasure_job_ref',
     'finish_run',
     'job_id',
     'job_ref',
+    'run_erasure_job',
     'run_job',
     'segment_records',
 ]

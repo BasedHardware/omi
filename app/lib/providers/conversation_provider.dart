@@ -1636,7 +1636,12 @@ class ConversationProvider extends ChangeNotifier {
       succeeded = await (conversationId.startsWith('ondevice-')
           ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
               Future.value(false))
-          : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId));
+          : _inServerDeleteTurn(() async {
+              // A queued delete must not go out under a different account.
+              if (!_isSignedIn() || prefs.uid != owner) return false;
+              return conversationDeleteFetcherOverride?.call(conversationId) ??
+                  deleteConversationServer(conversationId);
+            }));
     } catch (_) {
       succeeded = false;
     }
@@ -1687,6 +1692,20 @@ class ConversationProvider extends ChangeNotifier {
     }
     if (!current()) return;
     notifyListeners();
+  }
+
+  /// The server answers a delete that overlaps another on the same account with 409, so server
+  /// deletes (a bulk delete commits many at once) go out one at a time, in commit order.
+  Future<void>? _serverDeleteTail;
+
+  Future<bool> _inServerDeleteTurn(Future<bool> Function() send) {
+    final previous = _serverDeleteTail;
+    final result = previous == null ? send() : previous.then((_) => send());
+    final tail = _serverDeleteTail = result.then<void>((_) {}, onError: (_) {});
+    unawaited(tail.whenComplete(() {
+      if (identical(_serverDeleteTail, tail)) _serverDeleteTail = null;
+    }));
+    return result;
   }
 
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);

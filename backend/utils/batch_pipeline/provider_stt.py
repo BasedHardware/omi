@@ -60,6 +60,7 @@ from utils.batch_pipeline.recovery_disposition import (
     log_result_held,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.input_retention import TERMINAL_SECONDS, staged_enqueue
 from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
 from utils.batch_pipeline.vendor_route_contracts import (
     ATTEMPTS_FIELD,
@@ -596,12 +597,18 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
+    from utils.stt.allowance_session import Operation, current, track
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
         raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
+    scope = current.get()
+    if scope is None or scope.uid != item.owner_id or scope.operation != f'batch-unit:{item.segment_id}':
+        scope = Operation(item.owner_id, 'batch_provider', operation=f'batch-unit:{item.segment_id}', seconds=duration)
     try:
-        response = await _vendor_words(service, _wav(pcm), duration, language)
+        async with track(scope):
+            await scope.reserve_async(service)
+            response = await _vendor_words(service, _wav(pcm), duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception:
@@ -669,6 +676,7 @@ class _Call:
     inspected: tuple | None
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
+    allowance_period: str | None = None
 
 
 def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
@@ -685,7 +693,28 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool,
 _DURABLE_DENIALS = frozenset({DispatchReason.ALLOWANCE_EXHAUSTED.value, DispatchReason.BUDGET_EXHAUSTED.value})
 
 
-def funding_retry_seconds(decision: bool | tuple[bool, str]) -> float | None:
+# A held unit's staged audio is deleted by the bucket lifecycle at 30 days; the pipeline treats
+# 29 days as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
+# the hold re-checks at this interval whatever the configured window, and a longer window is cut
+# so the next re-check lands no later than the start of that day. A renewal in the last day is
+# then seen as soon as it was when the window was 2 h.
+NEAR_EXPIRY_WINDOW_SECONDS = 86400.0
+NEAR_EXPIRY_RECHECK_SECONDS = 7200.0
+
+
+def _hold_before_expiry(wait: float, job: dict | None, now: float | None) -> float:
+    if job is None or now is None or wait <= NEAR_EXPIRY_RECHECK_SECONDS:
+        return wait
+    staged = staged_enqueue(job)
+    if staged is None:
+        return wait
+    until_last_day = staged + TERMINAL_SECONDS - NEAR_EXPIRY_WINDOW_SECONDS - now
+    return min(wait, max(NEAR_EXPIRY_RECHECK_SECONDS, until_last_day))
+
+
+def funding_retry_seconds(
+    decision: bool | tuple[bool, str], *, job: dict | None = None, now: float | None = None
+) -> float | None:
     """None when funded; otherwise how long the refused unit waits before re-checking."""
     permitted, reason = decision if isinstance(decision, tuple) else (bool(decision), None)
     if permitted:
@@ -693,7 +722,7 @@ def funding_retry_seconds(decision: bool | tuple[bool, str]) -> float | None:
     if reason in _DURABLE_DENIALS:
         from config.batch_pipeline import allowance_hold_retry_seconds
 
-        return float(allowance_hold_retry_seconds())
+        return _hold_before_expiry(float(allowance_hold_retry_seconds()), job, now)
     return FUNDING_RETRY_SECONDS
 
 
@@ -809,6 +838,16 @@ class ProviderSttStage:
             return RecoveryFailure(failure['stage'], failure['reason'])
         if not plan.inspected[2]:
             return silence_payload(plan.inspected[1])
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -817,10 +856,23 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
         if self.stt_async is None or plan.failure is not None or not plan.inspected or not plan.inspected[2]:
             return self._call_sync(plan)
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -829,6 +881,9 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     # -- phases -----------------------------------------------------------------------------------
 
@@ -852,7 +907,11 @@ class ProviderSttStage:
         if route.provider_reason == 'byok':
             record_decision(DispatchPath.BATCH_PROVIDER, True, DispatchReason.BYOK)
         elif (
-            wait := funding_retry_seconds(self.allowed(item.owner_id, item.duration_seconds, route.provider_service))
+            wait := funding_retry_seconds(
+                self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
+                job=job,
+                now=self.clock(),
+            )
         ) is not None:
             return UnitOutcome('deferred', 'not_due', self.clock() + wait)
         audio = self.artifacts.fetch_audio(item)
@@ -867,7 +926,9 @@ class ProviderSttStage:
             route.provider_reason != 'byok'
             and (
                 wait := funding_retry_seconds(
-                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service)
+                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
+                    job=job,
+                    now=self.clock(),
                 )
             )
             is not None
@@ -919,7 +980,15 @@ class ProviderSttStage:
             return self._reconcile(segment_id, started, item, route)
         if service != route.provider_service:
             vendor_metrics.failover(route.provider_service, service)
-        return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates))
+
+        def read_intake(tx):
+            binding = started.get('projection_binding') or {}
+            return tx.get('intakes', binding.get('job_id', 'missing')) or {}
+
+        intake = self.protocol.store.run(read_intake)
+        return _Call(
+            segment_id, item, route, token, service, inspected, failure, tuple(candidates), intake.get('usage_period')
+        )
 
     def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token

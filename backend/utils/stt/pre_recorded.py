@@ -46,6 +46,7 @@ from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
 from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
 from utils.stt.modulate_batch import wav_duration_seconds as _wav_duration_seconds
+from utils.stt.allowance_watch import observe_request
 from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.soniox_batch import SonioxBatchError, transcribe as soniox_transcribe
 from utils.stt.brand_terms import normalize_brand_terms
@@ -386,6 +387,7 @@ def deepgram_prerecorded(
                 options["keywords"] = list(keywords)
 
         rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        observe_request('prerecorded', 'deepgram')
         response = rest_client.transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
 
         # Extract words from response
@@ -519,6 +521,12 @@ def deepgram_prerecorded_from_bytes(
         source: Dict[str, Any] = {"buffer": audio_buffer, "mimetype": mimetype}
 
         rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        duration = (
+            len(audio_bytes) / (sample_rate * channels * 2)
+            if encoding == 'linear16' and sample_rate > 0 and channels > 0
+            else _wav_duration_seconds(audio_bytes)
+        )
+        observe_request('prerecorded', 'deepgram', duration)
         response = rest_client.transcribe_file(source, options, timeout=_verification_timeout(_DG_TIMEOUT))
 
         # Extract words from response
@@ -704,6 +712,7 @@ def modulate_prerecorded_from_bytes(
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
             burn_seconds = _wav_duration_seconds(audio_bytes)
+            observe_request('prerecorded', 'modulate', burn_seconds)
             posted = True
             record_vendor_payload('modulate', 'stt', len(audio_bytes))
             response = client.post(url, headers=headers, files=files, data=data)
@@ -1147,12 +1156,14 @@ def parakeet_prerecorded_from_bytes(
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
             with observe_parakeet_request('v2' if use_v2 else 'v1'):
                 record_vendor_payload('parakeet', 'v2' if use_v2 else 'v1', len(audio_bytes))
+                observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                 response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
                 with observe_parakeet_request('v1'):
                     record_vendor_payload('parakeet', 'v1', len(audio_bytes))
+                    observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                     response = observe_sync_call(
                         'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
                     )
