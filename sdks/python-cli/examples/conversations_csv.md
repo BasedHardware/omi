@@ -28,6 +28,16 @@ from pathlib import Path
 FIELDS = ("id", "title", "category", "started_at", "source")
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    encoding the CSV payload as UTF-8 raises UnicodeEncodeError on them. Dropping
+    them keeps the remaining text and lets the spreadsheet export cleanly.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
 def spreadsheet_text(value):
     """Render one exported field as spreadsheet-safe text.
 
@@ -39,6 +49,7 @@ def spreadsheet_text(value):
         return ""
     if not isinstance(value, str):
         value = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    value = strip_surrogates(value)
     # Avoid treating common formula prefixes as formulas on spreadsheet import.
     # The apostrophe is intentional and may be visible in some importers.
     if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
@@ -68,7 +79,7 @@ def convert(source, destination):
     writer = csv.writer(buffer)
     writer.writerow(FIELDS)
     writer.writerows(rows)
-    payload = buffer.getvalue().encode("utf-8-sig")
+    payload = strip_surrogates(buffer.getvalue()).encode("utf-8-sig")
     output_path = Path(destination)
     # Exclusive creation still protects an existing export.
     try:
