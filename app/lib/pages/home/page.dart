@@ -502,9 +502,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         final owner = SharedPreferencesUtil().uid;
         final localRecordings = context.read<LocalRecordingsProvider>();
         final syncProvider = context.read<SyncProvider>();
-        unawaited(syncProvider.initialized.then((_) async {
-          if (!mounted || SharedPreferencesUtil().uid != owner) return;
-          await localRecordings.refresh();
+        unawaited(localRecordings.refresh().then((_) async {
           if (mounted && SharedPreferencesUtil().uid == owner) await syncProvider.refreshWals();
         }).catchError((Object error) {
           Logger.debug('Home: pending recordings refresh deferred: $error');
