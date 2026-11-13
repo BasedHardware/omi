@@ -204,6 +204,13 @@ def test_annotations_name_the_exact_switch_and_re_enable_path():
     assert 'Fixture' in annotations['evaluated_good']
 
 
+def test_verification_annotation_refuses_to_read_absence_as_zero():
+    """An empty series is the healthy state, not a measured clean reading."""
+    verification = _rule()['annotations']['verification']
+    assert 'no series' in verification
+    assert 'never as a measured clean zero' in verification
+
+
 @pytest.mark.parametrize('export', ['split', 'combined'])
 def test_rule_passes_the_offline_admission_lint(export):
     rules = _split() if export == 'split' else _combined()

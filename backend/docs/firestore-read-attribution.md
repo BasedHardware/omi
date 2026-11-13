@@ -108,6 +108,13 @@ disables the alert, and restoring `vector(1)` re-enables it. The rule also ships
 either automatically. Fixtures that drive the real probe and evaluate the
 committed rule live in `backend/tests/unit/test_firestore_caller_overflow_alert.py`.
 
+An empty result on both arms is the expected healthy state: the
+`caller="other"` bucket is created only after a fold, so the series is normally
+absent. Absence is not a measured zero. When you run the verification query,
+record `no series` rather than `0`, and do not report an empty result as a clean
+live reading — the live attestation for this rule is a fresh consumed series from
+the running alert consumer after the approved roll, not an empty query.
+
 Custom-registry processes (the batch pipeline worker and the record-seal worker)
 serve `utils/observability/firestore_probe_export.py`'s `COLLECTORS`, not the
 default registry, so `omi_firestore_caller_label_overflow_total` is in that tuple
