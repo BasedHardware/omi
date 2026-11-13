@@ -7,6 +7,7 @@ unmetered/FIFO arm reproduces the 2026-11-13 incident above a 2x p90 regression.
 
 from concurrent.futures import ProcessPoolExecutor
 import json
+import multiprocessing
 import os
 from pathlib import Path
 
@@ -27,7 +28,10 @@ def _run_arm(release: str, first_turn: int):
 @pytest.fixture(scope='module')
 def runs():
     arms = [(release, first_turn) for release in ('held', 'unmetered') for first_turn in (0, 15)]
-    with ProcessPoolExecutor(max_workers=len(arms)) as pool:
+    # Linux defaults to fork, which can inherit the simulator's patched asyncio/env state and
+    # libraries with background threads. Spawn matches the tested macOS path on every platform.
+    context = multiprocessing.get_context('spawn')
+    with ProcessPoolExecutor(max_workers=len(arms), mp_context=context) as pool:
         samples = list(pool.map(_run_arm, *zip(*arms)))
     return {f'{release}_{first_turn}': sample for (release, first_turn), sample in zip(arms, samples)}
 
