@@ -321,6 +321,7 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_home_rows_user_day_count_total/',
     'prometheus.googleapis.com/omi_home_rows_user_day_sum_total/',
     'prometheus.googleapis.com/omi_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_journey_failure_reason_total/',
     'prometheus.googleapis.com/omi_journey_latency_seconds/',
     'prometheus.googleapis.com/omi_journey_terminal_total/',
     'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/',
