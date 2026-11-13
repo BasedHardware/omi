@@ -206,7 +206,7 @@ class Units:
             # A2 already holds the owner guard, before namespace and row locks.
             acquire(conn, self.ticket)
             current = self._unit(conn, identity)
-            if current != before:
+            if current is None or current != before:
                 raise AdmissionChanged()
             old_targets = {t['conversation_key'] for t in before['admission']['privacy_targets']}
             new_targets = {t['conversation_key'] for t in admission['privacy_targets']}
