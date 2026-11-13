@@ -65,6 +65,19 @@ def test_expired_lease_retains_uncertain_spend_and_cannot_be_resurrected(store):
     result = ledger.reserve('u', 'first', 6, 100, now=NOW + timedelta(seconds=31), firestore_client=store)
     assert result.reason == 'lease_expired'
     assert ledger.chargeable_seconds('u', NOW, firestore_client=store) == 96
+    ledger.settle_billed([first], 0, now=NOW, firestore_client=store)
+    receipt = store.rows[('users', 'u', 'free_allowance_receipts', f'{first.month}_{first.key}')]
+    assert receipt['decision'] == 'unobserved'
+    assert ledger.chargeable_seconds('u', NOW, firestore_client=store) == 90
+
+
+def test_exhaustion_is_the_durable_allowance_refusal_reason(store):
+    decision = reserve(store, seconds=11)
+    assert decision.reason == 'allowance_exhausted'
+    ref = ledger.reference('u', 'first', NOW)
+    ledger.settle_billed([ref], 0, now=NOW, firestore_client=store)
+    receipt = store.rows[('users', 'u', 'free_allowance_receipts', f'{ref.month}_{ref.key}')]
+    assert receipt['decision'] == 'would_refuse'
 
 
 def test_actual_billing_and_release_are_queued_without_read_after_write(store):

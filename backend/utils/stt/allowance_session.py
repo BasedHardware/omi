@@ -41,6 +41,7 @@ class Operation:
         self.billing_period = billing_period
         self.closed = False
         self.refused = False
+        self.observed = False
         self.started: float | None = None
         self.reference: ledger.Reference | None = None
         self.provider = 'unknown'
@@ -84,7 +85,6 @@ class Operation:
             elapsed = (self.clock() if self.clock is not None else time.monotonic() - self.started) if self.live else 0
             seconds = elapsed + ledger.LEASE_SECONDS if self.live else self.seconds
             if seconds is None or seconds <= 0:
-                self.refused = True
                 watch.emit(self.path, provider, 'duration_unavailable', 0)
                 return
             from database import monthly_usage_totals
@@ -116,11 +116,15 @@ class Operation:
             self.lease_until = result.lease.expires_at if result.lease is not None else None
             if self.loop is not None and not self.loop.is_closed():
                 self.loop.call_soon_threadsafe(self.changed.set)
-            self.refused = self.refused or result.lease is None
-            watch.emit(self.path, provider, 'would_allow' if result.lease is not None else 'would_refuse', seconds)
+            self.refused = self.refused or result.reason == 'allowance_exhausted'
+            self.observed = self.observed or result.reason in {'reserved', 'allowance_exhausted'}
+            decision = {
+                'reserved': 'would_allow',
+                'allowance_exhausted': 'would_refuse',
+            }.get(result.reason, result.reason)
+            watch.emit(self.path, provider, decision, 0 if result.reason == 'already_settled' else seconds)
             watch.LEASE_DECISIONS.labels(self.path, result.reason).inc()
         except Exception:
-            self.refused = True
             watch.emit(self.path, provider, 'usage_unavailable', 0)
 
     async def reserve_async(self, provider, *, customer_funded=False, timeout=2.5) -> None:
@@ -165,11 +169,12 @@ class Operation:
                 seconds,
                 daily_ptt=daily_ptt,
                 source=source,
-                decision='would_refuse' if self.refused else 'would_allow',
+                decision='would_refuse' if self.refused else 'would_allow' if self.observed else 'unobserved',
             ):
                 watch.SETTLED_SECONDS.labels(self.path).inc(seconds)
             self.reference = None
             self.refused = False
+            self.observed = False
             self.operation = uuid4().hex
             self.started = None
         except Exception:

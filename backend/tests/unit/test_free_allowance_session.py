@@ -80,6 +80,36 @@ def test_confirmed_billing_settles_actual_units_and_finishes_offline_operation(p
     ledger.reserve.assert_called_once()
 
 
+@pytest.mark.parametrize('reason', ['already_settled', 'lease_expired', 'operation_too_old', 'ledger_full'])
+def test_administrative_outcomes_are_not_allowance_refusals(policy, reason):
+    ledger.reserve.return_value = ledger.Decision(reason, 4)
+    scope = Operation('u', 'sync', operation='sync:retry', seconds=6)
+    scope.reserve('modulate')
+    watch.emit.assert_called_once_with('sync', 'modulate', reason, 0 if reason == 'already_settled' else 6)
+    assert not scope.refused
+    scope.billed(6)
+    assert ledger.settle_billed.call_args.kwargs['decision'] == 'unobserved'
+
+
+def test_only_exhaustion_marks_an_operation_refused_and_survives_later_diagnostics(policy):
+    ledger.reserve.side_effect = [ledger.Decision('allowance_exhausted', 0), ledger.Decision('lease_expired', 0)]
+    scope = Operation('u', 'sync', seconds=6)
+    scope.reserve('modulate')
+    scope.reserve('modulate')
+    assert scope.refused
+    scope.billed(6)
+    assert ledger.settle_billed.call_args.kwargs['decision'] == 'would_refuse'
+    assert not scope.refused and not scope.observed
+
+
+def test_unavailable_usage_is_not_stamped_as_a_measured_overage(policy):
+    ledger.reserve.side_effect = TimeoutError
+    scope = Operation('u', 'one_shot', seconds=6)
+    scope.reserve('modulate')
+    scope.billed(6)
+    assert ledger.settle_billed.call_args.kwargs['decision'] == 'unobserved'
+
+
 def test_final_live_flush_cannot_reserve_an_unused_window(policy):
     scope = Operation('u', 'live_open', live=True)
     scope.reserve('soniox')

@@ -108,6 +108,20 @@ def test_firestore_aborted_commit_retries_with_no_extra_spend(lane, monkeypatch)
     assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 96
 
 
+def test_terminal_zero_releases_expired_hold_without_fabricating_an_overage(lane):
+    client, uid, user = lane
+    first = reserve(lane, 'failed-request').lease
+    assert first is not None
+    result = ledger.reserve(uid, 'failed-request', 6, 100, now=NOW + timedelta(seconds=31))
+    assert result.reason == 'lease_expired'
+    assert ledger.settle_billed([first], 0, now=NOW)
+    receipt = user.collection('free_allowance_receipts').document(f'{first.month}_{first.key}').get().to_dict()
+    assert receipt['decision'] == 'unobserved' and receipt['billed_seconds'] == 0
+    assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 90
+    assert reserve(lane, 'failed-request').reason == 'already_settled'
+    assert reserve(lane, 'next-request', 10).lease is not None
+
+
 def test_actual_billing_units_release_their_hold_and_no_other(lane):
     client, uid, user = lane
     first = reserve(lane, 'first', 4).lease

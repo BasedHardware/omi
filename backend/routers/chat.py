@@ -1291,13 +1291,18 @@ async def transcribe_voice_message_stream(
                 uid, 'ptt', provider, actual_duration_ms / 1000, customer_funded=customer_funded(provider)
             )
 
-    def refund_reservation_once() -> None:
+    async def refund_reservation_once() -> None:
         """Release an unused reservation when the session never drained successfully."""
         nonlocal usage_recorded
-        if usage_recorded or budget_reserved_ms <= 0:
+        if usage_recorded:
             return
-        settle_reserved_duration(uid, budget_reserved_ms, 0)
+        if budget_reserved_ms > 0:
+            settle_reserved_duration(uid, budget_reserved_ms, 0)
         usage_recorded = True
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.closed = True
+            await run_blocking(db_executor, scope.billed, 0)
 
     async def drain_stt_or_close() -> bool:
         """Finalize and await the selected provider's tail before sender teardown."""
@@ -1467,7 +1472,7 @@ async def transcribe_voice_message_stream(
             await record_stt_usage_once()
         else:
             # Provider never drained successfully — refund the connect-time reservation.
-            refund_reservation_once()
+            await refund_reservation_once()
 
         if dg_socket and not stt_drained:
             try:

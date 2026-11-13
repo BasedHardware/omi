@@ -175,7 +175,7 @@ def reserve(
                     'months': months,
                     'status': 'active',
                     'last_reason': reason,
-                    'had_refusal': (operation_data or {}).get('had_refusal') is True or reason != 'reserved',
+                    'had_refusal': (operation_data or {}).get('had_refusal') is True or reason == 'allowance_exhausted',
                     'has_hold': (operation_data or {}).get('has_hold') is True
                     or previous is not None
                     or reason == 'reserved',
