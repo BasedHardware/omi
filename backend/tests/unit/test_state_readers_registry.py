@@ -48,7 +48,7 @@ def test_state_readers_registry():
 def test_new_literal_write_names_missing_field(tmp_path, source):
     probe = tmp_path / 'probe.py'
     probe.write_text(source)
-    errors = coverage_errors(registry(), [probe])
+    errors = coverage_errors({'states': {}}, [probe])
     assert any('x_probe_at' in error for error in errors)
 
 
