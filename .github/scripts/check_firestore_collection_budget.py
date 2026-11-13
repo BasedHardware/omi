@@ -225,10 +225,12 @@ def _excluded(relative: str) -> bool:
     parts = Path(relative).parts
     if 'node_modules' in parts or '.next' in parts:
         return True
-    # Local virtualenvs (backend/.venv, backend/.openapi-venv) are untracked installs, not product
-    # code: the working-tree scan read the Firestore SDK's own computed collection names and failed
-    # every local push from a worktree that had run `make setup`.
-    if any(part == 'site-packages' or part.endswith('venv') and part.startswith('.') for part in parts):
+    # Installed packages are not product code. Every worktree owns backend/.venv
+    # and backend/.openapi-venv, so scanning them reports Firestore's own library
+    # as "computed collection name" sites and rejects every backend push. Only
+    # those two exact roots are skipped: a product directory that happens to be
+    # named venv or site-packages is still scanned.
+    if parts[:2] in (('backend', '.venv'), ('backend', '.openapi-venv')):
         return True
     if '/tests/' in relative or '/__tests__/' in relative or '/.test/' in relative:
         return True

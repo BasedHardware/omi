@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_firestore_collection_budget import (
+    _excluded,
     ENABLED_ENV,
     REASON_ENV,
     findings,
@@ -199,6 +200,31 @@ class GuardFixture(unittest.TestCase):
         return findings(scan_tree(self.root), scan_git_tree(self.root, 'HEAD'), budgets, exempt, dynamic)
 
 
+class VirtualenvExclusionTests(unittest.TestCase):
+    """Installed packages are not product code: a worktree's own backend/.venv and
+    backend/.openapi-venv must never be scanned (they held Firestore's client library
+    and failed every push), while look-alike product directories still are."""
+
+    def test_worktree_virtualenv_roots_are_excluded(self) -> None:
+        for relative in (
+            "backend/.venv/lib/python3.11/site-packages/google/cloud/firestore_v1/client.py",
+            "backend/.openapi-venv/lib/python3.11/site-packages/fake_firestore/client.py",
+        ):
+            self.assertTrue(_excluded(relative), relative)
+
+    def test_product_code_is_still_scanned(self) -> None:
+        for relative in (
+            "backend/database/conversations.py",
+            "backend/utils/venv_helper.py",
+            "backend/venv/queue.py",
+            "backend/domain/site-packages/queue.py",
+            "backend/domain/.venv/queue.py",
+            "web/admin/venv/queue.ts",
+            "web/admin/lib/queue.ts",
+        ):
+            self.assertFalse(_excluded(relative), relative)
+
+
 class LiteralCollectionTests(GuardFixture):
     def test_unbudgeted_new_queue_collection_fails(self) -> None:
         self.write_python(NEW_QUEUE_PYTHON)
@@ -285,13 +311,6 @@ class LiteralCollectionTests(GuardFixture):
 
 
 class ComputedNameTests(GuardFixture):
-    def test_local_virtualenv_sources_are_not_scanned(self) -> None:
-        for venv in ('.venv', '.openapi-venv'):
-            installed = self.root / 'backend' / venv / 'lib' / 'python3.11' / 'site-packages' / 'sdk' / 'client.py'
-            installed.parent.mkdir(parents=True)
-            installed.write_text(COMPUTED_PYTHON, encoding='utf-8')
-        self.assertEqual(self.evaluate(), [])
-
     def test_computed_python_name_fails(self) -> None:
         self.write_python(COMPUTED_PYTHON)
         errors = self.evaluate()
