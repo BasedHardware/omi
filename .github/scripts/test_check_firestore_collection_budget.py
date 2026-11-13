@@ -226,6 +226,15 @@ class VirtualenvExclusionTests(unittest.TestCase):
 
 
 class LiteralCollectionTests(GuardFixture):
+    def test_generated_python_environments_do_not_hide_first_party_work_state(self) -> None:
+        for environment in ('.venv', '.openapi-venv'):
+            dependency = self.root / 'backend' / environment / 'lib' / 'site-packages' / 'client.py'
+            dependency.parent.mkdir(parents=True)
+            dependency.write_text('def read(client, collection_id):\n    return client.collection(collection_id)\n')
+        self.assertEqual(self.evaluate(), [])
+        self.write_python(NEW_QUEUE_PYTHON)
+        self.assertTrue(self.evaluate(), 'generated dependency exclusions must not exempt first-party queues')
+
     def test_unbudgeted_new_queue_collection_fails(self) -> None:
         self.write_python(NEW_QUEUE_PYTHON)
         errors = self.evaluate()
