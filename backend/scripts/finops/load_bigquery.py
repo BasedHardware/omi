@@ -340,8 +340,13 @@ def load_vendor_balance(raw: pathlib.Path, run_id: str, computed_at: str, ensure
         raise SystemExit("vendor balance ts must be UTC ISO with Z")
     # Re-render through the NUMERIC contract so an artifact written by an older
     # image can never reach BigQuery with more than nine fractional digits.
-    snapshot["used_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["used_usd"]))
-    snapshot["available_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["available_usd"]))
+    try:
+        snapshot["used_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["used_usd"]))
+        snapshot["available_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["available_usd"]))
+    except pull_vendor_balance.BalanceError as error:
+        # Same rule as the puller: an unusable value is a bounded skip, never a failed daily job.
+        print("vendor balance artifact skipped: %s" % error.reason, file=sys.stderr)
+        return {}
     if type(snapshot["invoice_billing_enabled"]) is not bool:
         raise SystemExit("invalid vendor balance invoice flag")
     vendor = snapshot["vendor"]

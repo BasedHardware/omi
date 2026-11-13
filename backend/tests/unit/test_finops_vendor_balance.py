@@ -79,7 +79,14 @@ def test_parse_balance_renders_numeric_safe_strings(vb, raw, expected):
     assert re.match(NUMERIC_RE, parsed["used_usd"])
 
 
-@pytest.mark.parametrize("raw", ["100000000000000000000000000000", "1E+40"])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "100000000000000000000000000000",
+        "1E+40",
+        "99999999999999999999999999999.9999999996",  # rounds up to 10**29, which NUMERIC cannot hold
+    ],
+)
 def test_parse_balance_rejects_values_outside_the_numeric_range(vb, raw):
     with pytest.raises(vb.BalanceError) as err:
         vb.parse_balance({**BALANCE, "used_balance_usd": raw})
@@ -396,6 +403,40 @@ def test_deltas_decimal_string_inputs(vb):
 
 
 # ---------------------------------------------------------------- loader dark path
+
+
+def test_deltas_never_emit_exponent_notation_or_overflow_the_context(vb):
+    import re
+
+    # a zero delta quantizes to 0E-9 without the renderer; the readback strings are NUMERIC text
+    zero = vb.daily_deltas([snap("2026-10-20", "100.000000000"), snap("2026-10-21", "100.000000000")])
+    assert re.match(NUMERIC_RE, zero[0]["usd"]) and "E" not in zero[0]["usd"]
+    # a 29-integer-digit value divides and rounds under the default 28-digit context otherwise
+    big = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-22", "99999999999999999999999999999.999999999")])
+    assert len(big) == 2 and all(re.match(NUMERIC_RE, row["usd"]) for row in big)
+    # a repeating share rounds to nine places
+    third = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-23", "1")])
+    assert [row["usd"] for row in third] == ["0.333333333"] * 3
+
+
+def test_loader_skips_an_out_of_range_artifact_instead_of_failing_the_job(vb, tmp_path, capsys):
+    lb = load("load_bigquery")
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "vendor": "soniox",
+                "ts": "2026-10-23T14:30:00Z",
+                "used_usd": "100000000000000000000000000000",
+                "available_usd": "1",
+                "invoice_billing_enabled": False,
+            }
+        )
+    )
+    created = []
+    assert lb.load_vendor_balance(tmp_path, "r1", "t", created.append, lambda *a, **k: 0, lambda *a, **k: "[]") == {}
+    assert created == []
+    assert "skipped: invalid_response" in capsys.readouterr().err
 
 
 def test_loader_dark_paths(vb, tmp_path, monkeypatch):

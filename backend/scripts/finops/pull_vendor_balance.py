@@ -87,20 +87,23 @@ NUMERIC_SCALE = Decimal("0.000000001")
 NUMERIC_LIMIT = Decimal(10) ** 29
 
 
-def numeric_usd(amount: Decimal) -> str:
-    """Render a parsed balance as a plain decimal string BigQuery NUMERIC accepts.
+def numeric_usd(amount: Decimal, *, pad: bool = False) -> str:
+    """Render a parsed amount as a plain decimal string BigQuery NUMERIC accepts.
 
     Values with at most nine fractional digits keep their digits (``12.5`` stays
-    ``12.5``). Longer ones round half-up to nine places. Never exponent notation,
-    and a value outside the NUMERIC range is an invalid response, not a load error.
+    ``12.5``, ``0`` stays ``0``). Longer ones round half-up to nine places. Never
+    exponent notation (a quantized zero is ``0.000000000``), and a value outside
+    the NUMERIC range after rounding is an invalid response, not a load error.
+    ``pad=True`` always renders nine places (the derived daily spend's historical
+    shape). Arithmetic runs at 60 digits so a 29-integer-digit value can be rounded.
     """
-    if amount >= NUMERIC_LIMIT:
-        raise BalanceError("invalid_response", "balance value out of range")
-    if amount.as_tuple().exponent < -9:
-        with localcontext() as ctx:
-            ctx.prec = 60
+    with localcontext() as ctx:
+        ctx.prec = 60
+        if pad or amount.as_tuple().exponent < -9:
             amount = amount.quantize(NUMERIC_SCALE, rounding=ROUND_HALF_UP)
-    return format(amount, "f")
+        if amount >= NUMERIC_LIMIT:
+            raise BalanceError("invalid_response", "balance value out of range")
+        return format(amount, "f")
 
 
 def parse_balance(payload) -> dict:
@@ -212,6 +215,13 @@ def _day(ts: str) -> str:
     return ts[:10]
 
 
+def _share(delta: Decimal, days: int) -> Decimal:
+    """One day's share of a gap-spread delta, divided at 60 digits."""
+    with localcontext() as ctx:
+        ctx.prec = 60
+        return delta / days
+
+
 def daily_deltas(snapshots: list[dict]) -> list[dict]:
     """Per-UTC-day spend from consecutive snapshots, oldest first.
 
@@ -252,7 +262,7 @@ def daily_deltas(snapshots: list[dict]) -> list[dict]:
                 {
                     "date": day,
                     "vendor": VENDOR,
-                    "usd": str((delta / len(covered)).quantize(Decimal("0.000000001"))),
+                    "usd": numeric_usd(_share(delta, len(covered)), pad=True),
                     "flag": flag,
                     "interval_start": prev["ts"],
                     "interval_end": cur["ts"],
