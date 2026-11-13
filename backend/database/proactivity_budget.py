@@ -127,8 +127,9 @@ class BudgetAuthority:
         try:
             reservation = transact(self.client.transaction())
             logger.info(
-                'proactivity_v2_budget_reserved producer=%s reserved_micro_usd=%s policy_version=1',
+                'proactivity_v2_budget_reserved producer=%s day=%s reserved_micro_usd=%s policy_version=1',
                 producer,
+                day,
                 reservation.reserved_micro_usd,
             )
             return reservation
