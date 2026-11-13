@@ -29,6 +29,7 @@ from database.webhook_health import (
 )
 from models.app import App, ChatTool
 from utils.mcp_client import call_mcp_tool
+from utils.mcp_token_refresh import refresh_mcp_access_token
 from utils.http_client import get_webhook_circuit_breaker
 from utils.executors import db_executor, run_blocking
 from utils.model_text import UNTRUSTED_LEGEND, truncation_note, untrusted_block
@@ -225,8 +226,12 @@ def create_app_tool(
     if app_tool.is_mcp and mcp_server_url:
         _mcp_url: str = mcp_server_url
         _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
-        _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
         _transport: str = app_tool.transport
+
+        async def refresh_access_token(rejected: Optional[str]) -> str:
+            if _mcp_tokens is None:
+                raise PermissionError('MCP authorization is unavailable.')
+            return await refresh_mcp_access_token(app_id, _mcp_url, _mcp_tokens, rejected)
 
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
@@ -238,7 +243,14 @@ def create_app_tool(
             if not cb.allow_request():
                 return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
             try:
-                result = await call_mcp_tool(_mcp_url, app_tool.name, arguments, _access_token, _mcp_tokens, _transport)
+                result = await call_mcp_tool(
+                    _mcp_url,
+                    app_tool.name,
+                    arguments,
+                    access_token=_mcp_tokens.get('access_token') if _mcp_tokens else None,
+                    transport=_transport,
+                    refresh_access_token=refresh_access_token if _mcp_tokens else None,
+                )
                 if result.startswith('Error') or result.startswith('MCP error'):
                     cb.record_failure()
                     action = await run_blocking(
