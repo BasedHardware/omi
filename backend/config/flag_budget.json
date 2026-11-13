@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 274,
+  "count": 275,
   "names": {
     "STT_FREE_ALLOWANCE_WATCH_ENABLED": {"owner": "margin-owner", "review_by": "2026-12-12", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {"owner": "margin / SCA-1800", "review_by": "2026-11-26"},
@@ -48,6 +48,7 @@
     "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PUMP_SWEEP_PAGES": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_PUMP_TICK_SECONDS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
+    "BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS": {"owner": "provider-stt drain", "review_by": "2026-12-12"},
     "BATCH_PIPELINE_MAX_OWNER_DRAINS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05"},
     "BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {"owner": "omi-pipeline", "review_by": "2026-11-30"},

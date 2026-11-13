@@ -775,6 +775,18 @@ def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
 
 
+def owner_drain_first_turn_seconds() -> int:
+    """Seconds a newly requested owner's first projection turn may run (2026-11-13); 0 is off.
+
+    A productive turn that ends with rows left makes its owner a backlog owner. Backlog
+    owners keep the full two-minute turn but wait in their own queue, behind newly
+    requested owners, and end a turn at the next step when one of those is waiting for a
+    slot. Without this a few hundred backlog owners hold every slot for two minutes each
+    and an owner with a handful of fresh rows waits behind all of them. 0 restores the
+    single FIFO queue."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', '15'), 15, 120, 0)
+
+
 def projection_drain_claim_aware_enabled() -> bool:
     """Default on; only off disables claim-aware owner-drain admission and backoff."""
     from config.policy import kill_switch
