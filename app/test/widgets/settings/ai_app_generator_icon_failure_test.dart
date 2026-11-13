@@ -44,25 +44,31 @@ final class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
 }
 
-/// Answers the generator's requests in memory: prompts and the draft succeed, the icon fails.
+/// A valid 1x1 PNG, so a successful icon response decodes like a real one.
+const _onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+/// Answers the generator's requests in memory: prompts and the draft succeed; each icon request
+/// takes the next status from [iconStatuses] (500 once the script runs out).
 class _GeneratorHttpOverrides extends HttpOverrides {
-  _GeneratorHttpOverrides(this.requests);
+  _GeneratorHttpOverrides(this.requests, this.iconStatuses);
 
   final List<String> requests;
+  final List<int> iconStatuses;
 
   @override
-  HttpClient createHttpClient(SecurityContext? context) => _GeneratorHttpClient(requests);
+  HttpClient createHttpClient(SecurityContext? context) => _GeneratorHttpClient(requests, iconStatuses);
 }
 
 class _GeneratorHttpClient implements HttpClient {
-  _GeneratorHttpClient(this.requests);
+  _GeneratorHttpClient(this.requests, this.iconStatuses);
 
   final List<String> requests;
+  final List<int> iconStatuses;
 
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
     requests.add(url.path);
-    return _GeneratorRequest(url.path);
+    return _GeneratorRequest(url.path, iconStatuses);
   }
 
   @override
@@ -78,9 +84,10 @@ class _GeneratorHttpClient implements HttpClient {
 }
 
 class _GeneratorRequest implements HttpClientRequest {
-  _GeneratorRequest(this.path);
+  _GeneratorRequest(this.path, this.iconStatuses);
 
   final String path;
+  final List<int> iconStatuses;
 
   @override
   HttpHeaders get headers => _Headers();
@@ -115,7 +122,14 @@ class _GeneratorRequest implements HttpClientRequest {
           }),
         );
       case '/v1/app/generate-icon':
-        return _Response(HttpStatus.internalServerError, jsonEncode({'detail': 'icon generation unavailable'}));
+        final status = iconStatuses.isEmpty ? HttpStatus.internalServerError : iconStatuses.removeAt(0);
+        if (status == HttpStatus.ok) {
+          return _Response(
+            HttpStatus.ok,
+            jsonEncode({'icon_base64': _onePixelPng, 'mime_type': 'image/png', 'status': 'ok'}),
+          );
+        }
+        return _Response(status, jsonEncode({'detail': 'icon generation unavailable'}));
     }
     return _Response(HttpStatus.notFound, '{}');
   }
@@ -188,6 +202,7 @@ Widget _harness(Widget child) {
 
 void main() {
   final requests = <String>[];
+  final iconStatuses = <int>[];
   final en = lookupAppLocalizations(const Locale('en'));
 
   setUpAll(() async {
@@ -197,13 +212,19 @@ void main() {
     // All requests are answered in memory above, without credentials or sockets.
     Env.overrideApiBaseUrl('http://generator.test/');
     PlatformManager.initializeForLocalHarness();
-    HttpOverrides.runWithHttpOverrides(() => HttpPoolManager.instance, _GeneratorHttpOverrides(requests));
+    HttpOverrides.runWithHttpOverrides(() => HttpPoolManager.instance, _GeneratorHttpOverrides(requests, iconStatuses));
+  });
+
+  setUp(() {
+    requests.clear();
+    iconStatuses.clear();
   });
 
   tearDownAll(Env.clearApiBaseUrlOverride);
 
   testWidgets('a failed icon request reports the failed generation instead of silently returning to the prompt',
       (tester) async {
+    iconStatuses.add(HttpStatus.internalServerError);
     await tester.pumpWidget(_harness(const AiAppGeneratorPage()));
     await tester.pump();
 
@@ -221,5 +242,35 @@ void main() {
     expect(find.text(en.aiGenFailedToGenerateApp), findsOneWidget);
     expect(find.text(en.createApp), findsNothing, reason: 'no preview without an icon');
     expect(find.byType(TextField), findsOneWidget, reason: 'the prompt stays on screen for a retry');
+  });
+
+  testWidgets('a failed icon regeneration says so and keeps the generated app on screen', (tester) async {
+    iconStatuses.addAll([HttpStatus.ok, HttpStatus.internalServerError]);
+    await tester.pumpWidget(_harness(const AiAppGeneratorPage()));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'A playful gratitude spinner for daily positivity');
+    await tester.pump();
+    await tester.tap(find.byTooltip(en.send));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(find.text(en.createApp), findsOneWidget, reason: 'the first icon succeeded, so the preview is up');
+
+    await tester.tap(find.byTooltip(en.aiGenRegenerateIcon));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    // The shared client retries a failed call once, so the redo shows up as two icon requests.
+    expect(requests.where((path) => path == '/v1/app/generate-icon').length, greaterThanOrEqualTo(2),
+        reason: 'the redo asked for a new icon and that request is the one that failed');
+    expect(find.text(en.aiGenFailedToRegenerateIcon), findsOneWidget, reason: 'the failed redo is said out loud');
+    expect(find.text(en.createApp), findsOneWidget, reason: 'the generated app and its previous icon stay');
+    expect(find.byTooltip(en.aiGenRegenerateIcon), findsOneWidget, reason: 'and the redo can be tried again');
+
+    // Let the error toast time out so no timer outlives the test.
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pumpAndSettle();
   });
 }
