@@ -17,12 +17,14 @@ def sort_ready_intents(
     *,
     priority_of: Callable[[Any], int],
 ) -> List[Any]:
+    if not intents:
+        return []
     return sorted(
         intents,
         key=lambda intent: ready_sort_key(
             priority=priority_of(intent),
-            created_at=intent.created_at,
-            item_id=intent.intent_id,
+            created_at=getattr(intent, 'created_at', None),
+            item_id=str(getattr(intent, 'intent_id', '')),
             enable_priority=True,
         ),
     )
