@@ -248,6 +248,25 @@ def test_daily_job_never_echoes_artifact_free_text(runner, tmp_path, capsys):
     assert sentinel not in err and "SENTINEL" not in err and "token=" not in err
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        ["http_error", "Bearer sk-live-SENTINEL"],
+        {"code": "http_error", "url": "/v1/organization/balance?token=abc"},
+        ["SENTINEL-BODY"],
+        {"SENTINEL-BODY": "raw vendor response"},
+    ],
+)
+def test_daily_job_bounds_unhashable_artifact_reasons(runner, tmp_path, capsys, reason):
+    """A JSON array/object reason is unhashable; membership must not raise TypeError."""
+    (tmp_path / "vendor_balance_snapshot.json").write_text(json.dumps({"status": "skipped", "reason": reason}))
+    runner.log_vendor_balance_skip(tmp_path, set())
+    err = capsys.readouterr().err
+    assert "reason_unrecognized" in err
+    for leaked in ("SENTINEL", "token=", "Bearer", "http_error"):
+        assert leaked not in err
+
+
 def test_daily_job_reports_an_unreadable_artifact(runner, tmp_path, capsys):
     (tmp_path / "vendor_balance_snapshot.json").write_text("{not json")
     runner.log_vendor_balance_skip(tmp_path, set())

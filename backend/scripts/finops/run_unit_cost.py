@@ -80,7 +80,9 @@ def vendor_balance_skip(raw: pathlib.Path) -> tuple[str, int | None] | None:
     if not isinstance(document, dict) or document.get("status") != "skipped":
         return None
     reason = document.get("reason")
-    if reason not in pull_vendor_balance.SKIP_REASONS:
+    # A JSON array/object reason is unhashable: membership would raise TypeError
+    # and abort the daily job. Type-check first so any non-string is bounded.
+    if not isinstance(reason, str) or reason not in pull_vendor_balance.SKIP_REASONS:
         return ("reason_unrecognized", None)
     status = document.get("http_status")
     if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
