@@ -5,7 +5,11 @@ from typing import Any, Callable, Literal
 
 from prometheus_client import Counter
 
-from config.batch_pipeline import provider_fresh_capture_lag_seconds, provider_merge_membership_enabled
+from config.batch_pipeline import (
+    FRESH_CAPTURE_LAG_SECONDS,
+    provider_fresh_capture_lag_seconds,
+    provider_merge_membership_enabled,
+)
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 from utils.batch_pipeline.contracts import WorkItem
@@ -143,6 +147,10 @@ def enqueue_in_transaction(
         # not stamped fresh is held with the backlog and has no other way to commit.
         lag = now - item.capture_at - item.duration_seconds
         job['fresh_capture'] = lag <= provider_fresh_capture_lag_seconds()
+        if job['fresh_capture'] and lag > FRESH_CAPTURE_LAG_SECONDS:
+            # Fresh for the merge only. Assignment-conflict handling keeps treating an
+            # upload past the ten-minute bar as backfill (projection_hold_policy).
+            job['late_upload'] = True
         # Counted per transaction attempt, so a retried admission can count twice.
         provider_admission(lag, job['fresh_capture'])
     tx.put('jobs', item.segment_id, job)

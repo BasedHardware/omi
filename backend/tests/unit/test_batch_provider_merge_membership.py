@@ -87,6 +87,26 @@ def test_a_provider_upload_within_a_day_of_capture_is_fresh(world, monkeypatch):
     assert _admit_late(store, 'over', end + 86401.0)['fresh_capture'] is False
 
 
+def test_a_late_fresh_upload_keeps_backfill_conflict_handling(world, monkeypatch):
+    """The longer bar changes the merge class only: a writer still missing hours later holds."""
+    from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict
+    from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+
+    _, store = world
+    end = FRESH_CAPTURE + item('probe', FRESH_CAPTURE).duration_seconds
+    on_time = _admit_late(store, 'on-time', end + 600.0)
+    late = _admit_late(store, 'late', end + 7 * 3600.0)
+    over = _admit_late(store, 'over', end + 86401.0)
+    assert 'late_upload' not in on_time and late['late_upload'] is True and 'late_upload' not in over
+    waiting = SyncAssignmentConflict('synthetic', subtype=SyncAssignmentConflictReason.RECORD_FINALIZE_PENDING)
+    now = end + 8 * 3600.0
+    assert quarantines_assignment_conflict(waiting, late, now=now)
+    assert quarantines_assignment_conflict(waiting, {**late, 'fresh_capture': False}, now=now)
+    assert not quarantines_assignment_conflict(waiting, {**on_time}, now=now)
+    # Under six hours old, every lane keeps waiting, as before.
+    assert not quarantines_assignment_conflict(waiting, late, now=end + 3600.0)
+
+
 def test_the_setting_restores_the_ten_minute_bar_and_is_bounded(world, monkeypatch):
     from config import batch_pipeline
 

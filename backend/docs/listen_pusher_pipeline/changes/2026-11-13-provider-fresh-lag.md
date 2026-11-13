@@ -37,8 +37,13 @@ transaction attempt, so a retried admission can count twice.
 For a provider row, `fresh_capture` is read by the merge (`_catch_up`, `_backlog_held`, the
 fresh-first probe and its query) and by `projection_hold_policy.quarantines_assignment_conflict`,
 which treats a row stamped not-fresh as the `backfill` lane and everything else as `fresh` when it
-decides whether an assignment conflict holds or retries. A late provider row now takes the `fresh`
-side of that rule. Nothing else in `backend/` reads the stamp for routing.
+decides whether a conflict that waits on another writer holds or keeps retrying. That rule is kept
+as it was: a provider row stamped fresh with lag over 600 seconds also carries `late_upload: true`,
+and the policy treats it as `backfill`. The only other readers are test code
+(`testing/pipeline_sim/store.py`, `testing/batch_replay`).
+
+Fresh-first is not a guarantee for every owner: behind a fresh GPU head that is not ready yet, a
+fresh provider row waits for that head in capture order. That was already so for on-time rows.
 
 ## Off switch
 
