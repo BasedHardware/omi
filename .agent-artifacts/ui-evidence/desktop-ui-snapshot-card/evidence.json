@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-ui-snapshot-textedit-pending.png",
+      "platform": "desktop-macos",
+      "description": "Main chat on the named dev bundle built from f6951e094a, new account with an empty chat: a ui_snapshot call for com.apple.TextEdit parked under the Using ui_snapshot row. The card reads Read an app window, Let Omi read the window of TextEdit?, the App row TextEdit \u00b7 com.apple.TextEdit, Allow Once (primary), Allow for This Chat (1 h) and Deny, the note Allow for This Chat also allows reading any window of TextEdit for the next hour, and the expiry line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-ui-snapshot-textedit-denied.png",
+      "platform": "desktop-macos",
+      "description": "After Deny through the bridge (the same store method the button calls): the card keeps its app row, the buttons are gone, the status reads Denied, not run, and the model's reply above says it could not read the TextEdit window because the request was declined",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-ui-snapshot-textedit-allowed-for-chat.png",
+      "platform": "desktop-macos",
+      "description": "A second TextEdit read in the same chat answered with Allow for This Chat: the card reads Allowed for this chat until 2:58 AM and the model's reply above quotes the scratch document snapshot-test.txt as hello snapshot test",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-desktop-macos-ui-snapshot-textedit-no-card-in-chat.png",
+      "platform": "desktop-macos",
+      "description": "A third TextEdit read in the same chat runs with no new card under the session grant: the reply lists the window's Close, Minimize and Full Screen buttons and the disabled Document Actions menu, and the card list still holds only the two earlier TextEdit cards",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-desktop-macos-ui-snapshot-notes-pending.png",
+      "platform": "desktop-macos",
+      "description": "A Notes read in the same chat asks again because the grant covers TextEdit only: a new pending card for Notes \u00b7 com.apple.Notes with all three answers and its own covers note, below the denied and allowed TextEdit cards. It was then denied; Notes was not open and nothing was read",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-desktop-macos-ui-snapshot-terminal-refused.png",
+      "platform": "desktop-macos",
+      "description": "A ui_snapshot call for com.apple.Terminal is refused before any card: the reply says Omi blocks access to terminal apps and no Terminal card joins the list",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-desktop-macos-ui-snapshot-settings-pending.png",
+      "platform": "desktop-macos",
+      "description": "A System Settings read in the same chat: a pending card for System Settings \u00b7 com.apple.systempreferences with Allow Once, Allow for This Chat (1 h), Deny and the note that the grant covers any System Settings window for the next hour",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-desktop-macos-ui-snapshot-settings-allowed-for-chat.png",
+      "platform": "desktop-macos",
+      "description": "After Allow for This Chat the System Settings card reads Allowed for this chat until 3:00 AM. The first read after it was refused as refused_settings_pane_unknown because the Sound pane had been opened by deep link with no sidebar row selected; with Sound selected in the sidebar the next read ran without a card and named the Sound pane with its Sound Effects and Output & Input sections (that reply is above the card list, out of frame)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-desktop-macos-capture-screen-pending.png",
+      "platform": "desktop-macos",
+      "description": "A capture_screen call parked: Take a screenshot, Let Omi take a screenshot of your whole screen?, with only Allow Once and Deny (no Allow for This Chat) and the expiry line. It was then denied and no screenshot was taken",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
