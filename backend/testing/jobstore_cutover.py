@@ -37,8 +37,12 @@ def local_only():
     if os.environ.get('OMI_TEST_POSTGRES_IAM') or os.environ.get('OMI_TEST_POSTGRES_ALLOW_REMOTE') == '1':
         raise RuntimeError('remote PostgreSQL forbidden in this local harness')
     dsn = os.environ.get('OMI_TEST_POSTGRES_DSN', '')
-    if dsn and not any(marker in dsn for marker in ('host=/', 'host=127.0.0.1', 'host=localhost')):
-        raise RuntimeError('explicit local PostgreSQL DSN required')
+    if dsn:
+        from psycopg.conninfo import conninfo_to_dict
+
+        host = conninfo_to_dict(dsn).get('host', '')
+        if host not in {'127.0.0.1', 'localhost', '::1'} and not host.startswith('/'):
+            raise RuntimeError('explicit local PostgreSQL DSN required')
 
 
 def corrected_w4(args):
