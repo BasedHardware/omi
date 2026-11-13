@@ -637,7 +637,8 @@ export async function fetchModulateModelled(
   return { byDay, price, priceAsOf };
 }
 
-/** The margin meter's newest hourly row (`omi_finops.margin_meter_hourly`,
+/** The margin meter's newest hourly row (a null margin in the newest row is
+ * "no value", never an older row's number) (`omi_finops.margin_meter_hourly`,
  * written by the meter's publisher; the board's read grant is
  * omi-admin-billing-ro dataViewer). It is the live headline for Variable
  * margin (David 2026-11-13): one number from one owner, so the tile and the
@@ -653,7 +654,6 @@ export interface MeterTile {
 export const METER_TILE_QUERY = `
 SELECT FORMAT_TIMESTAMP('%FT%TZ', as_of) AS as_of, variable_margin_pct, basis_version
 FROM \`based-hardware.omi_finops.margin_meter_hourly\`
-WHERE variable_margin_pct IS NOT NULL
 ORDER BY as_of DESC
 LIMIT 1`;
 

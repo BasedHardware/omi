@@ -506,7 +506,7 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "Settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame "
                    "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
@@ -663,7 +663,7 @@ def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
-            "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
+            "refresh": "5m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
             "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 

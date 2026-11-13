@@ -1818,6 +1818,64 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(text).toContain("basis 2026-11-06.1");
   });
 
+  it("a fresh meter row wins over a metered live day for the headline", async () => {
+    const cutoff = isoDay(shiftDay(end, -2));
+    const s = sources();
+    s.billing = vi.fn(async () => ({
+      ...(await billing()),
+      daily: billingDays.filter((d) => d.date < cutoff),
+    }));
+    s.live = vi.fn(async () => ({
+      runAt: now.toISOString(),
+      days: {
+        [cutoff]: {
+          date: cutoff,
+          queryEnd: `${isoDay(shiftDay(end, -1))}T00:00:00.000Z`,
+          fraction: 1,
+          metered: { cloudRun: 5, firestore: 0, gcs: 0, logging: 0 },
+          producedAt: now.toISOString(),
+        },
+      },
+    }));
+    const withoutMeter = await all(null, s);
+    expect(withoutMeter.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(now.getTime() - 30 * 60_000).toISOString(),
+      variableMarginPct: 12.34,
+      basisVersion: null,
+    }));
+    const f = await all(null, s);
+    expect(f.health.variableMargin.at(-1)!.marginPct).toBe(12.3);
+    expect(f.health.variableMargin.at(-1)!.live).toBe(1);
+  });
+
+  it("a meter row exactly three hours old is stale (the cutoff is under three hours)", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+      variableMarginPct: 40,
+      basisVersion: null,
+    }));
+    const f = await all(null, s);
+    expect(f.health.variableMargin.at(-1)!.marginPct).toBeNull();
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "Margin meter stale since"
+    );
+  });
+
+  it("a rejected meter read leaves the health series intact with no meter headline", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => {
+      throw new Error("bigquery unavailable");
+    });
+    const f = await all(null, s);
+    expect(f.health.variableMargin.length).toBeGreaterThan(0);
+    expect(f.health.variableMargin.at(-1)!.marginPct).toBeNull();
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "Margin meter row unavailable"
+    );
+  });
+
   it("a meter row older than three hours is named stale and never shown as a number", async () => {
     const s = sources();
     const asOf = new Date(now.getTime() - 4 * 3_600_000).toISOString();

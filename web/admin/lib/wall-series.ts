@@ -1155,7 +1155,7 @@ export function healthFrames(
   const meter = legs.meter ?? null;
   const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
   const meterFresh =
-    meter != null && meterAgeMs != null && meterAgeMs <= METER_FRESH_MS;
+    meter != null && meterAgeMs != null && meterAgeMs < METER_FRESH_MS;
   const meterStatus = meterFresh
     ? `Headline: margin meter hour ${meter!.asOf
         .slice(0, 16)
