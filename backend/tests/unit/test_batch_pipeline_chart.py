@@ -999,7 +999,7 @@ def test_held_dead_letter_kill_switch_renders_literal_worker_setting(enabled):
         assert next(v['value'] for v in env if v['name'] == 'BATCH_HELD_DEAD_LETTER_ENABLED') == enabled
 
 
-@pytest.mark.parametrize('environment', ['default', 'dev', 'prod'])
+@pytest.mark.parametrize('environment', ['default', 'dev'])
 def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
     surface = manifest['surfaces'][f'chart/{environment}/batch-pipeline-worker']
@@ -1007,3 +1007,13 @@ def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     assert surface['inheritance']['reason'] == 'intentionally inherits code defaults'
     assert surface['inheritance']['status'] == 'UNRESOLVED'
     assert surface['effective']['batch_timeliness_leader'] == 100
+
+
+def test_prod_worker_levers_match_backend_integration():
+    manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
+    integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
+    assert worker['explicit'] == integration['explicit']
+    assert worker['effective'] == integration['effective']
+    assert worker['explicit']['bpp_decision_cache'] == 100
+    assert 'inheritance' not in worker
