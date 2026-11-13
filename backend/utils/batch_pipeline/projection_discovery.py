@@ -1,5 +1,6 @@
 """Independent bounded discovery cursors for assignment and durable follow-ups."""
 
+import random
 import time
 
 from config.batch_pipeline import (
@@ -10,16 +11,22 @@ from config.batch_pipeline import (
     projection_striping_enabled,
 )
 
+# A main cursor that has not wrapped for this long starts again at a new random point.
+MAIN_PASS_SECONDS = 1800.0
+RECENT_OFFERED_PRUNE = 4096
+
 
 class ProjectionDiscovery:
     def __init__(self, store, *, states: tuple[str, ...] | None = None, recent: bool = False):
         self.store = store
         self.after = None
-        # Second cursor over the newest commits only (assignment discovery opts in). It
-        # shares each page with the main cursor, so the sweep does no more work per tick.
+        # Assignment discovery opts in to a second, stateless read of the newest commits.
+        # It shares each page with the main cursor, so the page holds no more rows.
         self.recent = recent
-        self.recent_after = None
-        self.recent_started = False
+        # segment -> time offered by the recent read; one offer per row per process.
+        self.offered: dict[str, float] = {}
+        self.random = random.random
+        self.pass_started = time.time()
         # None keeps the store's default drain states and its exact legacy call.
         self.states = states
         self.stripe = projection_discovery_stripe()
@@ -53,46 +60,52 @@ class ProjectionDiscovery:
                 ceiling = float(due_before) if due_mode else time.time()
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
-        recent_before = (self.recent_after, self.recent_started)
-        newest = self.recent_page(limit, scope) if self.recent and not due_mode else []
-        if newest:
-            limit = max(1, limit - len(newest))
-        try:
-            segments, after = self.store.projection_page(limit=limit, after=after, **scope)
-            if not segments and seeding:
-                # Sparse/short collections or clock skew: do not waste a sweep tick.
-                segments, after = self.store.projection_page(limit=limit, after=None, **scope)
-        except Exception:
-            # The newest rows read above are not returned, so their cursor must not move.
-            self.recent_after, self.recent_started = recent_before
-            raise
+        recent_on = self.recent and not due_mode and projection_recent_discovery_seconds() > 0
+        if recent_on and striped and self.seeded and time.time() - self.pass_started > MAIN_PASS_SECONDS:
+            # The main cursor has not reached the newest row for a whole pass period: rows
+            # arrive as fast as it reads. Rows before every process's start point would
+            # then wait for a wrap that never comes, so start again at a new random point.
+            # A continuous point, not one of the 4096 buckets: every row can be the start.
+            self.stripe = self.random() * PROJECTION_DISCOVERY_STRIPES
+            self.after, self.seeded, self.pass_started = None, False, time.time()
+            return self.next(limit, due_before)
+        newest, read = self.recent_page(limit, scope) if recent_on else ([], 0)
+        if read:
+            limit = max(1, limit - read)
+        segments, after = self.store.projection_page(limit=limit, after=after, **scope)
+        if not segments and seeding:
+            # Sparse/short collections or clock skew: do not waste a sweep tick.
+            segments, after = self.store.projection_page(limit=limit, after=None, **scope)
         # Commit the hint only after a successful query. Errors retry this page.
         self.after = after
         self.seeded = True
+        if after is None or seeding:
+            self.pass_started = time.time()
         if newest:
+            now = time.time()
+            for segment in newest:
+                self.offered[segment] = now
             seen = set(newest)
             return newest + [segment for segment in segments if segment not in seen]
         return segments
 
-    def recent_page(self, limit: int, scope: dict) -> list[str]:
-        """Up to half a page from the newest commits, oldest first inside the window.
+    def recent_page(self, limit: int, scope: dict) -> tuple[list[str], int]:
+        """Rows from the newest commits this process has not offered yet, and rows read.
 
-        The cursor walks from the window's floor to the newest row, then starts again.
-        A process's first pass starts at its stripe's point in the window, so replicas
-        do not all read the same rows. A failed query costs only this half page."""
+        Each tick reads up to half a page, oldest first, from a random point in the last
+        `projection_recent_discovery_seconds`. There is no cursor: replicas land on
+        different points, a restart changes nothing, and a row is offered here at most
+        once per process (it has left the window before its entry expires). The main
+        cursor still reaches every row. A failed query costs only this half page."""
         window = projection_recent_discovery_seconds()
-        if window <= 0 or limit < 2:
-            return []
-        floor = time.time() - window
-        after = self.recent_after
-        if after is None or float(after[0]) < floor:
-            phase = 0.0 if self.recent_started else window * self.stripe / PROJECTION_DISCOVERY_STRIPES
-            after = (floor + phase, '')
+        if limit < 2:
+            return [], 0
+        now = time.time()
+        if len(self.offered) > RECENT_OFFERED_PRUNE:
+            self.offered = {name: at for name, at in self.offered.items() if now - at <= window}
         try:
-            segments, cursor = self.store.projection_page(limit=limit // 2, after=after, **scope)
+            start = now - window + window * self.random()
+            segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
         except Exception:
-            return []
-        self.recent_started = True
-        # None: the newest row was reached; the next pass starts at the floor again.
-        self.recent_after = cursor
-        return segments
+            return [], 0
+        return [name for name in segments if now - self.offered.get(name, -window - 1.0) > window], len(segments)
