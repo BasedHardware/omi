@@ -3394,3 +3394,84 @@ final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {};
 }
+
+enum RetentionOfferShownReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other");
+  const RetentionOfferShownReason(this.wireName);
+  final String wireName;
+}
+
+final class RetentionOfferShown extends RegisteredEvent {
+  const RetentionOfferShown({required this.reason, required this.percentOff});
+  final RetentionOfferShownReason reason;
+  final int percentOff;
+  @override
+  String get wireName => "Retention Offer Shown";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "percent_off": percentOff};
+}
+
+enum RetentionOfferAcceptedReason {
+  tooExpensive("too_expensive"),
+  notUsingEnough("not_using_enough"),
+  missingFeatures("missing_features"),
+  audioQuality("audio_quality"),
+  batteryDrain("battery_drain"),
+  foundAlternative("found_alternative"),
+  other("other");
+  const RetentionOfferAcceptedReason(this.wireName);
+  final String wireName;
+}
+
+final class RetentionOfferAccepted extends RegisteredEvent {
+  const RetentionOfferAccepted({required this.reason, required this.percentOff});
+  final RetentionOfferAcceptedReason reason;
+  final int percentOff;
+  @override
+  String get wireName => "Retention Offer Accepted";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "percent_off": percentOff};
+}
+
+enum YearlyRetentionObservationPlacement {
+  cancel("cancel"),
+  engaged("engaged");
+  const YearlyRetentionObservationPlacement(this.wireName);
+  final String wireName;
+}
+
+enum YearlyRetentionObservationAction {
+  shown("shown"),
+  opened("opened"),
+  confirmed("confirmed"),
+  succeeded("succeeded"),
+  failed("failed"),
+  dismissed("dismissed");
+  const YearlyRetentionObservationAction(this.wireName);
+  final String wireName;
+}
+
+enum YearlyRetentionObservationVariant {
+  control("control"),
+  treatment("treatment");
+  const YearlyRetentionObservationVariant(this.wireName);
+  final String wireName;
+}
+
+final class YearlyRetentionObservation extends RegisteredEvent {
+  const YearlyRetentionObservation({required this.placement, required this.action, required this.variant, required this.experimentVersion});
+  final YearlyRetentionObservationPlacement placement;
+  final YearlyRetentionObservationAction action;
+  final YearlyRetentionObservationVariant variant;
+  final int experimentVersion;
+  @override
+  String get wireName => "Yearly Retention Observation";
+  @override
+  Map<String, Object> get properties => {"placement": placement.wireName, "action": action.wireName, "variant": variant.wireName, "experiment_version": experimentVersion};
+}

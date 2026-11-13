@@ -176,6 +176,9 @@ def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch
     monkeypatch.setattr('database.user_data_deletion.get_data_plane_firestore_client', lambda: data_plane)
     client.collection.return_value.document.return_value.get.return_value.exists = False
     assert purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
+    client.collection.assert_any_call('experiments')
+    experiment = client.collection.return_value.document.return_value.collection.return_value
+    experiment.document.assert_any_call('synthetic')
     data_plane.collection.assert_any_call('rollout_cohorts')
     data_plane.collection.return_value.document.return_value.delete.assert_called_once_with()
     client.collection.assert_any_call('users')
@@ -191,7 +194,10 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     user_ref = MagicMock()
     user_ref.get.return_value.exists = False
     user_ref.collections.return_value = []
-    client.collection.side_effect = lambda name: {'plugins_data': plugins, 'users': users}[name]
+    experiments = MagicMock()
+    client.collection.side_effect = lambda name: {'plugins_data': plugins, 'users': users, 'experiments': experiments}[
+        name
+    ]
     users.document.return_value = user_ref
 
     app_ref = MagicMock()
@@ -222,6 +228,9 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     app_ref.delete.assert_called_once_with()
     delete_app_cache.assert_called_once_with('creator-app')
     delete_generic_cache.assert_called_once()
+    experiments.document.assert_called_once_with('EXP-006-yearly-switch-retention')
+    experiments.document.return_value.collection.return_value.document.assert_called_once_with('creator')
+    experiments.document.return_value.collection.return_value.document.return_value.delete.assert_called_once_with()
 
 
 def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_expand_batch_scope():

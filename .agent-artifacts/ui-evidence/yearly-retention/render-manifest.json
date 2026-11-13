@@ -1,0 +1,60 @@
+{
+  "viewport_logical": [
+    430,
+    932
+  ],
+  "pixel_ratio": 2,
+  "theme": "light",
+  "locale": "en",
+  "synthetic": true,
+  "approval": "PENDING",
+  "historical_source": "ac02feb05f0d6389f473e08a25980397b1348b0f",
+  "renders": [
+    {
+      "file": "001-mobile-ios-cancel-before.png",
+      "sha256": "18639044ae7e31c48f7b32b6e6785629e2c0343528946e2bfbdf98523843d5dc",
+      "role": "Historical production cancellation source at ac02feb05f0d6389f473e08a25980397b1348b0f"
+    },
+    {
+      "file": "002-mobile-ios-cancel-control.png",
+      "sha256": "18639044ae7e31c48f7b32b6e6785629e2c0343528946e2bfbdf98523843d5dc",
+      "role": "Current cancellation control/no yearly offer"
+    },
+    {
+      "file": "003-mobile-ios-cancel-after.png",
+      "sha256": "d87a81584b757d67c6e656853f6f34726843feb023419d0e39e3aa87190d4539",
+      "role": "Production cancellation, too_expensive treatment; yearly before discount; Cancel pinned"
+    },
+    {
+      "file": "004-mobile-ios-engaged-before.png",
+      "sha256": "c8a533f4e69db77bad22161f65d451011ab375083d1caa8dc28e67aaa7febe6d",
+      "role": "Minimal Home host before/flag-off: no new placement"
+    },
+    {
+      "file": "005-mobile-ios-engaged-after.png",
+      "sha256": "d4c3d860cd9a7d1562c6d7cb892bf3211f9f618fe770bcb00c30e69503e24154",
+      "role": "Production engaged placement in minimal Home host, not full Home shell"
+    },
+    {
+      "file": "006-mobile-ios-price-preview.png",
+      "sha256": "023cfe9927cbf884783bf71f86598eba22faa1180ed4664db4b368e9d149de57",
+      "role": "Production existing yearly preview, exact synthetic charge and annual total"
+    },
+    {
+      "file": "007-mobile-ios-payment-declined.png",
+      "sha256": "5980c2d1eb80abe6c5b44dc8db88a3130a54ad895e88e8a61e814be4e83f189a",
+      "role": "Production switch decline, monthly retained; dismiss sheet to Cancel subscription"
+    }
+  ],
+  "limitations": [
+    "Widget rasters, not device/system-safe-area or full Home-shell acceptance.",
+    "No task-owned agent-flutter debug app was available; device/debugger verification not claimed.",
+    "No actual Stripe price, account, deployment, approval, activation or lift is represented."
+  ],
+  "source_files_sha256": {
+    "app/lib/pages/settings/widgets/cancel_subscription_sheet.dart": "a049f3a5bda156086529967dc03c9ba6b437f0633b2d43328a4a8692aa00927f",
+    "app/lib/pages/settings/widgets/yearly_retention_placement.dart": "76a9256d3ac1a022c705d751aea568b1e78b3f6c8e464da618cbe8460f6133dc",
+    "app/lib/pages/settings/widgets/yearly_switch.dart": "a6490fdd2c338edaef0667ddfa84dc17a26b03a3c6d93463664e35eec3c9e4e0",
+    "app/test/widgets/yearly_retention_test.dart": "9a3edebfbccf1755e2168159910b50326d3243f8926e91aa3ca1764a29ca438c"
+  }
+}
