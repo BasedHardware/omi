@@ -219,6 +219,21 @@ def test_empty_structure_minimum_eligibility_is_narrow(monkeypatch, mutate, kwar
     assert result is structured
 
 
+def test_empty_structure_minimum_keeps_a_trusted_wake_word_mic_check(monkeypatch):
+    from models.structured import Structured
+
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    conversation = _empty_structure_conversation()
+    _set_content_free_transcript(conversation)
+    with (
+        patch.object(eligibility, 'find_wake_word_matches', return_value=[object()]),
+        patch.object(eligibility, 'is_release_probe_uid', return_value=False),
+        patch.object(eligibility.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC')),
+    ):
+        _, applied = eligibility.apply_empty_structure_minimum(**_eligibility_arguments(conversation, Structured()))
+    assert applied is True
+
+
 def test_empty_structure_minimum_eligible_for_plain_kept_recovery(monkeypatch):
     from models.structured import Structured
 

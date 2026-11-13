@@ -23,6 +23,7 @@ from utils.conversations.recovery import (
     structured_is_rich,
 )
 from utils.conversations.relevance import content_free_rule, final_relevance
+from utils.conversations.wake_word import find_wake_word_matches
 from utils.llm.notes_short_clip import has_explicit_reminder
 from utils.release_probe import is_release_probe_uid
 
@@ -60,7 +61,7 @@ def _eligible(
         return False
     segments = conversation.transcript_segments or []
     texts = [segment.text for segment in segments]
-    if content_free_rule(texts, has_photos=False, trusted_wake_word=False):
+    if content_free_rule(texts, has_photos=False, trusted_wake_word=bool(find_wake_word_matches(segments))):
         # Mic checks and filler stay on the discard path, as in the ordinary rule.
         return False
     if conversation.photos or has_explicit_reminder(conversation.transcript_segments):

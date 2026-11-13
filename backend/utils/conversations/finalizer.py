@@ -37,6 +37,7 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.recovery import recovery_minimum_terminal_enabled
 from utils.conversations.smart_merge import (
     _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
     SmartMergeIncomplete,
@@ -473,7 +474,7 @@ async def finalize_persisted_conversation(
                 recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
-                recovery_final_attempt=final_attempt,
+                recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
