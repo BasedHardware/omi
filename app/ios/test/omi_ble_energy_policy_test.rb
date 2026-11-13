@@ -36,6 +36,8 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 return diagnostics.backfilledHistory(
                     stored, nowMs: timestamp, hadConnection: hadConnection,
                     timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+                    resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+                    onLookupMiss: { _ in },
                     withDuration: { event, duration in
                         var updated = event
                         updated["timeToReconnectMs"] = duration
@@ -157,6 +159,8 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 let backfilled = diagnostics.backfilledHistory(
                     open, nowMs: 2_000, hadConnection: true,
                     timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+                    resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+                    onLookupMiss: { _ in },
                     withDuration: { event, duration in
                         var updated = event
                         updated["timeToReconnectMs"] = duration
@@ -172,6 +176,8 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 let backfilledResolved = diagnostics.backfilledHistory(
                     resolvedHistory, nowMs: 2_000, hadConnection: true,
                     timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+                    resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+                    onLookupMiss: { _ in },
                     withDuration: { event, duration in
                         var updated = event
                         updated["timeToReconnectMs"] = duration
@@ -181,7 +187,28 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 guard let resolvedUpdated = backfilledResolved, !resolvedUpdated.isEmpty else {
                     fatalError("Resolved outage row was not found because lookup used retentionTimestamp")
                 }
-                precondition(resolvedUpdated[0]["timeToReconnectMs"] as? Int64 == 1_000)
+                precondition(resolvedUpdated[0]["timeToReconnectMs"] as? Int64 == 500)
+
+                var misses: [Int64] = []
+                func recover(_ history: [[String: Any]]) -> [[String: Any]]? {
+                    diagnostics.recordEvent(timestampMs: 1_000, eventType: "disconnect", isManual: false)
+                    return diagnostics.backfilledHistory(
+                        history, nowMs: 1_000, hadConnection: true,
+                        timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+                        resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+                        onLookupMiss: { misses.append($0) },
+                        withDuration: { event, duration in
+                            var updated = event
+                            updated["timeToReconnectMs"] = duration
+                            return updated
+                        }
+                    )
+                }
+                let immediate = recover([["timestamp": Int64(1_000)]])
+                precondition(immediate?[0]["timeToReconnectMs"] as? Int64 == 0)
+                precondition(misses.isEmpty)
+                precondition(recover([["timestamp": Int64(999)]]) == nil)
+                precondition(misses == [1_000])
             }
         }
       SWIFT

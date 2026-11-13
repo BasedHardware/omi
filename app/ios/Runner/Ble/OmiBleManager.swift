@@ -1492,6 +1492,10 @@ final class OmiBleManager: NSObject {
         if let updated = pending.backfilledHistory(
             history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
             timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+            resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+            onLookupMiss: { start in
+                self.logBle(uuid: uuid, event: "reconnect_history_lookup_miss", detail: "start=\(start)")
+            },
             withDuration: { event, duration in
                 var updated = event
                 updated["timeToReconnectMs"] = duration
