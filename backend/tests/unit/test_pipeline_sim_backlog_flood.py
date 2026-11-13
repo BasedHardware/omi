@@ -1,11 +1,13 @@
 """A flood of settled backlog must not consume the capacity fresh projection needs.
 
-All four full-scale arms get their own same-seed, same-scheduler no-flood baseline
-in an isolated process (the sim patches process-global runtime seams). The
+All four full-scale arms share one same-seed no-flood baseline: its short chains
+produce identical metrics under both scheduler settings. Four flood arms run in
+isolated processes because the sim patches process-global runtime seams. The
 unmetered/FIFO arm reproduces the 2026-11-13 incident above a 2x p90 regression.
 """
 
 from concurrent.futures import ProcessPoolExecutor
+from itertools import repeat
 import json
 import multiprocessing
 import os
@@ -13,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from testing.pipeline_sim.backlog_flood import run_backlog_flood
+from testing.pipeline_sim.backlog_flood import BacklogFloodSimulation, fresh_baseline, run_backlog_flood
 from testing.pipeline_sim.scenarios import backlog_flood_fresh_latency
 
 
@@ -21,18 +23,19 @@ def _config(release: str, first_turn: int, *, flood: bool = True):
     return backlog_flood_fresh_latency(1, release=release, flood=flood, owner_drain_first_turn_seconds=first_turn)
 
 
-def _run_arm(release: str, first_turn: int):
-    return run_backlog_flood(_config(release, first_turn))
+def _run_arm(release: str, first_turn: int, baseline):
+    return run_backlog_flood(_config(release, first_turn), baseline_summary=baseline)
 
 
 @pytest.fixture(scope='module')
 def runs():
     arms = [(release, first_turn) for release in ('held', 'unmetered') for first_turn in (0, 15)]
+    baseline = fresh_baseline(BacklogFloodSimulation(_config('held', 15, flood=False)).run())
     # Linux defaults to fork, which can inherit the simulator's patched asyncio/env state and
     # libraries with background threads. Spawn matches the tested macOS path on every platform.
     context = multiprocessing.get_context('spawn')
     with ProcessPoolExecutor(max_workers=len(arms), mp_context=context) as pool:
-        samples = list(pool.map(_run_arm, *zip(*arms)))
+        samples = list(pool.map(_run_arm, *zip(*arms), repeat(baseline)))
     return {f'{release}_{first_turn}': sample for (release, first_turn), sample in zip(arms, samples)}
 
 

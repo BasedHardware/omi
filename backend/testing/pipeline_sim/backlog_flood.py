@@ -377,26 +377,30 @@ def _rounded(value: float | None) -> float | None:
     return round(value, 3) if value is not None else None
 
 
-def flood_metrics(result, baseline_result=None) -> dict[str, Any]:
+def _capture_latency(record: UploadRecord) -> float:
+    capture_end = record.accepted_at - record.spec.recording_age + sum(s.duration for s in record.spec.segments)
+    return record.projected_at - capture_end
+
+
+def fresh_baseline(result) -> dict[str, float | int | None]:
+    """The serializable no-flood cohort shared by tests whose short chains are scheduler-identical."""
+    fresh = [record for record in result.records if record.spec.upload_id.startswith('fresh-')]
+    values = [_capture_latency(record) for record in fresh if record.projected_at is not None]
+    return {
+        'p50': _rounded(percentile(values, 0.5)),
+        'p90': _rounded(percentile(values, 0.9)),
+        'pending': sum(record.projected_at is None for record in fresh),
+    }
+
+
+def flood_metrics(result, baseline_result=None, *, baseline_summary=None) -> dict[str, Any]:
     spec = result.config.backlog_flood or {}
     fresh = [record for record in result.records if record.spec.upload_id.startswith('fresh-')]
     backlog = [record for record in result.records if record.spec.upload_id.startswith('flood-')]
 
-    def capture_latency(record: UploadRecord) -> float:
-        capture_end = record.accepted_at - record.spec.recording_age + sum(s.duration for s in record.spec.segments)
-        return record.projected_at - capture_end
-
-    latencies = [capture_latency(record) for record in fresh if record.projected_at is not None]
+    latencies = [_capture_latency(record) for record in fresh if record.projected_at is not None]
     p50, p90 = _rounded(percentile(latencies, 0.5)), _rounded(percentile(latencies, 0.9))
-    baseline = None
-    if baseline_result is not None:
-        baseline_fresh = [record for record in baseline_result.records if record.spec.upload_id.startswith('fresh-')]
-        baseline_values = [capture_latency(record) for record in baseline_fresh if record.projected_at is not None]
-        baseline = {
-            'p50': _rounded(percentile(baseline_values, 0.5)),
-            'p90': _rounded(percentile(baseline_values, 0.9)),
-            'pending': sum(record.projected_at is None for record in baseline_fresh),
-        }
+    baseline = baseline_summary or (fresh_baseline(baseline_result) if baseline_result is not None else None)
 
     projected_backlog = [record for record in backlog if record.projected_at is not None]
     last_projection = max((record.projected_at for record in projected_backlog), default=result.ended_at)
@@ -482,8 +486,8 @@ def flood_metrics(result, baseline_result=None) -> dict[str, Any]:
     }
 
 
-def run_backlog_flood(config: SimConfig) -> dict[str, Any]:
-    """Run one release arm against its same-seed, same-scheduler no-flood baseline."""
+def run_backlog_flood(config: SimConfig, *, baseline_summary=None) -> dict[str, Any]:
+    """Run one release arm against its same-seed no-flood baseline or its serializable summary."""
     release = (config.backlog_flood or {})['release']
     if release == 'gated':
         # Step 4 installs the commit gate here; do not label unmetered rollback as metered release.
@@ -492,8 +496,8 @@ def run_backlog_flood(config: SimConfig) -> dict[str, Any]:
         raise ValueError('the backlog flood scenario only models the batch path')
     result = BacklogFloodSimulation(config).run()
     sample = score(result)
-    metrics = flood_metrics(result)
-    if config.backlog_flood['flood']:
+    metrics = flood_metrics(result, baseline_summary=baseline_summary)
+    if config.backlog_flood['flood'] and baseline_summary is None:
         baseline_spec = {**config.backlog_flood, 'flood': False}
         baseline_result = BacklogFloodSimulation(replace(config, backlog_flood=baseline_spec)).run()
         metrics = flood_metrics(result, baseline_result)
