@@ -193,5 +193,5 @@ another upload. Recovery does not change automatic-upload or local-only choices.
 - [x] Foreign accounts and unresolved batch ownership remain hidden and recoverable.
 - [x] Accepted legacy jobs survive preference clearing and resume as processing.
 - [x] Regression suites exercise real WAL persistence, retained bytes and repeated intake.
-- [ ] Native simulator persistence/reauthentication verification.
+- [x] Native iOS simulator persistence/reauthentication verification with disposable PCM audio, real preferences and index.
 - [ ] Store release and original-customer recording recovery, tracked separately from source verification.
