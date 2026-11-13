@@ -426,6 +426,11 @@ class FirestoreStore:
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
 
+    def projection_finish_backfill_complete(self) -> bool:
+        from database.batch_pipeline_projection_finish_backfill import backfill_complete
+
+        return backfill_complete(self.client, self.namespace)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
