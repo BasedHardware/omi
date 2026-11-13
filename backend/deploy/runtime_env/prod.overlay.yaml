@@ -1656,10 +1656,11 @@ overlay:
           # keeps 7200. Kill switch: '7200' restores the previous cycle.
           BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '86400', category: ops_kill}
           # The outbox sweep repairs a lost wake only for rows younger than this. At the 14-day default a
-          # held row whose 24 h due time crossed day 14 could lose its last wake with no repair. 31 days
-          # covers the staged audio's 30-day life, after which the unit cannot be processed anyway
+          # held row whose 24 h due time crossed day 14 could lose its last wake with no repair. 29 days is
+          # where the pipeline ends a staged input (input_retention.TERMINAL_SECONDS); the bucket deletes
+          # the audio at 30, so an older row must not be re-woken to fetch audio that is gone
           # (David 2026-11-13, D5). Removing the line restores 14.
-          BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS: {value: '31', category: reliability}
+          BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS: {value: '29', category: reliability}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).

@@ -60,6 +60,7 @@ from utils.batch_pipeline.recovery_disposition import (
     log_result_held,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.input_retention import TERMINAL_SECONDS, staged_enqueue
 from utils.batch_pipeline.provider_stt_admission import PENDING, SttRoute
 from utils.batch_pipeline.vendor_route_contracts import (
     ATTEMPTS_FIELD,
@@ -704,8 +705,6 @@ NEAR_EXPIRY_RECHECK_SECONDS = 7200.0
 def _hold_before_expiry(wait: float, job: dict | None, now: float | None) -> float:
     if job is None or now is None or wait <= NEAR_EXPIRY_RECHECK_SECONDS:
         return wait
-    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS, staged_enqueue
-
     staged = staged_enqueue(job)
     if staged is None:
         return wait
