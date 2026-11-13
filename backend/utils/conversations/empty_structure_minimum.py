@@ -59,7 +59,7 @@ def _eligible(
     if app_id or is_release_probe_uid(uid):
         return False
     segments = conversation.transcript_segments or []
-    texts = [segment.text for segment in segments] or [conversation.text or '']
+    texts = [segment.text for segment in segments]
     if content_free_rule(texts, has_photos=False, trusted_wake_word=False):
         # Mic checks and filler stay on the discard path, as in the ordinary rule.
         return False
