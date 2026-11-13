@@ -1188,16 +1188,44 @@ def defer_sync_revision_fence(
     *,
     firestore_client: Any = None,
 ) -> bool:
+    """Yield a losing processor's lease under the shared bounded contention budget.
+
+    Every other custody writer in this file rides
+    ``run_with_transaction_contention_retry``; this yield ran the decorated
+    transaction bare on one ``client.transaction()``, so one read-time
+    ``Aborted`` on the hot job document — the same document the budgeted
+    claim, complete, fence and fanout writers are rewriting — escaped the
+    losing processor's yield as a raw SDK error, and the redispatch a fresh
+    transaction would have landed was lost with the attempt. Replayable
+    contention (including expired-chain retirements) now replays on a fresh
+    transaction; the attempt cap surfaces as the typed
+    ``FirestoreContentionExhausted`` the finalization lane already handles.
+    The direct-transactional shape matches the sibling yield writer
+    ``defer_finalization_replay``: expired-transaction retirements replay at
+    the outer budget layer, which owns tighter bounds than an inner restart
+    ladder (three fresh chains without a wall-clock budget, the attempt cap
+    with one).
+
+    Failure-Class: FC-sync-revision-yield-commit-runs-outside-the-shared-contention-budget
+    """
     client = _client(firestore_client)
-    return firestore.transactional(_defer_sync_revision_fence_txn)(
-        client.transaction(),
-        _job_ref(client, job_id),
-        lambda uid, cid: _conversation_ref(client, uid, cid),
-        dispatch_generation,
-        lease_epoch,
-        expected_revision,
-        _now(),
-        client.collection(FINALIZATION_PROJECTION_COLLECTION),
+
+    def run_once(transaction: Any) -> bool:
+        return firestore.transactional(_defer_sync_revision_fence_txn)(
+            transaction,
+            _job_ref(client, job_id),
+            lambda uid, cid: _conversation_ref(client, uid, cid),
+            dispatch_generation,
+            lease_epoch,
+            expected_revision,
+            _now(),
+            client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        )
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_sync_revision_defer',
     )
 
 
