@@ -2720,3 +2720,189 @@ environment_shared:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
   compute_project: '{compute_project}'
+
+# Offline read-lever evidence only: no rollout value authority.
+firestore_read_lever_policy:
+  lever_expiry:
+    base/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/dev/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/dev/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/prod/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/dev/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/prod/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'

@@ -1,6 +1,7 @@
 """Offline Helm contract: no deployment, dedicated pool and scoped queue age."""
 
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
@@ -996,3 +997,13 @@ def test_held_dead_letter_kill_switch_renders_literal_worker_setting(enabled):
     for deployment in deployments:
         env = deployment['spec']['template']['spec']['containers'][0]['env']
         assert next(v['value'] for v in env if v['name'] == 'BATCH_HELD_DEAD_LETTER_ENABLED') == enabled
+
+
+@pytest.mark.parametrize('environment', ['default', 'dev', 'prod'])
+def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
+    manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    surface = manifest['surfaces'][f'chart/{environment}/batch-pipeline-worker']
+    assert surface['explicit'] == {}
+    assert surface['inheritance']['reason'] == 'intentionally inherits code defaults'
+    assert surface['inheritance']['status'] == 'UNRESOLVED'
+    assert surface['effective']['batch_timeliness_leader'] == 100
