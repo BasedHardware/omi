@@ -423,9 +423,43 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
         )
     ):
         errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
-    for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
-        if f"--service {service}" not in snapshot_step:
-            errors.append(f"{name}: pre-promotion snapshot must include {service}")
+    scope_argument = "${{ steps.service-scope.outputs.service_args }}"
+    if scope_argument in snapshot_step:
+        # The same canonical resolver writes both the argv and promotion's env
+        # list. Blank/auto-dev scope remains all four; its grammar/default and
+        # subset behavior are exercised by test_backend_deploy_services.py.
+        scope_index = step_index("id: service-scope")
+        scope_step = "\n".join(steps[scope_index]) if scope_index >= 0 else ""
+        promotion_step = "\n".join(steps[promotion_index]) if promotion_index >= 0 else ""
+        required_scope = (
+            'python3 "$GITHUB_ACTION_PATH/../../../backend/scripts/backend_deploy_services.py"',
+            'SERVICES: ${{ inputs.services }}',
+            '--services "$SERVICES"',
+            '--profile "${{ inputs.deploy_profile }}"',
+            '--github-output "$GITHUB_OUTPUT"',
+            '--github-env "$GITHUB_ENV"',
+        )
+        if (
+            not 0 <= scope_index < snapshot_index
+            or not all(marker in scope_step for marker in required_scope)
+            or any(line.strip().startswith("if:") for line in steps[scope_index])
+        ):
+            errors.append(f"{name}: scoped snapshot requires the unconditional canonical service resolver first")
+        if (
+            "for service in $BACKEND_DEPLOY_SERVICES; do" not in promotion_step
+            or 'update-traffic "$service"' not in promotion_step
+        ):
+            errors.append(f"{name}: snapshot and promotion must share the validated service scope")
+        if scope_argument not in candidate_text:
+            errors.append(f"{name}: candidate acceptance must share the validated service scope")
+        serving_step = "\n".join(steps[serving_vector_index]) if serving_vector_index >= 0 else ""
+        if scope_argument not in serving_step:
+            errors.append(f"{name}: serving verification must share the validated service scope")
+    else:
+        for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
+            if f"--service {service}" not in snapshot_step:
+                errors.append(f"{name}: pre-promotion snapshot must include {service}")
+
 
     if not any(
         marker in "\n".join(profile_restore)
@@ -1265,6 +1299,64 @@ jobs:
 """
     if validate_phase_aware_backend_promotion("fixture.yml", phase_aware_promotion):
         raise PolicyError("valid phase-aware backend promotion was rejected")
+    scoped_promotion = phase_aware_promotion.replace(
+        "    steps:\n",
+        """    steps:
+      - name: Resolve service selection
+        id: service-scope
+        env:
+          SERVICES: ${{ inputs.services }}
+        run: |
+          python3 "$GITHUB_ACTION_PATH/../../../backend/scripts/backend_deploy_services.py" --services "$SERVICES" --profile "${{ inputs.deploy_profile }}" --github-output "$GITHUB_OUTPUT" --github-env "$GITHUB_ENV"
+""",
+        1,
+    )
+    service_lines = "".join(
+        f"            --service {service} " + "\\" + "\n"
+        for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration")
+    )
+    scoped_promotion = scoped_promotion.replace(
+        service_lines, "            ${{ steps.service-scope.outputs.service_args }} " + "\\" + "\n"
+    )
+    scoped_promotion = (
+        scoped_promotion.replace(
+            "--candidate --cloud-run-only",
+            "--candidate --cloud-run-only ${{ steps.service-scope.outputs.service_args }}",
+        )
+        .replace(
+            "verify_backend_release_vector.py --environment dev",
+            "verify_backend_release_vector.py --environment dev ${{ steps.service-scope.outputs.service_args }}",
+        )
+        .replace(
+            "        id: shift-cloud-run-traffic\n",
+            '        id: shift-cloud-run-traffic\n        run: |\n          for service in $BACKEND_DEPLOY_SERVICES; do\n            gcloud run services update-traffic "$service" --to-revisions=validated=100\n          done\n',
+        )
+    )
+    if validate_phase_aware_backend_promotion("fixture.yml", scoped_promotion):
+        raise PolicyError("validated scoped snapshot/promotion was rejected")
+    for before, after in (
+        ("backend_deploy_services.py", "untrusted_scope.py"),
+        ("--github-env", "--ignored-env"),
+        ("--github-output", "--ignored-output"),
+        ('--services "$SERVICES"', '--services backend'),
+        ('--profile "${{ inputs.deploy_profile }}"', '--profile manual'),
+        ("for service in $BACKEND_DEPLOY_SERVICES; do", "for service in backend; do"),
+        ('update-traffic "$service"', "update-traffic backend"),
+        (
+            "--candidate --cloud-run-only ${{ steps.service-scope.outputs.service_args }}",
+            "--candidate --cloud-run-only",
+        ),
+        ("--environment dev ${{ steps.service-scope.outputs.service_args }}", "--environment dev"),
+        ("id: service-scope", "id: service-scope\n        if: ${{ false }}"),
+    ):
+        if not validate_phase_aware_backend_promotion("fixture.yml", scoped_promotion.replace(before, after)):
+            raise PolicyError(f"unsafe scoped snapshot mutation was accepted: {before!r}")
+    without_one_service = phase_aware_promotion.replace(
+        "--service backend-integration", "--ignored-service backend-integration"
+    )
+    if not validate_phase_aware_backend_promotion("fixture.yml", without_one_service):
+        raise PolicyError("a literal snapshot omitting a service satisfied the promotion contract")
+
     without_restore = phase_aware_promotion.replace(
         "Restore Cloud Run traffic snapshot after failed promotion", "Report"
     )
