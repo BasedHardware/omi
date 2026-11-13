@@ -1,4 +1,7 @@
-"""Quiet-check identity and retirement, independent of finalization admission."""
+"""Quiet-check identity and retirement, independent of finalization admission.
+
+Failure-Class: FC-quiet-retirement-defers-a-replayable-abort-to-the-durable-backstop
+"""
 
 import logging
 from datetime import datetime, timezone
@@ -7,7 +10,8 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -82,17 +86,36 @@ def restore_quiet_check_in_transaction(
 def stop_quiet_check(
     job_id: str, generation: int, *, failure_code: str | None = None, firestore_client: Any = None
 ) -> None:
-    """A delivered worker may retire only its own generation."""
+    """A delivered worker may retire only its own generation.
+
+    The retirement transaction runs on the same shared bounded contention
+    budget with the expired-transaction restart as the recording-session
+    writers it races on these documents. The SDK replays a commit abort on
+    the same — often retired — transaction id and never retries an abort
+    raised by the body's read, so a mid-delivery contention burst used to
+    surface as a raw ``Aborted`` that failed the delivered worker's whole
+    run after its real work had already committed. Every rejection here is
+    atomic — the body either refuses without writing or commits its single
+    retirement update — so replaying on fresh transactions is safe, and
+    budget exhaustion still raises the typed ``FirestoreContentionExhausted``
+    the dispatched worker's at-least-once redelivery contract already treats
+    as transient.
+
+    Failure-Class: FC-quiet-retirement-defers-a-replayable-abort-to-the-durable-backstop
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('conversation_finalization_jobs').document(job_id)
 
-    @firestore.transactional
     def stop(transaction: Any) -> None:
         job = ref.get(transaction=transaction).to_dict() or {}
         if job.get('kind') == 'listen_quiet_check' and job.get('dispatch_generation') == generation:
             _retire(transaction, ref, failure_code=failure_code)
 
-    stop(client.transaction())
+    run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: run_transactional(client, firestore.transactional(stop), initial_transaction=transaction),
+        operation_name='quiet_check_generation_stop',
+    )
 
 
 def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
@@ -101,6 +124,21 @@ def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firesto
     Read the latest job and conversation together: an old post-commit cleanup
     must not cancel a successor armed after a concurrent reopen. Missing jobs
     are never created. A missing/merged/hidden/non-live owner owes no quiet wake.
+
+    The authoritative retirement transaction runs on the same shared bounded
+    contention budget as every other writer on these documents (the
+    recording-session open, renewal, lifecycle-event and empty-delete lanes,
+    whose post-commit cleanup this call is). A read-time abort now replays on
+    a brand-new transaction and an expired-id rejection restarts, instead of
+    deferring the retirement to the durable replay backstop on the first
+    transient burst (prod backend-listen: the ``stop_quiet_check_for_conversation``
+    traceback family whose frames end in ``return stop(client.transaction())``).
+    The fail-open arm below remains the exhausted path: the budget's
+    ``FirestoreContentionExhausted`` lands here and keeps the
+    ``outcome=deferred`` telemetry and the indexed obligation for the
+    independent replay backstop, so a real dependency failure is never
+    retried into a delay and an already-committed owner result is still
+    never invalidated.
     """
     try:
         client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -110,7 +148,6 @@ def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firesto
         if (ref.get().to_dict() or {}).get('kind') != 'listen_quiet_check':
             return False
 
-        @firestore.transactional
         def stop(transaction: Any) -> bool:
             job = ref.get(transaction=transaction).to_dict() or {}
             if job.get('kind') != 'listen_quiet_check':
@@ -126,7 +163,13 @@ def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firesto
             _retire(transaction, ref)
             return True
 
-        return stop(client.transaction())
+        return run_with_transaction_contention_retry(
+            client.transaction,
+            lambda transaction: run_transactional(
+                client, firestore.transactional(stop), initial_transaction=transaction
+            ),
+            operation_name='quiet_check_retirement',
+        )
     except Exception:
         # Cleanup must not invalidate an already-committed owner transition.
         # Keep the durable index for the independent quiet replay backstop.
