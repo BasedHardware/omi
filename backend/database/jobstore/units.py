@@ -12,7 +12,7 @@ from uuid import uuid4
 from database.jobstore.authority import Epoch, acquire, fingerprint, AuthorityRefused
 from database.jobstore.postgres_store import jsonb
 from database.privacy_fence.protocol import row_dict, lock
-from database.privacy_fence import FenceRefused
+from database.privacy_fence import AdmissionChanged, FenceRefused, owner_key
 
 
 class Units:
@@ -169,12 +169,74 @@ class Units:
                     )
                 else:
                     conn.execute(
-                        'UPDATE units SET lease_token=%s,lease_until=%s,attempt_token=%s,attempts=attempts+1 '
+                        'UPDATE units SET lease_token=%s,lease_until=%s,attempt_token=%s,attempts=attempts+1,'
+                        'attempt_admission_id=%s '
                         'WHERE namespace=%s AND unit_id=%s',
-                        (uuid4().hex, now + lease_seconds, uuid4().hex, self.namespace, identity),
+                        (
+                            uuid4().hex,
+                            now + lease_seconds,
+                            uuid4().hex,
+                            job['admission']['admission_id'],
+                            self.namespace,
+                            identity,
+                        ),
                     )
                     claimed.append(self._unit(conn, identity))
         return claimed
+
+    def readmit(self, client, uid, conversation_ids, identity):
+        """A9 restore through the production A1/walk/A2, never by clearing a flag.
+
+        Caller supplies the original source targets; the new admission must
+        still bind every old target (including redirects). An unresolved paid
+        attempt keeps its token and enters a vendor hold. Its old result cannot
+        be adopted under the newly minted admission.
+        """
+        owner = owner_key(uid)
+        with self.pool.connection() as conn:
+            before = row_dict(conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s', (self.namespace, identity))
+        if before is None:
+            return False
+        if before['owner_key'] != owner:
+            raise AuthorityRefused('restore owner binding mismatch')
+        if before['state'] != 'pending' or before['hold_reason'] != 'privacy_deferred':
+            return False
+
+        def persist(conn, admission):
+            # A2 already holds the owner guard, before namespace and row locks.
+            acquire(conn, self.ticket)
+            current = self._unit(conn, identity)
+            if current != before:
+                raise AdmissionChanged()
+            old_targets = {t['conversation_key'] for t in before['admission']['privacy_targets']}
+            new_targets = {t['conversation_key'] for t in admission['privacy_targets']}
+            if not old_targets <= new_targets:
+                raise AuthorityRefused('restore cannot drop an original privacy target')
+            custody = row_dict(
+                conn,
+                'SELECT * FROM queue_custody WHERE namespace=%s AND identity=%s FOR UPDATE',
+                (self.namespace, identity),
+            )
+            if not custody or custody['phase'] != 'admitted' or custody['owner_key'] != owner:
+                raise AuthorityRefused('restore needs unresolved original custody')
+            conn.execute(
+                'UPDATE units SET admission=%s,privacy_generation=%s,hold_reason=%s,'
+                'lease_token=NULL,lease_until=0,due_at=NULL WHERE namespace=%s AND unit_id=%s',
+                (
+                    jsonb(admission),
+                    admission['privacy_generation'],
+                    'vendor' if current['attempt_token'] else None,
+                    self.namespace,
+                    identity,
+                ),
+            )
+            conn.execute(
+                'UPDATE queue_custody SET admission_id=%s WHERE namespace=%s AND identity=%s',
+                (admission['admission_id'], self.namespace, identity),
+            )
+
+        self.fence.admit_from_authority(client, uid, conversation_ids, persist)
+        return True
 
     def _guarded_unit(self, conn, identity):
         before = row_dict(conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s', (self.namespace, identity))
@@ -192,7 +254,13 @@ class Units:
             raise ValueError('positive lease required')
         with self.pool.connection() as conn, conn.transaction():
             job = self._guarded_unit(conn, identity)
-            if not job or job['lease_token'] != lease_token or job['lease_until'] <= now or job['state'] != 'pending':
+            if (
+                not job
+                or job['lease_token'] != lease_token
+                or job['lease_until'] <= now
+                or job['state'] != 'pending'
+                or str(job['attempt_admission_id']) != job['admission']['admission_id']
+            ):
                 return False
             conn.execute(
                 'UPDATE units SET lease_until=%s WHERE namespace=%s AND unit_id=%s',
@@ -212,7 +280,12 @@ class Units:
             raise ValueError('terminal state and explicit positive partial wait required')
         with self.pool.connection() as conn, conn.transaction():
             job = self._guarded_unit(conn, identity)
-            if not job or job['state'] != 'pending' or job['attempt_token'] != attempt:
+            if (
+                not job
+                or job['state'] != 'pending'
+                or job['attempt_token'] != attempt
+                or str(job['attempt_admission_id']) != job['admission']['admission_id']
+            ):
                 return False
             # Status-only refusal is a separate API/integration gate. Do not let
             # a caller smuggle a result through a privacy_blocked status write.

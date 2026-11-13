@@ -26,7 +26,7 @@ MISSING = [
     'conditional Firestore reverse sink adapter, final parity certificate and certified reverse-open edge',
     'process-kill/restart coverage at every cross-store commit gap, not exception-only rollback',
     'every G2 section 5.2 row/lettered subrow and complete P21-P25 qualification',
-    'default-off runtime factory integration, bounded no-account-label metrics and restore/residue job runners',
+    'default-off runtime factory integration, metrics, residue runner and production scheduling of drain/janitor/restore adapters',
 ]
 
 
@@ -145,6 +145,7 @@ def races(args):
         '-ra',
         '-q',
         'tests/integration/test_privacy_fence_postgres.py',
+        'tests/integration/test_privacy_lifecycle_postgres.py',
         'tests/integration/test_jobstore_authority_postgres.py',
         'tests/integration/test_jobstore_sql_boundary.py',
         'tests/integration/test_jobstore_handoff.py',

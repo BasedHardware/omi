@@ -24,3 +24,20 @@ The normal primary review verdict and final exact-head privacy/custody second
 look have not been obtained for a complete source implementation. No second
 review round is requested by this repair checkpoint. The two-round maximum
 continues to apply; privacy/custody/data-loss defects remain blocking.
+
+## Lifecycle source continuation
+
+Migration 0010 and `privacy_fence/lifecycle.py` make new close drains durable
+in the close transaction, fence stale task acknowledgements, and expose bounded
+drain/janitor passes. Abrupt subprocess exits exercise the real close/drain
+commit gaps. Tasks bind the close sequence: delayed old tasks cannot retire
+post-restore registrations. Retry backoff preserves unresolved GCS capabilities
+while allowing other owners' janitor work to proceed.
+
+`Units.readmit` uses a new real-authority admission and preserves original targets
+and custody. A paid attempt retains its original admission identity; restoring
+the unit cannot adopt that attempt's late result or dispatch it a second time.
+
+These source adapters reduce the lifecycle gap. Production scheduling, the
+effect/customer projection adapters, purge/reverse certificates and the complete
+matrix remain unfinished. No new review round or merge handoff is requested.

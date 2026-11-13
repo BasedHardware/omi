@@ -6,5 +6,6 @@ late after a successful START; COMPLETE never treats lease expiry as authority.
 """
 
 from .protocol import Fence, FenceRefused, AdmissionChanged, owner_key, conversation_key
+from .lifecycle import Lifecycle
 
-__all__ = ['Fence', 'FenceRefused', 'AdmissionChanged', 'owner_key', 'conversation_key']
+__all__ = ['Fence', 'FenceRefused', 'AdmissionChanged', 'owner_key', 'conversation_key', 'Lifecycle']

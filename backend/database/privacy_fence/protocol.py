@@ -264,6 +264,12 @@ class Fence:
                     "WHERE privacy_conversation_fence.state <> 'deleted'",
                     (owner, conversation, state),
                 )
+            # Same transaction as the close: a crash before a transient wake
+            # cannot lose the drain, and a rolled-back close creates no task.
+            conn.execute(
+                'INSERT INTO privacy_close_drain(owner_key,seq,conversation_key) VALUES (%s,%s,%s)',
+                (owner, seq, conversation),
+            )
             return seq
 
     def settle(self, owner, seq, proof):
@@ -371,7 +377,7 @@ class Fence:
                 )
         conn.execute('DELETE FROM privacy_effect_inflight WHERE effect_id=%s', (row['effect_id'],))
 
-    def drain_pass(self, owner, *, conversation=None, janitor=False, fence_gcs=None):
+    def drain_pass(self, owner, *, conversation=None, janitor=False, fence_gcs=None, before_seq=None):
         """One bounded pass. Return remaining rows; caller retries without holding L_x.
 
         `fence_gcs(sink)` must cancel/query the C4 session and verify absence, and
@@ -381,9 +387,10 @@ class Fence:
             rows = conn.execute(
                 'SELECT effect_id,sink,kind FROM privacy_effect_inflight WHERE owner_key=%s '
                 'AND (%s::text IS NULL OR %s=ANY(conversation_keys)) '
+                'AND (%s::bigint IS NULL OR change_seq<%s) '
                 'AND (NOT %s OR lease_until<=now()) '
-                'ORDER BY lease_until,effect_id LIMIT 100',
-                (owner, conversation, conversation, janitor),
+                "ORDER BY (state='registered') DESC,lease_until,effect_id LIMIT 100",
+                (owner, conversation, conversation, before_seq, before_seq, janitor),
             ).fetchall()
         for effect, sink, kind in rows:
             terminal = kind == 'gcs_put' and fence_gcs is not None and fence_gcs(sink)
@@ -402,6 +409,7 @@ class Fence:
         with self.pool.connection() as conn:
             return conn.execute(
                 'SELECT count(*) FROM privacy_effect_inflight WHERE owner_key=%s '
-                'AND (%s::text IS NULL OR %s=ANY(conversation_keys))',
-                (owner, conversation, conversation),
+                'AND (%s::text IS NULL OR %s=ANY(conversation_keys)) '
+                'AND (%s::bigint IS NULL OR change_seq<%s)',
+                (owner, conversation, conversation, before_seq, before_seq),
             ).fetchone()[0]

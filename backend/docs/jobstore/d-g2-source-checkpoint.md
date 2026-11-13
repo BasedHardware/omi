@@ -8,7 +8,8 @@ Base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (current origin/main at checkou
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
 The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4,
-0008 adds immutable handoffs, and 0009 closes raw-SQL authority bypasses.
+0008 adds immutable handoffs, 0009 closes raw-SQL authority bypasses, and 0010
+adds transactional close-drain tasks and paid-attempt admission binding.
 No old migration was edited. No staging, production, IAM, provisioning or runtime
 configuration was touched. Runtime SQL grants are an operator-rendered source
 file, never executed remotely by the harness.
@@ -66,6 +67,18 @@ file, never executed remotely by the harness.
   namespace order. Refused candidates get a durable hold and lease release;
   healthy owners in the same batch can commit, while paid-attempt tokens survive.
   This does not implement the missing production restore/re-admission runner.
+- Lifecycle continuation: every new close inserts its scoped drain task in the
+  close transaction. Bounded claim/drain/ack passes survive a lost wake, abrupt
+  process exit and lease takeover. Tasks are deleted after completion; no new
+  indefinite registry/coordination retention is introduced. Old close tasks only
+  retire registrations with an earlier change sequence, so they cannot delete
+  effects created after restore. Registered rows are visited before live started
+  rows; janitor retry backoff prevents a stuck GCS owner monopolizing discovery.
+- Explicit typed-unit re-admission uses the production CustomerData walk and
+  A1/A2, preserves every original target and original custody, and mints a new
+  admission. Unresolved paid attempts keep their token in a vendor hold. Their
+  immutable attempt-admission identity prevents a late result from being adopted
+  after restore. These are callable source adapters, not installed schedulers.
 
 ## Missing integration (blocks completion/readiness)
 
@@ -88,7 +101,8 @@ file, never executed remotely by the harness.
 4. Conditional FS reverse sink, complete tombstone/expiry replay, all-field parity
    checksums and final source-fenced reverse certificates are missing. No automatic
    fallback, rollback env flip or reverse-open edge is permitted by this source.
-5. Durable close-drain, restore, residue cadence and janitor runners; production
+5. Production scheduling/binding for the new durable close-drain/lease-janitor
+   passes and typed restore API; residue cadence; production
    no-account-label metrics; final admission class/owner_turn and budget reservation
    chunk policy; complete crash/kill/restart harness remain missing.
 6. Guard/handoff read budgets are dark sentinels (expected production 0, budget 1/day),
@@ -131,6 +145,16 @@ SQL/FS completion, customer effect plus receipt atomicity, forged/missing receip
 independent FS/PG closes, privacy deletion before projection, paused direct writer,
 deferred/threaded bulk and original ledger+intent admission. They use local real
 FS/PG; process-kill/restart and complete grouped projection remain gaps.
+
+`tests/integration/test_privacy_lifecycle_postgres.py` adds abrupt subprocess
+exit before close COMMIT, after close/before wake, after drain claim, after
+registry retirement/before ack and after ack. The restarted runner observes
+durable SQL and takes over expired leases; a stale runner cannot ack a successor.
+It also checks post-restore/other-conversation effects survive old tasks, both
+pool slots and the exclusive owner guard remain available during sink I/O,
+registry terminal lifecycles, janitor fairness, real-authority restore, and
+refusal of pre-restore paid results. GCS terminal proof is still synthetic:
+these tests do not qualify a real session adapter or the complete wipe path.
 
 ## Repeatable local commands
 
@@ -192,8 +216,8 @@ qualification of an activated cohort. Tests below live in
 | 15a | test_g2_15a_15b_concurrent_guard_versions_never_settle_by_high_water |
 | 15b | test_real_guard_update_time_and_exact_sequence_kill |
 | 16 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
-| 16a | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
-| 16b | test_g2_16b_restore_cannot_adopt_pre_restore_effect |
+| 16a | Typed readmit API tested with real walk; production backoff/restore sweep scheduling still missing |
+| 16b | test_g2_16b_restore_cannot_adopt_pre_restore_effect; typed attempt-admission refusal in test_restore_mints_new_admission_and_never_adopts_old_paid_result |
 | 17 | test_g2_17_seed_race_does_not_upgrade_shared_lock |
 | 18 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
 | 19 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
@@ -215,7 +239,7 @@ qualification of an activated cohort. Tests below live in
 | 33 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
 | 34 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
 | 35 | test_clock_backward_and_expired_admission_refused |
-| 36 | MISSING: end-to-end scenario/integration not implemented; all-scenario receipt remains failed |
+| 36 | test_close_drain_does_not_hold_pool_or_exclusive_lock_during_gcs_io (real SQL locks/pool, synthetic sink; complete production drain still missing) |
 
 ## P21-P25 inventory
 
@@ -227,5 +251,7 @@ qualification of an activated cohort. Tests below live in
 | P24 | Real production ledger transaction refuses late admission/completion observers after account/conversation deletion; real conversation purge deletes ledger. Process-kill/lost-COMMIT variants missing |
 | P25 | Unaffected-conversation START/COMPLETE behavior tested; long-stall custody/latency qualification missing |
 
-Exact-head independent review and Luna privacy/custody second look have not
-started. This checkpoint does not consume a review round or request merge.
+The first FIX and its repair are recorded in `d-g2-review-log.md`. A complete
+implementation has not obtained the final exact-head primary review and Luna
+privacy/custody second look. This continuation requests neither another round
+nor merge.
