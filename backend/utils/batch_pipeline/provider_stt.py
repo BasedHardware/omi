@@ -680,7 +680,30 @@ def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool,
 _DURABLE_DENIALS = frozenset({DispatchReason.ALLOWANCE_EXHAUSTED.value, DispatchReason.BUDGET_EXHAUSTED.value})
 
 
-def funding_retry_seconds(decision: bool | tuple[bool, str]) -> float | None:
+# A held unit's staged audio is deleted by the bucket lifecycle at 30 days; the pipeline treats
+# 29 days as the end (input_retention.TERMINAL_SECONDS). Inside the unit's last day before that,
+# the hold re-checks at this interval whatever the configured window, and a longer window is cut
+# so the next re-check lands no later than the start of that day. A renewal in the last day is
+# then seen as soon as it was when the window was 2 h.
+NEAR_EXPIRY_WINDOW_SECONDS = 86400.0
+NEAR_EXPIRY_RECHECK_SECONDS = 7200.0
+
+
+def _hold_before_expiry(wait: float, job: dict | None, now: float | None) -> float:
+    if job is None or now is None or wait <= NEAR_EXPIRY_RECHECK_SECONDS:
+        return wait
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS, staged_enqueue
+
+    staged = staged_enqueue(job)
+    if staged is None:
+        return wait
+    until_last_day = staged + TERMINAL_SECONDS - NEAR_EXPIRY_WINDOW_SECONDS - now
+    return min(wait, max(NEAR_EXPIRY_RECHECK_SECONDS, until_last_day))
+
+
+def funding_retry_seconds(
+    decision: bool | tuple[bool, str], *, job: dict | None = None, now: float | None = None
+) -> float | None:
     """None when funded; otherwise how long the refused unit waits before re-checking."""
     permitted, reason = decision if isinstance(decision, tuple) else (bool(decision), None)
     if permitted:
@@ -688,7 +711,7 @@ def funding_retry_seconds(decision: bool | tuple[bool, str]) -> float | None:
     if reason in _DURABLE_DENIALS:
         from config.batch_pipeline import allowance_hold_retry_seconds
 
-        return float(allowance_hold_retry_seconds())
+        return _hold_before_expiry(float(allowance_hold_retry_seconds()), job, now)
     return FUNDING_RETRY_SECONDS
 
 
@@ -847,7 +870,11 @@ class ProviderSttStage:
         if route.provider_reason == 'byok':
             record_decision(DispatchPath.BATCH_PROVIDER, True, DispatchReason.BYOK)
         elif (
-            wait := funding_retry_seconds(self.allowed(item.owner_id, item.duration_seconds, route.provider_service))
+            wait := funding_retry_seconds(
+                self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
+                job=job,
+                now=self.clock(),
+            )
         ) is not None:
             return UnitOutcome('deferred', 'not_due', self.clock() + wait)
         audio = self.artifacts.fetch_audio(item)
@@ -862,7 +889,9 @@ class ProviderSttStage:
             route.provider_reason != 'byok'
             and (
                 wait := funding_retry_seconds(
-                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service)
+                    self.allowed(item.owner_id, item.duration_seconds, route.provider_service),
+                    job=job,
+                    now=self.clock(),
                 )
             )
             is not None
