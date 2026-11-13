@@ -32,12 +32,12 @@ commits.
   about once in 15 minutes, which is the delay measured for fresh results.
 - The read has no cursor. Each tick it starts at a random point in the window and reads oldest
   first, so replicas land on different rows and a restart changes nothing. A process offers a row
-  from this read once; the entry is forgotten after one window, by which time the row has left it.
+  from this read once per run; the entry is kept for two windows, longer than the row stays there.
   A row that stays pending is next offered by the main cursor, as before.
 - Rows read here count against the page: the main cursor gets the rest (at least half). The page
   holds no more rows than before. The tick makes one more query than before.
-- A main cursor that has not reached the newest row for 30 minutes starts again at a new random
-  point between the oldest pending row and now. Without this, when rows arrive as fast as a cursor
+- A main cursor that has not reached the newest row for 30 minutes starts again: one time in
+  eight at the oldest pending row, otherwise at a uniform random point between it and now. Without this, when rows arrive as fast as a cursor
   reads, the rows before every process's start point wait for a wrap that never comes. That gap
   exists before this change too, at twice the arrival rate.
 - `0` restores the single cursor and removes the 30-minute restart.

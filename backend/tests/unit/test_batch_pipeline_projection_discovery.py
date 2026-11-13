@@ -325,10 +325,24 @@ def test_a_main_cursor_that_never_wraps_restarts_at_a_new_random_point(monkeypat
     clock['now'] += projection_discovery.MAIN_PASS_SECONDS - 1
     assert scan.next(20)[0] == 'old470'
     clock['now'] += 2  # A whole pass period without reaching the newest row.
-    clock['point'] = 0.0
-    assert scan.next(20)[0] == 'old000' and scan.stripe == 0.0
+    clock['point'] = 0.75
+    first = scan.next(20)[0]
+    assert scan.stripe == 0.75 * 4096 and first not in ('old000', 'old490')
     # The clock restarts with the pass: no second restart on the next tick.
-    assert scan.next(20)[0] == 'old020'
+    assert scan.next(20)[0] != first and scan.stripe == 0.75 * 4096
+
+
+def test_one_restart_in_eight_begins_at_the_oldest_row(monkeypatch):
+    """Review round 3: a random point almost never lands on the head of the log."""
+    rows = {f'old{i:03d}': {'committed_at': 1_000.0 + 10 * i, 'projection_state': 'pending'} for i in range(900)}
+    scan, clock = recent_scanner(monkeypatch, rows, striping='on', stripe=2048, window='1')
+    scan.next(20)
+    starts = []
+    for draw in (0.124, 0.126, 0.0, 0.5):
+        clock['now'] += projection_discovery.MAIN_PASS_SECONDS + 1
+        clock['point'] = draw
+        starts.append(scan.next(20)[0])
+    assert [name == 'old000' for name in starts] == [True, False, True, False]
 
 
 def test_a_main_cursor_that_wraps_in_time_is_not_restarted(monkeypatch):

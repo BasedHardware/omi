@@ -14,6 +14,7 @@ from config.batch_pipeline import (
 # A main cursor that has not wrapped for this long starts again at a new random point.
 MAIN_PASS_SECONDS = 1800.0
 RECENT_OFFERED_PRUNE = 4096
+MAIN_RESTART_HEAD_SHARE = 0.125
 
 
 class ProjectionDiscovery:
@@ -65,8 +66,11 @@ class ProjectionDiscovery:
             # The main cursor has not reached the newest row for a whole pass period: rows
             # arrive as fast as it reads. Rows before every process's start point would
             # then wait for a wrap that never comes, so start again at a new random point.
-            # A continuous point, not one of the 4096 buckets: every row can be the start.
-            self.stripe = self.random() * PROJECTION_DISCOVERY_STRIPES
+            # One restart in eight begins at the oldest row: a random point almost never
+            # lands on the head of the log, so without this its first rows could stay unread.
+            # The others use a continuous point, not one of the 4096 buckets.
+            head = self.random() < MAIN_RESTART_HEAD_SHARE
+            self.stripe = 0 if head else self.random() * PROJECTION_DISCOVERY_STRIPES
             self.after, self.seeded, self.pass_started = None, False, time.time()
             return self.next(limit, due_before)
         newest, read = self.recent_page(limit, scope) if recent_on else ([], 0)
@@ -94,18 +98,23 @@ class ProjectionDiscovery:
 
         Each tick reads up to half a page, oldest first, from a random point in the last
         `projection_recent_discovery_seconds`. There is no cursor: replicas land on
-        different points, a restart changes nothing, and a row is offered here at most
-        once per process (it has left the window before its entry expires). The main
-        cursor still reaches every row. A failed query costs only this half page."""
+        different points and a restarted process behaves like any other. A row is offered
+        here once per process run: its entry outlives its time in the window. The memory
+        is per process, so a restart can offer a row once more. A failed query costs only
+        this half page."""
         window = projection_recent_discovery_seconds()
         if limit < 2:
             return [], 0
         now = time.time()
         if len(self.offered) > RECENT_OFFERED_PRUNE:
-            self.offered = {name: at for name, at in self.offered.items() if now - at <= window}
+            self.offered = {name: at for name, at in self.offered.items() if now - at <= 2 * window}
         try:
             start = now - window + window * self.random()
             segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
         except Exception:
             return [], 0
-        return [name for name in segments if now - self.offered.get(name, -window - 1.0) > window], len(segments)
+        # Kept for two windows: a commit stamp up to one window ahead of this clock cannot
+        # bring a row back after its entry has gone.
+        return [name for name in segments if name not in self.offered or now - self.offered[name] > 2 * window], len(
+            segments
+        )
