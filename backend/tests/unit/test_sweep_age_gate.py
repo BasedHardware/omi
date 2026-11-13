@@ -55,14 +55,18 @@ def _served_provider_stt_sweep_days() -> str:
     return found[0]
 
 
-@pytest.mark.parametrize('age_days,skipped', [(13.5, False), (14.5, False), (28.5, False), (29.5, True), (30.5, True)])
+@pytest.mark.parametrize(
+    'age_days,skipped', [(13.5, False), (14.5, False), (28.5, False), (29.08, False), (29.9, False), (30.5, True)]
+)
 def test_served_provider_stt_gate_repairs_held_rows_but_never_past_the_staged_audio(monkeypatch, age_days, skipped):
-    """A 24 h hold needs lost-wake repair past day 14; a row older than its audio must stay asleep."""
+    """Lost-wake repair lasts while the staged audio can be fetched, and no longer."""
     from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
 
     served = _served_provider_stt_sweep_days()
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', served)
-    assert 14 * 86400 < sweep_age.max_age_seconds('provider-stt') <= TERMINAL_SECONDS
+    # Repair must outlast the pipeline's own 29-day end, where a 2 h hold can still come due,
+    # and stop at the staging bucket's 30-day lifecycle (deploy/storage-lifecycle/retention_contract.json).
+    assert TERMINAL_SECONDS + 7200 < sweep_age.max_age_seconds('provider-stt') <= 30 * 86400
     now = 100 * 86400.0
     assert skip_ancient({'created_at': now - age_days * 86400}, 'provider-stt', now=now) is skipped
 

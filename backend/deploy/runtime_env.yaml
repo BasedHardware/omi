@@ -4986,7 +4986,7 @@ environments:
               value: '86400'
               category: ops_kill
             BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS:
-              value: '29'
+              value: '30'
               category: reliability
             STT_GPU_FLEET_OFF:
               value: 'true'
