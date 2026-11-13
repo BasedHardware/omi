@@ -135,6 +135,23 @@ def _legacy_backlog(world, monkeypatch, count):
     return store, names
 
 
+def test_unstamped_ready_row_passes_an_unready_head_once_its_settle_is_a_head_wait_old(world, monkeypatch):
+    """A row settled before the ready_at stamp has only its intent's settled_at to wait from."""
+    _, store = world
+    monkeypatch.setenv(SWITCH, 'false')
+    admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
+    admit(monkeypatch, store, [item('old', 20)], 'content-old', JA)
+    settle(store, 'old', now=200.0)
+    assert 'ready_at' not in job(store, 'old')
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 10_000.0) is None  # switch off: stuck behind the unready head
+    monkeypatch.delenv(SWITCH)
+    assert merge.commit_next(OWNER, 230.0) is None  # settled 30 s ago
+    entry = merge.commit_next(OWNER, 261.0)
+    assert entry['segment_id'] == 'old' and entry['head_wait_bypass'] is True
+    assert job(store, 'head')['merge_pending'] is True and merge.commit_next(OWNER, 262.0) is None
+
+
 def _project_through(store, segment):
     key = owner_key(OWNER)
     store.run(lambda tx: tx.put('owners', key, {**tx.get('owners', key), 'projection_watermark': segment}))
@@ -250,17 +267,32 @@ async def test_head_wait_off_drains_once_and_owners_are_independent():
 
 
 @pytest.mark.asyncio
-async def test_owner_bound_drops_the_request_and_a_later_one_is_accepted(caplog):
+async def test_an_owner_past_the_task_bound_waits_its_turn_and_is_never_dropped(caplog):
     drains = Drains()
     drainer = coalescer(drains, head_wait=0.0, max_owners=1)
     assert drainer.request('owner-a') is True
     with caplog.at_level(logging.WARNING):
+        # Each of these may be the owner's only settle: none has a later request to rely on.
         assert drainer.request('owner-b') is False
-    assert 'event=batch_provider_drain outcome=dropped reason=owner_bound' in caplog.text
+        assert drainer.request('owner-c') is False
+        assert drainer.request('owner-b') is False
+    assert caplog.text.count('event=batch_provider_drain outcome=queued reason=owner_bound') == 2
+    assert drainer.pending() == 3
     await _idle(drainer)
-    assert drainer.request('owner-b') is True
+    assert drains.calls == ['owner-a', 'owner-b', 'owner-c']
+
+
+@pytest.mark.asyncio
+async def test_wake_tasks_are_tracked_background_tasks():
+    from utils.executors import get_background_task_count
+
+    before = get_background_task_count()
+    drainer = coalescer(Drains(), head_wait=0.0)
+    drainer.request('owner-a')
+    assert get_background_task_count() == before + 1
     await _idle(drainer)
-    assert drains.calls == ['owner-a', 'owner-b']
+    await asyncio.sleep(0)
+    assert get_background_task_count() == before
 
 
 @pytest.mark.asyncio

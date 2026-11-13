@@ -53,6 +53,16 @@ def _catch_up(job: dict) -> bool:
     )
 
 
+def _ready_since(row: dict) -> float | None:
+    """When the row became ready. A provider row settled before provider settle stamped
+    ``ready_at`` carries the same instant on its intent."""
+    if row.get('ready_at') is not None:
+        return row['ready_at']
+    if (row.get('stt_route') or {}).get('stt_route') == 'provider' and provider_merge_membership_enabled():
+        return (row.get('provider_intent') or {}).get('settled_at')
+    return None
+
+
 def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None, dict | None]:
     """The earliest pending fresh row once ready. If it is not, and a ready fresh
     row has waited ``wait`` behind it, the earliest ready one (the bounded head
@@ -287,10 +297,10 @@ class OrderedMerge:
                 if not (
                     current.get('merge_pending')
                     and current.get('state') == 'result_ready'
-                    and current.get('ready_at') == waiter['ready_at']
+                    and _ready_since(current) == _ready_since(waiter)
                 ):
                     return None
-                bypass.update(head_state=candidate['state'], waited=now - waiter['ready_at'])
+                bypass.update(head_state=candidate['state'], waited=now - _ready_since(waiter))
                 try:
                     candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
@@ -438,7 +448,22 @@ class OrderedMerge:
                     type(error).__name__,
                 )
                 return None
-            if not waiter or now - waiter['ready_at'] < wait:
+            if not waiter and provider_merge_membership_enabled():
+                # Provider rows settled before the ready_at stamp never match that probe. The
+                # owner's earliest ready row stands in; its intent carries when it settled.
+                try:
+                    waiter = self.store.run(lambda tx: tx.first_ready_pending(key))
+                except FailedPrecondition:
+                    return self._head_wait_unavailable()
+                except GoogleAPICallError as error:
+                    logger.warning(
+                        'event=batch_merge outcome=head_wait_probe_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(error).__name__,
+                    )
+                    return None
+            since = _ready_since(waiter) if waiter else None
+            if since is None or now - since < wait:
                 return None
             try:
                 entry = self.store.run(lambda tx: commit(tx, waiter))

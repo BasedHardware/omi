@@ -31,7 +31,11 @@ Behind one kill switch, `BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED` (on u
 - The serving route wakes one owner drain after a delivery that settles a unit or ends it terminally
   (`utils/batch_pipeline/provider_drain.py`, `Serving.drain_settled_async`). The wake is coalesced per owner
   per process: a burst of settles costs one drain after 2 s and one after the head wait, and a settle during
-  that round buys exactly one more round. At most 4 drains run at once per process.
+  that round buys exactly one more round. At most 4 drains run at once per process. Past 4,096 live wake
+  tasks an owner waits in arrival order instead of being dropped. The tasks are tracked background tasks.
+- A provider row settled before the `ready_at` stamp waits from its intent's `settled_at`. When the
+  `ready_at` probe finds no waiter, the merge reads the owner's earliest ready row once (one extra query per
+  blocked drain) so those rows can also pass an unready head after the head wait.
 
 The commit body, late marking, log chain, privacy fence and projection order are unchanged. No row skips
 the head wait or the depth hold. The wake is an in-memory hint: if the process stops first, the owner is
@@ -48,7 +52,7 @@ undoing.
 - Share of provider units settled one hour earlier that are `committed` (near 0% before this change).
 - Projection pending and fresh GPU-route time to episode: must stay flat.
 - `firestore_transaction_contention operation=batch_pipeline_store ... outcome=exhausted`.
-- `event=batch_provider_drain outcome=dropped` (owner bound reached) and `outcome=retry`.
+- `event=batch_provider_drain outcome=queued` (owner bound reached) and `outcome=retry`.
 
 ## Not in this change
 

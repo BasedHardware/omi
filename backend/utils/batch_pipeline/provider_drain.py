@@ -11,6 +11,9 @@ a burst of settles for one owner costs two drains, not one per unit. Each round 
 were ready behind an unready head become committable. A request during a round schedules exactly
 one further round.
 
+Past ``max_owners`` live tasks a request is not dropped: the owner waits in arrival order and
+starts when a task ends, so an owner's only settle still gets its drain.
+
 The wake is a hint held in memory. A lost task (instance stop) delays that owner until its next
 settle or the maintenance page, as before this module existed; the job rows stay the only state.
 """
@@ -19,15 +22,17 @@ import asyncio
 import logging
 from typing import Awaitable, Callable
 
+from utils.executors import start_background_task
+
 logger = logging.getLogger(__name__)
 
 # Settles of one upload arrive together; wait this long so one drain serves them.
 DRAIN_DELAY_SECONDS = 2.0
 # Added to the head wait so the waited row is past it when the second drain runs.
 HEAD_WAIT_MARGIN_SECONDS = 2.0
-# Owners with a live wake task. Past this a request is dropped (and counted in the log);
-# the dropped owner is drained by its next settle.
+# Owners with a live wake task. Past this an owner waits its turn (owner ids only, in memory).
 MAX_OWNERS = 4096
+TASK_NAME = 'provider_owner_drain'
 # Drains running at once in this process; each is an owner's bounded merge loop.
 DRAIN_CONCURRENCY = 4
 
@@ -51,22 +56,30 @@ class OwnerDrainCoalescer:
         self._sleep = sleep
         self._tasks: dict[str, asyncio.Task] = {}
         self._again: set[str] = set()
+        # Owners past the task bound, in arrival order (a dict keeps order and dedupes).
+        self._waiting: dict[str, None] = {}
         self._gate: asyncio.Semaphore | None = None
 
     def pending(self) -> int:
-        return len(self._tasks)
+        return len(self._tasks) + len(self._waiting)
 
     def request(self, owner_id: str) -> bool:
         """Ask for one drain of ``owner_id``. Must be called on the event loop. Returns False
-        only when the request was dropped at the owner bound."""
+        when the owner had to queue behind the task bound (it still drains, later)."""
         if owner_id in self._tasks:
             self._again.add(owner_id)
             return True
         if len(self._tasks) >= self._max_owners:
-            logger.warning('event=batch_provider_drain outcome=dropped reason=owner_bound count=1')
+            if owner_id not in self._waiting:
+                self._waiting[owner_id] = None
+                logger.warning('event=batch_provider_drain outcome=queued reason=owner_bound count=1')
             return False
-        self._tasks[owner_id] = asyncio.get_running_loop().create_task(self._run(owner_id))
+        self._start(owner_id)
         return True
+
+    def _start(self, owner_id: str) -> None:
+        # Tracked: shutdown cancels it with the other background tasks, and a failure is logged.
+        self._tasks[owner_id] = start_background_task(self._run(owner_id), name=TASK_NAME)
 
     async def _once(self, owner_id: str) -> None:
         if self._gate is None:
@@ -95,3 +108,7 @@ class OwnerDrainCoalescer:
             # and set ``_again`` before the check, or finds no task and starts a new one.
             self._again.discard(owner_id)
             self._tasks.pop(owner_id, None)
+            if self._waiting and len(self._tasks) < self._max_owners:
+                waiter = next(iter(self._waiting))
+                del self._waiting[waiter]
+                self._start(waiter)
