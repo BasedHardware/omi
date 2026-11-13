@@ -37,6 +37,8 @@ SWITCH = 'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED'
 RELEASE = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
 # admit() runs at 100.0 with 5 s units, so a capture at 10 is fresh.
 FRESH_CAPTURE = 10
+STALE = 90_000.0  # More than a day after FRESH_CAPTURE: catch-up under the provider bar.
+LAG = 'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS'
 
 
 def settle(store, segment, now=200.0):
@@ -57,14 +59,78 @@ def drain(merge, now):
 def test_provider_admission_stamps_the_merge_class(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('fresh', FRESH_CAPTURE)], 'content-fresh', JA)
-    # The same capture admitted two hours later is catch-up, as GPU admission classes it.
+    # The same capture admitted more than a day later is catch-up.
     late = item('old', FRESH_CAPTURE)
     binding = ProjectionBinding(OWNER, 'bp_content-old', 'content-old', ('old',), language='ja')
     enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
-    outcome = batch_pipeline_intake.admit(store, [late], binding, 7300.0, namespace=store.namespace, enqueue=enqueue)
+    outcome = batch_pipeline_intake.admit(store, [late], binding, STALE, namespace=store.namespace, enqueue=enqueue)
     assert outcome['outcome'] == 'batch'
     assert job(store, 'fresh')['fresh_capture'] is True
     assert job(store, 'old')['fresh_capture'] is False
+
+
+def _admit_late(store, name, now):
+    binding = ProjectionBinding(OWNER, f'bp_content-{name}', f'content-{name}', (name,), language='ja')
+    enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
+    batch_pipeline_intake.admit(
+        store, [item(name, FRESH_CAPTURE)], binding, now, namespace=store.namespace, enqueue=enqueue
+    )
+    return job(store, name)
+
+
+def test_a_provider_upload_within_a_day_of_capture_is_fresh(world, monkeypatch):
+    """2026-11-13: 167 late-synced provider uploads since the hold, none committed."""
+    _, store = world
+    assert _admit_late(store, 'two-hours', 7300.0)['fresh_capture'] is True
+    end = FRESH_CAPTURE + item('probe', FRESH_CAPTURE).duration_seconds
+    assert _admit_late(store, 'edge', end + 86400.0)['fresh_capture'] is True
+    assert _admit_late(store, 'over', end + 86401.0)['fresh_capture'] is False
+
+
+def test_the_setting_restores_the_ten_minute_bar_and_is_bounded(world, monkeypatch):
+    from config import batch_pipeline
+
+    _, store = world
+    monkeypatch.setenv(LAG, '600')
+    assert _admit_late(store, 'two-hours', 7300.0)['fresh_capture'] is False
+    for raw, want in (('600', 600), ('3600', 3600), ('10', 600), ('999999', 86400), ('junk', 86400)):
+        monkeypatch.setenv(LAG, raw)
+        assert batch_pipeline.provider_fresh_capture_lag_seconds() == want
+    monkeypatch.delenv(LAG)
+    assert batch_pipeline.provider_fresh_capture_lag_seconds() == 86400
+
+
+def test_a_late_provider_upload_commits_ahead_of_the_held_backlog(world, monkeypatch):
+    store, names = _legacy_backlog(world, monkeypatch, 3)
+    assert _admit_late(store, 'late', 7300.0)['fresh_capture'] is True
+    settle(store, 'late', now=7400.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert [e['segment_id'] for e in drain(merge, 7401.0)] == ['late']
+    assert [job(store, name)['state'] for name in names] == ['result_ready'] * 3
+
+
+def test_the_gpu_lane_keeps_its_ten_minute_bar():
+    from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
+
+    assert FRESH_CAPTURE_LAG_SECONDS == 600.0
+
+
+def test_provider_admissions_are_counted_by_class_and_lag(world, monkeypatch):
+    _, store = world
+    counter = provider_stt_admission.PROVIDER_ADMISSIONS
+
+    def value(merge_class, lag):
+        return counter.labels(merge_class=merge_class, lag=lag)._value.get()
+
+    before = {
+        key: value(*key) for key in (('fresh', 'lt10m'), ('fresh', 'lt1h'), ('fresh', 'lt24h'), ('catch_up', 'ge24h'))
+    }
+    end = FRESH_CAPTURE + item('probe', FRESH_CAPTURE).duration_seconds
+    _admit_late(store, 'a', end + 60.0)
+    _admit_late(store, 'b', end + 1800.0)
+    _admit_late(store, 'c', end + 7200.0)
+    _admit_late(store, 'd', end + 90000.0)
+    assert {key: value(*key) - before[key] for key in before} == dict.fromkeys(before, 1)
 
 
 def test_provider_settle_stamps_ready_at(world, monkeypatch):
@@ -217,13 +283,13 @@ def test_a_stale_capture_admitted_now_is_backlog_too(world, monkeypatch):
     late = item('old', FRESH_CAPTURE)
     binding = ProjectionBinding(OWNER, 'bp_content-old', 'content-old', ('old',), language='ja')
     enqueue = provider_stt_admission.provider_enqueue(JA, Outbox(), {})
-    batch_pipeline_intake.admit(store, [late], binding, 7300.0, namespace=store.namespace, enqueue=enqueue)
+    batch_pipeline_intake.admit(store, [late], binding, STALE, namespace=store.namespace, enqueue=enqueue)
     assert job(store, 'old')['fresh_capture'] is False
-    settle(store, 'old', now=7400.0)
+    settle(store, 'old', now=STALE + 100.0)
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
-    assert drain(merge, 7401.0) == []
+    assert drain(merge, STALE + 101.0) == []
     monkeypatch.setenv(RELEASE, 'true')
-    assert [e['segment_id'] for e in drain(merge, 7402.0)] == ['old']
+    assert [e['segment_id'] for e in drain(merge, STALE + 102.0)] == ['old']
 
 
 def test_a_ready_backlog_row_does_not_pass_an_unready_head_while_release_is_off(world, monkeypatch):
