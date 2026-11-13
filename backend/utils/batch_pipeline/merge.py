@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
+# How long this process trusts that it already wrote an owner's re-offer marker.
+FRESH_REOFFER_MARK_SECONDS = 30.0
+FRESH_REOFFER_MARK_PRUNE = 4096
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -131,6 +134,10 @@ class OrderedMerge:
         # cap with rows pending. Maintenance re-offers them by owner: a held
         # backlog can fill the global result_ready page and hide them.
         self.held_owners: set[str] = set()
+        # Owner keys whose last drain here left ready fresh rows on the probe page.
+        self._fresh_waiting: set[str] = set()
+        # Owner key -> monotonic time this process last ensured its re-offer marker.
+        self._fresh_marked: dict[str, float] = {}
         self._marked_after: str | None = None
 
     def _head_wait(self) -> float:
@@ -146,6 +153,10 @@ class OrderedMerge:
     def release_hold(self, key: str, *, force: bool = False) -> None:
         """Clear an owner's durable hold marker once it is below the depth cap (or has nothing pending)."""
         depth = self._catch_up_depth()
+        if not force and key in self._fresh_waiting:
+            # Ready fresh rows still wait behind this owner's head: keep the marker so the
+            # next maintenance pass drains it again.
+            return
 
         def clear(tx):
             mark = tx.get('merge_holds', key)
@@ -176,6 +187,41 @@ class OrderedMerge:
                     self.commit_source,
                     type(error).__name__,
                 )
+
+    def _reoffer_fresh(self, key: str, now: float) -> None:
+        """Keep a durable marker on an owner that still has ready fresh rows behind its head.
+
+        Nothing else drains such an owner again: its head is unready or held backlog, so no
+        unit of its own need settle soon, and the global ready page can be full of held
+        backlog rows. Maintenance re-offers marked owners; ``release_hold`` clears the marker
+        once a drain finds no ready fresh row left."""
+        marked = self._fresh_marked.get(key)
+        if marked is not None and time.monotonic() - marked < FRESH_REOFFER_MARK_SECONDS:
+            return
+        if len(self._fresh_marked) > FRESH_REOFFER_MARK_PRUNE:
+            self._fresh_marked.clear()
+
+        def mark(tx):
+            if not tx.get('merge_holds', key).get('held'):
+                tx.put('merge_holds', key, {'held': True, 'held_at': now})
+
+        try:
+            self.store.run(mark)
+            self._fresh_marked[key] = time.monotonic()
+        except GoogleAPICallError as error:
+            # The marker is a wake hint; the commit that precedes it stands.
+            logger.warning(
+                'event=batch_merge outcome=fresh_reoffer_mark_retry source=%s exception_type=%s count=1',
+                self.commit_source,
+                type(error).__name__,
+            )
+
+    def drain_budget_spent(self, owner_id: str, now: float) -> None:
+        """A drain stopped at its commit budget. If its last commit left ready fresh rows on
+        the probe page, mark the owner so maintenance comes back for them."""
+        key = owner_key(owner_id)
+        if key in self._fresh_waiting:
+            self._reoffer_fresh(key, now)
 
     def _head_wait_unavailable(self) -> None:
         self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
@@ -219,6 +265,7 @@ class OrderedMerge:
         wait; only the recovered unit also passes the catch-up depth hold. The
         body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
+        self._fresh_waiting.discard(key)
         wait = self._head_wait()
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held
@@ -459,6 +506,7 @@ class OrderedMerge:
                 logger.warning(
                     'event=batch_merge outcome=fresh_probe_full_no_ready source=%s count=1', self.commit_source
                 )
+            refused = False
             if fresh is not None:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
@@ -466,8 +514,18 @@ class OrderedMerge:
                     # A fence on that fresh row refuses only it; the head wait
                     # below still releases the owner's other ready rows.
                     entry = None
+                    refused = True
                     fresh_first.clear()
                     bypass.clear()
+            ready_left = sum(row.get('state') == 'result_ready' for row in pending) - (1 if entry is not None else 0)
+            if ready_left > 0 and not refused and fenced is None:
+                # Ready fresh rows remain on the page. If this call commits nothing they are
+                # inside their wait, and without a marker nothing drains this owner again
+                # until one of its own units settles. (A drain that stops at its budget
+                # marks through drain_budget_spent.) A fenced owner is left to its fence.
+                self._fresh_waiting.add(key)
+                if entry is None:
+                    self._reoffer_fresh(key, now)
         if entry is None and fenced is not None:
             raise fenced
         if entry is None and release and recovered_merge_release_enabled():
