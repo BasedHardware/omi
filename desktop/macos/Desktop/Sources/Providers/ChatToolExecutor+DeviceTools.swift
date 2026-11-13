@@ -19,6 +19,7 @@ extension ChatToolExecutor {
   /// debug a malformed call, nothing anyone would mind keeping.
   private static let sensitiveArgumentTools: Set<String> = [
     "send_message", "run_applescript", "read_message_history", "list_mail_messages", "search_contacts",
+    "propose_message", "propose_email",
   ]
 
   static func redactedArgumentSummary(for toolCall: ToolCall) -> String {
@@ -128,7 +129,11 @@ extension ChatToolExecutor {
 
   // MARK: - Contacts
 
-  static func executeSearchContacts(_ args: [String: Any]) async -> String {
+  static func executeSearchContacts(
+    _ args: [String: Any],
+    runID: String? = nil,
+    ownerID: String? = nil
+  ) async -> String {
     guard let query = (args["query"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
       !query.isEmpty
     else {
@@ -151,6 +156,10 @@ extension ChatToolExecutor {
 
     do {
       let contacts = try ContactsReaderService.search(query: query, limit: limit)
+      // A handle from the person's own Contacts may address a draft in this run.
+      ComposeRecipientGrounding.shared.recordContactHandles(
+        contacts.flatMap { $0.phoneNumbers.map(\.value) + $0.emailAddresses.map(\.value) },
+        runID: runID, ownerID: ownerID)
       return deviceToolJSON([
         "ok": true,
         "query": query,
@@ -281,11 +290,20 @@ extension ChatToolExecutor {
 
   // MARK: - Messages send
 
-  static func executeSendMessage(_ args: [String: Any]) async -> String {
+  static func executeSendMessage(
+    _ args: [String: Any],
+    ownerID: String? = nil,
+    composeCoordinator: ComposeProposalCoordinator = .shared
+  ) async -> String {
     guard let to = (args["to"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
       !to.isEmpty
     else {
       return deviceToolFailure(reason: "empty_recipient", message: "Provide a recipient handle.")
+    }
+    // Before anything is sent: a draft Omi placed in Messages for this person
+    // is the person's to send, so a "send it" never becomes a second message.
+    if let blocked = sendBlockedByWaitingDraft(to: to, ownerID: ownerID, coordinator: composeCoordinator) {
+      return blocked
     }
     guard let text = args["text"] as? String,
       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

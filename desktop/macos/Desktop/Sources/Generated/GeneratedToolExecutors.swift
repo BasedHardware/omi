@@ -41,6 +41,8 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case readMessageHistory = "read_message_history"
   case listMailMessages = "list_mail_messages"
   case sendMessage = "send_message"
+  case proposeMessage = "propose_message"
+  case proposeEmail = "propose_email"
   case runApplescript = "run_applescript"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
@@ -55,8 +57,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:2485219c4f7346983e817847193494a8e8a1520ec1272925521e8bc7370ee23e"
-  static let chatFirstManifestDigest = "sha256:ce20a45ebe23f393a8c6898b1efde8b49b6367b53e0d494d6d958c4a6a334b58"
+  static let manifestDigest = "sha256:0ba63523d1c002d85c2233a5054691edccebce45b876b5b0fdab8876e7f6a97c"
+  static let chatFirstManifestDigest = "sha256:9b3d64c861e4f3a498928a537d1df7155b8f00e583c8865458b1007c6a2ee1a2"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -104,6 +106,8 @@ enum GeneratedToolExecutors {
     .readMessageHistory: .chatToolExecutor,
     .listMailMessages: .chatToolExecutor,
     .sendMessage: .chatToolExecutor,
+    .proposeMessage: .chatToolExecutor,
+    .proposeEmail: .chatToolExecutor,
     .runApplescript: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
@@ -173,6 +177,8 @@ enum GeneratedToolExecutors {
     case readMessageHistory
     case listMailMessages
     case sendMessage
+    case proposeMessage
+    case proposeEmail
     case runApplescript
     case createCanonicalGoal
     case getCanonicalGoals
@@ -219,6 +225,8 @@ enum GeneratedToolExecutors {
     case .readMessageHistory: return .readMessageHistory
     case .listMailMessages: return .listMailMessages
     case .sendMessage: return .sendMessage
+    case .proposeMessage: return .proposeMessage
+    case .proposeEmail: return .proposeEmail
     case .runApplescript: return .runApplescript
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
