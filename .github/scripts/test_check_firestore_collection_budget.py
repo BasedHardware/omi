@@ -246,6 +246,35 @@ class LiteralCollectionTests(GuardFixture):
         self.write_registry(exempt=[{'collection': 'conversation_finalization_jobs', 'reason': 'fixture exemption'}])
         self.assertEqual(self.evaluate(), [])
 
+    def test_python_keyword_collection_argument_fails(self) -> None:
+        self.write_python(
+            BASE_PYTHON
+            + "\n\ndef claim(job_id):\n"
+            + "    return client.collection(collection_id='conversation_retry_jobs').document(job_id).get()\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('conversation_retry_jobs', errors[0])
+        self.assertNotIn('computed collection name', errors[0])
+
+    def test_python_keyword_collection_argument_with_budget_passes(self) -> None:
+        self.write_python(
+            BASE_PYTHON
+            + "\n\ndef claim(job_id):\n"
+            + "    return client.collection(collection_id=JOBS).document(job_id).get()\n"
+            + "\n\nJOBS = 'conversation_retry_jobs'\n"
+        )
+        self.write_registry(budgets=[dict(BUDGET, collection='conversation_retry_jobs')])
+        self.assertEqual(self.evaluate(), [])
+
+    def test_python_argument_less_collection_call_fails_closed(self) -> None:
+        self.write_python(
+            BASE_PYTHON + "\n\ndef claim(job_id):\n    return client.collection().document(job_id).get()\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('computed collection name', errors[0])
+
     def test_work_state_token_classification(self) -> None:
         self.assertEqual(work_state_token('conversation_finalization_jobs'), 'jobs')
         self.assertEqual(work_state_token('channel_turn_leases'), 'leases')
@@ -363,6 +392,51 @@ class WebSurfaceTests(GuardFixture):
             + "\n\nexport async function again(id: string) {\n  return getDb().collection(\"conversation_dispatch_queue\").doc(id).get();\n}\n"
         )
         self.assertEqual(self.evaluate(), [])
+
+    def test_typescript_concatenated_constant_fails(self) -> None:
+        self.write_web(
+            BASE_WEB
+            + '\n\nconst NEW_JOBS = "conversation_" + "retry_jobs";\n'
+            + "\nexport async function claim(id: string) {\n"
+            + "  return getDb().collection(NEW_JOBS).doc(id).get();\n}\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('computed collection name', errors[0])
+        self.assertIn('NEW_JOBS', errors[0])
+
+    def test_typescript_multiline_concatenated_constant_fails(self) -> None:
+        self.write_web(
+            BASE_WEB
+            + "\n\nconst NEW_JOBS =\n  \"conversation_\" +\n  \"retry_jobs\";\n"
+            + "\nexport async function claim(id: string) {\n"
+            + "  return getDb().collection(NEW_JOBS).doc(id).get();\n}\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('computed collection name', errors[0])
+
+    def test_typescript_concatenated_constant_with_dynamic_entry_passes(self) -> None:
+        self.write_web(
+            BASE_WEB
+            + '\n\nconst NEW_JOBS = "conversation_" + "retry_jobs";\n'
+            + "\nexport async function claim(id: string) {\n"
+            + "  return getDb().collection(NEW_JOBS).doc(id).get();\n}\n"
+        )
+        self.write_registry(dynamic=[dict(WEB_DYNAMIC, expression='NEW_JOBS')])
+        self.assertEqual(self.evaluate(), [])
+
+    def test_typescript_as_const_still_resolves(self) -> None:
+        self.write_web(
+            BASE_WEB
+            + '\n\nconst NEW_JOBS = "conversation_retry_jobs" as const;\n'
+            + "\nexport async function claim(id: string) {\n"
+            + "  return getDb().collection(NEW_JOBS).doc(id).get();\n}\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('conversation_retry_jobs', errors[0])
+        self.assertNotIn('computed collection name', errors[0])
 
     def test_typescript_comment_is_not_a_collection(self) -> None:
         self.write_web(

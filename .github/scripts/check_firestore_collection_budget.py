@@ -189,9 +189,13 @@ TS_CALL = re.compile(
     r'|(?<![.\w$])(?P<kind>collection|collectionGroup|doc)\s*\('
 )
 TS_CONSTANT = re.compile(
-    r'\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*' r'(?:"([^"\n]*)"|\'([^\'\n]*)\'|`([^`\n$]*)`)'
+    r'\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*'
+    r'(?:"([^"\n]*)"|\'([^\'\n]*)\'|`([^`\n$]*)`)'
+    r'\s*(?:as\s+const)?\s*[;,]?\s*(?://.*)?$',
+    re.MULTILINE,
 )
 TS_IDENTIFIER = re.compile(r'^[A-Za-z_$][\w$]*$')
+COLLECTION_KEYWORDS = ('collection_id', 'collection_group_id')
 # A module constant whose whole value is one string literal. Implicit concatenation
 # and arithmetic intentionally do not match: they fall through to the computed-name
 # path and fail closed instead of resolving to a partial name.
@@ -305,6 +309,21 @@ def _python_resolve(argument: ast.expr, constants: dict[str, set[str]]) -> list[
     return None
 
 
+def _python_call_argument(node: ast.Call) -> ast.expr | None:
+    """The collection argument of ``.collection()`` / ``.collection_group()``, positional or keyword.
+
+    ``google.cloud.firestore`` accepts ``collection_id`` as a keyword, so a
+    keyword-only call must resolve exactly like the positional form; returning
+    None makes the caller record a dynamic site instead of skipping the call.
+    """
+    if node.args:
+        return node.args[0]
+    for keyword in node.keywords:
+        if keyword.arg in COLLECTION_KEYWORDS:
+            return keyword.value
+    return None
+
+
 def _scan_python(sources: list[tuple[str, str]], inventory: Inventory) -> None:
     constants: dict[str, set[str]] = {}
     for _path, source in sources:
@@ -315,22 +334,22 @@ def _scan_python(sources: list[tuple[str, str]], inventory: Inventory) -> None:
     # Only files that name a Firestore collection call can contain a call site, so
     # parsing stays proportional to the Firestore surface instead of the backend.
     parsed = _parse([(path, source) for path, source in sources if 'collection' in source.lower()])
-    call_sites: list[tuple[str, int, ast.expr]] = []
+    call_sites: list[tuple[str, int, ast.expr | None, str]] = []
     for path, tree in parsed:
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
                 and node.func.attr in ('collection', 'collection_group')
-                and node.args
             ):
-                call_sites.append((path, node.lineno, node.args[0]))
+                call_sites.append((path, node.lineno, _python_call_argument(node), ast.unparse(node)))
 
-    for path, lineno, argument in call_sites:
+    for path, lineno, argument, call_text in call_sites:
         reference = f'{path}:{lineno}'
-        resolved = _python_resolve(argument, constants)
+        resolved = None if argument is None else _python_resolve(argument, constants)
         if resolved is None:
-            inventory.dynamic.setdefault(f'{path}::{ast.unparse(argument)}', []).append(reference)
+            expression = call_text if argument is None else ast.unparse(argument)
+            inventory.dynamic.setdefault(f'{path}::{expression}', []).append(reference)
             continue
         for name in resolved:
             inventory.collections.setdefault(name, []).append(reference)
