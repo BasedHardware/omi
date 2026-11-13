@@ -61,7 +61,7 @@ void main() {
     await view.refresh();
     expect(view.recordings, isEmpty);
     expect(await ledger.getAllWals(), isEmpty);
-    expect(ledger.testForeignWals.single.jobId, 'fixture-accepted-job');
+    expect((await WalFileManager.loadWals()).single.jobId, 'fixture-accepted-job');
     expect(SharedPreferencesUtil().getString('batchAudioDir'), docs.path);
     ledger.clearUserData();
     view.clearUserData();
