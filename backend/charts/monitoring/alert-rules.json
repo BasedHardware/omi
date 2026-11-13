@@ -33298,7 +33298,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Firestore Cost",
     "title": "Firestore - unattributed reads above 3% of billed reads",
-    "condition": "F",
+    "condition": "D",
     "data": [
       {
         "refId": "A",
@@ -33344,26 +33344,6 @@
         "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
-          "from": 1800,
-          "to": 0
-        },
-        "datasourceUid": "gmp-cloud-run",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "gmp-cloud-run"
-          },
-          "expr": "((count(count by (type) (firestore_googleapis_com:document_read_count)) == bool 3) or vector(0)) * (((time() - max(timestamp(firestore_googleapis_com:document_read_count))) < bool 900) or vector(0))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C"
-        }
-      },
-      {
-        "refId": "D",
-        "queryType": "",
-        "relativeTimeRange": {
           "from": 0,
           "to": 0
         },
@@ -33376,32 +33356,12 @@
           "expression": "($B - $A) / $B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "D",
+          "refId": "C",
           "type": "math"
         }
       },
       {
-        "refId": "E",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "($D > 0.03) || ($C == 0)",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "E",
-          "type": "math"
-        }
-      },
-      {
-        "refId": "F",
+        "refId": "D",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -33413,7 +33373,7 @@
             {
               "evaluator": {
                 "params": [
-                  0
+                  0.03
                 ],
                 "type": "gt"
               },
@@ -33422,7 +33382,7 @@
               },
               "query": {
                 "params": [
-                  "F"
+                  "D"
                 ],
                 "reducer": {
                   "params": [],
@@ -33436,10 +33396,10 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "E",
+          "expression": "C",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "F",
+          "refId": "D",
           "type": "threshold"
         }
       }
@@ -33451,21 +33411,136 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
-      "summary": "Unattributed Firestore reads are above 3% of billed reads on a 30m window, or the billed read series is incomplete or stale: the instrumented read counters cover less than 97% of the native document/read_count.",
-      "threshold": "($D > 0.03) || ($C == 0) for 30m, where A = sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0), B = avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60, C = 1 only when all three billed types are present and the newest sample is under 900s old, and D = ($B - $A) / $B. Same 30m window on both sides; the rule resolves at or below 0.03 with a complete, fresh billed series.",
+      "summary": "Unattributed Firestore reads are above 3% of billed reads on a 30m window: the instrumented read counters cover less than 97% of the native document/read_count.",
+      "threshold": "($B - $A) / $B > 0.03 for 30m, where A = sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0), B = avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60, and the same 30m window is used on both sides. The rule resolves at or below 0.03. The denominator's completeness and per-type freshness are guarded independently by omi-firestore-unattributed-reads-blind.",
       "user_impact": "No direct user impact. A blind spot in read attribution means a read regression can grow without a named caller, so the next cost cut cannot be proven and the bill can rise unseen.",
-      "scope": "based-hardware, both Firestore databases, all read types (LOOKUP, QUERY, NOT_FOUND). A is the complete instrumented counter on the GMP datasource (Cloud Run and GKE); B is the native Cloud Monitoring document/read_count, which tracked the settled bill to 0.3% on the 2026-11-09 cross-check. C is the same-source completeness and freshness guard: it requires all three billed types and a sample younger than 900s, so partial type loss cannot shrink the denominator and total loss cannot pass as NoData. A missing instrumented series reads as zero through or vector(0) and fires.",
-      "verification": "Exact expression replayed on GMP query_range 2026-11-02T06:51Z..2026-11-12T06:51Z at 1h steps (241 points): 0.134-0.568, mean 0.321. Daily means: 11-09 0.274, 11-10 0.196, 11-11 0.163, 11-12 0.162. No retained hour is at or below 0.03, so the resolve side is proven by fixtures, not by live history. The 95% acceptance figure in backend/docs/firestore-read-attribution.md is historical; the fresh measurement is 84% attributed. Guard check on 2026-11-13T09:44Z: count by type = 3, newest sample age 153s, C = 1; re-checked 2026-11-13T10:39Z: C = 1, age 143s.",
-      "evaluated_bad": "Live 2026-11-11T00:00Z..2026-11-12T00:00Z: 0.136-0.183 (mean 0.163), above 0.03 in every hour. Fixtures also fire on partial billed-type loss (C=0, gap 0.02) and total billed-series loss (C=0, B=0).",
-      "evaluated_good": "Fixture: instrumented 980/s against billed 1000/s (gap 0.02) with C=1 for 2h produces no episode, and a firing episode resolves on the first chronological tick at exactly 0.03.",
-      "safe_next_action": "Read the by-caller coverage per kind on the Firestore dashboard, then confirm the instrumented fleet is on a probe build that exports by_caller. If C=0, check the GMP series for a missing type or a stale sample before reading the ratio. This rule reports the gap; it does not explain it, and the closed QUERY undercount RCA is not reopened here.",
+      "scope": "based-hardware, both Firestore databases, all read types (LOOKUP, QUERY, NOT_FOUND). A is the complete instrumented counter on the GMP datasource (Cloud Run and GKE); B is the native Cloud Monitoring document/read_count, which tracked the settled bill to 0.3% on the 2026-11-09 cross-check. A missing instrumented series reads as zero through or vector(0) and fires. The separate guard rule fires when the billed series is incomplete, stale or absent, so this rule's NoData is covered.",
+      "verification": "Exact expression replayed on GMP query_range 2026-11-02T06:51Z..2026-11-12T06:51Z at 1h steps (241 points): 0.134-0.568, mean 0.321. Daily means: 11-09 0.274, 11-10 0.196, 11-11 0.163, 11-12 0.162. No retained hour is at or below 0.03, so the resolve side is proven by fixtures, not by live history. The 95% acceptance figure in backend/docs/firestore-read-attribution.md is historical; the fresh measurement is 84% attributed.",
+      "evaluated_bad": "Live 2026-11-11T00:00Z..2026-11-12T00:00Z: 0.136-0.183 (mean 0.163), above 0.03 in every hour.",
+      "evaluated_good": "Fixture: instrumented 980/s against billed 1000/s (gap 0.02) for 2h produces no episode, and a firing episode resolves on the first chronological tick at exactly 0.03.",
+      "safe_next_action": "Read the by-caller coverage per kind on the Firestore dashboard, then confirm the instrumented fleet is on a probe build that exports by_caller. If omi-firestore-unattributed-reads-blind is firing, fix the billed series before reading this ratio. This rule reports the gap; it does not explain it, and the closed QUERY undercount RCA is not reopened here.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production. The guard rule has its own isPaused switch and its own gate UID."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed-reads guard: billed series incomplete or stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((count(count by (type) (firestore_googleapis_com:document_read_count)) == bool 3) or vector(0)) * ((min((max by (type) (time() - timestamp(firestore_googleapis_com:document_read_count))) < bool 900)) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-13T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The billed Firestore read series is incomplete, stale or absent, so the unattributed-reads ratio is blind.",
+      "threshold": "A < 1 for 30m, where A = (count by type == 3) * (min per type of (max by type (time() - timestamp(...)) < 900)); NoData is Alerting.",
+      "user_impact": "No direct user impact. A blind denominator means the unattributed-reads alert cannot tell a real attribution gap from a vanished or stale billed series, so a read regression could pass unmeasured.",
+      "scope": "based-hardware, all three billed types (LOOKUP, QUERY, NOT_FOUND) on the gmp-cloud-run datasource. The guard is 1 only when all three types are present and every type's oldest sample is younger than 900s. Partial type loss, one stale type, total loss and a missing metric all drive the guard to 0; NoData is Alerting as a final fail-closed layer.",
+      "verification": "Measured 2026-11-13T10:39Z on GMP: count by type = 3, max age 143s, guard = 1. Fixtures exercise all three types fresh (guard 1), one stale type with two fresh (guard 0), and an absent series (guard 0).",
+      "evaluated_bad": "Fixture: LOOKUP 100s, QUERY 2000s, NOT_FOUND 100s -> guard 0 -> fires. Absent metric -> guard 0 -> fires. NoData is Alerting.",
+      "evaluated_good": "Fixture: all three types at 100s -> guard 1 -> no episode.",
+      "safe_next_action": "Check the GMP series for a missing type or a stale sample before reading the ratio. Do not treat the ratio's NoData as healthy.",
       "runbook": "backend/docs/firestore-read-attribution.md",
       "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production."
     },
     "labels": {
       "severity": "warning",
       "instatus_component": "observability",
-      "alert_identity": "omi-firestore-unattributed-reads",
+      "alert_identity": "omi-firestore-unattributed-reads-blind",
       "component": "firestore",
       "impact": "infrastructure",
       "tier": "agent",
