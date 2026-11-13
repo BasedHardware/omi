@@ -103,7 +103,7 @@ def remark_missing_due_markers(
         state = state_ref.get().to_dict() or {}
         query = (
             FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
-                collection, {'status': status}, field_filter_factory=FieldFilter
+                collection, dict.fromkeys(('status',), status), field_filter_factory=FieldFilter
             )
             .where('created_at', '<=', cutoff)
             .order_by('created_at')
