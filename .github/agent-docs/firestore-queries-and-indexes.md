@@ -26,6 +26,16 @@ Merging a manifest PR triggers `.github/workflows/gcp_firestore_indexes.yml`. De
 
 The real-Firestore oracle is `backend/scripts/firestore_index_oracle.py`. Use it when validating a query/index change against Firestore's actual planning response or investigating a suspected index gap. It is an oracle and does not provision indexes.
 
+## Budget a new queue, job or lease collection
+
+A new Firestore collection that stores queue, job, lease, dispatch, retry, progress or recovery state must declare a read budget in `.github/firestore-collection-budgets.json` in the same PR that introduces it. The batch pipeline's job/queue/lease collections reached ~1.36B of ~1.83B reads/day before anyone wrote the number down, so the number is now a merge-time requirement rather than a post-incident discovery.
+
+`firestore-collection-budget` (`.github/scripts/check_firestore_collection_budget.py`) is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, and only a name that first appears in the change needs an entry. It scans both in-repo Firestore surfaces: Python under `backend/` (`.collection()`, `.collection_group()`) and TypeScript/JavaScript under `web/` (`db.collection()`, `db.collectionGroup()`, `collection(db, ...)`, `doc(db, ...)`). A `budgets` entry names the owning lane, the unit of work, `reads_per_unit_budget`, `reads_per_day_budget`, `basis` (`measured` or `planning-bound`), the source of the number, and the review date. A `planning-bound` entry is an estimate and is never booked as a saving.
+
+A **computed** collection name — `client.collection(f'new_{stage}_jobs')`, `db.collection(collectionName)`, a template literal whose collection segment is interpolated — cannot be resolved statically, so it fails closed. Declare it in the registry's `dynamic` list with the `site`, the `expression` exactly as the guard prints it, the `collection_pattern` family, and the same budget fields; the family budget then covers every member the expression can produce. A path whose collection segments are static (`f'users/{uid}/jobs'`) resolves normally and only the new `jobs` collection needs a budget. If the token heuristic misclassifies a name or a site, add it to `exempt` with a reason instead of inventing a budget.
+
+The guard is a disclosure ratchet, not semantic analysis: a name assembled from config or a runtime registry is invisible, and a new member of an already declared family is covered by that family's budget rather than by a new entry. `FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0` disables it for an approved rollback and requires `FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON` so the disable is visible in the run log.
+
 ## Respond to a missing-index alert
 
 The backend provisions a missing-index alert through `.github/scripts/ensure_firestore_missing_index_alert.py`. Follow `backend/docs/runbooks/firestore-missing-index.md`: confirm the actual query and platform suggestion, declare the composite or collection-group field requirement in the registry, regenerate the manifest, and verify the request after readiness. Never copy a suggested index directly into a project.

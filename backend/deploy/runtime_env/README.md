@@ -120,3 +120,41 @@ the batch scheduler/pump and the co-host contract classifies them listen-only.
 The retired WQ12 privacy lever is absent from worker and serving-role literals.
 Worker rollback: 64 / false / 2 / `{}` respectively. See
 [the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.
+
+
+## Generated read-lever evidence (M7)
+
+`python3 backend/deploy/generate_read_lever_manifest.py` (from the repository
+root) writes [`../firestore_read_levers_manifest.json`](../firestore_read_levers_manifest.json).
+Use `--check` for freshness and offline validation. It calls the existing
+`compose_runtime_env.compose_manifest()` in memory and reuses the compose YAML
+loader/merge and runtime validator's literal extraction. It records each source's
+explicit values, every inherited code default (including the implicit zero), and
+the effective values; it is not live-state evidence or authority to change a rollout.
+The existing backend unit selector runs these checks when any source changes.
+`check_runtime_env_compose.sh` continues to verify the runtime artifact itself.
+
+`firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
+map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
+`expires` date. Dates must be today through seven days out. Current approvals
+end on 2026-11-17; this is an expiry deadline, not permission to expand the rollout.
+Renewal requires an explicit reviewed source change. `base/` and `overlay/`
+identify raw input paths; `runtime/<env>/` identifies both the generated and
+in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
+`code/defaults` covers partial defaults even if an explicit literal overrides them.
+No broad exception grants expiry coverage to another surface or percentage.
+
+UNRESOLVED: chart-vs-CR `batch_timeliness_leader`: worker chart `{}` inherits
+100 from `DEFAULT_PERCENTAGES`; prod Cloud Run literals explicitly carry 0.
+The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev/prod
+worker surfaces and annotates the generated differences. It does not resolve them.
+
+UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
+`people_scan_dedupe`, and `finjob_candidate_queries` are documented as 0 in the
+historical train text above, while `_base.yaml` carries 100. Both source claims
+are preserved pending a human ruling. The generator's `UNRESOLVED_NOTES` constant
+supplies the manifest notes; neither evidence structure lives in `_base.yaml`,
+whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline guard
+extracts each historical train claim and compares it with every base declaration.
+It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
+and a missing note while the sources disagree.

@@ -160,6 +160,11 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
+run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_conversation_page.py
+
 
 if (( ${#failures[@]} )); then
   echo
