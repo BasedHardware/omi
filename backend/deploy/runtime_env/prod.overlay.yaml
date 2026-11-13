@@ -537,8 +537,6 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -902,8 +900,6 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
@@ -1296,8 +1292,6 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1647,8 +1641,6 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.

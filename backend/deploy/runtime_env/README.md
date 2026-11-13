@@ -116,7 +116,8 @@ Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
 and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
 complete lever map, including `bpp_decision_cache:100`, and enables held-poll
-skip and projection finish backoff; each flag is disabled by setting it to false.
+skip; its kill switch is setting `heldPollSkipEnabled` to false.
+Projection finish backoff remains at its code default, off (SCA-2024).
 The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.

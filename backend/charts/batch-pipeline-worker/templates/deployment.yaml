@@ -117,9 +117,6 @@ spec:
             {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
             - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
             {{- end }}
-            {{- if hasKey .Values.worker "projectionFinishBackoffEnabled" }}
-            - {name: BATCH_PROJECTION_FINISH_BACKOFF_ENABLED, value: {{ .Values.worker.projectionFinishBackoffEnabled | quote }}}
-            {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
