@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-idempotency-ignores-input-revisions",
+  "violated_contract": "An existing complete derived record must not suppress useful late source revisions indefinitely. Date-only idempotency returned daily recaps before reading conversation inputs, and the backfill inherited the same blind guard.",
+  "canonical_prevention": "Compare meaningful source membership and content revisions before reusing a derived record. Adopt legacy inputs without blessing stale content, retain durable repair and verification obligations across racing writes, and bound regeneration with transactional owner-wide counters. Patch generated content without replacing independently owned privacy or delivery state.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_summary_late_refresh.py",
+    "backend/testing/e2e/test_daily_summary_validation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/other/notifications.py", "backend/database/daily_summary_refresh.py"],
+  "status": "open"
+}

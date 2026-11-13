@@ -63,6 +63,7 @@ _ENUM_CLASS = re.compile(r'[A-Z]\w*(?:Reason|Outcome|Stage|Family)')
 CLOSED_HELPERS = frozenset(
     {
         'utils.observability.reasons.reason_label',
+        'utils.other.daily_summary_metrics.bounded_refresh_outcome',  # six REFRESH_OUTCOMES; other input raises
         'utils.journey_metrics_contract.bounded_client_journey_issue_class',  # closed CLIENT_JOURNEY_ISSUE_CLASSES else 'unknown'
         'utils.stt.outcomes.bounded_provider',  # _KNOWN_PROVIDERS else 'unknown'
         'utils.stt.stream_close.bounded_stream_close_provider',  # STT_STREAM_CLOSE_PROVIDERS else 'unknown'

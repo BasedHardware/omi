@@ -116,6 +116,7 @@ def _model_says_maya_due_soon():
 
 @pytest.fixture
 def pass_env(monkeypatch):
+    monkeypatch.setattr(daily, 'account_deletion_blocks_user_work', lambda *_a: False)
     fake = FakeFirestore()
     rows = [_row()]
     tasks = [{'id': 't1', 'description': 'Book the dentist', 'created_at': NOW - timedelta(days=3), 'completed': False}]
@@ -596,3 +597,22 @@ def test_parse_model_output_tolerates_fences_and_rejects_prose():
     assert daily.parse_model_output('```json\n{"loops": []}\n```') == {'loops': []}
     assert daily.parse_model_output('sounds good!') is None
     assert daily.parse_model_output(SimpleNamespace(content='{"surface": []}')) == {'surface': []}
+
+
+def test_account_deletion_blocks_daily_pass_before_reads(pass_env, monkeypatch):
+    monkeypatch.setattr(daily, 'account_deletion_blocks_user_work', lambda *_a: True)
+    reads = Mock(side_effect=AssertionError('no input reads for deleting owner'))
+    monkeypatch.setattr(daily.conversations_db, 'get_conversations', reads)
+    assert _run(pass_env, Mock()) == daily.SKIPPED_ACCOUNT_DELETION
+    reads.assert_not_called()
+
+
+def test_account_deletion_during_daily_model_blocks_content_writes(pass_env, monkeypatch):
+    def invoke(*_a, **_k):
+        monkeypatch.setattr(daily, 'account_deletion_blocks_user_work', lambda *_a: True)
+        return {'loops': [], 'surface': []}
+
+    model = Mock()
+    model.invoke.side_effect = invoke
+    assert _run(pass_env, model) == daily.SKIPPED_ACCOUNT_DELETION
+    assert daily.open_loops_db.get_cards_doc(UID, DATE_STR, firestore_client=pass_env.fake) is None

@@ -125,6 +125,11 @@ def default_off(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
     return False
 
 
+def daily_recap_late_input_refresh_enabled() -> bool:
+    """Default on; false restores blind reuse of complete legacy recaps."""
+    return default_on('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED')
+
+
 def quiet_empty_exit_enabled() -> bool:
     """Dark empty-row cleanup; uncertain server custody exits via orphan repair."""
     return default_off('QUIET_EMPTY_EXIT_ENABLED')

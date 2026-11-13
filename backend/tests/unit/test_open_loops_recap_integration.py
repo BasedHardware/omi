@@ -46,6 +46,7 @@ async def _bulk_then_drain(users, **kwargs):
 
 @pytest.fixture
 def recap_env(monkeypatch):
+    monkeypatch.delenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', raising=False)
     today = _AT.strftime('%Y-%m-%d')
 
     pass_calls = []
@@ -65,6 +66,16 @@ def recap_env(monkeypatch):
         return None if date_str == today else {'id': f'old-{date_str}', 'status': 'generated'}
 
     monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', summary_by_date)
+    monkeypatch.setattr(notif.daily_summaries_db, 'set_daily_summary_generation_status', Mock())
+    adoptions = []
+
+    def adopt_existing(uid, date_str, existing, fingerprint, stale):
+        adoptions.append((date_str, stale))
+        return {**existing, notif.recap_refresh.FIELD: fingerprint}
+
+    # Storage is a leaf seam here: exercise the default-on producer and sibling
+    # ordering without allowing the new adoption write to build a real client.
+    monkeypatch.setattr(notif.recap_refresh_db, 'adopt', adopt_existing)
     monkeypatch.setattr(
         notif.daily_summaries_db,
         'update_daily_summary',
@@ -74,6 +85,7 @@ def recap_env(monkeypatch):
     monkeypatch.setattr(notif.daily_summaries_db, 'mark_daily_summary_delivery_completed', Mock())
 
     conversation = SimpleNamespace(
+        id='c1',
         discarded=False,
         transcript_segments=[object()],
         structured=SimpleNamespace(overview='Maya will send the vendor write-up.'),
@@ -99,7 +111,7 @@ def recap_env(monkeypatch):
         webhook_calls.append(uid)
 
     monkeypatch.setattr(notif, 'day_summary_webhook', fake_webhook)
-    return SimpleNamespace(pass_calls=pass_calls, webhook_calls=webhook_calls, today=today)
+    return SimpleNamespace(pass_calls=pass_calls, webhook_calls=webhook_calls, today=today, adoptions=adoptions)
 
 
 def _user_data():
@@ -113,6 +125,8 @@ def test_recap_returns_the_pass_request_after_its_own_work(recap_env):
     request = notif._send_summary_notification(_user_data())
     assert recap_env.pass_calls == []  # nothing ran inside the recap window
     assert recap_env.webhook_calls == [UID]  # the recap itself completed fully
+    assert len(recap_env.adoptions) == notif._DAILY_SUMMARY_BACKFILL_DAYS
+    assert all(stale for _date, stale in recap_env.adoptions)
     assert request is not None
     uid, date_str, start_utc, end_utc, tz_name = request
     assert uid == UID

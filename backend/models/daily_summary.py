@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from models.daily_summary_payload import LearnedMemoryRef
 
@@ -61,6 +61,19 @@ class DailySummaryLocationPin(BaseModel):
 
 class DailySummaryResponse(BaseModel):
     model_config = ConfigDict(extra='allow')
+
+    @model_validator(mode='before')
+    @classmethod
+    def exclude_internal_state(cls, value):
+        # Keep the legacy response's public extras, but never serialize worker state.
+        if isinstance(value, dict):
+            return {
+                key: item
+                for key, item in value.items()
+                if not key.startswith(('late_input_', 'late_refresh_'))
+                and key not in ('notes_input_fingerprint', 'notification_delivery_completed', 'retry_delivery')
+            }
+        return value
 
     id: Optional[str] = None
     date: Optional[str] = None

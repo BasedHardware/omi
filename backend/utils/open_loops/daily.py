@@ -48,6 +48,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 from config.open_loops import open_loops_enabled
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.daily_summaries as daily_summaries_db
@@ -66,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 RAN = 'ran'
 SKIPPED_DISABLED = 'skipped_disabled'
+SKIPPED_ACCOUNT_DELETION = 'account_pending_deletion'
 SKIPPED_ALREADY_RAN = 'skipped_already_ran'
 SKIPPED_CLAIMED = 'skipped_claimed'
 SKIPPED_NO_SIGNAL = 'skipped_no_signal'
@@ -387,6 +389,8 @@ def run_daily_pass(
     """
     if not open_loops_enabled():
         return SKIPPED_DISABLED
+    if account_deletion_blocks_user_work(uid):
+        return SKIPPED_ACCOUNT_DELETION
     now = now or store.now_utc()
     try:
         today = date.fromisoformat(date_str)
@@ -554,6 +558,8 @@ def _run_claimed_pass(
         )
         surfaced_ids.add(str(loop['id']))
 
+    if account_deletion_blocks_user_work(uid):
+        return SKIPPED_ACCOUNT_DELETION
     for loop_id in absorbed:
         open_loops_db.delete_loops(uid, [loop_id], firestore_client=firestore_client)
     writes = [store.mark_surfaced(loop, today) if str(loop['id']) in surfaced_ids else loop for loop in writes]

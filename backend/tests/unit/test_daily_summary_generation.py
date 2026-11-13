@@ -15,6 +15,9 @@ import utils.other.notifications as notif
 
 @pytest.fixture(autouse=True)
 def isolate_generation_status_store(monkeypatch):
+    # Pin the prior idempotency behavior while the default-on path is covered in
+    # test_daily_summary_late_refresh and the real-storage validation E2E suite.
+    monkeypatch.setenv('DAILY_RECAP_LATE_INPUT_REFRESH_ENABLED', 'false')
     monkeypatch.setattr(notif.daily_summaries_db, 'set_daily_summary_generation_status', MagicMock())
 
 
@@ -26,6 +29,7 @@ class _FakeConvo:
     has its own tests below.
     """
 
+    id = 'c1'
     transcript_segments = [object()]
     discarded = False
     apps_results: list = []
