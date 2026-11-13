@@ -10,6 +10,9 @@
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "cache": {
         "disabled": true
       }
