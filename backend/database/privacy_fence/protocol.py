@@ -117,6 +117,12 @@ class Fence:
                 mint_token(client, token_ref)
                 continue
             token, targets, fs_generation = result
+            if set(targets) - set(keys):
+                # Redirects discovered by W need their own A1 snapshot BEFORE a
+                # fresh allowing walk. Never upgrade or silently adopt a target
+                # generation observed only during A2.
+                keys = sorted(set(keys) | set(targets))
+                continue
             try:
                 with self.pool.connection() as conn, conn.transaction():
                     admission = self.admit(conn, owner, before, token, targets)

@@ -2,6 +2,7 @@
 -- No role creation, IAM, remote connection or migration is performed by import.
 -- Runtime must not own these tables or inherit an owner role. Validate effective
 -- privileges, including inherited/default grants, before any enforcement ramp.
+REVOKE DELETE, TRUNCATE ON queue_authority FROM :"runtime_role";
 REVOKE ALL ON privacy_owner_fence, privacy_conversation_fence, privacy_fence_change,
  privacy_fence_config, privacy_residue_target FROM :"runtime_role";
 GRANT SELECT, INSERT, UPDATE ON privacy_owner_fence, privacy_conversation_fence,

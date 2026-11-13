@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import re
 
 from google.cloud.firestore_v1.types import Document, DocumentMask, DocumentTransform, Precondition, Value, Write
 
@@ -25,6 +26,7 @@ class Narrowing:
     conversation: str | None = None
     state: str = 'closed'
     reason: str = 'unknown'
+    hashed: bool = False
 
 
 def _value(value):
@@ -50,6 +52,15 @@ def classify(write):
     touched = {authority_path(p)[0] for p in write.update_mask.field_paths}
     touched.update(authority_path(t.field_path)[0] for t in transforms)
     transform_fields = {authority_path(t.field_path)[0] for t in transforms}
+    if family == 'batch_pipeline_privacy' and len(bits) == 2:
+        if not re.fullmatch('[0-9a-f]{64}', uid):
+            raise ValueError('privacy authority requires an owner hash')
+        authorities = {'generation', 'blocked', 'purging'}
+        # Opaque token mint/rotation alone does not close P recursively. Every
+        # authority-state write (including transforms and field deletes) does.
+        if write.delete or not masked or touched & authorities:
+            return Narrowing(uid, reason='data_protection', hashed=True)
+        return None
     if family == 'account_deletions' and len(bits) == 2:
         safe = (
             masked
@@ -71,7 +82,11 @@ def classify(write):
             safe = (
                 value in {'standard', 'enhanced'}
                 if field == 'data_protection_level'
-                else value is True if field == 'private_cloud_sync_enabled' else value is None and field in fields
+                else (
+                    value is True
+                    if field == 'private_cloud_sync_enabled'
+                    else field in fields and Value.pb(fields[field]).WhichOneof('value_type') == 'null_value'
+                )
             )
             if not safe:
                 return Narrowing(uid, reason='data_protection')
@@ -111,10 +126,10 @@ class Coordinator:
         for write in request.writes:
             narrowing = classify(write)
             if narrowing:
-                grouped.setdefault(narrowing.uid, set()).add(narrowing)
+                owner = narrowing.uid if narrowing.hashed else owner_key(narrowing.uid)
+                grouped.setdefault(owner, set()).add(narrowing)
         receipts = []
-        for uid, changes in sorted(grouped.items()):
-            owner = owner_key(uid)
+        for owner, changes in sorted(grouped.items()):
             ref = self.client.collection('batch_pipeline_privacy_fence').document(owner)
             snapshot = ref.get()
             version = snapshot.update_time if snapshot.exists else None

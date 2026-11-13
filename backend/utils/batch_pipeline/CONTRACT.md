@@ -214,6 +214,9 @@ and mint a new admission ID before work resumes; purging/erased is terminal
 path is enabled by this contract. A STARTed effect can transmit arbitrarily late
 (A3), and COMPLETE refuses its result. The missing durable writer/runner blocks
 source readiness; this requirement is not a claim that the state exists today.
+The dark typed queue persists `hold_reason=privacy_deferred` on refusal and
+releases its lease without discarding the paid-attempt token. This is not the
+document job-state writer or a completed restore/re-admission runner.
 
 `recovery_state` is an orthogonal job field: `held` → `prepared` → `running`
 → `failed_held` or `recovered`; revocation can write `cancelled`

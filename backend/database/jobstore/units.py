@@ -11,7 +11,8 @@ from uuid import uuid4
 
 from database.jobstore.authority import Epoch, acquire, fingerprint, AuthorityRefused
 from database.jobstore.postgres_store import jsonb
-from database.privacy_fence.protocol import row_dict
+from database.privacy_fence.protocol import row_dict, lock
+from database.privacy_fence import FenceRefused
 
 
 class Units:
@@ -19,9 +20,10 @@ class Units:
         self.pool, self.fence, self.ticket = pool, fence, ticket
         self.namespace = ticket.namespace
 
-    def _unit(self, conn, identity):
+    def _unit(self, conn, identity, *, skip_locked=False):
+        suffix = ' FOR UPDATE SKIP LOCKED' if skip_locked else ' FOR UPDATE'
         return row_dict(
-            conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s FOR UPDATE', (self.namespace, identity)
+            conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s' + suffix, (self.namespace, identity)
         )
 
     def admit(
@@ -45,8 +47,8 @@ class Units:
         cohort admission policy, not re-derived by the database. Migration census
         must establish the same units_total before this API serves old recordings.
         """
-        acquire(conn, self.ticket)
         self.fence.check_work_write(conn, owner, admission)
+        acquire(conn, self.ticket)
         immutable = dict(
             owner=owner,
             recording=recording,
@@ -113,44 +115,85 @@ class Units:
             raise ValueError('bounded count/share and positive lease required')
         claimed = []
         with self.pool.connection() as conn, conn.transaction():
-            acquire(conn, self.ticket)
+            candidates = []
             for cls, limit in ((0, count - backlog_share), (1, backlog_share)):
+                if not limit:
+                    continue
                 rows = conn.execute(
-                    "SELECT unit_id FROM units WHERE namespace=%s AND stage='provider_stt' AND class=%s "
+                    "SELECT * FROM units WHERE namespace=%s AND stage='provider_stt' AND class=%s "
                     "AND state='pending' AND hold_reason IS NULL AND (due_at IS NULL OR due_at<=%s) "
-                    'AND lease_until<=%s ORDER BY owner_turn,capture_at,unit_id LIMIT %s FOR UPDATE SKIP LOCKED',
+                    'AND lease_until<=%s ORDER BY owner_turn,capture_at,unit_id LIMIT %s',
                     (self.namespace, cls, now, now, limit),
-                ).fetchall()
-                for (identity,) in rows:
-                    job = self._unit(conn, identity)
-                    if job is None:
-                        raise AuthorityRefused('queried unit disappeared')
+                )
+                candidates.extend(dict(zip((column.name for column in rows.description), row)) for row in rows)
+            # Discover without row/namespace locks; acquire all owner guards in
+            # sorted order BEFORE authority, matching A2 admission. Re-read under
+            # authority before mutation. Never acquire a newly discovered owner
+            # while holding authority, nor upgrade a shared owner lock.
+            for owner in sorted({job['owner_key'] for job in candidates}):
+                lock(conn, owner)
+            refused = {}
+            for job in candidates:
+                try:
                     self.fence.check_work_write(conn, job['owner_key'], job['admission'])
-                    if job['attempt_token']:
-                        # Unknown paid outcome is custody, never authority to send
-                        # again. A receipt/reconciliation path must resolve it.
-                        conn.execute(
-                            "UPDATE units SET hold_reason='vendor' WHERE namespace=%s AND unit_id=%s",
-                            (self.namespace, identity),
-                        )
-                    else:
-                        conn.execute(
-                            'UPDATE units SET lease_token=%s,lease_until=%s,attempt_token=%s,attempts=attempts+1 '
-                            'WHERE namespace=%s AND unit_id=%s',
-                            (uuid4().hex, now + lease_seconds, uuid4().hex, self.namespace, identity),
-                        )
-                        claimed.append(self._unit(conn, identity))
+                except FenceRefused as error:
+                    refused[job['unit_id']] = error.disposition
+            acquire(conn, self.ticket)
+            for candidate in candidates:
+                identity = candidate['unit_id']
+                job = self._unit(conn, identity, skip_locked=True)
+                if (
+                    not job
+                    or job['owner_key'] != candidate['owner_key']
+                    or job['admission'] != candidate['admission']
+                    or job['state'] != 'pending'
+                    or job['hold_reason'] is not None
+                    or job['lease_until'] > now
+                    or (job['due_at'] is not None and job['due_at'] > now)
+                ):
+                    continue
+                if identity in refused:
+                    # Status-only hold: retain custody through grace/purge. An
+                    # admission refusal must not roll back another owner's lease
+                    # or remain eligible to poison the next bounded pull.
+                    conn.execute(
+                        'UPDATE units SET hold_reason=%s,lease_token=NULL,lease_until=0 WHERE namespace=%s AND unit_id=%s',
+                        (refused[identity], self.namespace, identity),
+                    )
+                elif job['attempt_token']:
+                    # Unknown paid outcome is custody, never authority to send
+                    # again. A receipt/reconciliation path must resolve it.
+                    conn.execute(
+                        "UPDATE units SET hold_reason='vendor' WHERE namespace=%s AND unit_id=%s",
+                        (self.namespace, identity),
+                    )
+                else:
+                    conn.execute(
+                        'UPDATE units SET lease_token=%s,lease_until=%s,attempt_token=%s,attempts=attempts+1 '
+                        'WHERE namespace=%s AND unit_id=%s',
+                        (uuid4().hex, now + lease_seconds, uuid4().hex, self.namespace, identity),
+                    )
+                    claimed.append(self._unit(conn, identity))
         return claimed
+
+    def _guarded_unit(self, conn, identity):
+        before = row_dict(conn, 'SELECT * FROM units WHERE namespace=%s AND unit_id=%s', (self.namespace, identity))
+        if before is None:
+            return None
+        self.fence.check_work_write(conn, before['owner_key'], before['admission'])
+        acquire(conn, self.ticket)
+        job = self._unit(conn, identity)
+        if not job or job['owner_key'] != before['owner_key'] or job['admission'] != before['admission']:
+            raise AuthorityRefused('unit binding changed; retry in a fresh transaction')
+        return job
 
     def heartbeat(self, identity, lease_token, *, now, lease_seconds):
         if lease_seconds <= 0:
             raise ValueError('positive lease required')
         with self.pool.connection() as conn, conn.transaction():
-            acquire(conn, self.ticket)
-            job = self._unit(conn, identity)
+            job = self._guarded_unit(conn, identity)
             if not job or job['lease_token'] != lease_token or job['lease_until'] <= now or job['state'] != 'pending':
                 return False
-            self.fence.check_work_write(conn, job['owner_key'], job['admission'])
             conn.execute(
                 'UPDATE units SET lease_until=%s WHERE namespace=%s AND unit_id=%s',
                 (now + lease_seconds, self.namespace, identity),
@@ -168,13 +211,11 @@ class Units:
         if state not in {'result_ready', 'quarantined', 'privacy_blocked'} or partial_wait <= 0:
             raise ValueError('terminal state and explicit positive partial wait required')
         with self.pool.connection() as conn, conn.transaction():
-            acquire(conn, self.ticket)
-            job = self._unit(conn, identity)
+            job = self._guarded_unit(conn, identity)
             if not job or job['state'] != 'pending' or job['attempt_token'] != attempt:
                 return False
             # Status-only refusal is a separate API/integration gate. Do not let
             # a caller smuggle a result through a privacy_blocked status write.
-            self.fence.check_work_write(conn, job['owner_key'], job['admission'])
             if state != 'result_ready' and result is not None:
                 raise ValueError('refused units cannot carry a result')
             conn.execute("SELECT set_config('omi.queue_owner_key',%s,true)", (job['owner_key'],))

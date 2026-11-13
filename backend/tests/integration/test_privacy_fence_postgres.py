@@ -279,6 +279,66 @@ def test_full_production_admission_walk_and_detector(context):
         )
 
 
+@pytest.mark.parametrize('value', [{'status': 'in_progress', 'target_level': 'enhanced'}, {}, False, 0, None])
+def test_migration_status_only_explicit_null_is_non_narrowing(context, value):
+    fence, client, uid, owner = context
+    job = admit(context)
+    token = g2_coordinator.set(Coordinator(client, fence))
+    try:
+        client.collection('users').document(uid).update({'migration_status': value})
+    finally:
+        g2_coordinator.reset(token)
+    with fence.pool.connection() as conn, conn.transaction():
+        if value is None:
+            fence.check_work_write(conn, owner, job)
+        else:
+            with pytest.raises(FenceRefused):
+                fence.check_work_write(conn, owner, job)
+
+
+def test_generation_purge_writer_closes_actual_hashed_owner_before_commit(context):
+    from database.batch_pipeline_privacy import advance_privacy_generation
+
+    fence, client, uid, owner = context
+    job = admit(context)
+    token = g2_coordinator.set(Coordinator(client, fence))
+    try:
+        assert advance_privacy_generation(client, uid, blocked=True) == 1
+    finally:
+        g2_coordinator.reset(token)
+    assert client.collection('batch_pipeline_privacy_fence').document(owner).get().to_dict()['landed'] == [1]
+    with fence.pool.connection() as conn, conn.transaction(), pytest.raises(FenceRefused):
+        fence.check_work_write(conn, owner, job)
+
+
+def test_legal_hold_token_rotation_does_not_close_pg_owner(context):
+    fence, client, uid, owner = context
+    job = admit(context)
+    token = g2_coordinator.set(Coordinator(client, fence))
+    try:
+        client.collection('legal_holds').document(uid).set({'active': True})
+    finally:
+        g2_coordinator.reset(token)
+    with fence.pool.connection() as conn, conn.transaction():
+        fence.check_work_write(conn, owner, job)
+    assert not client.collection('batch_pipeline_privacy_fence').document(owner).get().exists
+
+
+def test_redirect_target_is_snapshotted_before_retrying_allowing_walk(context):
+    fence, client, uid, owner = context
+    customer = ClientCustomerData(client)
+    customer.merge_conversation(uid, 'c', 'target')
+    admit(context)
+    key = conversation_key(owner, 'target')
+    fence.close(owner, local=True, conversation=key, state='closed')
+    persisted = []
+    admission = fence.admit_from_authority(client, uid, ['c'], lambda conn, value: persisted.append(value))
+    assert persisted == [admission]
+    assert key in {target['conversation_key'] for target in admission['privacy_targets']}
+    with fence.pool.connection() as conn, conn.transaction():
+        fence.check_work_write(conn, owner, admission)
+
+
 def test_r14_legacy_marker_denies_admission_and_never_discovers_a_wipe(context):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
 

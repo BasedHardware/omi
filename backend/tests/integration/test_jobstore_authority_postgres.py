@@ -157,3 +157,117 @@ def test_old_sql_image_without_epoch_cannot_mutate_registered_queue(source):
     with store.pool.connection() as conn, pytest.raises(Exception, match='epoch refused'):
         with conn.transaction():
             conn.execute("UPDATE units SET hold_reason='vendor' WHERE namespace=%s", (store.namespace,))
+
+
+def test_closed_and_expired_admissions_do_not_poison_other_owners_claims(source):
+    from datetime import timedelta
+    from database.jobstore.authority import acquire
+    from database.jobstore.postgres_store import jsonb
+
+    store, closed_owner, closed_admission = source
+    seed(store, closed_owner, closed_admission, 'closed', total=1)
+    store.fence.close(closed_owner, local=True)
+    for identity in ('expired', 'healthy'):
+        owner = owner_key(store.namespace + identity)
+        before = store.fence.snapshot(owner)
+        with store.pool.connection() as conn, conn.transaction():
+            admission = store.fence.admit(conn, owner, before, 'synthetic')
+            store.admit(
+                conn,
+                identity,
+                owner,
+                identity,
+                admission,
+                capture_at=100,
+                units_total=1,
+                custody_deadline=10000,
+                fresh=True,
+                owner_turn=1,
+                now=100,
+            )
+            if identity == 'expired':
+                admission['admitted_at'] -= timedelta(minutes=20)
+                acquire(conn, store.ticket)
+                conn.execute(
+                    'UPDATE units SET admission=%s WHERE namespace=%s AND unit_id=%s',
+                    (jsonb(admission), store.namespace, identity),
+                )
+    assert [job['unit_id'] for job in store.claim(3, now=100, lease_seconds=20, backlog_share=0)] == ['healthy']
+    assert store.claim(3, now=101, lease_seconds=20, backlog_share=0) == []
+    with store.pool.connection() as conn:
+        assert conn.execute(
+            'SELECT unit_id,hold_reason,state FROM units WHERE namespace=%s ORDER BY unit_id', (store.namespace,)
+        ).fetchall() == [
+            ('closed', 'privacy_deferred', 'pending'),
+            ('expired', 'privacy_deferred', 'pending'),
+            ('healthy', None, 'pending'),
+        ]
+
+
+def test_restore_admission_and_claim_do_not_invert_owner_namespace_locks(source):
+    import threading
+    import time
+
+    store, owner, old = source
+    seed(store, owner, old, 'old', total=1)
+    store.fence.close(owner, local=True)
+    before = store.fence.snapshot(owner)
+    held, release = threading.Event(), threading.Event()
+    errors = []
+
+    def restore():
+        try:
+            with store.pool.connection() as conn, conn.transaction():
+                admission = store.fence.admit(conn, owner, before, 'restored')
+                held.set()
+                assert release.wait(5)
+                store.admit(
+                    conn,
+                    'new',
+                    owner,
+                    'new-recording',
+                    admission,
+                    capture_at=101,
+                    units_total=1,
+                    custody_deadline=10000,
+                    fresh=True,
+                    owner_turn=2,
+                    now=101,
+                )
+        except Exception as error:
+            errors.append(error)
+
+    def claim():
+        try:
+            store.claim(1, now=102, lease_seconds=20, backlog_share=0)
+        except Exception as error:
+            errors.append(error)
+
+    producer = threading.Thread(target=restore)
+    consumer = threading.Thread(target=claim)
+    producer.start()
+    assert held.wait(5)
+    consumer.start()
+    # A separate synthetic connection observes the blocked privacy lock. This
+    # establishes the interleaving without sleeping while holding a pool slot.
+    observer = postgres_connect()()
+    try:
+        deadline = time.monotonic() + 1.5
+        waiting = False
+        while time.monotonic() < deadline:
+            waiting = bool(
+                observer.execute("SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted").fetchone()[
+                    0
+                ]
+            )
+            if waiting:
+                break
+            time.sleep(0.01)
+    finally:
+        release.set()
+        observer.close()
+        producer.join(6)
+        consumer.join(6)
+    assert waiting and not producer.is_alive() and not consumer.is_alive()
+    assert not errors
+    assert [job['unit_id'] for job in store.claim(1, now=103, lease_seconds=20, backlog_share=0)] == ['new']

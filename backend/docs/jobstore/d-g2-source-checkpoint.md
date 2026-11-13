@@ -7,7 +7,8 @@ Source delivery books $0. Continue all fixes on `sca-1697-d-g2-dark`; no second 
 Base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (current origin/main at checkout).
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
-The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4.
+The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4,
+0008 adds immutable handoffs, and 0009 closes raw-SQL authority bypasses.
 No old migration was edited. No staging, production, IAM, provisioning or runtime
 configuration was touched. Runtime SQL grants are an operator-rendered source
 file, never executed remotely by the harness.
@@ -50,6 +51,21 @@ file, never executed remotely by the harness.
   flushes and retries; thread exceptions surface at flush instead of looking like
   success. Unknown queue tables/subcollections and changed bindings refuse.
   Imports/default constructors do not bind or enable any new path.
+- First FIX repair: SQL itself now refuses all reverse-open edges while the
+  certificate path is absent; DELETE/TRUNCATE and namespace renames cannot erase
+  registration, and bootstrap cannot forge an authoritative epoch/history.
+  Runtime grant source also revokes DELETE/TRUNCATE. This is refusal, not an
+  implemented reverse certificate or permission to reopen FS.
+- Classifier distinguishes an explicit protobuf null from migration maps and
+  closes the actual hashed owner for generation/blocked/purging authority writes.
+  Token-only rotation does not recursively close P; Q10 legal holds still do not
+  close P. Redirect targets discovered by W trigger a new A1 snapshot/walk.
+- Typed claim discovers bounded candidates without row/namespace locks, locks
+  owners in sorted order first, then acquires authority and rechecks each locked
+  row (SKIP LOCKED). Admission/heartbeat/settlement use the same owner-before-
+  namespace order. Refused candidates get a durable hold and lease release;
+  healthy owners in the same batch can commit, while paid-attempt tokens survive.
+  This does not implement the missing production restore/re-admission runner.
 
 ## Missing integration (blocks completion/readiness)
 
