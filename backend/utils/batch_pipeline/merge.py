@@ -5,7 +5,12 @@ import time
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 
-from config.batch_pipeline import merge_catch_up_depth, merge_head_wait_seconds, recovered_merge_release_enabled
+from config.batch_pipeline import (
+    merge_catch_up_depth,
+    merge_head_wait_seconds,
+    provider_merge_membership_enabled,
+    recovered_merge_release_enabled,
+)
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -37,7 +42,25 @@ def _wait_bucket(seconds: float) -> str:
 
 def _catch_up(job: dict) -> bool:
     # Only rows classified at admission; record-lane and older rows keep the plain order.
-    return job.get('fresh_capture') is False
+    if job.get('fresh_capture') is False:
+        return True
+    # Provider rows admitted before provider admission stamped the class are backlog by now:
+    # without this they would commit in plain order ahead of the owner's fresh rows.
+    return (
+        job.get('fresh_capture') is None
+        and (job.get('stt_route') or {}).get('stt_route') == 'provider'
+        and provider_merge_membership_enabled()
+    )
+
+
+def _ready_since(row: dict) -> float | None:
+    """When the row became ready. A provider row settled before provider settle stamped
+    ``ready_at`` carries the same instant on its intent."""
+    if row.get('ready_at') is not None:
+        return row['ready_at']
+    if (row.get('stt_route') or {}).get('stt_route') == 'provider' and provider_merge_membership_enabled():
+        return (row.get('provider_intent') or {}).get('settled_at')
+    return None
 
 
 def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None, dict | None]:
@@ -271,13 +294,14 @@ class OrderedMerge:
                 # rows in capture order. The bypassed head later appends as
                 # late_capture through the unchanged body below.
                 current = tx.get('jobs', waiter['segment_id'])
-                if not (
+                since = _ready_since(waiter)
+                if since is None or not (
                     current.get('merge_pending')
                     and current.get('state') == 'result_ready'
-                    and current.get('ready_at') == waiter['ready_at']
+                    and _ready_since(current) == since
                 ):
                     return None
-                bypass.update(head_state=candidate['state'], waited=now - waiter['ready_at'])
+                bypass.update(head_state=candidate['state'], waited=now - since)
                 try:
                     candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
@@ -425,7 +449,22 @@ class OrderedMerge:
                     type(error).__name__,
                 )
                 return None
-            if not waiter or now - waiter['ready_at'] < wait:
+            if not waiter and provider_merge_membership_enabled():
+                # Provider rows settled before the ready_at stamp never match that probe. The
+                # owner's earliest ready row stands in; its intent carries when it settled.
+                try:
+                    waiter = self.store.run(lambda tx: tx.first_ready_pending(key))
+                except FailedPrecondition:
+                    return self._head_wait_unavailable()
+                except GoogleAPICallError as error:
+                    logger.warning(
+                        'event=batch_merge outcome=head_wait_probe_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(error).__name__,
+                    )
+                    return None
+            since = _ready_since(waiter) if waiter else None
+            if since is None or now - since < wait:
                 return None
             try:
                 entry = self.store.run(lambda tx: commit(tx, waiter))
