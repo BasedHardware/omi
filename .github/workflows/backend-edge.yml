@@ -56,6 +56,13 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: backend/edge
+      # Match the edge image's native Opus dependency. Without it audiopus_sys
+      # builds bundled Opus, whose old CMake minimum fails with CMake 4.
+      - name: Install native audio dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libopus-dev
+          pkg-config --modversion opus
       - run: cargo fmt --check
       - run: cargo build --locked --all-targets
       - run: cargo clippy --locked --all-targets -- -D warnings
