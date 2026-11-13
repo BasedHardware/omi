@@ -270,6 +270,22 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     }
     container = pod['containers'][0]
     project_env = {item['name']: item for item in container['env']}
+    lever_manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    integration_levers = lever_manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']['explicit']
+    for candidate in deployments:
+        for worker in candidate['spec']['template']['spec']['containers']:
+            if worker['name'] != 'worker':
+                continue
+            worker_env = {item['name']: item.get('value') for item in worker['env']}
+            # SCA-1993/SCA-2024: default-off backoff must stay absent from every worker sibling.
+            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
+            if environment == 'prod':
+                assert worker_env['BATCH_HELD_POLL_SKIP_ENABLED'] == 'true'
+                assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == integration_levers
+            else:
+                assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
+                assert worker_env['FIRESTORE_READ_LEVERS'] == '{}'
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
     assert project_env['OMI_ENV_STAGE']['value'] == stage
     assert project_env['BATCH_PIPELINE_NAMESPACE']['value'] == namespace
@@ -999,7 +1015,7 @@ def test_held_dead_letter_kill_switch_renders_literal_worker_setting(enabled):
         assert next(v['value'] for v in env if v['name'] == 'BATCH_HELD_DEAD_LETTER_ENABLED') == enabled
 
 
-@pytest.mark.parametrize('environment', ['default', 'dev', 'prod'])
+@pytest.mark.parametrize('environment', ['default', 'dev'])
 def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
     surface = manifest['surfaces'][f'chart/{environment}/batch-pipeline-worker']
@@ -1007,3 +1023,13 @@ def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     assert surface['inheritance']['reason'] == 'intentionally inherits code defaults'
     assert surface['inheritance']['status'] == 'UNRESOLVED'
     assert surface['effective']['batch_timeliness_leader'] == 100
+
+
+def test_prod_worker_levers_match_backend_integration():
+    manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
+    integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
+    assert worker['explicit'] == integration['explicit']
+    assert worker['effective'] == integration['effective']
+    assert worker['explicit']['bpp_decision_cache'] == 100
+    assert 'inheritance' not in worker

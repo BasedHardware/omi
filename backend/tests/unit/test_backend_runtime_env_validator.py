@@ -3703,10 +3703,16 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
     for lever in ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'):
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
-    assert prod_worker['explicit'] == {}
-    assert prod_worker['effective']['batch_timeliness_leader'] == 100
-    assert prod_worker['unresolved_differences']['batch_timeliness_leader'] == {'surface': 100, 'comparison_surface': 0}
-    assert prod_worker['inheritance']['status'] == 'UNRESOLVED'
+    integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
+    assert prod_worker['explicit'] == integration['explicit']
+    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['effective']['batch_timeliness_leader'] == 0
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
+        assert surface['explicit']['bpp_decision_cache'] == 100
+    dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
+    assert dev_worker['explicit'] == {}
+    assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
     assert generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 0
 
 
@@ -3852,6 +3858,7 @@ def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_source
         'runtime/prod/cloud_run/services/backend',
         'runtime/dev/gke/backend-listen',
         'chart/prod/backend-listen',
+        'chart/prod/batch-pipeline-worker',
         'chart/dev/pusher',
     ],
 )
@@ -3875,9 +3882,9 @@ def test_read_lever_parity_requires_exact_surfaces_and_reviewed_unresolved_annot
     elif mutation == 'missing_allowlist':
         policy['reviewed_inheritance'].clear()
     elif mutation == 'resolved_annotation':
-        policy['reviewed_inheritance']['chart/prod/batch-pipeline-worker']['status'] = 'RESOLVED'
+        policy['reviewed_inheritance']['chart/dev/batch-pipeline-worker']['status'] = 'RESOLVED'
     elif mutation == 'missing_note':
-        policy['reviewed_inheritance']['chart/prod/batch-pipeline-worker']['notes'] = ''
+        policy['reviewed_inheritance']['chart/dev/batch-pipeline-worker']['notes'] = ''
     else:
         policy['reviewed_inheritance']['chart/dev/unused'] = {}
     assert read_lever_manifest.parity_errors(sources, expected, policy)
