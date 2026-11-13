@@ -179,6 +179,24 @@ class TestSendMap:
         translated = second.translate([dict(seg)])
         assert translated and translated[0]['start'] == timeline.wall(1600 + int(0.05 * RATE))
 
+    def test_decimal_provider_seconds_round_to_the_nearest_sample(self):
+        """``2.01 * 16000`` is ``32159.999...`` in binary; truncating it lands one sample early.
+
+        On a 10 ms provider grid that happens for 2,356 of the 360,000 timestamps in an
+        hour. One sample is harmless mid-span, but on a send boundary the early sample
+        belongs to the previous send, so the window straddles a capture gap and the
+        segment is refused. Round instead, as the elapsed-send cursor already does.
+        """
+        timeline = CaptureTimeline(sample_rate=RATE)
+        for index in range(200):
+            timeline.accept(_pcm(320), arrival_wall=100.0 + (index + 1) * 0.02, arrival_monotonic=(index + 1) * 0.02)
+        translator = ProviderEpochTranslator(timeline, RATE)
+        translator.note_accepted(0, 64000)
+        (segment,) = translator.translate([{'start': 2.01, 'end': 3.01, 'text': 'x'}])
+        assert segment['_capture_start_sample'] == 32160
+        assert segment['_capture_end_sample'] == 48160
+        assert segment['start'] == timeline.wall(32160)
+
     def test_provider_time_out_of_range_rejects(self):
         translator = ProviderEpochTranslator(CaptureTimeline(RATE), RATE)
         translated = translator.translate([{'start': 10.0, 'end': 11.0, 'text': 'late'}])
