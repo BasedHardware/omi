@@ -226,6 +226,29 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-slow-timing-tests.yml/slow-timing-tests": {
+      "budget_p50_minutes": 3,
+      "display_name": "Slow timing / ${{ matrix.test_file }}",
+      "expected_runs_class": "main-push-forecast",
+      "expected_runs_per_day": 120,
+      "if": null,
+      "matrix": {
+        "test_file": [
+          "test_soniox_recovery_retry.py",
+          "test_live_replay_provider_pairs.py"
+        ]
+      },
+      "matrix_size": 2,
+      "needs": [],
+      "owner": "Backend CI maintainers",
+      "rationale": "SCA-1994: two isolated standard Linux jobs per main commit; local calls take 2s and 19s, with a conservative 3-minute p50 including setup and 120 main commits/day forecast. No PR runner minutes; SCA-1998/SCA-1999 track restoration.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-unit-tests.yml/backend-unit-guardrails": {
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
@@ -3533,6 +3556,19 @@
               "type": "string"
             }
           }
+        },
+        "workflow_dispatch": ""
+      }
+    },
+    "backend-slow-timing-tests.yml": {
+      "name": "Backend slow timing tests",
+      "owner": "Backend CI maintainers",
+      "rationale": "SCA-1994: run the two existing slow-marked timing files independently on every main push; no PR trigger, path filter, or concurrency coalescing.",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ]
         },
         "workflow_dispatch": ""
       }
