@@ -43,7 +43,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as p
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
 from database.legal_holds import settles_unknown_erasure
 
-PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
+PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow', 'ledger')
 DISCOVER_TABLES = ('jobs', 'results')
 DEPENDENT_TABLES = (
     'artifacts',
@@ -355,6 +355,16 @@ def purge_conversation(
                 settle()
                 with progress.unit():
                     purge_jobstore_owner(namespace, uid)
+            elif phase == 'ledger':
+                # C1 capture identity is the conversation ID. Do this through
+                # the same destructive unit/hold fence as other metadata.
+                _ensure_budget(progress)
+                settle()
+                with progress.unit() as authority:
+                    reference = (
+                        client.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id)
+                    )
+                    _fenced_delete(client, reference, authority.fence)
             if phase_index + 1 < len(PHASES):
                 mark({'ns': ns_index, 'phase': PHASES[phase_index + 1]})
             else:

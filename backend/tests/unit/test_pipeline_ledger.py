@@ -253,6 +253,7 @@ class _FakeRef:
     def __init__(self, store, path):
         self.store = store
         self.path = path
+        self.id = path.rsplit('/', 1)[-1]
 
     def collection(self, name):
         return _FakeRef(self.store, f'{self.path}/{name}')
@@ -294,7 +295,7 @@ class _FakeTransaction:
 
 class _FakeClient:
     def __init__(self):
-        self.store = {}
+        self.store = {'users/uid': {'data_protection_level': 'standard'}}
 
     def collection(self, name):
         return _FakeRef(self.store, name)

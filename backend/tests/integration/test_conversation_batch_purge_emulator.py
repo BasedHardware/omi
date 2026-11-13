@@ -331,6 +331,23 @@ def test_reconciled_purge_erases_only_its_conversation_then_clears(monkeypatch, 
     assert _quick(job, generation) == 'missing'
 
 
+def test_p24_real_purge_erases_ledger_and_stale_observers_stay_fenced(monkeypatch, plane, route):
+    from database import pipeline_ledger
+
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    cid = f'ledger-{uuid4().hex[:8]}'
+    _conversation(plane, cid)
+    assert pipeline_ledger.advance(plane.uid, cid, pipeline_ledger.SEALED, now=100, firestore_client=plane.client)
+    _delete(plane, route, cid)
+    [(job, generation)] = _reconcile(monkeypatch)
+    assert _quick(job, generation) == 'purged'
+    assert not _exists(plane, 'users', plane.uid, 'pipeline_ledger', cid)
+    assert not pipeline_ledger.advance(
+        plane.uid, cid, pipeline_ledger.TRANSCRIBED, now=200, firestore_client=plane.client
+    )
+    assert not _exists(plane, 'users', plane.uid, 'pipeline_ledger', cid)
+
+
 def test_hold_between_purge_units_stops_erasure_until_release(monkeypatch, plane, route):
     from database import legal_holds
 

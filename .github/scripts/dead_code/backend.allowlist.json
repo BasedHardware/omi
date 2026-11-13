@@ -55,6 +55,14 @@
     {
       "path": "backend/database/pipeline_ledger.py",
       "reason": "C1a-core ships the in-flight ledger contract dormant (no live transition hooks by design) so the reviewed CAS/idempotency/revision/read contract can merge under the 500-line cap. C1a2 adds the seal/notes/upload-failure callers and removes this entry. Contract behavior is exercised by backend/tests/unit/test_pipeline_ledger.py and backend/tests/integration/test_pipeline_ledger_firestore.py."
+    },
+    {
+      "path": "backend/database/jobstore/units.py",
+      "reason": "SCA-1959 dark source checkpoint: intentionally excluded from serving factories until G2 Rev 3 privacy/custody and reverse certificates pass. Exercised by testing.jobstore_cutover and real local integration tests; no runtime activation is authorized."
+    },
+    {
+      "path": "backend/database/privacy_fence/interceptor.py",
+      "reason": "SCA-1959 dark source checkpoint: intentionally excluded from serving factories until G2 Rev 3 privacy/custody and reverse certificates pass. Exercised by testing.jobstore_cutover and real local integration tests; no runtime activation is authorized."
     }
   ]
 }

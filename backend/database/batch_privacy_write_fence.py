@@ -8,10 +8,12 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
+import asyncio
+from contextvars import ContextVar
 from typing import Any, cast
 from uuid import uuid4
 
-from google.api_core.exceptions import GoogleAPICallError
+from google.api_core.exceptions import Aborted, AlreadyExists, FailedPrecondition, GoogleAPICallError
 from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
 from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1.types import (
@@ -38,6 +40,11 @@ _USER_FIELDS = frozenset(
 )
 _CONVERSATION_FIELDS = CONVERSATION_AUTHORITY_FIELDS
 _AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_value', 'purging': 'boolean_value'}
+
+# Dark integration seam. No runtime config enables G2; tests/qualified callers
+# inject an owner-scoped coordinator. Bulk authority writes use this same Commit
+# wrapper. It is unset in every existing serving process.
+g2_coordinator: ContextVar[Any] = ContextVar('g2_coordinator', default=None)
 
 
 def _authority_path(path: str) -> tuple[str, ...]:
@@ -102,7 +109,18 @@ def authority_tokens(writes: Any) -> set[str]:
         if len(parts) < 7 or parts[0] != 'projects' or parts[2] != 'databases' or parts[4] != 'documents':
             continue
         root, family, owner = '/'.join(parts[:5]), parts[5], parts[6]
-        if family == PRIVACY_COLLECTION and len(parts) == 7:
+        if family == 'batch_pipeline_privacy_fence' and len(parts) == 7:
+            if write.delete or not Write.pb(write).HasField('current_document'):
+                raise ValueError('G2 guard requires a precondition and must survive erasure')
+            # Guard writes only append exact sequences / perform kill transforms;
+            # they validate here without rotating F or recursively closing P.
+            if not Write.pb(write).HasField('update_mask') or write.update_mask.field_paths:
+                raise ValueError('G2 guard only accepts transform writes')
+            for transform in write.update_transforms:
+                kind = type(transform).pb(transform).WhichOneof('transform_type')
+                if (transform.field_path, kind) not in {('landed', 'append_missing_elements'), ('killed', 'increment')}:
+                    raise ValueError('invalid G2 guard transform')
+        elif family == PRIVACY_COLLECTION and len(parts) == 7:
             # This authority intentionally survives account erasure. Recreating
             # a deleted row with token fields alone would erase block/purge
             # state and its generation. Refuse before any RPC, including bulk.
@@ -173,7 +191,19 @@ def _wrap_commit(original: Any) -> Any:
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
-            return response(await original(client, request=prepared, **kwargs), count)
+            coordinator = g2_coordinator.get()
+            if coordinator is not None:
+                prepared = CommitRequest(prepared)
+                receipts = await asyncio.to_thread(coordinator.prepare, prepared)
+            try:
+                result = await original(client, request=prepared, **kwargs)
+            except (FailedPrecondition, AlreadyExists) as error:
+                if coordinator is not None and receipts:
+                    raise Aborted('privacy guard changed; retry the complete authority transaction') from error
+                raise
+            if coordinator is not None:
+                await asyncio.to_thread(coordinator.acknowledge, receipts)
+            return response(result, count)
 
         wrapped = async_wrapped
 
@@ -182,7 +212,19 @@ def _wrap_commit(original: Any) -> Any:
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
-            return response(original(client, request=prepared, **kwargs), count)
+            coordinator = g2_coordinator.get()
+            if coordinator is not None:
+                prepared = CommitRequest(prepared)
+                receipts = coordinator.prepare(prepared)
+            try:
+                result = original(client, request=prepared, **kwargs)
+            except (FailedPrecondition, AlreadyExists) as error:
+                if coordinator is not None and receipts:
+                    raise Aborted('privacy guard changed; retry the complete authority transaction') from error
+                raise
+            if coordinator is not None:
+                coordinator.acknowledge(receipts)
+            return response(result, count)
 
         wrapped = sync_wrapped
 

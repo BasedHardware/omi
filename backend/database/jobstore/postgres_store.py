@@ -180,6 +180,21 @@ class PostgresTransaction:
         return self.store.service_frontier_in(self.conn, priority)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        if self.store.privacy_fence is not None:
+            # A uid alone cannot authorize a PG work write. Only a persisted
+            # immutable admission checked in this committing transaction can.
+            from database.privacy_fence import AdmissionChanged, owner_key, conversation_key
+
+            wanted = {conversation_key(owner_key(uid), cid) for cid in conversation_ids}
+            for (table, _), job in [*self.writes.items(), *self.cache.items()]:
+                if table == 'jobs' and job.get('owner_id') == uid:
+                    targets = {t['conversation_key'] for t in job.get('privacy_targets', [])}
+                    if wanted <= targets and (
+                        expected_generation is None or expected_generation == job.get('privacy_generation')
+                    ):
+                        row = self.store.privacy_fence.check_work_write(self.conn, owner_key(uid), job)
+                        return row['generation']
+            raise AdmissionChanged()
         return self.store.check_privacy_for(uid, conversation_ids, expected_generation)
 
     # -- commit -----------------------------------------------------------------------------
@@ -191,6 +206,11 @@ class PostgresTransaction:
             if table not in {'jobs', 'results'}:
                 continue
             job = value if table == 'jobs' else self.get('jobs', key)
+            if self.store.privacy_fence is not None:
+                from database.privacy_fence import owner_key
+
+                self.store.privacy_fence.check_work_write(self.conn, owner_key(job['owner_id']), job)
+                continue
             identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
             if identity in guarded:
                 continue
@@ -224,6 +244,7 @@ class PostgresStore:
         pool: Pool,
         customer_client: Any,
         harness_customer_tables: bool = False,
+        privacy_fence: Any = None,
     ):
         if not _NAMESPACE.fullmatch(namespace):
             raise ValueError('explicit batch_pipeline_{prod,dev,test_<id>} namespace required')
@@ -231,6 +252,7 @@ class PostgresStore:
         self.pool = pool
         self.customer_client = customer_client
         self.harness_customer_tables = harness_customer_tables
+        self.privacy_fence = privacy_fence
 
     # -- Store protocol -----------------------------------------------------------------------
     def run(self, body: Callable[[PostgresTransaction], T]) -> T:
@@ -614,15 +636,28 @@ class PostgresStore:
         return row[0] if row[0] is not None else 0.0
 
     def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
+        if self.privacy_fence is not None:
+            from database.privacy_fence import AdmissionChanged
+
+            raise AdmissionChanged()  # no committing PG transaction/admission supplied
         # Each check is its own read-only customer-data transaction (the privacy authority is
         # still Firestore until A5), as in the pipeline simulator.
-        return assert_batch_write_allowed(
-            self.customer_client,
-            self.customer_client.transaction(),
-            uid,
-            conversation_ids=tuple(conversation_ids),
-            expected_generation=expected_generation,
-        )
+        from google.cloud import firestore
+
+        def check(transaction):
+            return assert_batch_write_allowed(
+                self.customer_client,
+                transaction,
+                uid,
+                conversation_ids=tuple(conversation_ids),
+                expected_generation=expected_generation,
+            )
+
+        # Simulator transactions own their snapshot without Google's begin RPC.
+        # Real customer clients require a begun transaction, as production does.
+        if self.harness_customer_tables and not hasattr(self.customer_client, '_database_string'):
+            return check(self.customer_client.transaction())
+        return firestore.transactional(check)(self.customer_client.transaction())
 
     def purge_namespace(self) -> None:
         """Test-only cleanup of this namespace (conformance fixtures own throwaway namespaces)."""

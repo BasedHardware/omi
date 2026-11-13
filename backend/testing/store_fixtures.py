@@ -355,7 +355,9 @@ def make_postgres() -> StoreHarness:
 
     connect = postgres_connect()
     namespace, token = _new_ids()
-    customer = CustomerData()
+    # Qualification must exercise the production customer-data adapter. The
+    # simulator hid unbegun Firestore transactions and cannot prove revocation.
+    customer = ClientCustomerData(_emulator_client()) if required_backends() == set(BACKENDS) else CustomerData()
     pool = Pool('', connect=connect)
     store = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
     harness = StoreHarness('postgres', store, customer, namespace, token)
