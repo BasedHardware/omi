@@ -1131,6 +1131,31 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
+
+
+def _due_marker_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/due-marker-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/due_marker_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.finalization_due_marker_sweep.remark_missing_due_markers',
+        domains={'now': [T0]},
+        neutrals={
+            'limit': _LIMIT,
+            'stale_after': (timedelta(hours=24), 'age bound; with the pinned now the cutoff is fixed, shape unchanged'),
+        },
+        setup=_due_marker_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
@@ -3216,6 +3241,17 @@ _add(
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
             _stub('database.monthly_usage_totals._epoch', 'v1'),
             _monthly_total_transaction_boundary,
         ),
