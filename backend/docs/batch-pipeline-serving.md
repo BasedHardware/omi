@@ -1439,3 +1439,21 @@ The [policy contract](../config/policy/README.md) owns the read map, unchanged
 legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
 exceptions, replay commands and revert procedure. This change alters no environment
 values; deployment remains part of the two-lane train.
+
+The maintenance leader also samples the fresh-delivery guard at most once per
+minute using two Firestore count aggregations, never streamed documents: fresh
+results committed in the inclusive interval 10–20 minutes ago, and that cohort's
+`projection_state=pending` subset. The merge transaction alone stamps the stored
+class `results.fresh_capture` from the job's exact `True` value (missing means
+`False`); no existing routing reader changes. The gauges
+`omi_batch_pipeline_fresh_committed_window_total`,
+`omi_batch_pipeline_fresh_unprojected_window_total`,
+`omi_batch_pipeline_fresh_unprojected_ratio` and
+`omi_batch_pipeline_fresh_guard_sample_age_seconds` expose the pair and its age;
+the ratio is absent for empty/failed samples, both counts and ratio expire after
+120 s, and a failed query leaves age advancing from the last successful pair.
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED=off` stops the queries and removes all guard
+gauges. Counts use declared prod/dev indexes, cost roughly one read per 1,000
+index entries per count (minimum two reads per sample), and do not alter merge,
+projection or enrichment order. See the 2026-11-13 fresh-delivery change note
+for the complete reader inventory and release-owner live acceptance procedure.

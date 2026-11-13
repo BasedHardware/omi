@@ -14,6 +14,18 @@ def _desc(field):
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_fresh_guard_{"pending" if pending else "total"}',
+            f'batch_pipeline_{stage}_results',
+            'COLLECTION',
+            (_asc('fresh_capture'),)
+            + ((_asc('projection_state'),) if pending else ())
+            + (_asc('committed_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+        for pending in (False, True)
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_{"fresh_" if fresh else ""}pending_nonterminal',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',

@@ -30,6 +30,11 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.batch_pipeline_fresh_guard.fresh_committed_counts',
+            domains={'namespace': namespaces},
+            neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_coalescing.due',
             domains={
                 'namespace': namespaces,

@@ -670,3 +670,15 @@ head lookup can advance. Held ready/retry/vendor_held heads keep capture order/f
 `held_merge_owners` always uses OFF. Oldest, held SLA gauges and stale-vendor watchdog are untouched.
 Unavailable ON queries fall back to exact OFF; OFF errors propagate. Rollback: flag OFF restores old queries/reads.
 No flag is replaced. Savings are Firestore-only, exclude index-entry costs, and stay booked at zero pending settled SKU.
+
+The merge commit alone writes `results.fresh_capture = (job.fresh_capture is True)`;
+unstamped jobs become backlog (`False`), without backfilling old results or changing
+log/predecessor order. Its only new semantic reader is the fresh-delivery guard:
+the serving maintenance leader counts fresh results committed 10–20 minutes ago
+and the pending subset once a minute, publishing
+`omi_batch_pipeline_fresh_{committed_window_total,unprojected_window_total,unprojected_ratio}`
+and `omi_batch_pipeline_fresh_guard_sample_age_seconds`. Empty windows or failed
+queries have no ratio; stale counts/ratios expire at 120 s. The default-on
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED` kill switch suppresses queries and all guard
+gauges when off. Reader inventory and rollout proof requirements are recorded in
+`docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
