@@ -5,7 +5,7 @@
     "guard": ".github/scripts/check_firestore_collection_budget.py",
     "surfaces": "Python under backend/ (.collection, .collection_group) and TypeScript/JavaScript under web/ (db.collection, db.collectionGroup, collection(db, ...), doc(db, ...)).",
     "kill_switch": "FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0 disables the guard for an approved rollback and requires FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON.",
-    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces.",
+    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. A grandfathered computed site whose literal namespace tuple grows keeps its site::expression key, so the guard also compares the enumerable collection family between revisions and requires a budget or exemption for each new member. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces, for computed-family expansion, and for Python collection_group_id.",
     "entry_fields": {
       "collection": "Firestore collection id, snake_case or camelCase",
       "owner": "lane that owns the collection and its budget",
