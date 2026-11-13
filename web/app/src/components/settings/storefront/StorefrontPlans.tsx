@@ -31,6 +31,8 @@ export interface StorefrontPlansProps {
   busyPriceId?: string | null;
   error?: string | null;
   livePlanId?: string | null;
+  /** Opens on the yearly chip; the host passes the kill switch. */
+  yearlyDefault?: boolean;
   onRetry: () => void;
   onSelect: (tier: PlanStorefrontTier, price: PlanStorefrontPrice) => void;
   onManage: () => void;
@@ -43,6 +45,7 @@ export function StorefrontPlans({
   busyPriceId = null,
   error = null,
   livePlanId,
+  yearlyDefault = true,
   onRetry,
   onSelect,
   onManage,
@@ -104,6 +107,7 @@ export function StorefrontPlans({
           data={data}
           busyPriceId={busyPriceId}
           livePlanId={livePlanId}
+          yearlyDefault={yearlyDefault}
           onSelect={onSelect}
         />
       )}
@@ -133,14 +137,18 @@ function TierList({
   data,
   busyPriceId,
   livePlanId,
+  yearlyDefault,
   onSelect,
 }: {
   data: PlanStorefront;
   busyPriceId: string | null;
   livePlanId?: string | null;
+  yearlyDefault: boolean;
   onSelect: StorefrontPlansProps['onSelect'];
 }) {
-  const [chosen, setChosen] = useState<StorefrontInterval>(() => initialInterval(data));
+  const [chosen, setChosen] = useState<StorefrontInterval>(() =>
+    initialInterval(data, yearlyDefault),
+  );
   const [expanded, setExpanded] = useState(false);
   const cancelScheduled = isCancelScheduled(data);
   // While a cancellation is scheduled the sheet shows the current interval only.

@@ -164,7 +164,7 @@ void main() {
     expect(BudgetNudgeDismissal.isDismissed(''), isFalse);
   });
 
-  testWidgets('monthly sheet is one header, one current line, and deck card copy', (tester) async {
+  testWidgets('yearly is the default and the monthly chip still offers monthly prices', (tester) async {
     String? selectedId;
     final data = PlanStorefront.fromJson(fixture());
     await pumpSheet(tester, data: data, select: (_, price) async => selectedId = price.id);
@@ -174,33 +174,48 @@ void main() {
     expect(find.text('Yearly · 2 months free'), findsOneWidget);
     expect(find.text('Recommended'), findsOneWidget);
     expect(find.text('Your plan'), findsOneWidget);
-    expect(find.text(r'US$49.99/month'), findsOneWidget);
+    // Yearly is preselected: yearly headlines, the yearly switch CTA and yearly renewal lines.
     expect(find.text(r'US$199.90/year'), findsWidgets);
-    expect(find.text(r'US$16.66/month'), findsNothing);
+    expect(find.text(r'US$499.90/year'), findsOneWidget);
     expect(find.text(r'12 months / US$199.90'), findsOneWidget);
     expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
     expect(find.text('Upgrade to Pro'), findsOneWidget);
-    expect(find.text('Renews monthly until you cancel. Cancel anytime in settings.'), findsOneWidget);
+    expect(find.text('Renews yearly until you cancel. Cancel anytime in settings.'), findsWidgets);
     expect(find.text('About 280 hours of recording a month, enough to wear it all day'), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.textContaining('•')),
         findsNothing);
     expect(find.byKey(const Key('storefront_restore')), findsNothing);
     expect(find.text('Refresh'), findsNothing);
-    await tester.tap(find.byKey(const Key('storefront_year')));
-    await tester.pumpAndSettle();
-    expect(find.text(r'US$499.90/year'), findsOneWidget);
-    expect(find.text(r'12 months / US$499.90'), findsOneWidget);
-    expect(find.text('Renews yearly until you cancel. Cancel anytime in settings.'), findsWidgets);
-    expect(find.text(r'Switch to yearly · save US$39.98'), findsOneWidget);
-    expect(
-      find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.text(r'US$199.90/year')),
-      findsOneWidget,
-    );
     await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
     await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
     await tester.pumpAndSettle();
     expect(selectedId, 'price_operator_year');
+    await tester.tap(find.byKey(const Key('storefront_month')));
+    await tester.pumpAndSettle();
+    expect(find.text(r'US$49.99/month'), findsOneWidget);
+    expect(find.text('Renews monthly until you cancel. Cancel anytime in settings.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
+    await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
+    await tester.pumpAndSettle();
+    expect(selectedId, 'price_operator_month');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the yearly default kill switch opens the sheet on monthly', (tester) async {
+    await pumpSheet(
+      tester,
+      content: StorefrontPlansContent(
+        storefront: PlanStorefront.fromJson(fixture()),
+        yearlyDefault: false,
+        onRetry: () async {},
+        onSelect: (_, __) async {},
+        onManage: () async {},
+      ),
+    );
+    expect(find.text(r'US$49.99/month'), findsOneWidget);
+    expect(find.text(r'US$499.90/year'), findsNothing);
+    expect(find.text('Renews monthly until you cancel. Cancel anytime in settings.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

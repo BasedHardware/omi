@@ -73,6 +73,16 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertEqual(Self.buttons(data)["plus"], "")
   }
 
+  func testOpensOnYearlyWheneverTheBackendOffersTheIntervalChoice() throws {
+    for name in ["free_settings", "pro_settings", "architect_settings"] {
+      XCTAssertEqual(try Self.golden(name).initialInterval(yearlyDefault: true), .year, name)
+      // The kill switch returns the panel to monthly-first.
+      XCTAssertEqual(try Self.golden(name).initialInterval(yearlyDefault: false), .month, name)
+    }
+    // No interval choice is published here, so monthly stays and every card keeps a price.
+    XCTAssertEqual(try Self.golden("cancel_scheduled_plus").initialInterval, .month)
+  }
+
   func testProAtFullBudgetUpsellsArchitectAndProSettingsNeverListsIt() throws {
     let capped = try Self.golden("pro_budget_cap")
     XCTAssertTrue(capped.budgetExhausted)

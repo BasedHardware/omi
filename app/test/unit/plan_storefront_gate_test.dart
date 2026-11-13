@@ -31,4 +31,16 @@ void main() {
     expect(await PlanStorefrontGate.upsellsEnabled(readFlag: read), isFalse);
     expect(keys, ['mobile-plan-storefront', 'mobile-contextual-upsells']);
   });
+  test('yearly default kill switch fails open and reads its own flag', () async {
+    final keys = <String>[];
+    Future<bool> read(String key) async {
+      keys.add(key);
+      return key == PlanStorefrontGate.yearlyDefaultOffFlag;
+    }
+
+    expect(await PlanStorefrontGate.yearlyDefaultEnabled(readFlag: read), isFalse);
+    expect(keys, ['mobile-plan-storefront-yearly-default-off']);
+    expect(await PlanStorefrontGate.yearlyDefaultEnabled(readFlag: (_) async => false), isTrue);
+    expect(await PlanStorefrontGate.yearlyDefaultEnabled(readFlag: (_) async => throw StateError('offline')), isTrue);
+  });
 }

@@ -8,10 +8,25 @@ import { PostHogManager } from '@/lib/analytics/posthog';
 export class PlanStorefrontGate {
   static readonly enabledFlag = 'web-plan-storefront';
 
+  /**
+   * Kill switch for the yearly-first plan picker. False/missing/offline/error
+   * keeps yearly preselected (ops_kill, owner dazheng); true returns the panel
+   * to monthly-first on the next open without a deploy.
+   */
+  static readonly yearlyDefaultOffFlag = 'web-plan-storefront-yearly-default-off';
+
   static sheetEnabled(
     read = PostHogManager.isFeatureEnabled.bind(PostHogManager),
   ): Promise<boolean> {
     return read(PlanStorefrontGate.enabledFlag).catch(() => false);
+  }
+
+  static yearlyDefaultEnabled(
+    read = PostHogManager.isFeatureEnabled.bind(PostHogManager),
+  ): Promise<boolean> {
+    return read(PlanStorefrontGate.yearlyDefaultOffFlag)
+      .then((killed) => !killed)
+      .catch(() => true);
   }
 
   /** Contextual entry points need both their own flag and the sheet flag. */

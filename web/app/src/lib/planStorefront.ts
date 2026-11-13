@@ -340,8 +340,23 @@ export function offeredPrice(
   );
 }
 
-/** Monthly by default; yearly only when the current card publishes nothing else. */
-export function initialInterval(data: PlanStorefront): StorefrontInterval {
+/**
+ * Yearly is the default whenever the backend offers the interval choice, so the
+ * web panel matches the mobile and external paywalls. A storefront with no
+ * yearly price anywhere keeps monthly so every card keeps a price; the caller
+ * passes `yearlyDefault: false` from the kill switch.
+ */
+export function initialInterval(
+  data: PlanStorefront,
+  yearlyDefault = true,
+): StorefrontInterval {
+  if (
+    yearlyDefault &&
+    data.yearlyToggleLabel !== null &&
+    data.tiers.some((t) => t.prices.some((p) => p.interval === 'year'))
+  ) {
+    return 'year';
+  }
   if (data.current?.interval !== 'year') return 'month';
   const current = data.tiers.find((t) => t.isCurrent);
   return current &&
