@@ -129,6 +129,14 @@ def legend_right(panel):
     panel["options"]["legend"]["placement"] = "right"
 
 
+def mrr_extra(panel):
+    """Legend beside the plot, and a break across missing book days: the Stripe book
+    has no snapshot from 2026-10-07 to 2026-11-07, and a smooth ramp across that
+    month reads as measured growth."""
+    legend_right(panel)
+    disconnect_after(1.5)(panel)
+
+
 def dashed(name, hex_):
     return {"matcher": {"id": "byName", "options": name}, "properties": [
         {"id": "displayName", "value": name},
@@ -301,7 +309,7 @@ def columns():
                   [target("growth", "weekly", [DATE, *PLATFORM_COLUMNS, ("mcp", "MCP-only", "number")])],
                   unit="short", draw="bars", stack=True, overrides=PLATFORM_OVERRIDES,
                   time_from="182d")),
-        (6, chart("New, returning & lost users",
+        (6, chart("New, returning, lost",
                   "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
                   [target("growth", "weekly", [DATE, ("retained", "Returning", "number"),
                                                ("resurrected", "Back after a break", "number"),
@@ -367,11 +375,11 @@ def columns():
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
         (5, chart("MRR by plan",
-                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
-                   overrides=[color(n, h) for n, h in PLANS.items()], extra=legend_right)),
+                   overrides=[color(n, h) for n, h in PLANS.items()], extra=mrr_extra)),
         (6, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
@@ -491,10 +499,14 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
                    "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
-                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
+                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. "
+                   "The meter's figure is its own 24-hour basis, so the last point can step away from the "
+                   "trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. "
+                   "Settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame "
                    "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
@@ -651,7 +663,7 @@ def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
-            "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
+            "refresh": "5m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
             "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 

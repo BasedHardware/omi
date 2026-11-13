@@ -162,7 +162,7 @@ PATCH_CONTRACTS = {
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'conversation_span'),
-                'd04053702f344798afcdaf665c967d325084a1bf8dd4009b0a0576898350c993',
+                'fc65ea6d28331e9fdb075178b84bca85d3d47a28aecf4155d0d11f314e6cab92',
             ),
             (
                 Writer('models/recorded_span.py', 'RecordedSpan'),

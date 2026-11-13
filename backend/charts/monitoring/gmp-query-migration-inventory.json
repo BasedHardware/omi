@@ -2464,6 +2464,24 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "round(sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range])))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 36,
+        "title": "Cloud PTT transport"
+      },
+      "pointer": "/panels/13/targets/1/expr",
+      "scope": "explicit-bridge"
+    },
+    {
       "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2550,7 +2568,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "count(count by (journey) ((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range])) > 0)) or (0 * sum((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[$__range]))))",
+      "expression": "count(count by (journey) ((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"backend-listen-metrics\",journey=\"capture_finalization\"}[$__range])) > 0)) or (0 * sum((increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[$__range]) or increase(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[$__range]) or increase(omi_journey_accepted_total{job=\"backend-listen-metrics\",journey=\"capture_finalization\"}[$__range]))))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2568,7 +2586,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+      "expression": "round(sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"created\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2583,10 +2601,10 @@
         "title": "New subscriptions"
       },
       "pointer": "/panels/25/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_requested\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+      "expression": "round(sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"cancellation_requested\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2601,10 +2619,10 @@
         "title": "Cancellation requests"
       },
       "pointer": "/panels/26/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"cancellation_reverted\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total[$__range])))",
+      "expression": "round(sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"cancellation_reverted\"}[$__range]))) or (0 * sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[$__range])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2619,10 +2637,10 @@
         "title": "Saves"
       },
       "pointer": "/panels/27/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "round(sum(increase(omi_subscription_events_total{event=\"created\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range])))) - round(sum(increase(omi_subscription_events_total{event=\"ended\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total[$__range]))))",
+      "expression": "round(sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"created\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[$__range])))) - round(sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"ended\"}[$__range])) or (0 * sum(increase(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[$__range]))))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
         "dashboard variables/macros require explicit expansion before shadow"
@@ -2637,7 +2655,7 @@
         "title": "Net change"
       },
       "pointer": "/panels/28/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
       "expression": "sum(increase(omi_home_rows_user_day_sum_total[$__range])) / sum(increase(omi_home_rows_user_day_count_total[$__range])) and sum(increase(omi_home_rows_user_day_count_total[$__range])) > 0",
@@ -2675,7 +2693,7 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (journey) ((rate(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
+      "expression": "sum by (journey) ((rate(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_accepted_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_accepted_total{job=\"backend-listen-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -3266,7 +3284,7 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "sum by (event) (rate(omi_subscription_events_total[5m]))",
+      "expression": "sum by (event) (rate(omi_subscription_events_total{job=\"cloud-run-application-metrics\"}[5m]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -3279,10 +3297,10 @@
         "title": "Lifecycle events over time"
       },
       "pointer": "/panels/40/panels/1/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (event, reason) (rate(omi_subscription_events_total{event=~\"ended|payment_failed\"}[5m]))",
+      "expression": "sum by (event, reason) (rate(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=~\"ended|payment_failed\"}[5m]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -3295,10 +3313,10 @@
         "title": "Cancellations by reason (voluntary vs involuntary)"
       },
       "pointer": "/panels/40/panels/2/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
-      "expression": "sum by (plan) (rate(omi_subscription_events_total{event=\"cancellation_requested\"}[5m]))",
+      "expression": "sum by (plan) (rate(omi_subscription_events_total{job=\"cloud-run-application-metrics\",event=\"cancellation_requested\"}[5m]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
       "metrics": [
@@ -3311,7 +3329,7 @@
         "title": "Cancellation requests by plan"
       },
       "pointer": "/panels/40/panels/3/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
+      "scope": "explicit-bridge"
     },
     {
       "expression": "100 * sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[$__rate_interval])), 1)",
@@ -4123,8 +4141,8 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 34,
-    "query_consumers": 277
+    "explicit_bridge": 42,
+    "query_consumers": 278
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

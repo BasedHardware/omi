@@ -1493,6 +1493,5 @@ async def run_listen_session(request: ListenRequest) -> None:
         soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
-                source=request.source,
-                platform=runtime.client_device_context.platform,
+                source=request.source, platform=runtime.client_device_context.platform, state=runtime.state
             )
