@@ -1072,12 +1072,14 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         outbox.wake.assert_called_once()
         assert not any(key[0] in {'queues', 'control'} for key in store.rows)
         vendor = Vendor()
+        # A 1 s unit cannot carry the 2 s speech minimum; this test is about admission, not the skip.
+        monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
         provider = provider_stage(
             store,
             Artifacts(),
             vendor,
             now=2,
-            inspect=lambda *_: (b'\0\0' * 16000 * 3, 3.0, [{'start': 0.5, 'end': 3.0}]),
+            inspect=lambda *_: (b'\0\0' * 16000, 1.0, [{'start': 0.5, 'end': 1.0}]),
         )
         outcome = provider.run(segment)
         assert outcome.outcome == 'done' and vendor.calls == 1

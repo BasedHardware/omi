@@ -401,7 +401,7 @@ def test_abandoned_running_intent_settles_failed_held_without_spend(world, monke
     artifacts, vendor = Artifacts(), Vendor()
     artifacts.fail_persist = True
     stage(store, artifacts, vendor).run('p1')
-    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 0.5
+    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 2.5
 
     def legacy_or_silence(tx):
         row = tx.get('jobs', 'p1')
@@ -437,7 +437,7 @@ def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monk
 
     def vendor(work, language, inspected, *, service):
         row = job(store, 'p1')
-        assert row['provider_intent']['measured_vad_speech_seconds'] == 0.5
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 2.5
         # A concurrent delivery cannot overwrite the winning intent's evidence.
         losing = provider_stt.ProviderSttStore(store).start(
             'p1', 'loser', 201.0, service, measured_vad_speech_seconds=0.0
@@ -522,7 +522,7 @@ def test_kill_switch_off_keeps_vendor_failure_terminal(world, monkeypatch, error
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == expected
     # Held VAD evidence from the CPU Silero inspection (SPEECH: 0.5s), as quarantine recovery records it.
-    assert row['measured_held_vad_speech_seconds'] == 0.5
+    assert row['measured_held_vad_speech_seconds'] == 2.5
     assert vendor.calls == 1
 
 
@@ -1446,7 +1446,7 @@ def test_short_speech_settles_as_silence_without_a_vendor_call(world, monkeypatc
     # Measured speech stays on the intent, so a short-speech skip is distinguishable from silence.
     assert row['provider_intent']['measured_vad_speech_seconds'] == pytest.approx(1.0)
     after = _sample('omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total', {'provider': 'modulate'})
-    assert after - before == pytest.approx(10.0)
+    assert after - before == pytest.approx(5.0)
 
 
 def test_short_speech_skip_threshold_zero_restores_the_no_spans_rule(world, monkeypatch):
