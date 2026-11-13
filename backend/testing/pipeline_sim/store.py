@@ -455,7 +455,14 @@ class SimStore:
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
             and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
-        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
+        # Like the serving probe: up to four pages while a full page has no ready row.
+        size = max(1, min(limit, 32))
+        found: list[dict] = []
+        for pages in range(1, 5):
+            found = [self.rows[('jobs', segment_id)] for _, segment_id in rows[: size * pages]]
+            if len(found) < size * pages or any(row.get('state') == 'result_ready' for row in found):
+                break
+        return [deepcopy(row) for row in found]
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         keys = sorted(

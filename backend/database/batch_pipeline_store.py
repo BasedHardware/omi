@@ -619,17 +619,31 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
     if skip:
         query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
     try:
-        return [
-            doc.to_dict()
-            for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
-        ]
+        return _fresh_pages(query, limit)
     except (FailedPrecondition, InvalidArgument):
         if not skip:
             raise
-        return [
-            doc.to_dict()
-            for doc in base.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
-        ]
+        return _fresh_pages(base, limit)
+
+
+# The fresh probe reads on while a full page holds no ready row, so a run of unready fresh rows
+# longer than one page cannot hide the ready ones behind it. Same query and index, more pages.
+FRESH_PROBE_PAGES = 4
+
+
+def _fresh_pages(query: Any, limit: int) -> list[dict]:
+    size = max(1, min(limit, 32))
+    ordered = query.order_by('capture_at').order_by('segment_id')
+    rows: list[dict] = []
+    last = None
+    for _ in range(FRESH_PROBE_PAGES):
+        page = ordered.limit(size) if last is None else ordered.start_after(last).limit(size)
+        docs = list(page.stream())
+        rows.extend(doc.to_dict() for doc in docs)
+        if len(docs) < size or any(row.get('state') == 'result_ready' for row in rows):
+            break
+        last = docs[-1]
+    return rows
 
 
 def ready_predecessor(

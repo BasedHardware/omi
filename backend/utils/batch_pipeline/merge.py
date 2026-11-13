@@ -86,7 +86,10 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     if rows[0].get('state') == 'result_ready':
         return rows[0], None
     ready = [row for row in rows if row.get('state') == 'result_ready']
-    waited = max((now - row['ready_at'] for row in ready if row.get('ready_at') is not None), default=None)
+    # A provider row settled while the ready_at stamp was off (or had it removed) carries the
+    # same instant on its intent. Reading only ready_at left such rows behind an unready
+    # earlier fresh row for good (2026-11-13: 15 owners, 7,784 ready fresh units).
+    waited = max((now - since for row in ready if (since := _ready_since(row)) is not None), default=None)
     if wait > 0 and waited is not None and waited >= wait:
         earlier = [row['segment_id'] for row in rows[: rows.index(ready[0])]]
         return ready[0], {'segment_ids': earlier, 'state': rows[0].get('state'), 'waited': waited}

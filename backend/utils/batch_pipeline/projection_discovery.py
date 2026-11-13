@@ -1,5 +1,6 @@
 """Independent bounded discovery cursors for assignment and durable follow-ups."""
 
+import logging
 import random
 import time
 
@@ -10,6 +11,9 @@ from config.batch_pipeline import (
     projection_recent_discovery_seconds,
     projection_striping_enabled,
 )
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 # A main cursor that has not wrapped for this long starts again at a new random point.
 MAIN_PASS_SECONDS = 1800.0
@@ -111,7 +115,20 @@ class ProjectionDiscovery:
         try:
             start = now - window + window * self.random()
             segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
-        except Exception:
+        except Exception as error:
+            # The main cursor still reads this tick; say that the newest-commits read did not.
+            logger.warning(
+                'event=batch_projection action=recent_discovery outcome=unavailable exception_type=%s count=1',
+                type(error).__name__,
+            )
+            record_fallback(
+                component='firestore_read',
+                from_mode='recent_discovery',
+                to_mode='main_cursor',
+                reason='unavailable',
+                outcome='degraded',
+                log=logger,
+            )
             return [], 0
         # Kept for two windows: a commit stamp up to one window ahead of this clock cannot
         # bring a row back after its entry has gone.
