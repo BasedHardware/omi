@@ -27,6 +27,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -427,8 +428,6 @@ class FirestoreStore:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
 
     def projection_finish_backfill_complete(self) -> bool:
-        from database.batch_pipeline_projection_finish_backfill import backfill_complete
-
         return backfill_complete(self.client, self.namespace)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
