@@ -228,11 +228,15 @@ async def test_release_endpoint_auth_owner_scope_and_rate_limit(runtime, tmp_pat
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from database import batch_pipeline_store
+    from database.batch_pipeline_coalescing import note_scan
     from routers import sync
     from utils.batch_pipeline import intake
 
     store, artifacts, objects, uid, cid = runtime
     args, _ = upload_args(tmp_path, uid, cid, 0)
+    # Cold route imports may outlive the five-second drainer heartbeat from
+    # fixture setup. This auth test needs an active synthetic drainer at admission.
+    note_scan(store, time.time(), producer_enabled=True)
     assert (await intake.accept_upload(**args)).status_code == 202
     snapshot = next(store.client.collection(store.namespace + '_coalesce_groups').stream())
     initial_deadline = snapshot.to_dict()['release_by']

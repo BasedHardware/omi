@@ -596,12 +596,18 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
+    from utils.stt.allowance_session import Operation, current, track
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
         raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
+    scope = current.get()
+    if scope is None or scope.uid != item.owner_id or scope.operation != f'batch-unit:{item.segment_id}':
+        scope = Operation(item.owner_id, 'batch_provider', operation=f'batch-unit:{item.segment_id}', seconds=duration)
     try:
-        response = await _vendor_words(service, _wav(pcm), duration, language)
+        async with track(scope):
+            await scope.reserve_async(service)
+            response = await _vendor_words(service, _wav(pcm), duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception:
@@ -669,6 +675,7 @@ class _Call:
     inspected: tuple | None
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
+    allowance_period: str | None = None
 
 
 def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
@@ -809,6 +816,16 @@ class ProviderSttStage:
             return RecoveryFailure(failure['stage'], failure['reason'])
         if not plan.inspected[2]:
             return silence_payload(plan.inspected[1])
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -817,10 +834,23 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
         if self.stt_async is None or plan.failure is not None or not plan.inspected or not plan.inspected[2]:
             return self._call_sync(plan)
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -829,6 +859,9 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     # -- phases -----------------------------------------------------------------------------------
 
@@ -919,7 +952,15 @@ class ProviderSttStage:
             return self._reconcile(segment_id, started, item, route)
         if service != route.provider_service:
             vendor_metrics.failover(route.provider_service, service)
-        return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates))
+
+        def read_intake(tx):
+            binding = started.get('projection_binding') or {}
+            return tx.get('intakes', binding.get('job_id', 'missing')) or {}
+
+        intake = self.protocol.store.run(read_intake)
+        return _Call(
+            segment_id, item, route, token, service, inspected, failure, tuple(candidates), intake.get('usage_period')
+        )
 
     def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token

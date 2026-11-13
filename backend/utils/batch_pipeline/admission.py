@@ -74,6 +74,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
     current = time.time() if now is None else now
     deadline = time.monotonic() + deadline_seconds(budget)
     allowed, retries, held_reason = [], {lease['segment_id']: 30 for lease in leases}, {}
+    observations = []
 
     async def stage(name, fn, *args, **kwargs):
         # Check in the executor too: a queued call must not start after expiry.
@@ -201,6 +202,9 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             if await stage('seal', store.run, seal):
                 allowed.append(segment)
                 retries.pop(segment, None)
+                observations.append(
+                    (job['owner_id'], segment, job.get('duration_seconds', 0), intake.get('usage_period'))
+                )
             else:
                 retries[segment] = 30
         except BatchPrivacyBlocked:
@@ -214,4 +218,14 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             logger.warning(
                 'event=batch_compute_admission_unevaluated exception_class=%s', bounded_exception_class(error)
             )
+    # Finish every authorization before spending any remaining budget on telemetry.
+    # An observation cannot make another unit miss its policy/transaction deadline.
+    from utils.stt.allowance_session import Operation
+
+    for uid, segment, seconds, period in observations:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        scope = Operation(uid, 'batch_gpu', operation=f'batch-unit:{segment}', seconds=seconds, billing_period=period)
+        await scope.reserve_async('parakeet', timeout=min(0.1, remaining))
     return {'allowed': allowed, 'retry_after': retries, 'held_reason': held_reason}

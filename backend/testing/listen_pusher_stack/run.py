@@ -1263,15 +1263,21 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     duplicate_task_events = [
         event for event in stack.finalization_task_events if event.get('event') == 'task_already_exists'
     ]
-    expected_duplicates = stack.rest_finalization_race_parties - 1
-    if len(duplicate_task_events) != expected_duplicates:
+    rest_events = [event for event in stack.finalization_task_events if event.get('admission_origin') == 'rest']
+    rest_created = [event for event in rest_events if event.get('event') == 'task_enqueued']
+    rest_duplicates = [event for event in rest_events if event.get('event') == 'task_already_exists']
+    if (
+        len(rest_events) != stack.rest_finalization_race_parties
+        or len(rest_created) > 1
+        or len(rest_duplicates) != stack.rest_finalization_race_parties - len(rest_created)
+    ):
         raise StackFailure(
-            f'concurrent REST finalization expected {expected_duplicates} named-task AlreadyExists events, '
-            f'observed {len(duplicate_task_events)}'
+            'concurrent REST finalization did not attempt every admission at the same named task: '
+            f'{len(rest_events)} attempts, {len(rest_created)} creates, {len(rest_duplicates)} duplicates'
         )
     if any(
         event.get('task_name') != task.get('task_name') or event.get('payload') != task.get('payload')
-        for event in duplicate_task_events
+        for event in [*duplicate_task_events, *rest_events]
     ):
         raise StackFailure('duplicate REST admission changed the durable Cloud Tasks identity')
     if len(stack.finalization_tasks) != 1 or len(stack.jobs_for(uid, conversation_id)) != 1:
