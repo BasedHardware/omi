@@ -149,6 +149,7 @@ def races(args):
         'tests/integration/test_jobstore_authority_postgres.py',
         'tests/integration/test_jobstore_sql_boundary.py',
         'tests/integration/test_jobstore_handoff.py',
+        'tests/integration/test_jobstore_provider_handoff.py',
         'tests/integration/test_pipeline_ledger_firestore.py',
         'tests/integration/test_conversation_batch_purge_emulator.py::test_p24_real_purge_erases_ledger_and_stale_observers_stay_fenced',
         '--junitxml',

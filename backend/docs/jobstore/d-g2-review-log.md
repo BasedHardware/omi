@@ -41,3 +41,18 @@ the unit cannot adopt that attempt's late result or dispatch it a second time.
 These source adapters reduce the lifecycle gap. Production scheduling, the
 effect/customer projection adapters, purge/reverse certificates and the complete
 matrix remain unfinished. No new review round or merge handoff is requested.
+
+## Ordinary provider source binding
+
+Migration 0011 retains immutable original source metadata. Production
+`batch_pipeline_intake.admit` can explicitly inject the typed provider plan;
+`ProviderHandoff.deliver` validates it again before admitting Units. The last
+terminal unit transaction seals the complete ordered original sibling census.
+Lost admission/terminal COMMIT replies replay without duplicated units, counters
+or recording outbox work. Real emulator/PG tests include abrupt child exits on
+both sides of these commits. Custody remains completed and unacknowledged.
+
+This does not qualify customer projection or paid provider dispatch. See
+`d-provider-integration-inventory.md` for the concrete production seams and
+remaining cohort adapters. The first P1 remains blocking; no further review
+round, merge, runtime activation or savings claim is requested.

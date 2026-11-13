@@ -1,8 +1,8 @@
 """Dark D4/W4 provider units. No production selector imports this store.
 
-This is a typed query/workload surface, not a certificate for the document
-mirror. Capture admission, provider calls and FS projection remain separate
-integration gates. No method can flip an authoritative namespace back to FS.
+This typed surface can explicitly bind ordinary-upload admission and terminal
+sealing through ProviderHandoff. Paid provider effects and customer projection
+remain separate integration gates; it is not a cutover certificate. No method can flip an authoritative namespace back to FS.
 """
 
 from __future__ import annotations
@@ -16,9 +16,12 @@ from database.privacy_fence import AdmissionChanged, FenceRefused, owner_key
 
 
 class Units:
-    def __init__(self, pool, fence, ticket: Epoch):
+    def __init__(self, pool, fence, ticket: Epoch, *, handoff=None):
         self.pool, self.fence, self.ticket = pool, fence, ticket
         self.namespace = ticket.namespace
+        if handoff is not None and (handoff.pool is not pool or handoff.fence is not fence or handoff.ticket != ticket):
+            raise AuthorityRefused('unit handoff must share pool, privacy fence and epoch')
+        self.handoff = handoff
 
     def _unit(self, conn, identity, *, skip_locked=False):
         suffix = ' FOR UPDATE SKIP LOCKED' if skip_locked else ' FOR UPDATE'
@@ -40,6 +43,7 @@ class Units:
         fresh,
         owner_turn,
         now,
+        source=None,
     ):
         """Caller joins a proven FS admission intent; retries must use identical data.
 
@@ -47,6 +51,8 @@ class Units:
         cohort admission policy, not re-derived by the database. Migration census
         must establish the same units_total before this API serves old recordings.
         """
+        if source and self.handoff is None:
+            raise AuthorityRefused('source-bound provider admission requires its handoff')
         self.fence.check_work_write(conn, owner, admission)
         acquire(conn, self.ticket)
         immutable = dict(
@@ -57,6 +63,7 @@ class Units:
             custody_deadline=custody_deadline,
             fresh=fresh,
             owner_turn=owner_turn,
+            **({'source': source} if source else {}),
         )
         digest = fingerprint(immutable)
         existing = row_dict(
@@ -87,8 +94,8 @@ class Units:
             raise AuthorityRefused('recording census/binding mismatch')
         conn.execute(
             'INSERT INTO units(namespace,unit_id,owner_key,recording_id,capture_at,stage,state,class,owner_turn,'
-            'custody_deadline,privacy_generation,admission,created_at) '
-            "VALUES (%s,%s,%s,%s,%s,'provider_stt','pending',%s,%s,%s,%s,%s,%s)",
+            'custody_deadline,privacy_generation,admission,created_at,source) '
+            "VALUES (%s,%s,%s,%s,%s,'provider_stt','pending',%s,%s,%s,%s,%s,%s,%s)",
             (
                 self.namespace,
                 identity,
@@ -101,6 +108,7 @@ class Units:
                 admission['privacy_generation'],
                 jsonb(admission),
                 now,
+                jsonb(source or {}),
             ),
         )
         conn.execute(
@@ -278,6 +286,11 @@ class Units:
         """
         if state not in {'result_ready', 'quarantined', 'privacy_blocked'} or partial_wait <= 0:
             raise ValueError('terminal state and explicit positive partial wait required')
+        if self.handoff is not None and state == 'result_ready':
+            from utils.batch_pipeline.contracts import WorkResult
+
+            if not isinstance(result, dict) or WorkResult(**result).segment_id != identity:
+                raise ValueError('typed provider completion requires its bound durable WorkResult')
         with self.pool.connection() as conn, conn.transaction():
             job = self._guarded_unit(conn, identity)
             if (
@@ -287,15 +300,17 @@ class Units:
                 or str(job['attempt_admission_id']) != job['admission']['admission_id']
             ):
                 return False
+            if job['source'] and self.handoff is None:
+                raise AuthorityRefused('source-bound provider settlement requires its handoff')
             # Status-only refusal is a separate API/integration gate. Do not let
             # a caller smuggle a result through a privacy_blocked status write.
             if state != 'result_ready' and result is not None:
                 raise ValueError('refused units cannot carry a result')
             conn.execute("SELECT set_config('omi.queue_owner_key',%s,true)", (job['owner_key'],))
             conn.execute(
-                'UPDATE units SET state=%s,result=%s,attempt_token=NULL,lease_token=NULL,lease_until=0 '
+                'UPDATE units SET state=%s,result=%s,attempt_token=NULL,lease_token=NULL,lease_until=0,settled_at=%s '
                 'WHERE namespace=%s AND unit_id=%s',
-                (state, jsonb(result) if result is not None else None, self.namespace, identity),
+                (state, jsonb(result) if result is not None else None, now, self.namespace, identity),
             )
             recording = row_dict(
                 conn,
@@ -337,4 +352,8 @@ class Units:
                 "UPDATE queue_custody SET phase='completed',completion=%s WHERE namespace=%s AND identity=%s",
                 (jsonb({'state': state, 'attempt': attempt, 'result': result}), self.namespace, identity),
             )
+            if self.handoff is not None and recording['units_final'] == recording['units_total']:
+                from database.jobstore.provider_handoff import seal_recording
+
+                seal_recording(conn, self.handoff, recording)
             return True

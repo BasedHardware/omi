@@ -1,7 +1,7 @@
 """FS admission adapter: customer ledger plus intent, without live FS queue rows.
 
 Used only by explicit Handoff injection into the existing admission function.
-Native/partial/provider/coalesced reservation adapters are not implemented here;
+Native/partial/coalesced reservation adapters are not implemented here;
 they refuse before any write instead of falling back to FS queue ownership.
 """
 
@@ -78,6 +78,10 @@ class IntentStore:
                     'jobs': jobs,
                     'intakes': {key: value for (table, key), value in plan.plans.items() if table == 'intakes'},
                 }
+                if any(job.get('typed_provider') for job in jobs.values()):
+                    from database.jobstore.provider_handoff import validate_provider_payload
+
+                    validate_provider_payload(payload, binding=self.binding)
                 # body writes above remain buffered in the original view. These
                 # authority/intent reads happen before the first raw FS write.
                 self.handoff.stage(view.transaction, self.binding.job_id, self.binding.owner_id, targets, payload)

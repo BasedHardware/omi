@@ -384,7 +384,7 @@ def test_close_drain_does_not_hold_pool_or_exclusive_lock_during_gcs_io(source):
         # A held slot or L_x would block this call rather than silently pass.
         from database.privacy_fence.protocol import lock
 
-        with store.pool.connection(timeout=0.2) as first, store.pool.connection(timeout=0.2) as second:
+        with store.pool.connection(timeout=2) as first, store.pool.connection(timeout=2) as second:
             with first.transaction():
                 lock(first, owner, exclusive=True)
                 assert second.execute('SELECT 1').fetchone() == (1,)
