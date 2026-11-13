@@ -2,12 +2,31 @@
 
 import asyncio
 from collections import Counter
+import os
 
 import httpx
 import pytest
 
 from tests.unit.test_soniox_batch import FILE, TRANSCRIPTION, TRANSCRIPT, client as sync_client
 from utils.stt import soniox_batch as module
+
+
+@pytest.fixture(autouse=True)
+def profile_ci_cold_path(request, capsys):
+    if not os.getenv('CI') or not request.node.name.endswith('[upload-429-False]'):
+        yield
+        return
+    import cProfile
+    import pstats
+
+    profile = cProfile.Profile()
+    profile.enable()
+    try:
+        yield
+    finally:
+        profile.disable()
+        with capsys.disabled():
+            pstats.Stats(profile).strip_dirs().sort_stats('cumulative').print_stats(35)
 
 
 @pytest.fixture(autouse=True)
