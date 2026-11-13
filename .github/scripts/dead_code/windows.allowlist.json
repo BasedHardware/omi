@@ -27,6 +27,10 @@
     {
       "path": "desktop/windows/src/shared/agentControlTools.ts",
       "reason": "test-only contract module (AGENT_CONTROL_TOOL_NAMES assertions); the live IPC handler is self-contained in src/main/ipc/agentControl.ts"
+    },
+    {
+      "path": "desktop/windows/src/renderer/src/lib/localBrain.ts",
+      "reason": "inert router client; intentionally unwired pending the INV-AGENT/llm_gateway BYOK-gated routing decision (see PR body). Covered by its sibling localBrain.test.ts and by router/laya_server.py --mock. This PR is the self-contained building block only."
     }
   ]
 }
