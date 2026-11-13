@@ -1273,6 +1273,7 @@ export class KernelCore {
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
       let adapterDispatchStarted = false;
+      let bindingTimedOut = false;
       try {
         assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
@@ -1282,13 +1283,30 @@ export class KernelCore {
             bindingQueueKey,
             `${attempt.attemptId}:binding`,
             async (worker) => {
-              const resolved = await this.resolveBindingForAttempt({
+              // Binding resolution can hang (for example ACP `session/new` has
+              // no request timeout), so the run deadline must cover it too.
+              const remainingMs = runDeadlineAtMs === null ? null : runDeadlineAtMs - Date.now();
+              if (remainingMs !== null && remainingMs <= 0) {
+                bindingTimedOut = true;
+                throw new RunDeadlineExceededError(runTimeoutMs);
+              }
+              const resolution = this.resolveBindingForAttempt({
                 input: attemptInput,
                 session: accepted.session,
                 adapter: worker.adapter,
                 attempt,
                 adapterId,
               });
+              const resolved = remainingMs === null
+                ? await resolution
+                : await this.raceWithRunDeadline({
+                    execution: resolution,
+                    remainingMs,
+                    onDeadline: () => {
+                      bindingTimedOut = true;
+                      return new RunDeadlineExceededError(runTimeoutMs);
+                    },
+                  });
               if (worker.adapter.capabilities.requiresPinnedWorker) {
                 if (resolved.replacesBindingId) {
                   worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
@@ -1306,6 +1324,35 @@ export class KernelCore {
                       this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
                     },
                   }),
+              recycleWorkerOnError: true,
+              // A worker whose binding request will not settle must be stopped
+              // and removed, never reused with the pending request still live.
+              shouldRecycleWorkerOnError: () => bindingTimedOut,
+              onWorkerBindingInvalidated: (bindingId) => {
+                if (!bindingId) return;
+                this.markEvictedBindingStale(bindingId, "pinned_worker_recycled_after_binding_timeout");
+              },
+              onWorkerRecycled: (bindingId, outcome) => {
+                this.appendEvent({
+                  sessionId: accepted.session.sessionId,
+                  runId: accepted.run.runId,
+                  attemptId: attempt.attemptId,
+                  type: "worker.recycled",
+                  payload: {
+                    adapterId,
+                    recoveryAction: "worker_recycled",
+                    phase: "binding",
+                    bindingId,
+                    recoveryOutcome: !outcome.stopSucceeded
+                      ? "stop_failed"
+                      : outcome.bindingInvalidationSucceeded
+                        ? "recovered"
+                        : "binding_stale_failed",
+                    bindingStalePersisted: outcome.bindingInvalidationSucceeded,
+                    retryDisposition: "next_send",
+                  },
+                });
+              },
               protectPinnedBindingAfterWork: true,
             },
           );
@@ -1316,6 +1363,16 @@ export class KernelCore {
         bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
+        if (bindingTimedOut) {
+          this.finishRunAsTimedOut({
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterId,
+            timeoutMs: runTimeoutMs,
+          });
+          break;
+        }
         if (input.authoritySignal?.aborted) {
           if (!this.isTerminalRun(accepted.run.runId)) {
             const failure = failureFromError(error, {
@@ -1479,12 +1536,20 @@ export class KernelCore {
               return error;
             },
           });
-        }, adapterId === "pi-mono" ? {
+        }, {
+          // Recycle on a run deadline for every adapter: the race can release
+          // the lease while the adapter is still executing the abandoned
+          // prompt, so the worker must be poisoned and stopped rather than
+          // reused by a follow-up. Non-timeout errors keep the old behavior
+          // (pi-mono recycles, every other adapter rethrows untouched).
           recycleWorkerOnError: true,
           shouldRecycleWorkerOnError: () => (
             adapterDispatchStarted
             && !input.authoritySignal?.aborted
-            && (timedOut || !abortController.signal.aborted)
+            && (
+              timedOut
+              || (adapterId === "pi-mono" && !abortController.signal.aborted)
+            )
             && this.runStatus(accepted.run.runId) !== "cancelling"
             && this.readAttempt(attempt.attemptId).status !== "cancelling"
           ),
@@ -1508,13 +1573,13 @@ export class KernelCore {
                 bindingStalePersisted: outcome.bindingInvalidationSucceeded,
                 retryDisposition: workerRecycleDisposition({
                   ...outcome,
-                  canRetry: attemptNo < maxAttempts,
+                  canRetry: timedOut ? false : attemptNo < maxAttempts,
                   originalError,
                 }),
               },
             });
           },
-        } : undefined);
+        });
         this.activeExecutions.delete(accepted.run.runId);
         assertExecutionAuthority();
         if (handle.bindingId && nextContextDelivery) {

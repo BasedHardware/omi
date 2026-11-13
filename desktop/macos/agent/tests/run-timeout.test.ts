@@ -15,6 +15,21 @@ import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
 
+/**
+ * A fake adapter whose binding resolution never settles, modelling an ACP
+ * `session/new` request that never responds.
+ */
+class HangingBindAdapter extends FakeRuntimeAdapter {
+  bindAttempts = 0;
+
+  override async openBinding(
+    _input: Parameters<FakeRuntimeAdapter["openBinding"]>[0],
+  ): ReturnType<FakeRuntimeAdapter["openBinding"]> {
+    this.bindAttempts += 1;
+    return new Promise(() => {});
+  }
+}
+
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -22,12 +37,25 @@ afterEach(() => {
 });
 
 describe("AgentRuntimeKernel run deadline", () => {
-  it("marks a hung run timed_out and releases the worker", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
-    adapter.deferResult();
+  it("marks a hung run timed_out and never reuses its worker for a follow-up", async () => {
+    const adapters: FakeRuntimeAdapter[] = [];
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "fake",
+      1,
+      undefined,
+      undefined,
+      () => {
+        const adapter = new FakeRuntimeAdapter("fake");
+        adapters.push(adapter);
+        return adapter;
+      },
+    );
+    const abandoned = adapters[0];
+    abandoned.deferResult();
 
     const running = kernel.executeRun({ ...baseRunInput, timeoutMs: 500 });
-    await waitUntil(() => adapter.executed.length === 1);
+    await waitUntil(() => abandoned.executed.length === 1);
     const result = await running;
 
     expect(result.run.status).toBe("timed_out");
@@ -41,18 +69,42 @@ describe("AgentRuntimeKernel run deadline", () => {
       .map((row) => String(row.type));
     expect(eventTypes).toContain("run.timed_out");
     expect(eventTypes).toContain("attempt.timed_out");
+    expect(eventTypes).toContain("worker.recycled");
 
-    // The deadline released the single worker: a follow-up run can execute.
-    adapter.resolveDeferred({
-      terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+    // The abandoned execution is still pending on purpose: the pool must stop
+    // and remove that worker, never hand it to a follow-up while the old
+    // prompt is still live.
+    expect(abandoned.stopped).toBeGreaterThan(0);
     const followUp = await kernel.executeRun({
       ...baseRunInput,
       requestId: "request-after-timeout",
       timeoutMs: 0,
     });
     expect(followUp.run.status).toBe("succeeded");
+    expect(adapters.length).toBeGreaterThanOrEqual(2);
+    expect(adapters[1].executed).toHaveLength(1);
+    expect(abandoned.executed).toHaveLength(1);
+    store.close();
+  });
+
+  it("applies the run deadline to binding resolution that never settles", async () => {
+    const hang = new HangingBindAdapter("fake");
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "fake",
+      1,
+      undefined,
+      undefined,
+      () => hang,
+    );
+
+    const result = await kernel.executeRun({ ...baseRunInput, timeoutMs: 300 });
+
+    expect(hang.bindAttempts).toBe(1);
+    expect(result.run.status).toBe("timed_out");
+    expect(result.run.errorCode).toBe("run_timed_out");
+    expect(result.attempt.status).toBe("timed_out");
+    expect(result.run.completedAtMs).toEqual(expect.any(Number));
     store.close();
   });
 
