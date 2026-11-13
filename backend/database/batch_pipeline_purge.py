@@ -1,5 +1,6 @@
 """Bounded, retryable erasure of top-level batch state and referenced objects."""
 
+import logging
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta, timezone
 from config.batch_pipeline import scheduler_control_key
@@ -12,8 +13,18 @@ from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 
+logger = logging.getLogger(__name__)
+
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
+
+# Static per-site operation labels: the purge chain touches the same hot
+# ``control``/``queues``/``owners``/``jobs``/``results`` rows the batch-store
+# labels storm on, so every rung it burns must be attributable in the
+# contention logs and dampable per site, not per module.
+PURGE_JOB_UNLINK_LABEL = 'batch_purge_job_unlink'
+PURGE_OWNER_FAIRNESS_LABEL = 'batch_purge_owner_fairness'
+PURGE_RESULT_ERASE_LABEL = 'batch_purge_result_erase'
 
 
 def _belongs(data: dict, conversation_id: str | None) -> bool:
@@ -47,6 +58,119 @@ def _belongs(data: dict, conversation_id: str | None) -> bool:
 def _references(data: dict) -> set[str]:
     result = data.get('result') or {}
     return {uri for uri in (data.get('audio_uri'), result.get('result_uri'), data.get('uri')) if uri}
+
+
+def _purge_storm_damper(namespace: str) -> Any:
+    """The namespace's process storm damper, or ``None`` while a switch is off.
+
+    The purge chain writes the same hot rows the batch-store labels storm on,
+    so it must consult, space and arm the ONE damper those lanes share:
+    ``shared_storm_damper`` is process-shared per namespace (and fleet-mirrored),
+    which means an exhaustion the purge measures spaces the store lane too, and
+    a window the store lane armed spaces the purge's next re-strike. Both
+    kill switches resolve per call — exactly like the store's
+    ``contention_storm_damper`` property — so a dormant damper is ``None``
+    and the chain below stays byte-for-byte the bare ladder.
+    """
+    from config.batch_pipeline import contention_retry_enabled, contention_storm_damper_enabled
+
+    if not (contention_retry_enabled() and contention_storm_damper_enabled()):
+        return None
+    from database.batch_pipeline_store import shared_storm_damper
+
+    return shared_storm_damper(namespace)
+
+
+def run_purge_transaction(
+    client: Any,
+    operation: Callable[[Any], Any],
+    *,
+    operation_name: str = PURGE_JOB_UNLINK_LABEL,
+    storm_damper: Any = None,
+) -> Any:
+    """Run one privacy-purge transaction with the namespace's bounded retries.
+
+    A bare ``operation(client.transaction())`` hands contention to the SDK's
+    same-id commit loop: one transaction id replayed inside the armed storm
+    window, retrying into the exact collision the batch-store damper has
+    already measured, with an expiry retirement the SDK never retries and an
+    exhaustion that surfaces as an anonymous fault with no label and no
+    window. Aborted and expired transactions write nothing, and the body
+    rereads every document, so a fresh transaction replays it safely.
+
+    The chain joins the process storm damper exactly like the store,
+    projection and retention lanes: the entry consult sleeps out the label's
+    residual window (fleet-adopted, spill share-capped) before the first
+    attempt — the first attempt itself is never gated — every rung after a
+    measured collision re-peeks the residual and, from the third failed rung
+    on, spaces itself by the same capped wave ladder, an exhaustion arms the
+    label and stamps the applied window onto ``retry_after``, and a commit
+    clears the ladder only when no concurrent arm bumped the generation.
+    With ``storm_damper`` ``None`` the schedule is the bare bounded ladder:
+    five fresh transactions, equal-jitter rungs, nothing recorded.
+
+    Failure-Class: FC-privacy-purge-chain-collides-inside-armed-storm-window
+    """
+    from database._client import run_transactional
+    from database.batch_pipeline_store import FirestoreStore
+    from database.firestore_transaction_retry import (
+        FirestoreContentionExhausted,
+        run_with_transaction_contention_retry,
+    )
+
+    label = operation_name
+    latest_generation = 0
+
+    def mid_ladder_gate(failed_attempt: int) -> float:
+        nonlocal latest_generation
+        if storm_damper is None:
+            return 0.0
+        residual, gate_generation = storm_damper.peek(label, client=client)
+        latest_generation = gate_generation
+        wait = residual
+        if failed_attempt >= FirestoreStore.WAVE_ENGAGEMENT_ATTEMPT:
+            wait = max(residual, storm_damper.wave_rung_wait(failed_attempt))
+        if wait <= 0.0:
+            return 0.0
+        logger.info(
+            'event=%s_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
+            label,
+            label,
+            failed_attempt,
+            round(wait * 1000),
+        )
+        return wait
+
+    if storm_damper is not None:
+        waited, generation = storm_damper.consult(label, client=client)
+        if waited > 0:
+            logger.info(
+                'event=%s_backoff operation=%s waited_ms=%d',
+                label,
+                label,
+                round(waited * 1000),
+            )
+        latest_generation = generation
+
+    try:
+        result = run_with_transaction_contention_retry(
+            # One SDK commit attempt per transaction: the outer helper is the only
+            # commit-contention budget (5 bodies, not 5 x 5).
+            lambda: client.transaction(max_attempts=1),
+            lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
+            operation_name=operation_name,
+            inter_attempt_gate=mid_ladder_gate,
+        )
+    except FirestoreContentionExhausted as error:
+        # This label just burned its whole budget against the hot rows:
+        # space out the next re-strike instead of colliding immediately,
+        # and carry the applied window for the caller's own schedule.
+        if storm_damper is not None:
+            error.retry_after = storm_damper.arm(label, client=client)
+        raise
+    if storm_damper is not None:
+        storm_damper.note_success(label, latest_generation)
+    return result
 
 
 def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: bool) -> None:
@@ -104,7 +228,12 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
         else:
             transaction.delete(result_ref)
 
-    remove(client.transaction())
+    run_purge_transaction(
+        client,
+        remove,
+        operation_name=PURGE_JOB_UNLINK_LABEL,
+        storm_damper=_purge_storm_damper(namespace),
+    )
     mirror_refresh(namespace, touched)
 
 
@@ -265,7 +394,12 @@ def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
         transaction.delete(client.collection(f'{namespace}_owners').document(key))
         transaction.delete(client.collection(f'{namespace}_merge_holds').document(key))
 
-    remove(client.transaction())
+    run_purge_transaction(
+        client,
+        remove,
+        operation_name=PURGE_OWNER_FAIRNESS_LABEL,
+        storm_damper=_purge_storm_damper(namespace),
+    )
     queues = [('queues', f'{priority}_{key}') for priority in range(3)]
     mirror_refresh(namespace, [('control', scheduler_control_key(key)), ('owners', key), *queues])
 
@@ -300,6 +434,11 @@ def _erase_result(client: Any, namespace: str, snapshot: Any) -> None:
         owner = owner_ref.get(transaction=transaction).to_dict() or {}
         _write_erased_result(transaction, snapshot.reference, result, owner_ref, owner)
 
-    erase(client.transaction())
+    run_purge_transaction(
+        client,
+        erase,
+        operation_name=PURGE_RESULT_ERASE_LABEL,
+        storm_damper=_purge_storm_damper(namespace),
+    )
     owner_key = (snapshot.to_dict() or {}).get('owner_key')
     mirror_refresh(namespace, [('results', snapshot.id), *([('owners', owner_key)] if owner_key else [])])

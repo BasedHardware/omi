@@ -1325,7 +1325,7 @@ class TinyClient:
     def collection(self, name):
         return TinyCollection(self._rows, self._namespace, name)
 
-    def transaction(self):
+    def transaction(self, max_attempts: int | None = None):
         return TinyFirestoreTransaction()
 
 
