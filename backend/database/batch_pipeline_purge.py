@@ -202,7 +202,17 @@ def purge_batch_owner(
     deleted = 0
     for namespace in namespaces:
         segments = set()
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs'):
+        for table in (
+            'jobs',
+            'results',
+            'artifacts',
+            'projections',
+            'intakes',
+            'shadow_jobs',
+            'coalesce_groups',
+            'coalesce_sources',
+            'coalesce_heads',
+        ):
             after = None
             while True:
                 rows = queries.owner_documents(client, namespace, table, key, after=after)
@@ -237,6 +247,10 @@ def purge_batch_owner(
                         _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
                     elif table == 'results' and conversation_id is not None:
                         _erase_result(client, namespace, snapshot)
+                    elif table == 'coalesce_groups':
+                        from database.batch_pipeline_coalescing import purge_group
+
+                        purge_group(client, namespace, snapshot.id, uid)
                     else:
                         snapshot.reference.delete()
                     if table != 'jobs':

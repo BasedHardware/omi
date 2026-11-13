@@ -499,10 +499,14 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
                    "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
-                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
+                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. "
+                   "The meter's figure is its own 24-hour basis, so the last point can step away from the "
+                   "trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. "
+                   "Settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame "
                    "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
@@ -659,7 +663,7 @@ def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
-            "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
+            "refresh": "5m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
             "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 
