@@ -39,6 +39,16 @@
       "basis": "planning-bound",
       "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "collection": "batch_pipeline_privacy_fence",
+      "owner": "pgfoundation / SCA-1959 G2 dark source",
+      "unit": "one narrowing Commit plus one explicit reconciliation attempt",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "G2 Rev 3 section 3.0: 1 guard read per narrowing Commit and 1 per reconciliation attempt; conflicts require separately counted attempts. Production path is uninstalled/dark (expected 0 reads/day); 1/day is a sentinel bound, NOT a serving volume forecast or ramp budget. Q15 measured narrowing volume/conflict/reconciliation rates and a reviewed replacement daily budget are required before activation. Local synthetic tests do not count as production reads. No saving is booked.",
+      "reviewed": "2026-11-13"
     }
   ],
   "dynamic": [],

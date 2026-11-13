@@ -58,7 +58,10 @@ file, never executed remotely by the harness.
 5. Durable close-drain, restore, residue cadence and janitor runners; production
    no-account-label metrics; final admission class/owner_turn and budget reservation
    chunk policy; complete crash/kill/restart harness remain missing.
-6. Full G2 §5.2/P21-P25 and production/emulator update_time equivalence are NOT
+6. Guard read budget is a dark sentinel (expected production 0, budget 1/day),
+   not a serving forecast. Q15 volume/conflict/reconciliation measurements and a
+   replacement reviewed daily budget block activation.
+7. Full G2 §5.2/P21-P25 and production/emulator update_time equivalence are NOT
    established. Emulator v1.22 rejects stale update_time with FailedPrecondition
    and stale exists=false with AlreadyExists; the source treats guard conflicts
    as retryable. No production test is authorized or claimed.
