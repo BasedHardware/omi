@@ -83,9 +83,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   late final WatchLiveCoverage watchCoverage = WatchLiveCoverage(getApplicationDocumentsDirectory, now: _now);
   late final NativeRecordingIntake nativeIntake = NativeRecordingIntake(this, coverage: watchCoverage);
   Future<void> intakeNativeRecordings() async {
+    final generation = _sessionGeneration;
+    final uid = SharedPreferencesUtil().uid;
     await walReady;
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await intakeOnDeviceOverflow(this);
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await nativeIntake.scan();
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
+    await _rehydrateForCurrentUser();
   }
 
   /// A minute recovery receipt can arrive before the normal flush timer. Seal
@@ -1421,6 +1427,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<int> purgeAccountWals(String uid) => _purgeAccountWals(uid);
+  @override
+  Future<void> rehydrateForCurrentUser() => _rehydrateForCurrentUser();
 
   Future<int> _removeExpiredSyncedCopies() async {
     final prefs = SharedPreferencesUtil();
