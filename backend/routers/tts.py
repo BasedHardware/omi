@@ -16,6 +16,7 @@ import asyncio
 import logging
 import os
 from typing import Any, Callable, Dict, cast
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -101,20 +102,37 @@ def _el_tts_url(voice_id: str, output_format: str) -> str:
 
 
 _DG_DEFAULT_MODEL = "aura-2-thalia-en"
+_DG_PCM_SAMPLE_RATES = frozenset({"16000", "22050", "24000", "44100", "48000"})
+_DG_MP3_OUTPUT_FORMATS = frozenset(
+    {
+        "mp3_22050_32",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "mp3_44100_256",
+    }
+)
+_DG_OUTPUT_FORMATS = frozenset({"ulaw_8000", *_DG_MP3_OUTPUT_FORMATS, *(f"pcm_{r}" for r in _DG_PCM_SAMPLE_RATES)})
 
 
 def _dg_params(output_format: str) -> Dict[str, str] | None:
-    """Deepgram /v1/speak query params for an output_format, or None if unsupported.
+    """Deepgram /v1/speak query params for an allowlisted output_format, or None if unsupported.
 
     The DevKit 2 speaker path needs raw 8 kHz mu-law (ulaw_8000) — container=none
     yields headerless bytes the RN client decodes directly.
     """
+    if output_format not in _DG_OUTPUT_FORMATS:
+        return None
     if output_format == "ulaw_8000":
         return {"encoding": "mulaw", "sample_rate": "8000", "container": "none"}
-    if output_format.startswith("mp3_"):
+    if output_format in _DG_MP3_OUTPUT_FORMATS:
         return {"encoding": "mp3", "container": "mp3"}
     if output_format.startswith("pcm_"):
         rate = output_format.split("_", 1)[1]
+        if rate not in _DG_PCM_SAMPLE_RATES:
+            return None
         return {"encoding": "linear16", "sample_rate": rate, "container": "none"}
     return None
 
@@ -224,7 +242,7 @@ async def _stream_direct_tts(
                 detail=f"unsupported output_format for Deepgram TTS: {req.output_format}",
             )
         params = {"model": _dg_model(req.model_id), **dg}
-        url = _DEEPGRAM_SPEAK_URL + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        url = f"{_DEEPGRAM_SPEAK_URL}?{urlencode(params)}"
         body = {"text": text}
         media_type = _el_output_media_type(req.output_format)
         assert dg_key is not None
@@ -385,9 +403,12 @@ async def tts_synthesize(
             raise HTTPException(status_code=502, detail="TTS upstream unavailable") from exc
         return StreamingResponse(audio_stream, media_type="audio/mpeg")
 
-    # Legacy provider path (MP3-compatible). Keep direct streaming behavior for
-    # non-default formats where possible.
-    if req.output_format != DEFAULT_OUTPUT_FORMAT or os.getenv('DEEPGRAM_API_KEY'):
+    # Legacy provider path (MP3-compatible). Route to direct streaming when the
+    # request needs a non-default/direct output format, or when Deepgram is the
+    # only configured legacy provider (so the inline ElevenLabs-only path below
+    # cannot serve it). Do not route solely because DEEPGRAM_API_KEY is present;
+    # it is also used for STT and must not make provider choice accidental.
+    if req.output_format != DEFAULT_OUTPUT_FORMAT or (os.getenv('DEEPGRAM_API_KEY') and not os.getenv('ELEVENLABS_API_KEY')):
         return await _stream_direct_tts(uid=uid, req=req, text=text, voice_id=voice_id, char_count=char_count)
 
     api_key = os.getenv('ELEVENLABS_API_KEY')
