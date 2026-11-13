@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
@@ -8,6 +9,22 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import '../support/custody_test_helpers.dart';
+
+class _DelayedLedger extends LocalWalSyncImpl {
+  _DelayedLedger() : super(CustodyListener());
+  final blocked = Completer<void>();
+  bool first = true;
+  @override
+  Future<void> intakeNativeRecordings() async {
+    final uid = SharedPreferencesUtil().uid;
+    if (first) {
+      first = false;
+      await blocked.future;
+      if (uid != SharedPreferencesUtil().uid) return;
+    }
+    await super.intakeNativeRecordings();
+  }
+}
 
 void main() {
   late Directory dir;
@@ -210,6 +227,23 @@ void main() {
     expect(ledger.testForeignWals.single.ownerUid, isNull);
     expect(await File('${dir.path}/$name').exists(), isTrue);
     expect(await File('${dir.path}/omibatch_owners.json').readAsString(), '{broken');
+    view.dispose();
+  });
+  test('post-auth refresh does not join an obsolete signed-out refresh', () async {
+    await audio(name);
+    final initial = await custodyLedger();
+    await initial.intakeNativeRecordings();
+    SharedPreferencesUtil().uid = '';
+    final ledger = _DelayedLedger();
+    await ledger.loadForOnDeviceWorker();
+    final view = LocalRecordingsProvider(ledger: ledger, initialize: false);
+    final oldRefresh = view.refresh();
+    SharedPreferencesUtil().uid = 'owner';
+    await view.refresh().timeout(const Duration(seconds: 2));
+    expect(view.recordings.single.fileName, name);
+    ledger.blocked.complete();
+    await oldRefresh;
+    expect(view.recordings.single.fileName, name);
     view.dispose();
   });
 }

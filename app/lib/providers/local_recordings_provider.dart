@@ -98,9 +98,15 @@ class LocalRecordingsProvider extends ChangeNotifier {
   }
 
   Future<void>? _refreshInFlight;
+  String? _refreshOwner;
+  int? _refreshSession;
   Future<void> refresh() {
     final active = _refreshInFlight;
-    if (active != null) return active;
+    final uid = SharedPreferencesUtil().uid;
+    final session = _ledger.sessionGeneration;
+    if (active != null && _refreshOwner == uid && _refreshSession == session) return active;
+    _refreshOwner = uid;
+    _refreshSession = session;
     final pass = _refresh();
     _refreshInFlight = pass;
     return pass.whenComplete(() {
