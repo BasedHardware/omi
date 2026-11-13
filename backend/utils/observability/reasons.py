@@ -88,6 +88,7 @@ class ReasonFamily(StrEnum):
     PIPELINE_LEDGER = 'pipeline_ledger'
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
+    DUE_MARKER_SWEEP = 'due_marker_sweep'
 
 
 class PusherPcmStage(StrEnum):
@@ -199,6 +200,15 @@ class StaleRecoveryOutcome(StrEnum):
     OVERSIZED_CLOSE_ATTEMPTED = 'oversized_close_attempted'
     CURRENT_SESSION = 'current_session'
     CANCELLED = 'cancelled'
+
+
+class DueMarkerSweepOutcome(StrEnum):
+    """Result of re-marking one finalization job that had no due marker."""
+
+    UNKNOWN = 'unknown'
+    REMARKED = 'remarked'
+    SKIPPED = 'skipped'
+    ERROR = 'error'
 
 
 class RetryReason(StrEnum):

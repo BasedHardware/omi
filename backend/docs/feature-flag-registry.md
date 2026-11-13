@@ -525,6 +525,7 @@ and an explicit empty literal renders as `''`.
 | `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | auditfix |
+| `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED` | Default on; a kept, decoded recovery with no enriched structure completes on the deterministic minimum instead of dead-lettering; false/0/off restores the typed refusal | backend | env | open | — | — | — | — | keep | keep | — | capfix-finalization |
 | `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED` | End self-heal jobs after a minimal structure and skip obvious trivial content before paid notes | backend | env | open | — | — | true | — | keep | keep | — | auditfix |
 | `LISTEN_FINALIZATION_REPLAY_ENABLED` | Default on; false disables replay only, preserving live admission | backend | env | open | — | — | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | auditfix |
 | `LISTEN_LOOP_METRICS_ENABLED` | Default on unless false; listen event-loop lag probe, per-frame processing histogram and VAD window counters | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1233,6 +1234,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `LIFECYCLE_V2_MODE` — Separate speech clocks, recovery head probes and bounded finalization executor lanes; off|shadow|serve, default shadow (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
+- `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED` — Default on; a kept, decoded recovery with no enriched structure completes on the deterministic minimum instead of dead-lettering; false/0/off restores the typed refusal (fail: open)
 - `LISTEN_LOOP_METRICS_ENABLED` — Default on unless false; listen event-loop lag probe, per-frame processing histogram and VAD window counters (fail: open)
 - `LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENABLED` — Default on unless false; final Soniox text on a non-window replacement leg, placed on the capture axis or not, accounts tracked speech sends older than the 15 s settle grace so active transcription cannot overflow the replay ring (fail: open)
 - `LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED` — Default on unless false; a Soniox/Modulate replacement leg whose provider owes no output settles horizon-aged quiet replay capture instead of failing over with replay_ring_overflow (fail: open)
