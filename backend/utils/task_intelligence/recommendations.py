@@ -118,9 +118,21 @@ def candidate_recommendation_dedupe_key(candidate_id: str) -> str:
 
 
 def _as_aware(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith('Z'):
+            raw = f'{raw[:-1]}+00:00'
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
     if not isinstance(value, datetime):
         return None
-    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _iso_token(value: Any) -> str:
@@ -159,10 +171,11 @@ def _context_signals(
 
 def _days_to_due(due_at: Any, now: datetime) -> Optional[float]:
     due = _as_aware(due_at)
-    if due is None:
+    now_utc = _as_aware(now)
+    if due is None or now_utc is None:
         return None
     # Whole-day fact buckets avoid turning clock drift into material state churn.
-    seconds = (due - now).total_seconds()
+    seconds = (due - now_utc).total_seconds()
     return float(int(seconds // 86400) if seconds >= 0 else -int((-seconds) // 86400))
 
 
@@ -181,7 +194,8 @@ def _stored_confidence(value: Any) -> float:
 
 def _recent(updated_at: Any, now: datetime) -> bool:
     updated = _as_aware(updated_at)
-    return updated is not None and now - updated <= timedelta(days=7)
+    now_utc = _as_aware(now)
+    return updated is not None and now_utc is not None and now_utc - updated <= timedelta(days=7)
 
 
 def _eligibility(
@@ -329,6 +343,7 @@ def _build_subjects(
     open_loop_snapshots: list[OpenLoopSnapshot],
     now: datetime,
 ) -> list[EvaluationSubject]:
+    now = _as_aware(now) or datetime.now(timezone.utc)
     goals = {str(goal.get('goal_id') or goal.get('id')): goal for goal in state['goals']}
     focused_goal_ids = {
         goal_id
@@ -763,7 +778,7 @@ def evaluate(
     now: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> WhatMattersNowProjection:
-    evaluated_at = now or datetime.now(timezone.utc)
+    evaluated_at = _as_aware(now) or datetime.now(timezone.utc)
     device_scope = request.device_id or 'global'
     context = (
         recommendation_db.get_context_snapshot(

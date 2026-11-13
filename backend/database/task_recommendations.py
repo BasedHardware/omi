@@ -112,6 +112,24 @@ def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
 
 
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith('Z'):
+            raw = f'{raw[:-1]}+00:00'
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _record_malformed_embedded_payload(*, evaluation_id: str, error: ValidationError) -> None:
     error_types = [
         str(item.get('type', 'unknown')) for item in error.errors(include_input=False, include_url=False)[:5]
@@ -292,6 +310,7 @@ def save_projection(
     if not did_publish:
         return published_projection
 
+    generated_at_utc = _coerce_utc_datetime(projection.generated_at) or datetime.now(timezone.utc)
     batch = client.batch()
     history = []
     for snapshot in (
@@ -302,10 +321,16 @@ def save_projection(
         payload = _snapshot_dict(snapshot)
         if payload.get('evaluation_id') == projection.evaluation_id:
             continue
-        history.append((payload.get('evaluated_at'), payload.get('expires_at'), snapshot.reference))
+        history.append(
+            (
+                _coerce_utc_datetime(payload.get('evaluated_at')),
+                _coerce_utc_datetime(payload.get('expires_at')),
+                snapshot.reference,
+            )
+        )
     history.sort(key=lambda item: item[0] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
     for index, (_, expires_at, ref) in enumerate(history):
-        if expires_at is None or expires_at <= projection.generated_at or index >= MAX_DECISION_HISTORY_PER_DEVICE - 1:
+        if expires_at is None or expires_at <= generated_at_utc or index >= MAX_DECISION_HISTORY_PER_DEVICE - 1:
             batch.delete(ref)
     batch.commit()
     return published_projection
@@ -350,7 +375,8 @@ def get_projection(
     )
     if projection is None:
         return None
-    return projection if include_expired or projection.expires_at > now else None
+    now_utc = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+    return projection if include_expired or projection.expires_at > now_utc else None
 
 
 def _decision_records(raw_records: list[Any], evaluation_id: str) -> list[DecisionRecord]:
@@ -423,7 +449,8 @@ def _valid_evaluation_projection(
     except ValidationError as e:
         _record_malformed_embedded_payload(evaluation_id=evaluation_id, error=e)
         return None
-    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
+    now_utc = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+    if projection.evaluation_id != evaluation_id or projection.expires_at <= now_utc:
         return None
     return projection
 
@@ -530,8 +557,8 @@ def create_feedback(
             if stored.get('_request_hash') != payload['_request_hash']:
                 raise IdempotencyConflictError('idempotency key was used for different feedback')
             stored_dedupe_key = stored.get('dedupe_key')
-            stored_override_expiry = stored.get('_override_expires_at')
-            if isinstance(stored_dedupe_key, str) and isinstance(stored_override_expiry, datetime):
+            stored_override_expiry = _coerce_utc_datetime(stored.get('_override_expires_at'))
+            if isinstance(stored_dedupe_key, str) and stored_override_expiry is not None:
                 override_id = _stable_id('override', uid, account_generation, stored_dedupe_key)
                 override_ref = user_ref.collection(ATTENTION_OVERRIDES_COLLECTION).document(override_id)
                 if not override_ref.get(transaction=write_transaction).exists:
@@ -545,7 +572,7 @@ def create_feedback(
                             'feedback_id': feedback_id,
                             'action': request.action.value,
                             'reason': request.reason.value if request.reason is not None else None,
-                            'created_at': stored.get('created_at', now),
+                            'created_at': _coerce_utc_datetime(stored.get('created_at')) or _coerce_utc_datetime(now) or now,
                             'expires_at': stored_override_expiry,
                         },
                     )
@@ -842,14 +869,15 @@ def get_context_snapshot(
     )
     if record is None:
         return None
-    if record.expires_at <= now:
+    now_utc = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+    if record.expires_at <= now_utc:
         ref.delete()
         receipt_id = payload.get('_receipt_id')
         if isinstance(receipt_id, str):
             _user_ref(uid, firestore_client=firestore_client).collection(SNAPSHOT_RECEIPTS_COLLECTION).document(
                 receipt_id
             ).delete()
-        _cleanup_expired_snapshot_receipts(uid, now=now, firestore_client=_get_db(firestore_client))
+        _cleanup_expired_snapshot_receipts(uid, now=now_utc, firestore_client=_get_db(firestore_client))
         return None
     return record
 
@@ -931,6 +959,7 @@ def list_open_loop_snapshots(
     account_generation: int,
     firestore_client: Any = None,
 ) -> list[OpenLoopSnapshot]:
+    now_utc = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
     collection = _user_ref(uid, firestore_client=firestore_client).collection(OPEN_LOOP_SNAPSHOTS_COLLECTION)
     query = collection.where('device_id', '==', device_id).where('account_generation', '==', account_generation)
     records: list[OpenLoopSnapshot] = []
@@ -943,7 +972,7 @@ def list_open_loop_snapshots(
         )
         if record is None:
             continue
-        if record.expires_at <= now:
+        if record.expires_at <= now_utc:
             snapshot.reference.delete()
             receipt_id = payload.get('_receipt_id')
             if isinstance(receipt_id, str):
@@ -952,7 +981,7 @@ def list_open_loop_snapshots(
                 ).delete()
             continue
         records.append(record)
-    _cleanup_expired_snapshot_receipts(uid, now=now, firestore_client=_get_db(firestore_client))
+    _cleanup_expired_snapshot_receipts(uid, now=now_utc, firestore_client=_get_db(firestore_client))
     records.sort(key=lambda record: (record.workstream_id, record.runtime_id))
     return records
 
