@@ -240,7 +240,7 @@ def reconcile_listen_finalization_jobs(
         logger.exception('listen finalization due-marker sweep failed')
         due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
     for outcome, count in due_markers.items():
-        due_marker_sweep.LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=outcome).inc(count)
+        due_marker_sweep.count_sweep_outcome(outcome, count)
     if due_markers['remarked']:
         logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
 

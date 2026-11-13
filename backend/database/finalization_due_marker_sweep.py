@@ -21,14 +21,24 @@ from database.conversation_finalization_jobs import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     STALE_PROCESSING_SWEEP_STATE_COLLECTION,
 )
+from utils.observability.reasons import DueMarkerSweepOutcome, ReasonFamily, reason_label
 
 LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL = Counter(
     'listen_finalization_due_marker_sweep_total',
     'Queued or leased finalization jobs older than 24h without a due marker, by sweep outcome',
     ['outcome'],
 )
-for _outcome in ('remarked', 'skipped', 'error'):
-    LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(outcome=_outcome)
+
+
+def count_sweep_outcome(outcome: object, count: int = 1) -> None:
+    """Add ``count`` to the sweep counter under a closed outcome label."""
+    LISTEN_FINALIZATION_DUE_MARKER_SWEEP_TOTAL.labels(
+        outcome=reason_label(ReasonFamily.DUE_MARKER_SWEEP, outcome, DueMarkerSweepOutcome)
+    ).inc(count)
+
+
+for _outcome in DueMarkerSweepOutcome:
+    count_sweep_outcome(_outcome, 0)
 
 
 def _advance_cursor_txn(
