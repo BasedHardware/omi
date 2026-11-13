@@ -1,7 +1,9 @@
-"""Fixtures for the unattributed Firestore reads alert: fire/resolve and its switch.
+"""Fixtures for the unattributed Firestore reads alert: fire/resolve, billed-series
+completeness/freshness, and the kill switch.
 
 The rule's own annotations carry the live measurement (FC-alert-never-provably-fired);
-these fixtures pin the threshold behaviour and both halves of the kill switch.
+these fixtures pin the threshold behaviour, the same-source billed-series guard, and
+both halves of the kill switch.
 """
 
 from __future__ import annotations
@@ -42,10 +44,22 @@ def rule() -> dict:
     return next(rule for rule in json.loads((ALERTS / "firestore.json").read_text()) if rule["uid"] == UID)
 
 
-def ticks(instrumented: float, billed: float, seconds: int = 7200) -> list[tuple[int, dict]]:
-    """One evaluation tick per minute with a fixed numerator and denominator."""
+def ticks(
+    instrumented: float,
+    billed: float,
+    guard: float = 1,
+    seconds: int = 7200,
+    offset: int = 0,
+) -> list[tuple[int, dict]]:
+    """One evaluation tick per minute with fixed numerator, denominator and guard."""
     return [
-        (t, backtest.evaluate(rule(), {"A": {(): [instrumented]}, "B": {(): [billed]}}))
+        (
+            offset + t,
+            backtest.evaluate(
+                rule(),
+                {"A": {(): [instrumented]}, "B": {(): [billed]}, "C": {(): [guard]}},
+            ),
+        )
         for t in range(0, seconds, STEP)
     ]
 
@@ -53,13 +67,18 @@ def ticks(instrumented: float, billed: float, seconds: int = 7200) -> list[tuple
 def test_rule_shape_pointers_and_threshold():
     subject = rule()
     nodes = {node["refId"]: node["model"] for node in subject["data"]}
-    assert subject["condition"] == "D"
-    assert {node["datasourceUid"] for node in subject["data"] if node["refId"] in ("A", "B")} == {"gmp-cloud-run"}
+    assert subject["condition"] == "F"
+    assert {node["datasourceUid"] for node in subject["data"] if node["refId"] in ("A", "B", "C")} == {"gmp-cloud-run"}
     assert nodes["A"]["expr"] == "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)"
     assert nodes["B"]["expr"] == "avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60"
-    assert nodes["C"]["expression"] == "($B - $A) / $B"
-    threshold = nodes["D"]["conditions"][0]["evaluator"]
-    assert threshold == {"params": [0.03], "type": "gt"}
+    assert nodes["C"]["expr"] == (
+        "((count(count by (type) (firestore_googleapis_com:document_read_count)) == bool 3) or vector(0)) * "
+        "(((time() - max(timestamp(firestore_googleapis_com:document_read_count))) < bool 900) or vector(0))"
+    )
+    assert nodes["D"]["expression"] == "($B - $A) / $B"
+    assert nodes["E"]["expression"] == "($D > 0.03) || ($C == 0)"
+    threshold = nodes["F"]["conditions"][0]["evaluator"]
+    assert threshold == {"params": [0], "type": "gt"}
     assert subject["for"] == "30m"
     assert subject["noDataState"] == "OK"
     # Enabled by default: the per-rule switch is the committed isPaused flag.
@@ -78,24 +97,49 @@ def test_gap_at_or_below_three_percent_resolves():
     # 0.02: ordinary attributed traffic never opens an episode.
     assert backtest.episodes(rule(), ticks(980, 1000), 0, 7200, STEP)["episodes"] == 0
     # Exactly 0.03 is the resolve side of `> 0.03`, not a firing tick.
-    assert backtest.evaluate(rule(), {"A": {(): [970]}, "B": {(): [1000]}}) == {(): 0.0}
-    # A real episode closes as soon as the ratio returns to 0.03.
-    samples = ticks(900, 1000, 3600) + ticks(970, 1000, 3600)
+    assert backtest.evaluate(rule(), {"A": {(): [970]}, "B": {(): [1000]}, "C": {(): [1]}}) == {(): 0.0}
+
+
+def test_chronological_resolve_closes_at_exactly_three_percent():
+    # Phase 1 (0..3540s) is 10% unattributed; phase 2 starts at 3600s at exactly 3%.
+    samples = ticks(900, 1000, seconds=3600) + ticks(970, 1000, seconds=3600, offset=3600)
     result = backtest.episodes(rule(), samples, 0, 7200, STEP)
     assert result["episodes"] == 1
     assert result["open_episodes"] == 0
+    # The episode opens at 1800s (the 30m pending period) and closes at 3600s.
+    assert result["longest_seconds"] == 1800
+    # The closing tick is exactly 3%, not below it.
+    assert backtest.evaluate(rule(), {"A": {(): [970]}, "B": {(): [1000]}, "C": {(): [1]}}) == {(): 0.0}
 
 
 def test_missing_instrumented_series_reads_as_fully_unattributed():
     # or vector(0) in A means a vanished counter cannot pass as healthy coverage.
-    assert backtest.evaluate(rule(), {"A": {(): [0]}, "B": {(): [1000]}}) == {(): 1.0}
+    assert backtest.evaluate(rule(), {"A": {(): [0]}, "B": {(): [1000]}, "C": {(): [1]}}) == {(): 1.0}
     assert backtest.episodes(rule(), ticks(0, 1000), 0, 7200, STEP)["episodes"] == 1
 
 
-def test_missing_billed_series_stays_no_data_not_a_page():
-    # B absent produces no frame; the billed-side guard is omi-firestore-metric-absent.
-    assert backtest.evaluate(rule(), {"A": {(): [900]}, "B": {}}) == {}
-    assert rule()["noDataState"] == "OK"
+def test_partial_billed_type_loss_fires_even_when_the_ratio_is_low():
+    # C=0 means one of the three billed types is missing; the denominator is not
+    # trustworthy, so a 2% ratio must not pass as healthy.
+    assert backtest.evaluate(rule(), {"A": {(): [980]}, "B": {(): [1000]}, "C": {(): [0]}}) == {(): 1.0}
+    assert backtest.episodes(rule(), ticks(980, 1000, guard=0), 0, 7200, STEP)["episodes"] == 1
+
+
+def test_total_billed_series_loss_fires_instead_of_no_data():
+    # B=0 and C=0 is the total-loss shape: the ratio is undefined, but the guard
+    # still fires, so noDataState=OK cannot hide a vanished billed series.
+    assert backtest.evaluate(rule(), {"A": {(): [900]}, "B": {(): [0]}, "C": {(): [0]}}) == {(): 1.0}
+    assert backtest.episodes(rule(), ticks(900, 0, guard=0), 0, 7200, STEP)["episodes"] == 1
+
+
+def test_billed_guard_requires_all_three_types_and_a_fresh_sample():
+    expr = {node["refId"]: node["model"] for node in rule()["data"]}["C"]["expr"]
+    assert "count by (type)" in expr
+    assert "== bool 3" in expr
+    assert "timestamp(" in expr
+    assert "< bool 900" in expr
+    # Both halves are zero-filled so absence cannot turn the guard into NoData.
+    assert expr.count("or vector(0)") == 2
 
 
 def test_selector_is_enabled_by_default_and_a_fixture_proves_disable(verifier, tmp_path, monkeypatch):
