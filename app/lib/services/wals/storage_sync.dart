@@ -258,6 +258,7 @@ class StorageSyncImpl implements StorageSync {
       // longer pairs with): drop the stale local row, nothing to delete.
       _wals = _wals.where((w) => w.id != wal.id).toList();
       listener.onWalUpdated();
+      if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
     }
     // A delete that was attempted drops the row whatever the reply said: the
@@ -327,7 +328,7 @@ class StorageSyncImpl implements StorageSync {
     _logStaleRowsDropped('miss', stale.length);
     _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, outcome.attempted);
     listener.onWalUpdated();
-    if (!outcome.confirmed.containsAll(toDelete.map((w) => w.id))) {
+    if (stale.isNotEmpty || !outcome.confirmed.containsAll(toDelete.map((w) => w.id))) {
       throw StateError("Some device deletions were not confirmed");
     }
   }

@@ -96,7 +96,7 @@ void main() {
     final stale = storageWal(timerStart: 1000, fileNum: 0, status: WalStatus.miss, device: 'pendant-1');
     sync.testWals = [stale];
 
-    await sync.deleteWal(stale);
+    await expectLater(sync.deleteWal(stale), throwsStateError);
 
     expect(await sync.getMissingWals(), isEmpty);
   });
@@ -122,7 +122,7 @@ void main() {
       storageWal(timerStart: 2000, fileNum: 1, status: WalStatus.miss, device: 'pendant-1'),
     ];
 
-    await sync.deleteAllPendingWals();
+    await expectLater(sync.deleteAllPendingWals(), throwsStateError);
 
     expect(await sync.getMissingWals(), isEmpty);
   });
