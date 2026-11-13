@@ -176,43 +176,47 @@ void main() {
     expect(coldView.recordings.single.fileName, name);
     coldView.dispose();
   });
-  test('upgrade receipts survive sign-out, foreign login and same-owner restart without re-upload', () async {
-    await audio(name);
-    final ledger = await custodyLedger();
-    await ledger.intakeNativeRecordings();
-    final wal = (await ledger.getAllWals()).single;
-    wal.ownerUid = null;
-    await ledger.persistRetryMetadata(wal);
-    await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({name: 'owner'}));
-    await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'accepted-job'}));
-    await SharedPreferencesUtil().saveString('localRecordingJobsCorrupt', 'quarantined');
-    ledger.clearUserData();
-    await clearPreferencesForSignOut();
-    expect(SharedPreferencesUtil().getString('localRecordingJobs'), contains('accepted-job'));
-    expect(SharedPreferencesUtil().getString('localRecordingJobsCorrupt'), 'quarantined');
-    SharedPreferencesUtil().uid = 'other';
-    final restarted = await custodyLedger();
-    final view = LocalRecordingsProvider(ledger: restarted, initialize: false);
-    await view.refresh();
-    expect(view.recordings, isEmpty);
-    expect(await restarted.getAllWals(), isEmpty);
-    expect(restarted.testForeignWals.single.ownerUid, 'owner');
-    expect(restarted.testForeignWals.single.jobId, 'accepted-job');
-    restarted.clearUserData();
-    view.clearUserData();
-    SharedPreferencesUtil().uid = 'owner';
-    await view.refresh();
-    expect(view.recordings.single.fileName, name);
-    expect(view.recordings.single.state.name, 'processing');
-    final restored = (await restarted.getAllWals()).single;
-    expect(restored.status, WalStatus.uploaded);
-    expect(restored.jobId, 'accepted-job');
-    expect(restored.holdForUser, isTrue);
-    expect(await File('${dir.path}/$name').readAsBytes(), [1, 0, 0, 0, 5]);
-    await view.refresh();
-    expect(view.recordings, hasLength(1));
-    view.dispose();
-  });
+  for (final unstampedOwner in <String?>[null, '', 'legacy']) {
+    test(
+        'upgrade receipts for $unstampedOwner survive sign-out, foreign login and same-owner restart without re-upload',
+        () async {
+      await audio(name);
+      final ledger = await custodyLedger();
+      await ledger.intakeNativeRecordings();
+      final wal = (await ledger.getAllWals()).single;
+      wal.ownerUid = unstampedOwner;
+      await ledger.persistRetryMetadata(wal);
+      await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({name: 'owner'}));
+      await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'accepted-job'}));
+      await SharedPreferencesUtil().saveString('localRecordingJobsCorrupt', 'quarantined');
+      ledger.clearUserData();
+      await clearPreferencesForSignOut();
+      expect(SharedPreferencesUtil().getString('localRecordingJobs'), contains('accepted-job'));
+      expect(SharedPreferencesUtil().getString('localRecordingJobsCorrupt'), 'quarantined');
+      SharedPreferencesUtil().uid = 'other';
+      final restarted = await custodyLedger();
+      final view = LocalRecordingsProvider(ledger: restarted, initialize: false);
+      await view.refresh();
+      expect(view.recordings, isEmpty);
+      expect(await restarted.getAllWals(), isEmpty);
+      expect(restarted.testForeignWals.single.ownerUid, 'owner');
+      expect(restarted.testForeignWals.single.jobId, 'accepted-job');
+      restarted.clearUserData();
+      view.clearUserData();
+      SharedPreferencesUtil().uid = 'owner';
+      await view.refresh();
+      expect(view.recordings.single.fileName, name);
+      expect(view.recordings.single.state.name, 'processing');
+      final restored = (await restarted.getAllWals()).single;
+      expect(restored.status, WalStatus.uploaded);
+      expect(restored.jobId, 'accepted-job');
+      expect(restored.holdForUser, isTrue);
+      expect(await File('${dir.path}/$name').readAsBytes(), [1, 0, 0, 0, 5]);
+      await view.refresh();
+      expect(view.recordings, hasLength(1));
+      view.dispose();
+    });
+  }
 
   test('indexed unstamped batch with corrupt ownership stays recoverable but unexposed', () async {
     await audio(name);
@@ -248,24 +252,26 @@ void main() {
     expect(view.recordings.single.fileName, name);
     view.dispose();
   });
-  test('headless overflow intake restores upgraded rows without a Home refresh', () async {
-    const overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_1720000000.bin';
-    await audio(overflow);
-    final initial = await custodyLedger();
-    await intakeOnDeviceOverflow(initial);
-    final wal = (await initial.getAllWals()).single;
-    wal.ownerUid = null;
-    await initial.persistRetryMetadata(wal);
-    await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({overflow: 'owner'}));
-    final restarted = await custodyLedger();
-    expect(await restarted.getAllWals(), isEmpty);
-    await intakeOnDeviceOverflow(restarted);
-    final restored = (await restarted.getAllWals()).single;
-    expect(restored.ownerUid, 'owner');
-    expect(restored.onDeviceOnly, isTrue);
-    expect(isAutoUploadEligible(restored), isFalse);
-    expect(await File('${dir.path}/$overflow').exists(), isTrue);
-  });
+  for (final unstampedOwner in <String?>[null, '', 'legacy']) {
+    test('headless overflow intake restores $unstampedOwner rows without a Home refresh', () async {
+      const overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_1720000000.bin';
+      await audio(overflow);
+      final initial = await custodyLedger();
+      await intakeOnDeviceOverflow(initial);
+      final wal = (await initial.getAllWals()).single;
+      wal.ownerUid = unstampedOwner;
+      await initial.persistRetryMetadata(wal);
+      await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({overflow: 'owner'}));
+      final restarted = await custodyLedger();
+      expect(await restarted.getAllWals(), isEmpty);
+      await intakeOnDeviceOverflow(restarted);
+      final restored = (await restarted.getAllWals()).single;
+      expect(restored.ownerUid, 'owner');
+      expect(restored.onDeviceOnly, isTrue);
+      expect(isAutoUploadEligible(restored), isFalse);
+      expect(await File('${dir.path}/$overflow').exists(), isTrue);
+    });
+  }
   test('an uninitialized view refresh remains a no-op without a ledger service', () async {
     final view = LocalRecordingsProvider(initialize: false);
     await view.refresh();

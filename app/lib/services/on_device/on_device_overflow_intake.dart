@@ -24,7 +24,7 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
     final existing = ledger.nativeWalForFileName(name);
     if (existing != null) {
       var needsPersist = false;
-      if (existing.ownerUid == null || existing.ownerUid == 'legacy') {
+      if (existing.ownerUid == null || existing.ownerUid!.isEmpty || existing.ownerUid == 'legacy') {
         final info = BatchRecordingInfo.fromFileName(name);
         if (info != null) {
           final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);

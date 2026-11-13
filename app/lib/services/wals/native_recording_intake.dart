@@ -106,7 +106,7 @@ class NativeRecordingIntake {
       final existing = ledger.nativeWalForFileName(name);
       if (existing != null) {
         var needsPersist = false;
-        if (existing.ownerUid == null || existing.ownerUid == 'legacy') {
+        if (existing.ownerUid == null || existing.ownerUid!.isEmpty || existing.ownerUid == 'legacy') {
           final owner = info.isWatch
               ? await watchRecordingOwner(dir, name)
               : await owners.resolve(file, name, uid, timerStart: info.timerStart);
