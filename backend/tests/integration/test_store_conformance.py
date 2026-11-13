@@ -1175,3 +1175,49 @@ def test_state_census_counts_only_pending_missing_null_or_unknown_rows(h, monkey
         census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
         census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
         assert census(client.transaction(read_only=True), client, collection) == 3
+
+
+def test_owner_serialization_prevents_a_pending_head_phantom(h):
+    """Admission and merge take the same owner row before querying the head."""
+    need(h, 'sim')
+    import threading
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    key = owner_key(h.uid('o'))
+    put_all(h, [('owners', key, {'revision': 0})])
+    queried, attempted, release = threading.Event(), threading.Event(), threading.Event()
+
+    def reader():
+        def body(tx):
+            owner = tx.get('owners', key)
+            assert tx.first_pending(key) is None
+            queried.set()
+            assert release.wait(10)
+            assert tx.first_pending(key) is None
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+
+        h.store.run(body)
+
+    def admitter():
+        def body(tx):
+            attempted.set()
+            owner = tx.get('owners', key)
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+            tx.put('jobs', 'phantom', job(h, 'phantom', merge_pending=True))
+
+        h.store.run(body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        held = pool.submit(reader)
+        try:
+            assert queried.wait(10)
+            inserted = pool.submit(admitter)
+            assert attempted.wait(10)
+            with pytest.raises(FutureTimeout):
+                inserted.result(timeout=0.2)
+        finally:
+            release.set()
+        held.result(timeout=30)
+        inserted.result(timeout=30)
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'phantom'
+    assert h.store.run(lambda tx: tx.get('owners', key))['revision'] == 2

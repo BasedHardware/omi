@@ -662,7 +662,9 @@ def promote_record_recoveries(client: Any, namespace: str, now: float, limit: in
     return promoted
 
 
-def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
+def due(
+    client: Any, namespace: str, state: str, now: float, limit: int = 100, *, promote_recoveries: bool = True
+) -> list[str]:
     if state not in {'leased', 'retry', 'result_ready', 'record_pending', record_recovery_gate.WAITING_STATE}:
         raise ValueError('only recoverable states may be scanned')
     field = {
@@ -672,7 +674,7 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
         'record_pending': 'available_at',
         record_recovery_gate.WAITING_STATE: 'available_at',
     }[state]
-    if state == 'record_pending':
+    if state == 'record_pending' and promote_recoveries:
         promote_record_recoveries(client, namespace, now, limit)
     docs = (
         client.collection(f'{namespace}_jobs')

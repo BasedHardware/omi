@@ -294,7 +294,9 @@ def test_jobstore_shadow_refuses_the_prod_namespace_in_prod():
 
 
 def test_jobstore_shadow_admits_the_prod_namespace_in_staging_on_the_staging_db():
-    assert staging_fence.jobstore_shadow_admits('batch_pipeline_prod', _clean_env())
+    assert staging_fence.jobstore_shadow_admits(
+        'batch_pipeline_prod', {**_clean_env(), 'JOBSTORE_SHADOW_NAMESPACES': 'batch_pipeline_prod'}
+    )
 
 
 @pytest.mark.parametrize('database_id', [None, '', '(default)', 'prod'])
@@ -308,7 +310,10 @@ def test_jobstore_shadow_refuses_the_staging_flag_on_a_non_staging_db(database_i
 
 
 def test_jobstore_shadow_admits_other_namespaces():
-    assert staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
+    assert not staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
+    assert staging_fence.jobstore_shadow_admits(
+        'batch_pipeline_dev', {'JOBSTORE_SHADOW_NAMESPACES': 'batch_pipeline_dev'}
+    )
 
 
 def test_unset_key_with_a_prod_code_default_is_refused():

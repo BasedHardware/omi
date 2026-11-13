@@ -137,13 +137,17 @@ def jobstore_shadow_admits(namespace: str, env: Mapping[str, str] | None = None)
 
     Staging keeps the worker namespace ``batch_pipeline_prod``, so the namespace alone cannot tell staging
     from prod. That namespace is admitted only in a staging deployment on the staging Firestore database;
-    production (and the staging flag on any other database) stays refused until account deletion purges
-    the Postgres copy too. Every other namespace is admitted. The one gate for ``shadow_from_env`` and
+    production (and the staging flag on any other database) stays refused.
+    Every namespace must also be explicitly named in JOBSTORE_SHADOW_NAMESPACES
+    (comma separated exact names; default empty, no wildcards). The one gate for ``shadow_from_env`` and
     ``mirror_refresh``.
     """
+    env = os.environ if env is None else env
+    admitted = {name.strip() for name in env.get('JOBSTORE_SHADOW_NAMESPACES', '').split(',') if name.strip()}
+    if namespace not in admitted:
+        return False
     if namespace != PROD_JOBSTORE_NAMESPACE:
         return True
-    env = os.environ if env is None else env
     return is_staging(env) and (env.get('FIRESTORE_DATABASE_ID') or '').strip() == STAGING_DATABASE
 
 

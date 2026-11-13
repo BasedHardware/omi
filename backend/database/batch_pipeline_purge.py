@@ -280,7 +280,7 @@ def purge_batch_owner(
 
                 purge_batch_storage_owner(uid, namespace)
         # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
-        # recorded as finished; a failure raises and the caller retries. No-op outside shadow mode.
+        # recorded as finished; a failure raises and the caller retries, even outside shadow mode.
         purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)
