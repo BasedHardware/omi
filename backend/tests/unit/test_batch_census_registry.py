@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import json
+import runpy
 from functools import lru_cache
 from pathlib import Path
 
@@ -74,11 +75,11 @@ def _resolve_constant(module: str, name: str, stack: frozenset[tuple[str, str]] 
     return frozenset()
 
 
-def literal_states(source: str, field: str, module: str | None = None) -> set[str]:
-    """Literal values written to ``field`` anywhere in ``source``."""
+def state_sites(source: str, field: str, module: str | None = None) -> set[tuple[str, str]]:
+    """(qualified owner, literal value) for each write to ``field`` in ``source``."""
     tree = ast.parse(source)
     constants = constant_names(tree)
-    found: set[str] = set()
+    found: set[tuple[str, str]] = set()
 
     def literals(value):
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
@@ -92,16 +93,32 @@ def literal_states(source: str, field: str, module: str | None = None) -> set[st
         return set()
 
     class Visitor(ast.NodeVisitor):
+        def __init__(self):
+            self.stack: list[str] = []
+
+        def visit_ClassDef(self, node):
+            self.stack.append(node.name)
+            self.generic_visit(node)
+            self.stack.pop()
+
+        visit_FunctionDef = visit_ClassDef
+        visit_AsyncFunctionDef = visit_ClassDef
+
+        def _record(self, key, value):
+            if field not in literal_key(key, constants):
+                return
+            owner = '.'.join(self.stack) or '<module>'
+            found.update((owner, literal) for literal in literals(value))
+
         def visit_Dict(self, node):
             for key, value in zip(node.keys, node.values):
-                if field in literal_key(key, constants):
-                    found.update(literals(value))
+                self._record(key, value)
             self.generic_visit(node)
 
         def visit_Assign(self, node):
             for target in node.targets:
-                if isinstance(target, ast.Subscript) and field in literal_key(target.slice, constants):
-                    found.update(literals(node.value))
+                if isinstance(target, ast.Subscript):
+                    self._record(target.slice, node.value)
             self.generic_visit(node)
 
         def visit_Call(self, node):
@@ -113,24 +130,37 @@ def literal_states(source: str, field: str, module: str | None = None) -> set[st
             if name in {'dict', 'update', 'set', 'setdefault'}:
                 for keyword in node.keywords:
                     if keyword.arg == field:
-                        found.update(literals(keyword.value))
-                if name == 'setdefault' and len(node.args) >= 2 and field in literal_key(node.args[0], constants):
-                    found.update(literals(node.args[1]))
+                        self._record(ast.Constant(field), keyword.value)
+                if name == 'setdefault' and len(node.args) >= 2:
+                    self._record(node.args[0], node.args[1])
             self.generic_visit(node)
 
     Visitor().visit(tree)
     return found
 
 
-def discovered_states(modules, field: str) -> set[str]:
+def literal_states(source: str, field: str, module: str | None = None) -> set[str]:
+    """Literal values written to ``field`` anywhere in ``source``."""
+    return {value for _owner, value in state_sites(source, field, module)}
+
+
+def is_excluded_site(module: str, field: str, owner: str, value: str) -> bool:
+    """True when a reviewed mixed-purpose site writes a non-job document."""
+    return field == 'state' and (owner, value) in batch_census.NON_JOB_STATE_SITES.get(module, ())
+
+
+def discovered_states(modules, field: str, sources: dict[str, str] | None = None) -> set[str]:
     found: set[str] = set()
     for module in modules:
-        found |= literal_states((BACKEND / module).read_text(), field, module)
+        source = (sources or {}).get(module) or (BACKEND / module).read_text()
+        for owner, value in state_sites(source, field, module):
+            if not is_excluded_site(module, field, owner, value):
+                found.add(value)
     return found
 
 
-def unregistered_states(source: str, registered, field: str = 'state') -> set[str]:
-    return literal_states(source, field) - set(registered)
+def unregistered_states(source: str, registered, field: str = 'state', module: str | None = None) -> set[str]:
+    return literal_states(source, field, module) - set(registered)
 
 
 # --- lifecycle table coverage ----------------------------------------------
@@ -158,6 +188,31 @@ def test_registered_projection_states_match_ast_discovery():
     legacy = {entry.state for entry in batch_census.entries_for('batch_projection') if entry.legacy}
     assert discovered == states_for('batch_projection') - legacy
     assert legacy == {'claimed'}
+
+
+def test_non_job_state_site_exclusions_name_live_sites():
+    for module, exclusions in batch_census.NON_JOB_STATE_SITES.items():
+        assert module in JOB_STATE_MODULES, f'{module} must stay in the job discovery set'
+        sites = state_sites((BACKEND / module).read_text(), 'state', module)
+        for exclusion in exclusions:
+            assert exclusion in sites, f'{module} exclusion {exclusion} no longer names a state write'
+
+
+@pytest.mark.parametrize('module', sorted(batch_census.NON_JOB_STATE_SITES))
+def test_mixed_purpose_module_keeps_its_job_states_in_scope(module):
+    excluded = {value for _owner, value in batch_census.NON_JOB_STATE_SITES[module]}
+    discovered = discovered_states([module], 'state')
+    assert not discovered & excluded, f'{module} leaked a non-job marker into the job census'
+    assert discovered <= set(JOB_STATES), f'{module} writes an unregistered job state'
+
+
+def test_mixed_purpose_module_job_write_mutation_is_rejected():
+    module = 'database/batch_pipeline_speech_redrive.py'
+    source = (BACKEND / module).read_text()
+    assert "state='result_ready'" in source
+    mutated = source.replace("state='result_ready'", "state='brand_new_state'", 1)
+    assert mutated != source
+    assert discovered_states([module], 'state', sources={module: mutated}) - set(JOB_STATES) == {'brand_new_state'}
 
 
 def test_synthetic_new_state_at_a_registered_site_is_rejected():
@@ -278,6 +333,42 @@ def test_unverified_clocks_are_marked():
             assert not entry.clock_verified
         if not entry.clock_verified:
             assert entry.clock is None or entry.custody is not None or entry.legacy
+
+
+def test_recovery_entries_state_that_the_vocabulary_is_not_yet_guarded():
+    for entry in batch_census.entries_for('batch_recovery'):
+        assert 'not AST-guarded' in entry.note, entry.key
+
+
+# --- changed-file CI selection ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'path',
+    [
+        'backend/utils/batch_pipeline/provider_stt.py',
+        'backend/database/batch_pipeline_speech_redrive.py',
+        'backend/utils/observability/reasons.py',
+        'backend/config/batch_census.py',
+        'backend/scripts/batch_pipeline_poll_state_census.py',
+    ],
+)
+def test_census_guard_runs_for_writer_and_vocabulary_changes(path):
+    selector = runpy.run_path(str(BACKEND / 'scripts/select_backend_unit_tests.py'))
+    guard = set(selector['CENSUS_GUARD_TESTS'])
+    assert guard == {'tests/unit/test_batch_census_registry.py'}
+    all_tests = selector['discover_all_tests']()
+    selected, reason = selector['tests_for_changed_paths']([path], all_tests)
+    assert guard <= set(selected), reason
+
+
+def test_unmapped_census_neighbours_keep_their_full_fallback():
+    selector = runpy.run_path(str(BACKEND / 'scripts/select_backend_unit_tests.py'))
+    all_tests = selector['discover_all_tests']()
+    # The registry is not otherwise mapped to a narrow area, so its edit must
+    # still select the full suite while the guard runs.
+    selected, _reason = selector['tests_for_changed_paths'](['backend/config/batch_census.py'], all_tests)
+    assert set(selected) == set(all_tests)
 
 
 # --- poll-state census ------------------------------------------------------

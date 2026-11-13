@@ -166,6 +166,22 @@ FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
 # workers and outbox modules. A PR that adds a violation must fail in its own changed-file CI.
 REASON_LABEL_ENUM_TESTS = ('tests/unit/test_reason_label_enums.py',)
 BATCH_STAGE_ENV_RATCHET_TESTS = ('tests/unit/test_batch_stage_env_ratchet.py',)
+
+# Batch census completeness guard (W3 / SCA-1921): a new job/projection state or
+# an unregistered reason vocabulary must fail the PR that adds it, not only the
+# post-merge ``--all`` run. The scanned writer sites and vocabularies live in
+# config/batch_census.py and tests/unit/test_batch_census_registry.py; selection
+# uses their prefixes so an edit to any registered writer or enum always runs the
+# guard. ``backend/config/batch_census.py`` also keeps its full-suite fallback
+# because it is not otherwise mapped to a narrow area.
+CENSUS_GUARD_TESTS = ('tests/unit/test_batch_census_registry.py',)
+CENSUS_GUARD_PREFIXES = (
+    'backend/utils/batch_pipeline/',
+    'backend/database/batch_pipeline_',
+    'backend/utils/observability/reasons.py',
+    'backend/config/batch_census.py',
+    'backend/scripts/batch_pipeline_poll_state_census.py',
+)
 BATCH_STAGE_ENV_RATCHET_PREFIXES = (
     'backend/utils/batch_pipeline/',
     'backend/database/batch_pipeline_',
@@ -732,6 +748,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)
     if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):
         selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
+    if any(path.startswith(CENSUS_GUARD_PREFIXES) for path in changed_paths):
+        selected.update(test for test in CENSUS_GUARD_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):

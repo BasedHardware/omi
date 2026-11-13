@@ -198,6 +198,10 @@ def _projection(
 
 
 def _recovery(state: str, *, ceiling: int | None = None) -> CensusEntry:
+    # recovery_state literals are not yet part of the AST discovery guard
+    # (SCA-1921 follow-up): the shared writer inventory does not track this
+    # field, so a new recovery state can ship without a registry entry. The
+    # declared vocabulary below is complete for current main only.
     return CensusEntry(
         'batch_recovery',
         state,
@@ -212,6 +216,7 @@ def _recovery(state: str, *, ceiling: int | None = None) -> CensusEntry:
         _OWNER,
         ceiling,
         _CENSUS_ALARM,
+        note='recovery_state is not AST-guarded yet, so a new recovery state would not fail CI (follow-up)',
     )
 
 
@@ -414,6 +419,13 @@ JOB_STATES = tuple(entry.state for entry in JOB_ENTRIES)
 # The guard scans exactly these modules' ``state`` payload sites. A new state at
 # one of them fails CI; request-lane coalescing vocabularies are classified out
 # below so they cannot create a false failure.
+#
+# Mixed-purpose batch modules write ``state`` on non-job documents (recovery
+# intents, markers) and on job documents, sometimes inside the same transaction
+# function. These modules stay in this job set so their job write remains
+# discoverable; ``NON_JOB_STATE_SITES`` excludes only the reviewed (owner,
+# state) payload sites that do not target a job document. A mutated job literal
+# is a new, unexcluded value and still fails the census guard.
 JOB_STATE_MODULES = (
     'utils/batch_pipeline/scheduler.py',
     'utils/batch_pipeline/live.py',
@@ -424,21 +436,48 @@ JOB_STATE_MODULES = (
     'utils/batch_pipeline/record_lease_append.py',
     'utils/batch_pipeline/merge.py',
     'database/record_partial.py',
+    'database/batch_pipeline_artifact_missing.py',
+    'database/batch_pipeline_quarantine_recovery.py',
     'database/batch_pipeline_record_dead_letter.py',
     'database/batch_pipeline_record_lease_recovery.py',
     'database/batch_pipeline_recovery.py',
     'database/batch_pipeline_projection_release.py',
+    'database/batch_pipeline_speech_redrive.py',
+    'database/batch_pipeline_terminal_empty.py',
 )
 
-# Batch-scope modules that write a ``state`` field for a different document.
-# Each is reviewed here; a new module writing ``state`` must be classified.
+# Reviewed non-job state payload sites inside those mixed-purpose modules, keyed
+# by (qualified owner, literal state value). Keep this per site: excluding a
+# whole module would hide its job write (that is how ``result_ready`` in
+# database/batch_pipeline_speech_redrive.py escaped the first census guard).
+NON_JOB_STATE_SITES: dict[str, tuple[tuple[str, str], ...]] = {
+    'database/batch_pipeline_artifact_missing.py': (
+        ('ArtifactMissingStore.apply.commit', 'missing'),
+        ('ArtifactMissingStore.restore_reupload.commit', 'restored'),
+    ),
+    'database/batch_pipeline_quarantine_recovery.py': (
+        ('SilenceDispositionStore.complete_silence.commit', 'completed'),
+        ('SilenceDispositionStore.prepare_silence.commit', 'prepared'),
+    ),
+    'database/batch_pipeline_speech_redrive.py': (
+        ('SpeechRedriveStore.prepare.commit', 'prepared'),
+        ('SpeechRedriveStore.settle.commit', 'completed'),
+        ('SpeechRedriveStore.settle.commit', 'failed_held'),
+        ('SpeechRedriveStore.start.commit', 'running'),
+    ),
+    'database/batch_pipeline_terminal_empty.py': (
+        ('TerminalEmptyStore.complete.commit', 'completed'),
+        ('TerminalEmptyStore.prepare.commit', 'prepared'),
+    ),
+}
+
+# Batch-scope modules that write a ``state`` field only for a different
+# document. Each is reviewed here; a new module writing ``state`` must be
+# classified. Collection-scoped result and request-lane documents stay out of
+# the job census entirely.
 NON_JOB_STATE_MODULES = {
     'database/batch_pipeline_coalescing.py': 'request-lane intake coalescing, not a pipeline stock',
     'database/batch_pipeline_shadow.py': 'shadow-lane documents',
-    'database/batch_pipeline_artifact_missing.py': 'artifact marker documents; its job write is registered elsewhere',
-    'database/batch_pipeline_quarantine_recovery.py': 'recovery intent documents; its job writes are registered elsewhere',
-    'database/batch_pipeline_speech_redrive.py': 'recovery intent documents; its job write is registered elsewhere',
-    'database/batch_pipeline_terminal_empty.py': 'recovery intent documents; its job write is registered elsewhere',
     'database/batch_pipeline_projection.py': 'result documents',
     'database/batch_pipeline_projection_privacy.py': 'result documents',
     'database/batch_pipeline_projection_session.py': 'result documents',
