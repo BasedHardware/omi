@@ -1,4 +1,11 @@
-"""SCA-1894: a new durable stamp must declare its independently deployed readers."""
+"""SCA-1894: a new durable stamp must declare its independently deployed readers.
+
+The registry, runtime roster and batch-pipeline source scan are read-only, so each
+one is parsed once per pytest process and shared through module-scoped fixtures. The
+backend fast-unit duration guard budgets per-test CPU, and re-parsing the deploy
+manifests or the whole `utils/batch_pipeline/` tree inside every test spent that
+budget on the same unchanged bytes.
+"""
 
 from copy import deepcopy
 
@@ -15,15 +22,25 @@ from scripts.state_readers_registry import (
 )
 
 
-def registry():
+@pytest.fixture(scope='module')
+def registry_data():
     return yaml.safe_load(REGISTRY.read_text())
 
 
-def test_state_readers_registry():
-    data = registry()
-    errors = validate(data, runtime_roster()) + coverage_errors(data, source_paths())
-    assert not errors, '\n'.join(errors)
-    ready = data['states']['{namespace}_jobs.ready_at']
+@pytest.fixture(scope='module')
+def roster():
+    return runtime_roster()
+
+
+@pytest.fixture(scope='module')
+def registry_errors(registry_data, roster):
+    """One full registry + source-coverage pass, shared by every assertion below."""
+    return validate(registry_data, roster) + coverage_errors(registry_data, source_paths())
+
+
+def test_state_readers_registry(registry_data, registry_errors):
+    assert not registry_errors, '\n'.join(registry_errors)
+    ready = registry_data['states']['{namespace}_jobs.ready_at']
     assert 'helm/batch-pipeline-worker' in ready['readers']
     assert ready['kill_switch'] == {
         'flag': 'BATCH_PIPELINE_WORKER_ENABLED',
@@ -78,14 +95,13 @@ def persist(tx):
         ({'kill_switch': {'service': 'helm/batch-pipeline-worker'}}, 'needs a flag'),
     ],
 )
-def test_invalid_reader_or_containment_is_rejected(change, expected):
-    data = deepcopy(registry())
+def test_invalid_reader_or_containment_is_rejected(registry_data, roster, change, expected):
+    data = deepcopy(registry_data)
     # Break the alias before changing this one state's contract.
     key = '{namespace}_jobs.ready_at'
     data['states'][key] = {**data['states'][key], **change}
-    assert any(expected in error for error in validate(data, runtime_roster()))
+    assert any(expected in error for error in validate(data, roster))
 
 
-def test_runtime_roster_includes_independent_gpu_deployment():
-    roster = runtime_roster()
+def test_runtime_roster_includes_independent_gpu_deployment(roster):
     assert {'helm/batch-pipeline-worker', 'gke/backend-listen', 'cloud_run/backend-integration'} <= roster
