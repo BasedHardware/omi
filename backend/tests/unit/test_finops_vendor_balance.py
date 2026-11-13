@@ -273,3 +273,27 @@ def test_loader_rejects_tampered_artifacts(vb, tmp_path):
     )
     with pytest.raises(SystemExit, match="unknown vendor"):
         lb.load_vendor_balance(tmp_path, "r1", "t", lambda n: None, lambda *a, **k: 0, lambda *a, **k: "[]")
+
+
+# ------------------------------------------------------------- CLI entry point
+
+
+def test_script_entry_writes_an_artifact_when_run_as_the_job_runs_it(tmp_path):
+    """The daily job runs this file as a subprocess. With no org key it must still
+    leave a `skipped` artifact (a missing artifact is indistinguishable from a
+    script that never ran, and left the snapshot table uncreated)."""
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in __import__("os").environ.items() if k != "FINOPS_SONIOX_ORG_KEY"}
+    env.pop("FINOPS_AUTH", None)
+    done = subprocess.run(
+        [sys.executable, str(FINOPS / "pull_vendor_balance.py"), "--raw", str(tmp_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        cwd=str(FINOPS),
+    )
+    assert done.returncode == 0, done.stderr
+    artifact = json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())
+    assert artifact == {"status": "skipped", "reason": "key_unavailable"}
