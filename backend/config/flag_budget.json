@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 273,
+  "count": 274,
   "names": {
     "STT_FREE_ALLOWANCE_WATCH_ENABLED": {"owner": "margin-owner", "review_by": "2026-12-12", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {"owner": "margin / SCA-1800", "review_by": "2026-11-26"},

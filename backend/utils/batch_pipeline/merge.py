@@ -57,10 +57,12 @@ def _catch_up(job: dict) -> bool:
 def _backlog_held(job: dict) -> bool:
     """A provider catch-up row while provider backlog release is off: it stays ready and
     uncommitted so only the owner's fresh rows reach projection."""
+    # Independent of the membership switch: rows it stamped stay eligible for the head wait
+    # after it is turned off, so the hold must outlive it (2026-11-13, 1,700 commits a minute
+    # an hour after the switch went off).
     return (
         (job.get('stt_route') or {}).get('stt_route') == 'provider'
-        and _catch_up(job)
-        and provider_merge_membership_enabled()
+        and job.get('fresh_capture') is not True
         and not provider_backlog_release_enabled()
     )
 
@@ -214,6 +216,9 @@ class OrderedMerge:
         key = owner_key(owner_id)
         wait = self._head_wait()
         depth = self._catch_up_depth()
+        # False while the fresh query is backing off: then nothing probes, and a held
+        # backlog stays held instead of falling back to the plain order.
+        fresh_query = time.monotonic() >= self._fresh_first_retry_at
         blocked: dict = {}
         bypass: dict = {}
         fresh_first: dict = {}
@@ -243,6 +248,7 @@ class OrderedMerge:
             over_cap = bool(depth and candidate and _awaiting_projection(tx, owner) >= depth)
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
+                head['backlog'] = _backlog_held(candidate)
             if exact is not None:
                 # Recovered release: the wake's row must still be this owner's
                 # pending, ready row. It appends at the tail like any commit;
@@ -266,7 +272,12 @@ class OrderedMerge:
                 # 33 rows past the cap ahead of a later fresh row.
                 released['recovered'] = current.get('recovery_state') == 'recovered'
                 candidate = current
-            elif over_cap and waiter is None and fresh is None:
+            elif (
+                over_cap
+                and waiter is None
+                and fresh is None
+                and not (candidate['state'] == 'result_ready' and _backlog_held(candidate))
+            ):
                 # At the depth cap with rows pending, whatever the head's state:
                 # maintenance re-offers this owner, and the durable marker
                 # (owner key only) survives a restart.
@@ -281,7 +292,7 @@ class OrderedMerge:
                 current = tx.get('jobs', fresh['segment_id'])
                 if not (
                     candidate
-                    and _catch_up(candidate)
+                    and (_catch_up(candidate) or _backlog_held(candidate))
                     and current.get('merge_pending')
                     and current.get('state') == 'result_ready'
                     and current.get('fresh_capture') is True
@@ -382,18 +393,22 @@ class OrderedMerge:
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
-        # A backlog hold needs the fresh probe even when the depth hold is switched off.
-        strict_backlog = bool(held.get('backlog'))
+        # A held backlog row at or behind the head needs the fresh probe even when the depth
+        # hold is switched off: a ready head is refused, and behind an unready one the head
+        # wait would pick a held row and commit nothing.
+        backlog_probe = fresh_query and bool(
+            held.get('backlog') or (head.get('backlog') and (strict_blocked or fenced))
+        )
         if held.get('over_cap'):
             self.held_owners.add(owner_id)
         else:
             self.held_owners.discard(owner_id)
-        if fenced is not None and not (depth and head.get('catch_up')):
+        if fenced is not None and not ((depth and head.get('catch_up')) or backlog_probe):
             # A fenced catch-up head must not hide the owner's ready fresh rows;
             # any other fence keeps its strict-order behaviour.
             raise fenced
         if entry is None and (
-            strict_backlog or (depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
+            backlog_probe or (depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
         ):
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);

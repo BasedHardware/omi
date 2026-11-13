@@ -238,7 +238,7 @@ def test_a_ready_backlog_row_does_not_pass_an_unready_head_while_release_is_off(
     assert merge.held_owners == set() and job(store, 'old')['state'] == 'result_ready'
 
 
-def test_gpu_catch_up_rows_are_not_held_by_the_provider_backlog_switch():
+def test_gpu_catch_up_rows_are_not_held_by_the_provider_backlog_switch(monkeypatch):
     from utils.batch_pipeline.merge import _backlog_held
 
     assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is True
@@ -246,15 +246,77 @@ def test_gpu_catch_up_rows_are_not_held_by_the_provider_backlog_switch():
     assert _backlog_held({'stt_route': {'stt_route': 'provider'}, 'fresh_capture': True}) is False
     assert _backlog_held({'stt_route': {'stt_route': 'parakeet'}, 'fresh_capture': False}) is False
     assert _backlog_held({'fresh_capture': False}) is False
-
-
-def test_switch_off_keeps_the_unstamped_backlog_in_plain_order(world, monkeypatch):
-    store, names = _legacy_backlog(world, monkeypatch, 6)
+    # The hold outlives the membership switch: rows it stamped stay eligible after it goes off.
     monkeypatch.setenv(SWITCH, 'false')
+    assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is True
+    monkeypatch.setenv(RELEASE, 'true')
+    assert _backlog_held({'stt_route': {'stt_route': 'provider'}}) is False
+
+
+def test_membership_switch_off_still_holds_the_backlog(world, monkeypatch):
+    """2026-11-13: an hour after membership was switched off, rows it had stamped were still
+    committing at 1,700 a minute through the head wait. Off must not mean release."""
+    store, names = _legacy_backlog(world, monkeypatch, 6)
     admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
     settle(store, 'new', now=200.0)
+    monkeypatch.setenv(SWITCH, 'false')
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=4)
-    assert [e['segment_id'] for e in drain(merge, 201.0)] == [*names, 'new']
+    assert [e['segment_id'] for e in drain(merge, 10_000.0)] == ['new']
+    assert [job(store, name)['state'] for name in names] == ['result_ready'] * 6
+    # With release on, switch-off is the old plain order.
+    monkeypatch.setenv(RELEASE, 'true')
+    assert [e['segment_id'] for e in drain(merge, 10_001.0)] == names
+
+
+def test_a_fresh_row_passes_an_unready_backlog_head_with_the_depth_hold_off(world, monkeypatch):
+    """Depth 0, an unready provider head, a ready held row and a fresh row behind it: the head
+    wait alone would pick the held row and commit nothing, every drain."""
+    _, store = world
+    monkeypatch.setenv(SWITCH, 'false')
+    admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
+    admit(monkeypatch, store, [item('old', 20)], 'content-old', JA)
+    settle(store, 'old', now=200.0)
+    monkeypatch.delenv(SWITCH)
+    admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
+    settle(store, 'new', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=0)
+    assert [e['segment_id'] for e in drain(merge, 10_000.0)] == ['new']
+    assert job(store, 'old')['state'] == 'result_ready' and job(store, 'head')['merge_pending']
+
+
+def test_an_unavailable_fresh_query_keeps_the_backlog_held_and_asks_once(world, monkeypatch):
+    from google.api_core.exceptions import FailedPrecondition
+
+    store, names = _legacy_backlog(world, monkeypatch, 3)
+    admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
+    settle(store, 'new', now=200.0)
+    calls = []
+
+    def unavailable(key, limit):
+        calls.append(key)
+        raise FailedPrecondition('The query requires an index.')
+
+    monkeypatch.setattr(store, 'fresh_pending', unavailable, raising=False)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=4)
+    assert merge.commit_next(OWNER, 201.0) is None
+    assert merge.commit_next(OWNER, 202.0) is None
+    # One failed query, then a backoff: no recursion and no plain-order backlog commit.
+    assert len(calls) == 1
+    assert [job(store, name)['state'] for name in names] == ['result_ready'] * 3
+
+
+def test_a_held_backlog_head_at_the_depth_cap_writes_no_marker(world, monkeypatch):
+    """A depth marker would have maintenance re-offer an owner whose head can never commit."""
+    store, names = _legacy_backlog(world, monkeypatch, 3)
+    admit(monkeypatch, store, [item('new1', 90), item('new2', 95)], 'content-new', JA)
+    settle(store, 'new1', now=200.0)
+    settle(store, 'new2', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=1)
+    assert [e['segment_id'] for e in drain(merge, 201.0)] == ['new1', 'new2']
+    # Two rows now await projection, past a depth of 1, and the held backlog heads the owner.
+    assert merge.commit_next(OWNER, 202.0) is None
+    assert merge.held_owners == set()
+    assert not store.run(lambda tx: tx.get('merge_holds', owner_key(OWNER))).get('held')
 
 
 def test_unstamped_gpu_rows_keep_the_plain_order(world, monkeypatch):

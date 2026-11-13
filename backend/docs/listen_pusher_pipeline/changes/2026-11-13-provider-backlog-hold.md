@@ -49,3 +49,11 @@ Staged results are deleted at 30 days, so that job has to run before 2026-12-05 
 Set `BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED=true` to restore release paced only by the
 catch-up depth hold (do this only with projection headroom). Set
 `BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED=false` to stop provider merge membership entirely.
+
+## After review (same day)
+
+- The hold does not depend on `BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED`. Rows stamped `ready_at` while that switch was on kept committing through the head wait after it was set to `false` (3,435 day-old provider rows in a 2-minute window at 13:00Z).
+- The fresh probe runs for a held or unready provider backlog head at any depth setting.
+- While the fresh query backs off after `FailedPrecondition`, a held owner is not probed and nothing falls back to the plain order.
+- A held head at the depth cap writes no `merge_holds` marker.
+- Limit: a GPU-route catch-up row behind a held provider row of the same owner waits with it until the metered release.
