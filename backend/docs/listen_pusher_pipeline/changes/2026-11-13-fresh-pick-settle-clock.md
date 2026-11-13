@@ -28,7 +28,9 @@ dependency on that field for provider rows.
   same index. It stops at the first page that is short or contains a ready row, so the common case
   is still one page. A probe of more than one page is not one consistent view, so its pick commits
   only if the owner revision is unchanged since the strict transaction; otherwise nothing commits
-  and the next drain probes again.
+  and the next drain probes again. Admission and provider settle move the revision; a GPU result
+  settle and the redrive of a dead row do not, so for those the paged probe keeps the window the
+  one-page probe already has between probe and transaction.
 - The newest-commits read in projection discovery records a fallback
   (`recent_discovery` to `main_cursor`) when its query fails, instead of failing silently.
 

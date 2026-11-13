@@ -307,9 +307,11 @@ class OrderedMerge:
                     return None
                 if skipped is not None and 'revision' in skipped and head['revision'] != skipped['revision']:
                     # A probe that read more than one page is not one consistent view: a fresh
-                    # row admitted behind its cursor would be missed. Any job change for this
-                    # owner moves the revision; then nothing commits here and the next drain
-                    # probes again.
+                    # row admitted behind its cursor would be missed. Admission and provider
+                    # settle move the owner revision; then nothing commits here and the next
+                    # drain probes again. Writes that do not move it (a GPU result settle, a
+                    # dead row redriven) are not caught: that is the window the one-page probe
+                    # already has between probe and transaction, longer by the extra pages.
                     return None
                 if skipped is not None:
                     # Every skipped earlier fresh row must still be unready;
