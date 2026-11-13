@@ -268,10 +268,12 @@ def normalize_plan_usage(data: Mapping[str, Any]) -> dict[str, Any]:
 
 def _historical_quantity(leaf, quantity):
     attributed = 'quantity_attributed_seconds' if quantity == 'legacy_counter_seconds' else 'quantity_attributed_events'
-    amount = max(0, float(leaf.get(quantity, 0)) - float(leaf.get(attributed, 0)))
-    units = max(0, int(leaf.get('micro_units', 0)) - int(leaf.get('quantity_attributed_micro_units', 0)))
+    amount = max(0, float(leaf.get(quantity) or 0) - float(leaf.get(attributed) or 0))
+    units = max(0, int(leaf.get('micro_units') or 0) - int(leaf.get('quantity_attributed_micro_units') or 0))
+    status_counts = leaf.get('status_counts')
+    missing_count = status_counts.get('missing', 0) if isinstance(status_counts, Mapping) else 0
     missing = max(
-        0, int(leaf.get('status_counts', {}).get('missing', 0)) - int(leaf.get('quantity_attributed_missing_events', 0))
+        0, int(missing_count or 0) - int(leaf.get('quantity_attributed_missing_events') or 0)
     )
     return amount, units, missing
 
@@ -284,11 +286,11 @@ def _ambiguous_quantity(leaf, quantity):
 
 
 def _covered_quantity(leaf, funding, quantity, unpriced, enforcing):
-    total = float(leaf.get(quantity, 0))
+    total = float(leaf.get(quantity) or 0)
     if not enforcing or funding in EXCLUDED_FUNDING:
         return int(total) if quantity == 'events' else total
     historical, units, missing = _historical_quantity(leaf, quantity)
-    covered = max(0, total - historical - float(leaf.get(unpriced, 0)))
+    covered = max(0, total - historical - float(leaf.get(unpriced) or 0))
     # Only historical units may establish historical coverage. A new priced
     # write must not hide an old zero-unit gap in the same aggregated leaf.
     # Mixed historical priced statuses remain ambiguous, never double-billed.
@@ -322,12 +324,19 @@ def summarize_usage(hourly, days, entitlements, enforcing, read_versions=None):
     lane_accepted: dict[str, int] = {}
     versions_seen: dict[str, int] = {}
 
-    def consume(features: Mapping[str, Any]) -> None:
+    def consume(features: Mapping[str, Any] | None) -> None:
+        if not isinstance(features, Mapping):
+            return
         for feature, feature_data in features.items():
             if not isinstance(feature_data, Mapping):
                 continue
-            for funding, leaf in feature_data.get('funding', {}).items():
-                units = int(leaf.get('micro_units', 0))
+            funding_map = feature_data.get('funding')
+            if not isinstance(funding_map, Mapping):
+                continue
+            for funding, leaf in funding_map.items():
+                if not isinstance(leaf, Mapping):
+                    continue
+                units = int(leaf.get('micro_units') or 0)
                 if enforcing and funding not in EXCLUDED_FUNDING and feature != 'web_search_tool':
                     quantity = 'legacy_counter_seconds' if feature == 'transcription' else 'events'
                     ambiguous = _ambiguous_quantity(leaf, quantity)
@@ -342,8 +351,10 @@ def summarize_usage(hourly, days, entitlements, enforcing, read_versions=None):
                 totals[feature] = totals.get(feature, 0) + units
                 funding_totals[funding] = funding_totals.get(funding, 0) + units
                 counts = statuses.setdefault(feature, {})
-                for status, count in leaf.get('status_counts', {}).items():
-                    counts[status] = counts.get(status, 0) + int(count)
+                status_counts = leaf.get('status_counts')
+                if isinstance(status_counts, Mapping):
+                    for status, count in status_counts.items():
+                        counts[status] = counts.get(status, 0) + int(count or 0)
 
     for data in hourly:
         shadows = _shadow_maps(data, versions)
@@ -351,63 +362,84 @@ def summarize_usage(hourly, days, entitlements, enforcing, read_versions=None):
             covered = 0
             for version, shadow in shadows:
                 versions_seen[version] = versions_seen.get(version, 0) + 1
-                features = shadow.get('features', {})
+                features_raw = shadow.get('features')
+                features = features_raw if isinstance(features_raw, Mapping) else {}
                 consume(features)
-                for lane, values in shadow.get('lanes', {}).items():
-                    lane_totals[lane] = lane_totals.get(lane, 0) + int(values.get('micro_units', 0))
-                    lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds', 0))
-                    lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
+                lanes_raw = shadow.get('lanes')
+                for lane, values in (lanes_raw.items() if isinstance(lanes_raw, Mapping) else ()):
+                    if not isinstance(values, Mapping):
+                        continue
+                    lane_totals[lane] = lane_totals.get(lane, 0) + int(values.get('micro_units') or 0)
+                    lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds') or 0)
+                    lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events') or 0)
+                transcription_row = features.get('transcription')
+                transcription_funding = (
+                    transcription_row.get('funding') if isinstance(transcription_row, Mapping) else None
+                )
+                transcription_items = (
+                    transcription_funding.items() if isinstance(transcription_funding, Mapping) else ()
+                )
                 covered += sum(
                     _covered_quantity(leaf, funding, 'legacy_counter_seconds', 'unpriced_counter_seconds', enforcing)
-                    for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
+                    for funding, leaf in transcription_items
+                    if isinstance(leaf, Mapping)
                 )
                 ambiguous_seconds += sum(
                     _ambiguous_quantity(leaf, 'legacy_counter_seconds')
-                    for funding, leaf in features.get('transcription', {}).get('funding', {}).items()
-                    if funding not in EXCLUDED_FUNDING
+                    for funding, leaf in transcription_items
+                    if funding not in EXCLUDED_FUNDING and isinstance(leaf, Mapping)
                 )
-            residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
+            residual = max(float(data.get('transcription_seconds') or 0) - covered, 0)
             missing_seconds += residual
             if residual:
                 missing_hourly += 1
         elif data.get('transcription_seconds') or data.get('speech_seconds'):
             missing_hourly += 1
-            missing_seconds += float(data.get('transcription_seconds', 0))
+            missing_seconds += float(data.get('transcription_seconds') or 0)
     for data, api in days:
         shadows = _shadow_maps(data, versions)
         projected = 0
         for version, shadow in shadows:
             versions_seen[version] = versions_seen.get(version, 0) + 1
-            for hour in shadow.get('hours', {}).values():
-                features = hour.get('features', {})
+            hours_raw = shadow.get('hours')
+            for hour in (hours_raw.values() if isinstance(hours_raw, Mapping) else ()):
+                if not isinstance(hour, Mapping):
+                    continue
+                features_raw = hour.get('features')
+                features = features_raw if isinstance(features_raw, Mapping) else {}
                 consume(features)
                 ambiguous_attempts += sum(
                     _ambiguous_quantity(leaf, 'events')
                     for feature, row in features.items()
-                    if feature != 'web_search_tool'
-                    for funding, leaf in row.get('funding', {}).items()
-                    if funding not in EXCLUDED_FUNDING
+                    if feature != 'web_search_tool' and isinstance(row, Mapping)
+                    for funding, leaf in (
+                        row.get('funding').items() if isinstance(row.get('funding'), Mapping) else ()
+                    )
+                    if funding not in EXCLUDED_FUNDING and isinstance(leaf, Mapping)
                 )
                 projected += sum(
                     _covered_quantity(leaf, funding, 'events', 'unpriced_events', enforcing)
                     for feature, row in features.items()
-                    if feature != 'web_search_tool'
-                    for funding, leaf in row.get('funding', {}).items()
+                    if feature != 'web_search_tool' and isinstance(row, Mapping)
+                    for funding, leaf in (
+                        row.get('funding').items() if isinstance(row.get('funding'), Mapping) else ()
+                    )
+                    if isinstance(leaf, Mapping)
                 )
-        residual = max(int(data.get('attempts', 0)) - projected, 0)
+        residual = max(int(data.get('attempts') or 0) - projected, 0)
         if residual:
             missing_days += 1
             missing_attempts += residual
         # New daily API quantities are priced separately from tool/model attempts.
-        if entitlements['entitlement_version'] == 'ladder_v1':
-            if api.get('micro_units'):
+        if (entitlements or {}).get('entitlement_version') == 'ladder_v1':
+            if isinstance(api, Mapping) and api.get('micro_units'):
                 consume(
                     {
                         'mcp_api': {
                             'funding': {
                                 'omi': {
                                     'micro_units': api['micro_units'],
-                                    'status_counts': {'provisional': api.get('requests', 0)},
+                                    'status_counts': {'provisional': api.get('requests') or 0},
                                 }
                             }
                         }

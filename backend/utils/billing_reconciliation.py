@@ -2,6 +2,7 @@
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 DRIFT_CATEGORIES = (
@@ -29,8 +30,39 @@ class DriftReport:
 
 
 def _price_id(sub: Mapping[str, Any]) -> str | None:
-    items = sub.get('items', {}).get('data', [])
-    return items[0].get('price', {}).get('id') if items else None
+    items_wrapper = sub.get('items') if isinstance(sub, Mapping) else None
+    items = items_wrapper.get('data') if isinstance(items_wrapper, Mapping) else None
+    if not isinstance(items, list) or not items or not isinstance(items[0], Mapping):
+        return None
+    price = items[0].get('price')
+    return price.get('id') if isinstance(price, Mapping) else None
+
+
+def _coerce_epoch_seconds(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, datetime):
+        dt = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return int(dt.timestamp())
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return int(float(raw))
+        except ValueError:
+            pass
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        dt = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+        return int(dt.timestamp())
+    return None
 
 
 def reconcile(
@@ -84,10 +116,12 @@ def reconcile(
             counts['manual_payment_entitlement'] += 1
             continue
 
+        stored_plan = stored.get('plan') or 'basic'
+        stored_period_end = _coerce_epoch_seconds(stored.get('current_period_end'))
         stored_paid = (
-            stored.get('plan', 'basic') not in ('basic', 'free')
-            and bool(stored.get('current_period_end'))
-            and stored['current_period_end'] >= as_of
+            stored_plan not in ('basic', 'free')
+            and bool(stored_period_end)
+            and stored_period_end >= as_of
         )
         if (
             stored_paid
@@ -129,21 +163,24 @@ def reconcile(
             continue
         price_id = _price_id(chosen)
         plan = price_plans.get(price_id) if price_id else None
-        if stored.get('plan', 'basic') != plan:
+        if stored_plan != plan:
             counts['wrong_plan'] += 1
         if not stored.get('current_price_id'):
             # Raw webhooks historically omit this: do not pretend missing is a wrong price.
             counts['missing_price_identity'] += 1
         elif stored['current_price_id'] != price_id:
             counts['wrong_price'] += 1
+        chosen_period_end = _coerce_epoch_seconds(chosen.get('current_period_end'))
+        stored_period_start = _coerce_epoch_seconds(stored.get('current_period_start'))
+        chosen_period_start = _coerce_epoch_seconds(chosen.get('current_period_start'))
         if (
-            stored.get('current_period_end') != chosen.get('current_period_end')
+            stored_period_end != chosen_period_end
             or (
                 stored.get('current_period_start') is not None
-                and stored['current_period_start'] != chosen.get('current_period_start')
+                and stored_period_start != chosen_period_start
             )
-            or not chosen.get('current_period_end')
-            or chosen['current_period_end'] < as_of
+            or not chosen_period_end
+            or chosen_period_end < as_of
         ):
             counts['stale_period'] += 1
     return DriftReport(dict(counts), len(users), len(subscriptions))
