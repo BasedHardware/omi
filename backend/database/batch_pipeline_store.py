@@ -954,6 +954,21 @@ class FirestoreStore:
         # Failure-Class: FC-storm-damper-window-dies-with-its-store-instance
         self._storm_damper = storm_damper if storm_damper is not None else shared_storm_damper(namespace)
 
+    @property
+    def contention_storm_damper(self) -> '_ContentionStormDamper | None':
+        """The namespace's storm damper, or ``None`` while a contention switch is off.
+
+        The projection lane (``ProjectionStore.run``) reads this to consult
+        the same per-label windows every batch-store entry arms: a storm one
+        lane measured on the shared ``jobs``/``results`` rows must space
+        every lane that writes those rows, not only the lane that exhausted.
+        Resolved per call exactly like ``run`` resolves it, so both kill
+        switches stay live and a dormant damper is ``None``, never consulted.
+        """
+        if not (contention_retry_enabled() and contention_storm_damper_enabled()):
+            return None
+        return self._storm_damper
+
     def _require_stage(self):
         if self.namespace.startswith('batch_pipeline_test_'):
             host = os.getenv('FIRESTORE_EMULATOR_HOST', '')

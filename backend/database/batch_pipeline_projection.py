@@ -334,20 +334,81 @@ class ProjectionStore:
         # Same bounded opt-in read-contention retry as legacy sync (#21680).
         import os
         from database._client import run_transactional
-        from database.firestore_transaction_retry import run_with_transaction_contention_retry
+        from database.firestore_transaction_retry import (
+            FirestoreContentionExhausted,
+            run_with_transaction_contention_retry,
+        )
 
         if (
             not (policy and policy.projection_contention)
             and os.getenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'false').strip().lower() != 'true'
         ):
             return run_transactional(self.client, operation)
-        return run_with_transaction_contention_retry(
-            self.client.transaction,
-            # attempts=1: the outer budget owns every attempt, so an expired
-            # chain costs one bounded outer retry instead of inner restarts.
-            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction, attempts=1),
-            operation_name='batch_projection',
-        )
+
+        # The projection chain fights the same hot jobs/results rows as the
+        # batch-store labels, so it joins the storm damper the store lane
+        # arms: the entry consult sleeps out a window a sibling lane (or a
+        # sibling pod) measured for this label, every rung after a measured
+        # collision re-peeks the label's residual (and, from the third
+        # failed rung on, spaces itself by the same capped wave ladder), an
+        # exhaustion stamps the applied window onto ``retry_after`` for a
+        # caller that schedules its own re-offer, and a commit clears the
+        # ladder only when no concurrent arm bumped the generation. The
+        # first attempt is never gated and a dormant damper leaves the bare
+        # equal-jitter ladder byte-for-byte unchanged.
+        #
+        # Failure-Class: FC-projection-contention-chain-collides-inside-armed-storm-window
+        label = 'batch_projection'
+        client = self.client
+        # Only the real FirestoreStore carries the process damper contract;
+        # simulator or harness primaries keep the bare ladder byte-for-byte.
+        damper = self.store.contention_storm_damper if isinstance(self.store, FirestoreStore) else None
+        latest_generation = 0
+
+        def mid_ladder_gate(failed_attempt: int) -> float:
+            nonlocal latest_generation
+            if damper is None:
+                return 0.0
+            residual, gate_generation = damper.peek(label, client=client)
+            latest_generation = gate_generation
+            wait = residual
+            if failed_attempt >= FirestoreStore.WAVE_ENGAGEMENT_ATTEMPT:
+                wait = max(residual, damper.wave_rung_wait(failed_attempt))
+            if wait <= 0.0:
+                return 0.0
+            logger.info(
+                'event=batch_projection_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
+                label,
+                failed_attempt,
+                round(wait * 1000),
+            )
+            return wait
+
+        if damper is not None:
+            waited, generation = damper.consult(label, client=client)
+            if waited > 0:
+                logger.info('event=batch_projection_backoff operation=%s waited_ms=%d', label, round(waited * 1000))
+            latest_generation = generation
+
+        try:
+            result = run_with_transaction_contention_retry(
+                client.transaction,
+                # attempts=1: the outer budget owns every attempt, so an expired
+                # chain costs one bounded outer retry instead of inner restarts.
+                lambda transaction: run_transactional(client, operation, initial_transaction=transaction, attempts=1),
+                operation_name=label,
+                inter_attempt_gate=mid_ladder_gate,
+            )
+        except FirestoreContentionExhausted as error:
+            # This label just burned its whole budget against the hot rows:
+            # space out the next re-strike instead of colliding immediately,
+            # and carry the applied window for the caller's own schedule.
+            if damper is not None:
+                error.retry_after = damper.arm(label, client=client)
+            raise
+        if damper is not None:
+            damper.note_success(label, latest_generation)
+        return result
 
     def hold_for_quarantine(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None) -> bool:
         """Stop re-sweeping a persisted sibling; keep ledger/assignment fences intact."""
