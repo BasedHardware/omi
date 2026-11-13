@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-approval-card-pending.png",
+      "platform": "desktop-macos",
+      "description": "Main chat, named dev bundle: a direct send_message call parked behind the card under the Using send_message row \u2014 headline, question with the exact recipient, To/Message/Service preview, Allow Once (primary), Allow for This Chat (1 h), Deny, the covers note for the session grant, and the 12:59 PM expiry line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-approval-card-denied.png",
+      "platform": "desktop-macos",
+      "description": "After Deny through the bridge (same store method as the button): the card keeps its preview, the buttons are gone, the status reads Denied, not run, and the model's reply above says the iMessage was not sent because the approval was denied",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-approval-card-read-pending.png",
+      "platform": "desktop-macos",
+      "description": "A direct list_message_chats call parked while the denied card above stays in the thread: List Messages conversations card with the limit preview, all three answers, the covers note, and its own expiry line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-desktop-macos-approval-card-allowed-once.png",
+      "platform": "desktop-macos",
+      "description": "After Allow Once: the card reads Allowed once and the tool runs exactly once through the kernel's resolution",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-desktop-macos-approval-card-mail-pending.png",
+      "platform": "desktop-macos",
+      "description": "A direct list_mail_messages call parked: List Mail messages card with the headers-only question, the limit preview, all three answers and its expiry line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-desktop-macos-approval-card-mail-allowed-by-person.png",
+      "platform": "desktop-macos",
+      "description": "The same card after the founder pressed Allow Once in the app itself five seconds after it appeared (the harness was waiting for it to expire): it reads Allowed once, the tool ran once and reported Mail's missing inbox mapping above",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-desktop-macos-approval-card-expired.png",
+      "platform": "desktop-macos",
+      "description": "A list_mail_messages card left alone for its full 180 s on the rebuilt bundle: it reads Expired, not run, the model's reply above says the request expired before approval, and the kernel recorded the dispatch expired with the ledger row failed / approval_expired and never dispatched",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-desktop-macos-approval-card-waiting-no-banner.png",
+      "platform": "desktop-macos",
+      "description": "The same card 30 s after it appeared, past the old 20 s stall threshold: the tool row reads Waiting for your approval with no taking-longer-than-usual banner and no Cancel, and the card keeps its buttons and deadline line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
