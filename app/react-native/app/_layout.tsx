@@ -1,6 +1,8 @@
+import 'react-native-gesture-handler';
 import React, { useEffect, Component, type ReactNode } from 'react';
 import { Stack } from 'expo-router';
 import { Text, View, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import '../global.css';
 import { useAuthStore } from '@/state/authStore';
 
@@ -39,16 +41,18 @@ export default function RootLayout() {
   }, [init]);
 
   return (
-    <ErrorBoundary>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="conversation/[id]" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="dev-local-brain" />
-        <Stack.Screen name="dev-omi-device" />
-        <Stack.Screen name="omi-device" />
-      </Stack>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="conversation/[id]" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="dev-local-brain" />
+          <Stack.Screen name="dev-omi-device" />
+          <Stack.Screen name="omi-device" />
+        </Stack>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
