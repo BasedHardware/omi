@@ -1589,6 +1589,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     before_probe=lambda: not cap_enforced()
                     or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
                     cohort_key=uid,
+                    declared_language=user_language,
                 ),
             )
             if (
