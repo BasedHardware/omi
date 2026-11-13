@@ -94,6 +94,9 @@ abstract class LocalWalSync implements IWalSync {
   /// from this phone. Returns the number of records removed.
   Future<int> purgeAccountWals(String uid);
 
+  /// Re-admits parked/retired WALs belonging to the currently signed-in account.
+  Future<void> rehydrateForCurrentUser() async {}
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});

@@ -436,7 +436,7 @@ class Projector:
         self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
-        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
+        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES, recent=True)
         self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
