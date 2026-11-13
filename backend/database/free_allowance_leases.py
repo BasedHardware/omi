@@ -297,6 +297,59 @@ def prepare_settlement(
     return queue
 
 
+def _batch_aggregate(
+    transaction: Any,
+    user: Any,
+    content_id: str,
+    expected_start: datetime | None,
+    now: datetime,
+    refused: bool,
+    client: Any,
+):
+    """One monotonic receipt per committed content-billing generation.
+
+    Unit receipts carry zero; an absent/previously settled chunk cannot own or
+    lose the aggregate. Read the writer's actual integer billing counter, never
+    a request estimate or a caller's stale partial delta.
+    """
+    from database.sync_ledger import sync_content_ledger_ref
+
+    if not content_id or len(content_id) > 512:
+        raise ValueError('batch billing identity required')
+    billing = sync_content_ledger_ref(client, user.id, content_id).get(transaction=transaction).to_dict()
+    if not billing or billing.get('usage_committed_at') is None:
+        raise ValueError('confirmed batch billing required')
+    total = _number(billing.get('allowance_billed_seconds'))
+    started = billing.get('allowance_billing_started_at')
+    if not isinstance(started, datetime) or started.tzinfo is None:
+        raise ValueError('verified batch billing generation required')
+    if expected_start != started:
+        raise ValueError('batch billing generation changed')
+    key = hashlib.sha256(f'{content_id}:{started.timestamp():.6f}'.encode()).hexdigest()
+    ref = _receipt(user, 'batch', key)
+    previous = ref.get(transaction=transaction).to_dict()
+    prior = 0.0
+    prior_decision = 'unobserved'
+    if previous is not None:
+        if previous.get('kind') != 'batch_aggregate' or previous.get('source') != 'batch':
+            raise ValueError('invalid batch aggregate receipt')
+        prior = _number(previous.get('billed_seconds'))
+        prior_decision = previous.get('decision')
+        if prior_decision not in {'unobserved', 'would_allow', 'would_refuse'}:
+            raise ValueError('invalid batch aggregate decision')
+    verdict = 'would_refuse' if refused else prior_decision
+    if previous is not None and total <= prior and verdict == prior_decision:
+        return None
+    return ref, {
+        'kind': 'batch_aggregate',
+        'source': 'batch',
+        'billed_seconds': max(total, prior),
+        'decision': verdict,
+        'settled_at': now,
+        'expires_at': now + timedelta(days=90),
+    }
+
+
 def settle_billed(
     leases: Sequence[Reference],
     seconds: float,
@@ -306,6 +359,8 @@ def settle_billed(
     registered_only: bool = False,
     source: str = 'unknown',
     decision: str = 'unobserved',
+    batch_content_id: str | None = None,
+    batch_billing_started_at: datetime | None = None,
     firestore_client: Any = None,
 ) -> bool:
     """Release ONLY after the trusted usage writer confirms its billing commit.
@@ -317,6 +372,8 @@ def settle_billed(
     """
     if not leases:
         return False
+    if batch_content_id is not None and (source != 'batch' or not registered_only or daily_ptt or seconds != 0):
+        raise ValueError('batch aggregates require zero-valued registered unit settlement')
     now = now or datetime.now(timezone.utc)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user = client.collection('users').document(leases[0].uid)
@@ -339,6 +396,11 @@ def settle_billed(
                 months = _operation_months(data) or [lease.month]
                 operations[lease.key] = months
                 expanded.extend(Reference(user.id, month, lease.key) for month in months)
+            aggregate = (
+                _batch_aggregate(transaction, user, batch_content_id, batch_billing_started_at, now, refused, client)
+                if batch_content_id is not None and operations
+                else None
+            )
             queue = prepare_settlement(
                 transaction,
                 user,
@@ -356,7 +418,9 @@ def settle_billed(
                     _operation(user, key),
                     {'months': months, 'status': 'settled', 'expires_at': now + timedelta(days=90)},
                 )
-            return changed
+            if aggregate is not None:
+                transaction.set(*aggregate)
+            return changed or aggregate is not None
 
     return commit(client.transaction(max_attempts=3))
 

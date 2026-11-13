@@ -15,6 +15,7 @@ from database import free_allowance_leases as ledger, monthly_usage_totals as to
 from database.legal_holds import DestructiveOperationInProgress
 from utils import analytics
 from utils.stt.allowance_session import Operation
+from utils.observability.stt_cap_dispatch import observe_billed_batch
 
 NOW = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
 pytestmark = pytest.mark.integration
@@ -205,3 +206,77 @@ def test_genuine_zero_requires_a_successful_source_query(lane):
     totals.month_ref(user, NOW).delete()
     totals.establish_verified_month(uid, NOW, firestore_client=client)
     assert totals.read_verified_transcription_seconds(uid, NOW, firestore_client=client) == 0
+
+
+def test_batch_writer_and_late_registered_chunk_preserve_exact_partial_billing(lane, monkeypatch):
+    from types import SimpleNamespace
+    from database.batch_pipeline_projection import ProjectionStore
+    from database.sync_ledger import sync_content_ledger_ref
+    from database.hourly_usage_updates import prepare_hourly_usage_updates
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client, uid, user = lane
+    content = 'batch-content'
+    source = sync_content_ledger_ref(client, uid, content)
+    source.set({'status': 'processing'})
+    reserve(lane, 'batch-unit:64')
+    projection = ProjectionStore(SimpleNamespace(client=client))
+
+    def write(seconds, charged, now):
+        updates = prepare_hourly_usage_updates(NOW, {'transcription_seconds': int(seconds) - int(charged)}, 'free')
+
+        @firestore.transactional
+        def commit(tx):
+            with totals.publication_fence(user, tx, firestore_client=client):
+                prior = source.get(transaction=tx).to_dict()
+                projection._commit_usage(
+                    tx,
+                    source,
+                    prior,
+                    SimpleNamespace(owner_id=uid),
+                    {'charged': charged, 'updates': updates, 'hour': NOW.strftime('%Y-%m-%d-%H')},
+                    seconds,
+                    now,
+                )
+                tx.update(source, {'status': 'partial'})
+
+        commit(client.transaction())
+
+    write(3.8, 0, NOW.timestamp())
+    # The entire partial observer is missed; the next completion must repair it.
+    write(7.9, 3.8, NOW.timestamp() + 10)
+    assert totals.month_ref(user, NOW).get().to_dict()['totals']['transcription_seconds'] == 97
+    assert source.get().to_dict()['allowance_billed_seconds'] == 7
+    ids = [str(i) for i in range(65)]
+    observe_billed_batch(client, uid, content, NOW, ids, NOW.timestamp() + 10)
+    observe_billed_batch(client, uid, content, NOW, ids, NOW.timestamp() + 20)
+    receipts = [row.to_dict() for row in user.collection('free_allowance_receipts').stream()]
+    assert sum(row['billed_seconds'] for row in receipts) == 7
+    assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 97
+
+
+def test_concurrent_batch_replays_share_one_cumulative_receipt(lane, monkeypatch):
+    from database.sync_ledger import sync_content_ledger_ref
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client, uid, user = lane
+    sync_content_ledger_ref(client, uid, 'batch-content').set(
+        {
+            'usage_committed_at': NOW,
+            'allowance_billing_started_at': NOW,
+            'allowance_billed_seconds': 7,
+        }
+    )
+    reserve(lane, 'batch-unit:0', 2)
+    reserve(lane, 'batch-unit:64', 2)
+    ids = [str(i) for i in range(65)]
+
+    def replay(_):
+        observe_billed_batch(client, uid, 'batch-content', NOW, ids, NOW.timestamp())
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        list(workers.map(replay, range(2)))
+    replay(None)  # Repair any conservative bounded-contention failure.
+    receipts = [row.to_dict() for row in user.collection('free_allowance_receipts').stream()]
+    assert sum(row['billed_seconds'] for row in receipts) == 7
+    assert not user.collection('free_allowance_months').document('2026-11').get().to_dict()['holds']

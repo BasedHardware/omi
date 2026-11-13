@@ -99,7 +99,7 @@ def record_allowance_decision(path: DispatchPath, allowance) -> bool:
     return record_decision(path, allowance.managed, allowance_decision_reason(allowance))
 
 
-def observe_billed_batch(client, uid, segment_ids, seconds, now):
+def observe_billed_batch(client, uid, content_id, billing_generation, segment_ids, now):
     """Bound shadow settlement after durable projection; serving never waits on its DB pool."""
     from datetime import datetime, timezone
     from database import free_allowance_leases
@@ -111,10 +111,12 @@ def observe_billed_batch(client, uid, segment_ids, seconds, now):
         for index in range(0, len(references), 32):
             free_allowance_leases.settle_billed(
                 references[index : index + 32],
-                seconds if index == 0 else 0,
+                0,
                 now=stamp,
                 registered_only=True,
                 source='batch',
+                batch_content_id=content_id,
+                batch_billing_started_at=billing_generation,
                 firestore_client=client,
             )
 

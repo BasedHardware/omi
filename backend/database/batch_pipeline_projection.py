@@ -104,10 +104,14 @@ class ProjectionStore:
 
             if not isinstance(accounting.get('updates'), dict) or 'seconds' not in accounting:
                 return
-            seconds = (
-                max(0, int(accounting['seconds']) - int(accounting.get('charged', 0))) if accounting['updates'] else 0
+            observe_billed_batch(
+                self.client,
+                binding.owner_id,
+                binding.content_id,
+                accounting.get('billing_generation'),
+                segment_ids,
+                now,
             )
-            observe_billed_batch(self.client, binding.owner_id, segment_ids, seconds, now)
         except Exception:
             logger.warning('event=free_allowance_lease decision=settlement_unavailable')
 
@@ -584,6 +588,11 @@ class ProjectionStore:
                 'charged': charged,
                 'steps': steps,
                 'step_times': step_times,
+                'billing_generation': (
+                    ledger.get('allowance_billing_started_at')
+                    if ledger.get('usage_committed_at') is not None
+                    else datetime.fromtimestamp(now, timezone.utc)
+                ),
             }
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
@@ -609,6 +618,11 @@ class ProjectionStore:
             'charged': charged,
             'steps': steps,
             'step_times': step_times,
+            'billing_generation': (
+                ledger.get('allowance_billing_started_at')
+                if ledger.get('usage_committed_at') is not None
+                else datetime.fromtimestamp(now, timezone.utc)
+            ),
         }
 
     def complete(
@@ -829,6 +843,12 @@ class ProjectionStore:
         # each recent step's once-key: a write lost after any earlier commit
         # still lands on a later attempt while that key is live.
         steps, times = extend_chain(*(charge_chain(ledger) if partial else ([0.0], [])), seconds, now)
+        # Observer provenance only: the existing hourly write above remains the
+        # billing authority. Unknown pre-rollout partials remain unobserved.
+        previous_billed = ledger.get('allowance_billed_seconds') if partial else 0
+        billed = None
+        if type(previous_billed) is int and 0 <= previous_billed <= int(charged):
+            billed = previous_billed + (int(seconds) - int(charged) if accounting['updates'] else 0)
         transaction.update(
             ledger_ref,
             {
@@ -836,6 +856,10 @@ class ProjectionStore:
                 'usage_committed_seconds': seconds,
                 'usage_steps': steps,
                 'usage_step_times': times,
+                'allowance_billed_seconds': billed,
+                'allowance_billing_started_at': (
+                    ledger.get('allowance_billing_started_at') if partial else datetime.fromtimestamp(now, timezone.utc)
+                ),
             },
         )
 
