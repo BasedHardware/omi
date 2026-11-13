@@ -213,6 +213,8 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils/
 
 ## Testing
 
+Durable batch-state writes: update `deploy/state_readers.yaml` with every reader's minimum version and the switch-owning service; verify `pytest tests/unit/test_state_readers_registry.py` (GPU readers deploy independently).
+
 ```bash
 bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)

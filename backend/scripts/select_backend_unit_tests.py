@@ -311,6 +311,17 @@ AREA_TESTS = (
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
     (
+        (
+            'backend/utils/batch_pipeline/',
+            'backend/deploy/state_readers.yaml',
+            'backend/deploy/runtime_env.yaml',
+            'backend/scripts/state_readers_registry.py',
+            'backend/scripts/cross_service_contract.py',
+        ),
+        ('backend/database/batch_pipeline*.py',),
+        ('tests/unit/test_state_readers_registry.py',),
+    ),
+    (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
         # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
         # key: routers/batch_pipeline.py selected no route test. utils/enrichment/ stays unmapped on

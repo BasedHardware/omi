@@ -276,6 +276,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: batch-state-readers
+    command: ["python3", "backend/scripts/state_readers_registry.py"]
+    triggers: ["backend/utils/batch_pipeline/**", "backend/database/batch_pipeline*.py", "backend/deploy/state_readers.yaml", "backend/deploy/runtime_env.yaml", "backend/scripts/state_readers_registry.py", "backend/scripts/cross_service_contract.py", "backend/tests/unit/test_state_readers_registry.py"]
+    lanes: ["local", "ci"]
+    reason: "SCA-1894: a ready_at writer released backlog on an older GPU reader; admission's switch did not stop that worker"
   - id: file-tools-sanitization-tests
     command: ["python3", "backend/tests/unit/test_file_tools_sanitization.py"]
     triggers: ["backend/utils/retrieval/tools/file_tools.py", "backend/tests/unit/test_file_tools_sanitization.py", ".github/checks-manifest.yaml"]
