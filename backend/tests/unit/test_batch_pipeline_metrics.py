@@ -840,5 +840,16 @@ def test_queue_refresh_feeds_the_vendor_held_and_provider_stage_gauges(monkeypat
     assert registry.get_sample_value('omi_batch_pipeline_provider_stage_units', labels) is None
     # A failed read keeps the last held values and publishes no synthetic zero.
     held.side_effect = TimeoutError('synthetic')
+    stage.return_value = {'provider_pending': (301, 86700.0), 'provider_running': (0, 0.0)}
     sampler.refresh(store, 100.0 + module.VENDOR_HELD_REFRESH_SECONDS + 1)
     assert REGISTRY.get_sample_value('omi_batch_pipeline_vendor_held_units', {'reason': 'funds_refusal'}) == 7
+    # ...and does not stop the provider-stage sample.
+    clock[0] = 100.0 + module.VENDOR_HELD_REFRESH_SECONDS + 1
+    assert registry.get_sample_value('omi_batch_pipeline_provider_stage_units', labels) == 301
+
+
+def test_timeliness_cohort_includes_provider_running_but_not_provider_pending():
+    from database.batch_pipeline_store import TIMELINESS_ACTIVE_STATES, TIMELINESS_UNCOMMITTED_STATES
+
+    assert 'provider_running' in TIMELINESS_ACTIVE_STATES
+    assert 'provider_pending' not in TIMELINESS_UNCOMMITTED_STATES

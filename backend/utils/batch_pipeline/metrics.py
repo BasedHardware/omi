@@ -92,7 +92,7 @@ def record_privacy_stop(stop: str) -> None:
     ).inc()
 
 
-# Six equality counts and one indexed head read per tick (~7 reads); vendor_held drains in hours, not seconds.
+# Per tick: eight count aggregations (one read per 1,000 index entries, minimum one each) and three head reads.
 VENDOR_HELD_REFRESH_SECONDS = 300.0
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
@@ -521,13 +521,17 @@ class QueueMetrics:
         from database.lifecycle_metrics_queries import vendor_held
 
         try:
-            counts, age, _truncated = vendor_held(store.client, store.namespace, now)
+            counts, age, truncated = vendor_held(store.client, store.namespace, now)
         except Exception as error:
             logging.getLogger(__name__).warning(
                 'event=batch_vendor_held_sample outcome=unavailable exception_type=%s', type(error).__name__
             )
-            return
-        vendor_metrics.held_units(counts, age)
+        else:
+            vendor_metrics.held_units(counts, age)
+            if truncated:
+                # Counts at the cap are lower bounds; the frozen held collectors carry no truncation label.
+                logging.getLogger(__name__).warning('event=batch_vendor_held_sample outcome=truncated')
+        # Independent of the held sample: provider_pending has no other stock signal.
         from database.lifecycle_metrics_queries import provider_stage
 
         try:
