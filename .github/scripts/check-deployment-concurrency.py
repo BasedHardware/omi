@@ -424,11 +424,17 @@ def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
     ):
         errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
     scope_argument = "${{ steps.service-scope.outputs.service_args }}"
-    if scope_argument in snapshot_step:
+    scope_index = step_index("id: service-scope")
+    scoped_contract = (
+        scope_index >= 0 or scope_argument in contract or
+        "backend_deploy_services.py" in contract or "BACKEND_DEPLOY_SERVICES" in contract
+    )
+    if scoped_contract:
+        if scope_argument not in snapshot_step:
+            errors.append(f"{name}: snapshot must share the validated service scope")
         # The same canonical resolver writes both the argv and promotion's env
         # list. Blank/auto-dev scope remains all four; its grammar/default and
         # subset behavior are exercised by test_backend_deploy_services.py.
-        scope_index = step_index("id: service-scope")
         scope_step = "\n".join(steps[scope_index]) if scope_index >= 0 else ""
         promotion_step = "\n".join(steps[promotion_index]) if promotion_index >= 0 else ""
         required_scope = (
@@ -1351,6 +1357,19 @@ jobs:
     ):
         if not validate_phase_aware_backend_promotion("fixture.yml", scoped_promotion.replace(before, after)):
             raise PolicyError(f"unsafe scoped snapshot mutation was accepted: {before!r}")
+    full_snapshot_in_scoped_deploy = scoped_promotion.replace(
+        "            ${{ steps.service-scope.outputs.service_args }} " + "\\" + "\n",
+        service_lines,
+    )
+    if not validate_phase_aware_backend_promotion("fixture.yml", full_snapshot_in_scoped_deploy):
+        raise PolicyError("a full-stack snapshot satisfied the selected-service promotion contract")
+    empty_snapshot_in_scoped_deploy = scoped_promotion.replace(
+        "            ${{ steps.service-scope.outputs.service_args }} " + "\\" + "\n",
+        "",
+    )
+    if not validate_phase_aware_backend_promotion("fixture.yml", empty_snapshot_in_scoped_deploy):
+        raise PolicyError("an unscoped snapshot satisfied the selected-service promotion contract")
+
     without_one_service = phase_aware_promotion.replace(
         "--service backend-integration", "--ignored-service backend-integration"
     )
