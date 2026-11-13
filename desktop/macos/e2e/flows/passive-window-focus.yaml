@@ -1,4 +1,4 @@
-version: 1
+version: 2
 name: passive-window-focus
 tier: 1
 description: Synthetic presentation probes in a disposable non-production bundle; live foreground-app focus is verified separately in normal presentation mode.
