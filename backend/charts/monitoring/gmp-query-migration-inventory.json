@@ -489,6 +489,32 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_billed_reads_by_caller_total"
+      ],
+      "owner_title": "Firestore - caller label set overflowed into other",
+      "owner_uid": "omi-firestore-caller-overflow",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
+      "file": "alerts/firestore.json",
+      "issues": [],
+      "metrics": [
+        "omi_firestore_caller_label_overflow_total"
+      ],
+      "owner_title": "Firestore - caller label set overflowed into other",
+      "owner_uid": "omi-firestore-caller-overflow",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
       "file": "alerts/firestore.json",
       "issues": [],
@@ -4142,7 +4168,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 278
+    "query_consumers": 280
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -27,12 +27,20 @@ Two shapes are gated, both diff-scoped against the base revision:
   pattern and the family budget. A collection path whose *collection* segments
   are static (``f'users/{uid}/jobs'``) resolves normally; only a dynamic
   collection segment is unresolved.
+* A **computed family that grows** -- a computed site that already exists at the
+  base revision keeps its ``site::expression`` key when the literal namespace
+  tuple it reads gains a member (``NAMESPACES = ('prod', 'dev')`` becoming
+  ``('prod', 'dev', 'preview')``), so the key-level check above cannot see the
+  new collection. When the guard can enumerate the family from a literal
+  sequence, a member that first appears in this change needs its own reviewed
+  ``budgets`` entry or an ``exempt`` entry: the family budget was reviewed
+  against the old membership, and a new namespace is a new read surface.
 
 This is a disclosure ratchet, not semantic analysis. A name assembled from config
-or a runtime registry cannot be seen at all, and a new member of an already
-declared family is covered by that family's budget rather than by a new entry.
-``exempt`` is the reviewed escape hatch for a name or site the heuristic
-misclassifies, and ``done`` is never inferred from the shape of the code.
+or a runtime registry cannot be seen at all, and only families the guard can
+enumerate from literal sequences are compared between revisions. ``exempt`` is the
+reviewed escape hatch for a name or site the heuristic misclassifies, and ``done``
+is never inferred from the shape of the code.
 
 Kill switch: ``FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0`` disables the guard
 for an approved rollback and requires ``FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON``
@@ -43,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import itertools
 import json
 import os
 import re
@@ -204,12 +213,25 @@ PYTHON_CONSTANT = re.compile(
     r"(?:'([^'\n]*)'|\"([^\"\n]*)\")[ \t]*(?:#.*)?$",
     re.MULTILINE,
 )
+# A module-level tuple or list of plain string literals -- the namespace registry a
+# computed collection name iterates over (``NAMESPACES = ('prod', 'dev')``). The
+# membership of this sequence is the collection family a computed site can reach.
+PYTHON_SEQUENCE = re.compile(
+    r"^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?::[^=\n]+)?[ \t]*=[ \t]*" r"(?:\(([^\)]*)\)|\[([^\]]*)\])[ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
+# A family is enumerated, never sampled: past this many combinations the guard stops
+# claiming it knows the membership and leaves the site unexpanded, exactly as before.
+MAX_FAMILY_MEMBERS = 64
 
 
 @dataclass
 class Inventory:
     collections: dict[str, list[str]] = field(default_factory=dict)
     dynamic: dict[str, list[str]] = field(default_factory=dict)
+    # Concrete collection names a computed site can produce, when the guard can
+    # enumerate them from a literal namespace sequence. Keyed like ``dynamic``.
+    families: dict[str, set[str]] = field(default_factory=dict)
 
 
 def work_state_token(name: str) -> str | None:
@@ -224,6 +246,13 @@ def work_state_token(name: str) -> str | None:
 def _excluded(relative: str) -> bool:
     parts = Path(relative).parts
     if 'node_modules' in parts or '.next' in parts:
+        return True
+    # Installed packages are not product code. Every worktree owns backend/.venv
+    # and backend/.openapi-venv, so scanning them reports Firestore's own library
+    # as "computed collection name" sites and rejects every backend push. Only
+    # those two exact roots are skipped: a product directory that happens to be
+    # named venv or site-packages is still scanned.
+    if parts[:2] in (('backend', '.venv'), ('backend', '.openapi-venv')):
         return True
     if '/tests/' in relative or '/__tests__/' in relative or '/.test/' in relative:
         return True
@@ -324,6 +353,127 @@ def _python_call_argument(node: ast.Call) -> ast.expr | None:
     return None
 
 
+def _sequence_values(body: str) -> list[str] | None:
+    """Plain string members of a tuple/list literal body, or None if any member is not literal."""
+    values: list[str] = []
+    for piece in body.split(','):
+        piece = piece.strip()
+        if not piece:
+            continue
+        quote = piece[0]
+        if len(piece) < 2 or quote not in ('"', "'") or piece[-1] != quote:
+            return None
+        values.append(piece[1:-1])
+    return values or None
+
+
+def _sequence_reference(node: ast.expr, sequences: dict[str, set[str]]) -> list[str] | None:
+    """Literal values behind ``NAMESPACES``, ``NAMESPACES[index]`` or an inline tuple."""
+    if isinstance(node, ast.Name):
+        values = sequences.get(node.id)
+        return sorted(values) if values else None
+    if isinstance(node, ast.Subscript):
+        return _sequence_reference(node.value, sequences)
+    if isinstance(node, (ast.Tuple, ast.List)):
+        values: list[str] = []
+        for element in node.elts:
+            if not (isinstance(element, ast.Constant) and isinstance(element.value, str)):
+                return None
+            values.append(element.value)
+        return values or None
+    return None
+
+
+def _python_bindings(
+    parsed: list[tuple[str, ast.Module]], sequences: dict[str, set[str]]
+) -> dict[str, dict[str, set[str]]]:
+    """Names whose value is drawn from a literal sequence, by ``for`` loop or assignment.
+
+    ``for namespace in NAMESPACES`` and ``namespace = NAMESPACES[index]`` both make
+    ``namespace`` one of the sequence's members. Bindings are kept per file: a name
+    that is a parameter in one module must not inherit a same-named loop variable from
+    another, or an unrelated tuple edit would flag every site that shares the name.
+    """
+    bindings: dict[str, dict[str, set[str]]] = {}
+    for path, tree in parsed:
+        local = bindings.setdefault(path, {})
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and isinstance(node.target, ast.Name):
+                values = _sequence_reference(node.iter, sequences)
+                if values:
+                    local.setdefault(node.target.id, set()).update(values)
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if node.value is None:
+                    continue
+                values = _sequence_reference(node.value, sequences)
+                if not values:
+                    continue
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        local.setdefault(target.id, set()).update(values)
+    return bindings
+
+
+def _python_parts(node: ast.expr, bindings: dict[str, set[str]]) -> list[list[str]] | None:
+    """Split a computed name into its literal and variable parts, each with its options."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [[node.value]]
+    if isinstance(node, ast.Name):
+        options = bindings.get(node.id)
+        return [sorted(options)] if options else None
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _python_parts(node.left, bindings)
+        right = _python_parts(node.right, bindings)
+        if left is None or right is None:
+            return None
+        return left + right
+    if isinstance(node, ast.JoinedStr):
+        parts: list[list[str]] = []
+        for value in node.values:
+            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                parts.append([value.value])
+                continue
+            if (
+                isinstance(value, ast.FormattedValue)
+                and value.conversion == -1
+                and value.format_spec is None
+                and isinstance(value.value, ast.Name)
+            ):
+                options = bindings.get(value.value.id)
+                if not options:
+                    return None
+                parts.append(sorted(options))
+                continue
+            return None
+        return parts or None
+    return None
+
+
+def _python_family(argument: ast.expr, bindings: dict[str, set[str]]) -> set[str] | None:
+    """Every collection name a computed argument can produce, or None when unbounded.
+
+    A grandfathered computed site keeps its ``site::expression`` key when the namespace
+    tuple it reads grows, so the key-level check in ``findings`` never sees the new
+    collection. Enumerating the family makes that growth comparable between revisions.
+    """
+    parts = _python_parts(argument, bindings)
+    if parts is None:
+        return None
+    combinations = 1
+    for part in parts:
+        combinations *= len(part)
+    if combinations > MAX_FAMILY_MEMBERS:
+        return None
+    names: set[str] = set()
+    for combination in itertools.product(*parts):
+        resolved = _path_names(''.join(combination))
+        if resolved is None:
+            return None
+        names.update(resolved)
+    return names or None
+
+
 def _scan_python(sources: list[tuple[str, str]], inventory: Inventory) -> None:
     constants: dict[str, set[str]] = {}
     for _path, source in sources:
@@ -331,9 +481,18 @@ def _scan_python(sources: list[tuple[str, str]], inventory: Inventory) -> None:
             value = match.group(2) if match.group(2) is not None else match.group(3)
             constants.setdefault(match.group(1), set()).update(_path_names(value) or [])
 
+    sequences: dict[str, set[str]] = {}
+    for _path, source in sources:
+        for match in PYTHON_SEQUENCE.finditer(source):
+            body = match.group(2) if match.group(2) is not None else match.group(3)
+            values = _sequence_values(body)
+            if values is not None:
+                sequences.setdefault(match.group(1), set()).update(values)
+
     # Only files that name a Firestore collection call can contain a call site, so
     # parsing stays proportional to the Firestore surface instead of the backend.
     parsed = _parse([(path, source) for path, source in sources if 'collection' in source.lower()])
+    bindings = _python_bindings(parsed, sequences)
     call_sites: list[tuple[str, int, ast.expr | None, str]] = []
     for path, tree in parsed:
         for node in ast.walk(tree):
@@ -349,7 +508,11 @@ def _scan_python(sources: list[tuple[str, str]], inventory: Inventory) -> None:
         resolved = None if argument is None else _python_resolve(argument, constants)
         if resolved is None:
             expression = call_text if argument is None else ast.unparse(argument)
-            inventory.dynamic.setdefault(f'{path}::{expression}', []).append(reference)
+            key = f'{path}::{expression}'
+            inventory.dynamic.setdefault(key, []).append(reference)
+            family = None if argument is None else _python_family(argument, bindings.get(path, {}))
+            if family:
+                inventory.families.setdefault(key, set()).update(family)
             continue
         for name in resolved:
             inventory.collections.setdefault(name, []).append(reference)
@@ -752,6 +915,26 @@ def findings(
             f'computed collection name at {references}: {expression} '
             f'(site {site}); declare a dynamic entry with the collection pattern and family budget'
         )
+    # A grandfathered computed site keeps its key when the namespace tuple it reads
+    # grows, so the key-level check above cannot see the new collection. Compare the
+    # enumerable family instead: a member that first appears in this change needs its
+    # own reviewed budget (or exemption), because the family budget was reviewed
+    # against the old membership.
+    for key in sorted(set(head.dynamic) & set(base.dynamic)):
+        if key in exempt:
+            continue
+        base_family = base.families.get(key)
+        if not base_family:
+            continue
+        site, _, expression = key.partition('::')
+        references = ', '.join(head.dynamic[key][:3])
+        for name in sorted(head.families.get(key, set()) - base_family):
+            if name in budgets or name in exempt:
+                continue
+            errors.append(
+                f'computed collection family at {references}: {expression} (site {site}) '
+                f'gained {name}; budget the new collection or exempt it'
+            )
     return errors
 
 
@@ -791,7 +974,11 @@ def main() -> int:
     if args.print_inventory:
         print(
             json.dumps(
-                {'collections': head.collections, 'dynamic': head.dynamic},
+                {
+                    'collections': head.collections,
+                    'dynamic': head.dynamic,
+                    'families': {key: sorted(values) for key, values in sorted(head.families.items())},
+                },
                 indent=2,
                 sort_keys=True,
             )
@@ -823,6 +1010,7 @@ def main() -> int:
         'reads_per_unit_budget, reads_per_day_budget, basis, source and reviewed date.'
     )
     print('A computed name needs a dynamic entry (site, expression, collection_pattern, same budget fields).')
+    print('A computed family that gained a member needs a budget entry for that collection, or an exemption.')
     print('If the name or site is not work state, add it to the registry\'s exempt list with a reason.')
     return 1
 

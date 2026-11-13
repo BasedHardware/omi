@@ -231,9 +231,9 @@ class FirestoreTransaction:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results'}:
+            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
-            job = value if table == 'jobs' else self.get('jobs', key)
+            job = self.get('jobs', key) if table == 'results' else value
             identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
             if identity in guarded:
                 continue

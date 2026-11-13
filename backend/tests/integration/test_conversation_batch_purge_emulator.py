@@ -128,7 +128,133 @@ def test_six_parallel_same_account_cascade_deletes_all_succeed(monkeypatch, plan
     for thread in threads:
         thread.join(timeout=120)
     assert statuses == [204] * 6, errors
+    # Hidden at once: erased in the request, or accepted behind a peer (row marked deleted).
+    for cid in ids:
+        row = plane.client.document(f'users/{plane.uid}/conversations/{cid}').get()
+        assert not row.exists or row.to_dict().get('deleted') is True
+    _drain_erasures(monkeypatch, route)
     assert not any(_exists(plane, 'users', plane.uid, 'conversations', cid) for cid in ids)
+
+
+def _drain_erasures(monkeypatch, route, passes=30):
+    """Reconciler passes plus the consumer running each dispatched erasure, until none is owed."""
+    from database import conversation_batch_purge_jobs as purge_jobs
+    from utils.conversations import deletion_batch_purge
+
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
+    outcomes = []
+    for _ in range(passes):
+        sent = []
+        monkeypatch.setattr(
+            deletion_batch_purge,
+            'enqueue_conversation_batch_purge',
+            lambda job, gen, erasure=False: sent.append((job, gen)) if erasure else None,
+        )
+        future = purge_jobs._now() + timedelta(hours=2)  # every spread/busy timer has elapsed
+        monkeypatch.setattr(purge_jobs, '_now', lambda: future)
+        deletion_batch_purge.reconcile_conversation_batch_purges()
+        if not sent:
+            break
+        for job, gen in sent:
+            outcomes.append(purge_jobs.run_erasure_job(job, gen, erase=route.routes.erase_accepted_conversation))
+    return outcomes
+
+
+def test_53_same_second_deletes_are_accepted_and_erased_in_order_on_real_transactions(monkeypatch, plane, route):
+    """Prod 2026-11-12 shape: one phone sent 53 cascade deletes in the same second."""
+    from database import conversation_batch_purge_jobs as purge_jobs
+
+    original = route.routes.delete_conversation_and_frame_evidence
+    inside, peak = [0], [0]
+    lock = threading.Lock()
+
+    def slower(*args, **kwargs):
+        with lock:
+            inside[0] += 1
+            peak[0] = max(peak[0], inside[0])
+        try:
+            time.sleep(0.3)  # in-gate work so the burst genuinely contends
+            return original(*args, **kwargs)
+        finally:
+            with lock:
+                inside[0] -= 1
+
+    monkeypatch.setattr(route.routes, 'delete_conversation_and_frame_evidence', slower)
+    ids = [f'conv-{index}-{uuid4().hex[:6]}' for index in range(53)]
+    for cid in ids:
+        _conversation(plane, cid)
+    keep = f'keep-{uuid4().hex[:6]}'
+    _conversation(plane, keep)
+    statuses, elapsed, errors = [], [], []
+    start = threading.Barrier(len(ids))
+
+    def delete(cid):
+        try:
+            with TestClient(route.app) as client:
+                start.wait()
+                began = time.monotonic()
+                statuses.append(client.delete(f'/v1/conversations/{cid}?cascade=true').status_code)
+                elapsed.append(time.monotonic() - began)
+        except Exception as error:  # surface, don't drop, a thread's failure
+            errors.append(f'{type(error).__name__}: {error}')
+
+    threads = [threading.Thread(target=delete, args=(cid,)) for cid in ids]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=180)
+    assert statuses == [204] * 53, errors
+    assert max(elapsed) < 5.0, sorted(elapsed)[-5:]  # serialized: 53 x >=0.3 s, and 409 past 20 s
+    accepted = []
+    for cid in ids:
+        assert _exists(plane, 'users', plane.uid, 'deleted_conversations', cid)
+        row = plane.client.document(f'users/{plane.uid}/conversations/{cid}').get()
+        assert not row.exists or row.to_dict().get('deleted') is True
+        if (
+            plane.client.collection(purge_jobs.ERASURE_COLLECTION)
+            .document(purge_jobs.erasure_job_id(plane.uid, cid))
+            .get()
+            .exists
+        ):
+            accepted.append(cid)
+    assert accepted, 'the burst must exercise the accept path'
+
+    outcomes = _drain_erasures(monkeypatch, route)
+
+    assert outcomes.count('erased') == len(accepted), outcomes
+    assert not any(_exists(plane, 'users', plane.uid, 'conversations', cid) for cid in ids)
+    assert _exists(plane, 'users', plane.uid, 'conversations', keep)
+    assert peak[0] == 1, 'two same-account cascades erased inside the account gate at once'
+    assert not any(
+        plane.client.collection(purge_jobs.ERASURE_COLLECTION)
+        .document(purge_jobs.erasure_job_id(plane.uid, cid))
+        .get()
+        .exists
+        for cid in ids
+    )
+    for cid in ids:  # every erasure armed its batch purge next to the tombstone
+        assert plane.client.collection(purge_jobs.COLLECTION).document(purge_jobs.job_id(plane.uid, cid)).get().exists
+
+
+def test_hold_after_acceptance_keeps_the_conversation_hidden_and_retained(monkeypatch, plane, route):
+    from database import conversation_batch_purge_jobs as purge_jobs
+    from database import legal_holds
+
+    cid = f'conv-{uuid4().hex[:8]}'
+    _conversation(plane, cid)
+    legal_holds.acquire_destructive_operation(plane.uid, kind='explicit_memory_deletion', token='peer-delete')
+    with TestClient(route.app) as client:
+        assert client.delete(f'/v1/conversations/{cid}?cascade=true').status_code == 204
+    legal_holds.finish_destructive_operation(
+        plane.uid, kind='explicit_memory_deletion', token='peer-delete', outcome='completed'
+    )
+    legal_holds.place_legal_hold(plane.uid, issuer='legal_hold_service')
+
+    assert _drain_erasures(monkeypatch, route, passes=1) == ['held']
+    row = plane.client.document(f'users/{plane.uid}/conversations/{cid}').get()
+    assert row.exists and row.to_dict()['deleted'] is True  # hidden, retained under the hold
+    owed = plane.client.collection(purge_jobs.ERASURE_COLLECTION).document(purge_jobs.erasure_job_id(plane.uid, cid))
+    assert owed.get().to_dict()['last_outcome'] == 'held'
 
 
 def test_delete_arms_obligation_atomically_and_retry_keeps_the_tombstone(plane, route):
@@ -155,7 +281,9 @@ def _reconcile(monkeypatch):
     sent = []
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
     monkeypatch.setattr(
-        deletion_batch_purge, 'enqueue_conversation_batch_purge', lambda job, gen: sent.append((job, gen))
+        deletion_batch_purge,
+        'enqueue_conversation_batch_purge',
+        lambda job, gen, erasure=False: None if erasure else sent.append((job, gen)),
     )
     deletion_batch_purge.reconcile_conversation_batch_purges()
     return sent
@@ -496,12 +624,18 @@ def test_slow_remote_erasure_keeps_the_gate_until_it_resolves_real_transport(mon
         with TestClient(route.app) as foreground:
             response = foreground.delete('/v1/conversations/foreground-conversation?cascade=true')
         timeline['foreground_done'] = time.monotonic()
+        # The busy gate accepts the foreground delete without erasing anything: hidden, owed, retained.
+        row = plane.client.document(f'users/{plane.uid}/conversations/foreground-conversation').get()
+        erased_before_resolution = not row.exists
         worker.join(20)
         assert 'rejected_at' in hold_attempt, 'a hold committed while the erasure was unresolved'
         assert response.status_code == 204
-        assert erased_at['t'] < timeline['foreground_done']  # authority moved only after the erasure landed
+        assert not erased_before_resolution, 'the foreground erased while the remote erasure was unresolved'
+        assert row.to_dict()['deleted'] is True
         legal_holds.place_legal_hold(plane.uid, issuer='admin')  # now it can, and nothing erases after it
         assert not worker.is_alive()
+        assert _drain_erasures(monkeypatch, route, passes=1) == ['held']
+        assert _exists(plane, 'users', plane.uid, 'conversations', 'foreground-conversation')
     finally:
         worker.join(20)
         server.shutdown()

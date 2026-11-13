@@ -229,6 +229,7 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
+    from utils.batch_pipeline.upload_coalescing import member_status
 
     spent_redrives: list[str] = []
 
@@ -239,6 +240,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return None
         if intake['owner_id'] != uid:
             raise HTTPException(status_code=403, detail='Not authorized to view this sync job')
+        if intake.get('coalesce_group'):
+            return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
         sources = {job.get('conversation_id') for job in jobs if job.get('conversation_id')}
@@ -402,6 +405,8 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
         }
 
     status = store.run(read)
+    if status is not None and '_coalescing_intake' in status:
+        return member_status(store, uid, status['_coalescing_intake'], durable_status)
     if spent_redrives:
         # Class 6 counter: same signal as the nightly scan, once per committed poll re-drive.
         from utils.backlog_metrics import record_transition
@@ -442,6 +447,7 @@ async def accept_upload(
     repair_job_id: str | None = None,
     vendor_table: bool = True,
     release: str | None = None,
+    _coalescing_group: dict | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through.
 
@@ -462,6 +468,7 @@ async def accept_upload(
             db_executor, lambda: shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
         )
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
+        previous = await _coalescing_previous(store, previous, public_job_id, _coalescing_group)
         refused = await _repair_prior_upload(
             store,
             previous,
@@ -558,12 +565,14 @@ async def accept_upload(
             priority_for(lane, recording_age_seconds),
             requires_compute_admission=True,
             conversation_id=conversation_id,
+            privacy_generation=_coalescing_generation(_coalescing_group),
         )
         phase = 'authorization'
         snapshots = {}
         context = await run_blocking(db_executor, batch_artifact_authorize, store, seed, snapshots=snapshots)
         user = snapshots['user']
         target = snapshots.get('conversations', {}).get(conversation_id) or {}
+        user, target = _coalescing_language(user, target, _coalescing_group)
         # Privacy authorization already loaded this row. Rollback may drain a
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
@@ -750,6 +759,47 @@ async def accept_upload(
         )
         phase = 'artifact_setup'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
+        held_response = await _coalescing_try_offer(
+            store,
+            artifacts,
+            seed,
+            context,
+            language,
+            policy,
+            (
+                _coalescing_group,
+                previous,
+                adopt,
+                provider,
+                sampled,
+                record_origin,
+                decode,
+                repair_job_id,
+                release,
+                usage_period,
+                uid,
+                language,
+                input_language,
+            ),
+            {
+                'uid': uid,
+                'job_id': job_id,
+                'content_id': content_id,
+                'paths': paths,
+                'lane': lane,
+                'recording_age_seconds': recording_age_seconds,
+                'source': source,
+                'should_lock': should_lock,
+                'conversation_id': conversation_id,
+                'client_device_id': client_device_id,
+                'client_platform': client_platform,
+                'byok_enabled': byok_enabled,
+                'intake_context': intake_context,
+            },
+            evidence,
+        )
+        if held_response is not None:
+            return held_response
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
@@ -788,7 +838,7 @@ async def accept_upload(
                 timing_store='sync' if decode is None else None,
             )
 
-        from utils.stt.batch_language import resolve_language, self_language_class
+        from utils.stt.batch_language import resolve_language
         from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
         # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
@@ -797,59 +847,19 @@ async def accept_upload(
         # sends later speech in another language to Parakeet. Strict-silent units keep today's own
         # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
         # no unit inherits another's language.
-        queue, decisions, first = [], {}, None
+        queue, decisions = [], {}
         if sampled:
-            phase = 'sample_decode'
-            speeches = []
-            while unit := await run_blocking(sync_executor, _next_unit, iterator):
-                if len(queue) >= 128 or sum(u.duration_seconds for u in queue) + unit.duration_seconds > (
-                    SAMPLE_SCAN_SECONDS
-                ):
-                    return _sampled_refusal(target, user, evidence)
-                queue.append(unit)
-                try:
-                    speeches.append(await run_blocking(sync_executor, _speech_windows, unit.wav))
-                except Exception:
-                    return _sampled_refusal(target, user, evidence)  # a VAD failure is not silence
-            if all(speech is None for speech in speeches):
-                # No strict-VAD speech to sample: nothing was probed or staged; the upload keeps legacy.
-                return _sampled_refusal(target, user, evidence)
-            for index, (unit, speech) in enumerate(zip(queue, speeches)):
-                phase = 'language_probe'
-                # Every probe of the upload runs here, so any refusal happens before anything is staged.
-                # Authorize each as the exact unit it will replay as (index, derived conversation).
-                probe_guard = ServingLanguageProbeGuard(
-                    store, unit_item(unit, index), authorize=batch_artifact_authorize
-                )
-                decision = await run_blocking(
-                    sync_executor,
-                    resolve_language,
-                    input_language,
-                    speech[0] if speech is not None else unit.wav,
-                    surface='batch',
-                    cohort_key=uid,
-                    before_probe=probe_guard,
-                    before_self_probe=probe_guard,
-                )
-                probe_guard.raise_if_denied()
-                decisions[index] = decision
-                if speech is None:
-                    continue
-                # Only vendor audio LID admits: worker self-LID evidence is bound to the unit's first 30 s.
-                if not decision.parakeet_safe or decision.evidence != 'audio_lid':
-                    return _sampled_refusal(target, user, evidence)
-                # The vendor heard only this unit's first 30 s of speech; the rest is frozen with it.
-                for window in speech[1:]:
-                    capability = await run_blocking(
-                        sync_executor, self_language_class, window, before_probe=probe_guard
-                    )
-                    probe_guard.raise_if_denied()
-                    record_sample_window(capability)
-                    if capability != 'supported':
-                        return _sampled_refusal(target, user, evidence)
-                first = first or decision
-            if first is not None:  # always set here: at least one speech unit passed above
-                record_route('intake', first.language, 'parakeet')
+
+            def set_sample_phase(value):
+                nonlocal phase
+                phase = value
+
+            sample = await _sample_language_units(
+                iterator, unit_item, store, input_language, uid, target, user, evidence, set_sample_phase
+            )
+            if sample is None:
+                return None
+            queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
         repair_languages: dict[str, dict] = {}
         phase = 'decode'
@@ -961,6 +971,7 @@ async def accept_upload(
             },
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
+            coalescing_group=_coalescing_group,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():
@@ -1007,6 +1018,155 @@ async def accept_upload(
             await run_blocking(sync_executor, iterator.close)
         if sample_directory is not None:
             await run_blocking(sync_executor, shutil.rmtree, sample_directory, True)
+
+
+async def _sample_language_units(
+    iterator, unit_item, store, input_language, uid, target, user, evidence, set_phase
+) -> tuple[list, dict] | None:
+    """Decide a sampled upload whole before staging, preserving phase and privacy fences."""
+    from utils.stt.batch_language import resolve_language, self_language_class
+    from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+
+    queue, decisions, first = [], {}, None
+    set_phase('sample_decode')
+    speeches = []
+    while unit := await run_blocking(sync_executor, _next_unit, iterator):
+        if len(queue) >= 128 or sum(u.duration_seconds for u in queue) + unit.duration_seconds > (SAMPLE_SCAN_SECONDS):
+            return _sampled_refusal(target, user, evidence)
+        queue.append(unit)
+        try:
+            speeches.append(await run_blocking(sync_executor, _speech_windows, unit.wav))
+        except Exception:
+            return _sampled_refusal(target, user, evidence)  # a VAD failure is not silence
+    if all(speech is None for speech in speeches):
+        # No strict-VAD speech to sample: nothing was probed or staged; the upload keeps legacy.
+        return _sampled_refusal(target, user, evidence)
+    for index, (unit, speech) in enumerate(zip(queue, speeches)):
+        set_phase('language_probe')
+        # Every probe of the upload runs here, so any refusal happens before anything is staged.
+        # Authorize each as the exact unit it will replay as (index, derived conversation).
+        probe_guard = ServingLanguageProbeGuard(store, unit_item(unit, index), authorize=batch_artifact_authorize)
+        decision = await run_blocking(
+            sync_executor,
+            resolve_language,
+            input_language,
+            speech[0] if speech is not None else unit.wav,
+            surface='batch',
+            cohort_key=uid,
+            before_probe=probe_guard,
+            before_self_probe=probe_guard,
+        )
+        probe_guard.raise_if_denied()
+        decisions[index] = decision
+        if speech is None:
+            continue
+        # Only vendor audio LID admits: worker self-LID evidence is bound to the unit's first 30 s.
+        if not decision.parakeet_safe or decision.evidence != 'audio_lid':
+            return _sampled_refusal(target, user, evidence)
+        # The vendor heard only this unit's first 30 s of speech; the rest is frozen with it.
+        for window in speech[1:]:
+            capability = await run_blocking(sync_executor, self_language_class, window, before_probe=probe_guard)
+            probe_guard.raise_if_denied()
+            record_sample_window(capability)
+            if capability != 'supported':
+                return _sampled_refusal(target, user, evidence)
+        first = first or decision
+    if first is not None:  # always set here: at least one speech unit passed above
+        record_route('intake', first.language, 'parakeet')
+    return queue, decisions
+
+
+async def _coalescing_try_offer(
+    store,
+    artifacts,
+    seed,
+    context,
+    language,
+    policy,
+    eligibility: tuple,
+    arguments: dict,
+    evidence: IntakeRouteEvidence | None,
+) -> JSONResponse | None:
+    if not _coalescing_eligible(*eligibility):
+        return None
+    from utils.batch_pipeline.upload_coalescing import offer
+
+    response = await offer(
+        store, artifacts, seed, context=context, language=language, policy=policy, arguments=arguments
+    )
+    if response is not None and response.status_code == 202 and evidence is not None:
+        evidence.batch_accepted = True
+    return response
+
+
+async def _coalescing_previous(store, previous, public_job_id, group) -> dict:
+    """A reentry owns only this exact held receipt, under its drain lease."""
+    if group is None:
+        return previous
+    from database.batch_pipeline_coalescing import guard
+
+    await run_blocking(db_executor, store.run, lambda tx: guard(tx, group, time.time()))
+    if group['mode'] == 'individual' and previous.get('job_id') == public_job_id:
+        held = await run_blocking(db_executor, store.run, lambda tx: tx.get('intakes', public_job_id))
+        if held.get('coalesce_group') == group['id'] and not held.get('coalesce_target'):
+            return {}
+    return previous
+
+
+def _coalescing_generation(group) -> int | None:
+    return group['privacy_generation'] if group is not None else None
+
+
+def _coalescing_language(user, target, group) -> tuple[dict, dict]:
+    if group is None:
+        return user, target
+    # Freeze only the initially declared supported language. All privacy and
+    # consent fields continue to come from the current authoritative snapshots.
+    language = group['members'][0]['language']
+    return (
+        {
+            **user,
+            'language': language,
+            'transcription_preferences': {
+                **(user.get('transcription_preferences') or {}),
+                'single_language_mode': True,
+            },
+        },
+        {**target, 'language': language},
+    )
+
+
+def _coalescing_eligible(
+    group,
+    previous,
+    adopt,
+    provider,
+    sampled,
+    record_origin,
+    decode,
+    repair_job_id,
+    release,
+    usage_period,
+    uid,
+    language,
+    input_language,
+):
+    return (
+        group is None
+        and not previous
+        and adopt is None
+        and not provider
+        and not sampled
+        and not record_origin
+        and decode is None
+        and repair_job_id is None
+        and not release
+        and not usage_period
+        and not serving_for('CAPTURE_COVERAGE_MODE', uid)
+        and language in PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3']
+        and language not in {'', 'multi'}
+        and input_language == language
+    )
 
 
 def stranded_adopter(observed: dict, *, owner_job_present: bool | None = None):

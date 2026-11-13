@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
@@ -2563,6 +2564,7 @@ async def _resolve_safety_wal_target(
 @sync_attempt
 @sync_snapshot_resolve_job
 @with_batch_privacy_attempt
+@allowance_operation('sync', live=False)
 async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -3031,6 +3033,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             total_speech_seconds = await run_blocking(
                 sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
             )
+            allowance_scope = current_allowance_operation.get()
+            if allowance_scope is not None:
+                allowance_scope.seconds = int(total_speech_seconds)
             total_speech_ms = int(total_speech_seconds * 1000)
             total_segments = len(segmented_paths)
 

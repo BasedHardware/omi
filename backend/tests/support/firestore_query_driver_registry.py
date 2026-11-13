@@ -379,11 +379,13 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
-# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first.
+# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first, over the
+# purge obligations or the accepted-delete erasure obligations.
 _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
+        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
@@ -3241,6 +3243,17 @@ _add(
         setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
             _stub('database.monthly_usage_totals._epoch', 'v1'),
             _monthly_total_transaction_boundary,
         ),

@@ -47,9 +47,12 @@ class _Ref:
     def __init__(self, client, path):
         self.client, self.path = client, path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, field_paths=None):
         with self.client.lock:
-            return _Snapshot(self.client.docs.get(self.path), self)
+            payload = self.client.docs.get(self.path)
+            if payload is not None and field_paths is not None:
+                payload = {key: value for key, value in payload.items() if key in field_paths}
+            return _Snapshot(payload, self)
 
     def create(self, payload):
         from google.api_core.exceptions import AlreadyExists
@@ -91,6 +94,9 @@ class _Collection:
 class _Transaction:
     def __init__(self, client):
         self.client = client
+
+    def create(self, reference, payload):
+        reference.create(payload)
 
     def set(self, reference, payload, merge=False):
         reference.set(payload, merge=merge)
@@ -169,7 +175,7 @@ def gate_client(monkeypatch):
     client = _Client()
     lock = threading.Lock()
 
-    def acquire(uid, *, kind, token, firestore_client=None, now=None, expires_at=None):
+    def acquire(uid, *, kind, token, firestore_client=None, now=None, expires_at=None, max_attempts=None):
         with lock:
             legal_holds._acquire_destructive_operation_transaction.to_wrap(
                 client.transaction(),
@@ -574,25 +580,32 @@ def dispatch(monkeypatch):
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
     monkeypatch.setattr(
-        deletion_batch_purge, 'enqueue_conversation_batch_purge', lambda job, gen: sent.append((job, gen))
+        deletion_batch_purge,
+        'enqueue_conversation_batch_purge',
+        lambda job, gen, erasure=False: sent.append((job, gen, 'erasure') if erasure else (job, gen)),
     )
-    monkeypatch.setattr(purge_jobs, 'due_jobs', lambda **kwargs: _due(kwargs.get('now')))
+    monkeypatch.setattr(
+        purge_jobs,
+        'due_jobs',
+        lambda **kwargs: _due(kwargs.get('now'), kwargs.get('collection', purge_jobs.COLLECTION), kwargs.get('limit')),
+    )
     return sent
 
 
 _PLANE: list = []
 
 
-def _due(now=None):
+def _due(now=None, collection=purge_jobs.COLLECTION, limit=None):
     client = _PLANE[0]
     now = now or purge_jobs._now()
-    prefix = f'{purge_jobs.COLLECTION}/'
+    prefix = f'{collection}/'
     rows = [
-        _Ref(client, path)
-        for path, row in sorted(client.docs.items())
-        if path.startswith(prefix) and row.get('due_at') is not None and row['due_at'] <= now
+        (row['due_at'], path)
+        for path, row in client.docs.items()
+        if path.startswith(prefix) and path.count('/') == 1 and row.get('due_at') is not None and row['due_at'] <= now
     ]
-    return rows
+    # Oldest first, like the single-field ``due_at`` query.
+    return [_Ref(client, path).get() for _due_at, path in sorted(rows)][:limit]
 
 
 @pytest.fixture(autouse=True)

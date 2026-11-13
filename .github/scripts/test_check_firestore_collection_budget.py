@@ -4,8 +4,11 @@
 Both directions are pinned on both Firestore surfaces: an unbudgeted new
 queue/job/lease collection fails, a budgeted one passes, a collection that
 already exists at the base revision is grandfathered, and a computed collection
-name fails until a dynamic family budget is declared. The fixtures build a real
-throwaway git repository so the base-revision scan is exercised, not mocked.
+name fails until a dynamic family budget is declared. A grandfathered computed
+site whose literal namespace tuple grows is compared by family, so the new
+member needs its own budget. Python's ``collection_group_id`` keyword form is
+pinned alongside the positional form. The fixtures build a real throwaway git
+repository so the base-revision scan is exercised, not mocked.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_firestore_collection_budget import (
+    _excluded,
     ENABLED_ENV,
     REASON_ENV,
     findings,
@@ -63,6 +67,38 @@ STATIC_PATH_PYTHON = BASE_PYTHON + '''
 
 def claim_user_job(uid, job_id):
     return client.collection(f'users/{uid}/jobs').document(job_id).get()
+'''
+
+# The reported gap: the computed call site is unchanged, but the namespace tuple it
+# reads gains a member, so the collection family grows without a new site key.
+NAMESPACE_TUPLE_PYTHON = BASE_PYTHON + '''
+
+NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
+
+
+def purge_jobs(client, namespace):
+    return client.collection(f'{namespace}_jobs').stream()
+
+
+def sweep(client):
+    for index in range(len(NAMESPACES)):
+        namespace = NAMESPACES[index]
+        purge_jobs(client, namespace)
+'''
+
+EXPANDED_NAMESPACE_TUPLE_PYTHON = NAMESPACE_TUPLE_PYTHON.replace(
+    "'batch_pipeline_dev')", "'batch_pipeline_dev', 'batch_pipeline_preview')"
+)
+
+# Same shape, but the namespace is only ever a parameter: the guard cannot enumerate
+# the family, so a tuple edit must not invent members for it.
+UNBOUND_NAMESPACE_PYTHON = BASE_PYTHON + '''
+
+NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
+
+
+def purge_jobs(client, namespace):
+    return client.collection(f'{namespace}_jobs').stream()
 '''
 
 BASE_WEB = '''import { getDb } from "@/lib/firebase/admin";
@@ -199,7 +235,41 @@ class GuardFixture(unittest.TestCase):
         return findings(scan_tree(self.root), scan_git_tree(self.root, 'HEAD'), budgets, exempt, dynamic)
 
 
+class VirtualenvExclusionTests(unittest.TestCase):
+    """Installed packages are not product code: a worktree's own backend/.venv and
+    backend/.openapi-venv must never be scanned (they held Firestore's client library
+    and failed every push), while look-alike product directories still are."""
+
+    def test_worktree_virtualenv_roots_are_excluded(self) -> None:
+        for relative in (
+            "backend/.venv/lib/python3.11/site-packages/google/cloud/firestore_v1/client.py",
+            "backend/.openapi-venv/lib/python3.11/site-packages/fake_firestore/client.py",
+        ):
+            self.assertTrue(_excluded(relative), relative)
+
+    def test_product_code_is_still_scanned(self) -> None:
+        for relative in (
+            "backend/database/conversations.py",
+            "backend/utils/venv_helper.py",
+            "backend/venv/queue.py",
+            "backend/domain/site-packages/queue.py",
+            "backend/domain/.venv/queue.py",
+            "web/admin/venv/queue.ts",
+            "web/admin/lib/queue.ts",
+        ):
+            self.assertFalse(_excluded(relative), relative)
+
+
 class LiteralCollectionTests(GuardFixture):
+    def test_generated_python_environments_do_not_hide_first_party_work_state(self) -> None:
+        for environment in ('.venv', '.openapi-venv'):
+            dependency = self.root / 'backend' / environment / 'lib' / 'site-packages' / 'client.py'
+            dependency.parent.mkdir(parents=True)
+            dependency.write_text('def read(client, collection_id):\n    return client.collection(collection_id)\n')
+        self.assertEqual(self.evaluate(), [])
+        self.write_python(NEW_QUEUE_PYTHON)
+        self.assertTrue(self.evaluate(), 'generated dependency exclusions must not exempt first-party queues')
+
     def test_unbudgeted_new_queue_collection_fails(self) -> None:
         self.write_python(NEW_QUEUE_PYTHON)
         errors = self.evaluate()
@@ -275,6 +345,37 @@ class LiteralCollectionTests(GuardFixture):
         self.assertEqual(len(errors), 1)
         self.assertIn('computed collection name', errors[0])
 
+    def test_python_collection_group_keyword_argument_fails(self) -> None:
+        self.write_python(
+            BASE_PYTHON
+            + "\n\ndef steps():\n"
+            + "    return client.collection_group(collection_group_id='conversation_retry_steps').stream()\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('conversation_retry_steps', errors[0])
+        self.assertNotIn('computed collection name', errors[0])
+
+    def test_python_collection_group_positional_argument_fails(self) -> None:
+        self.write_python(
+            BASE_PYTHON
+            + "\n\ndef steps():\n"
+            + "    return client.collection_group('conversation_retry_steps').stream()\n"
+        )
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('conversation_retry_steps', errors[0])
+        self.assertNotIn('computed collection name', errors[0])
+
+    def test_python_collection_group_with_budget_passes(self) -> None:
+        self.write_python(
+            BASE_PYTHON
+            + "\n\ndef steps():\n"
+            + "    return client.collection_group(collection_group_id='conversation_retry_steps').stream()\n"
+        )
+        self.write_registry(budgets=[dict(BUDGET, collection='conversation_retry_steps')])
+        self.assertEqual(self.evaluate(), [])
+
     def test_work_state_token_classification(self) -> None:
         self.assertEqual(work_state_token('conversation_finalization_jobs'), 'jobs')
         self.assertEqual(work_state_token('channel_turn_leases'), 'leases')
@@ -332,6 +433,62 @@ class ComputedNameTests(GuardFixture):
                     'reason': 'fixture exemption',
                 }
             ]
+        )
+        self.assertEqual(self.evaluate(), [])
+
+
+class ComputedFamilyExpansionTests(GuardFixture):
+    """A grandfathered computed site keeps its key when its namespace tuple grows.
+
+    The key-level check cannot see the new collection, so the guard compares the
+    enumerable family between the base revision and the working tree.
+    """
+
+    def commit_python(self, source: str) -> None:
+        self.write_python(source)
+        self.git('add', '-A')
+        self.git('commit', '-m', 'namespace tuple')
+
+    def test_namespace_tuple_expansion_fails(self) -> None:
+        self.commit_python(NAMESPACE_TUPLE_PYTHON)
+        self.write_python(EXPANDED_NAMESPACE_TUPLE_PYTHON)
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('computed collection family', errors[0])
+        self.assertIn('batch_pipeline_preview_jobs', errors[0])
+        self.assertIn('backend/database/queue.py:', errors[0])
+
+    def test_namespace_tuple_expansion_with_budget_passes(self) -> None:
+        self.commit_python(NAMESPACE_TUPLE_PYTHON)
+        self.write_python(EXPANDED_NAMESPACE_TUPLE_PYTHON)
+        self.write_registry(budgets=[dict(BUDGET, collection='batch_pipeline_preview_jobs')])
+        self.assertEqual(self.evaluate(), [])
+
+    def test_namespace_tuple_expansion_with_exemption_passes(self) -> None:
+        self.commit_python(NAMESPACE_TUPLE_PYTHON)
+        self.write_python(EXPANDED_NAMESPACE_TUPLE_PYTHON)
+        self.write_registry(exempt=[{'collection': 'batch_pipeline_preview_jobs', 'reason': 'fixture exemption'}])
+        self.assertEqual(self.evaluate(), [])
+
+    def test_unchanged_namespace_tuple_passes(self) -> None:
+        self.commit_python(NAMESPACE_TUPLE_PYTHON)
+        self.write_python(
+            NAMESPACE_TUPLE_PYTHON
+            + "\n\ndef read_user(client, uid):\n    return client.collection('users').document(uid).get()\n"
+        )
+        self.assertEqual(self.evaluate(), [])
+
+    def test_new_computed_site_with_expanded_tuple_still_needs_a_dynamic_entry(self) -> None:
+        self.write_python(EXPANDED_NAMESPACE_TUPLE_PYTHON)
+        errors = self.evaluate()
+        self.assertEqual(len(errors), 1)
+        self.assertIn('computed collection name', errors[0])
+        self.assertNotIn('computed collection family', errors[0])
+
+    def test_unenumerable_family_is_not_flagged(self) -> None:
+        self.commit_python(UNBOUND_NAMESPACE_PYTHON)
+        self.write_python(
+            UNBOUND_NAMESPACE_PYTHON.replace("'batch_pipeline_dev')", "'batch_pipeline_dev', 'batch_pipeline_preview')")
         )
         self.assertEqual(self.evaluate(), [])
 
