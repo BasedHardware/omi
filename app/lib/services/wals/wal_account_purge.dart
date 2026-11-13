@@ -74,12 +74,7 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     if (uid.isEmpty) return false;
     var changed = false;
 
-    bool belongsToCurrent(Wal wal) {
-      if (wal.ownerUid == uid) return true;
-      // Batch migration must resolve its receipt/legacy owner before admission.
-      final batch = wal.filePath?.split('/').last.startsWith('audio_omibatch') ?? false;
-      return !batch && (wal.ownerUid == null || wal.ownerUid == 'legacy');
-    }
+    bool belongsToCurrent(Wal wal) => _walAdmittedAtLoad(wal);
 
     if (_wals.any((wal) => !belongsToCurrent(wal))) {
       final retained = <Wal>[];

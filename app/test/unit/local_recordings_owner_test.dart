@@ -153,6 +153,7 @@ void main() {
     // Cold-start a fresh ledger and provider while signed out (e.g. after app update cleared auth).
     SharedPreferencesUtil().uid = '';
     final coldLedger = await custodyLedger();
+    expect(await coldLedger.getAllWals(), isEmpty, reason: 'unstamped batch rows cannot enter a drain before intake');
     final coldView = LocalRecordingsProvider(ledger: coldLedger, initialize: false);
     await coldView.refresh();
     expect(coldView.recordings, isEmpty);

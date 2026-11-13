@@ -210,6 +210,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// ('legacy'), or was created by the current account.
   bool _walAdmittedAtLoad(Wal wal) {
     final owner = wal.ownerUid;
+    // Native migration must resolve receipt ownership before any reader/drain sees it.
+    final batch = wal.filePath?.split('/').last.startsWith('audio_omibatch') ?? false;
+    if (batch && (owner == null || owner.isEmpty || owner == 'legacy')) return false;
     return owner == null || owner == 'legacy' || owner == _currentWalOwnerUid();
   }
 
