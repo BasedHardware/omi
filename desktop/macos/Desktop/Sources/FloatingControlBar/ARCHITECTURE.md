@@ -4,6 +4,31 @@ This package owns the compact/notch presentation, Push-to-Talk coordination, and
 the realtime voice transport. UI views render `FloatingControlBarState`; they do
 not own a second chat provider or make semantic routing decisions.
 
+## Passive presentation and focus (#24782)
+
+`FloatingBarPresentationPolicy` distinguishes an explicit user request from a
+background reveal. Only the explicit request may acquire key-window or text-input
+focus, including deferred input focus; an already-open composer grants no passive
+focus authority. Snooze expiry, temporary tool overlays, and notification surfaces
+order the nonactivating panel forward without making it key. Notification previews
+remain independent from the durable bar setting. A temporary notification must
+re-hide after its queue drains when the bar is disabled or snoozed; closing a
+conversation follows the same durable visibility policy.
+
+`ShellSummon` separately repairs stranded main-window geometry after display
+changes. Inactive-app repair must not order the shell forward or move keyboard
+focus; explicit opens keep their normal destination and activation behavior.
+
+Verification checklist:
+- Exercise the production presenter with an open composer and background requests
+  (`FloatingBarPassiveFocusTests`), plus launch/visibility and ShellSummon tests.
+- In a named QA bundle, keep another app focused while exercising launch reveal,
+  snooze expiry, temporary overlays, notification chrome and frame recovery.
+- Verify explicit opens still accept input and hidden/snoozed surfaces re-hide.
+- `probe_passive_window` is a local-only automation action for these probes. Its
+  notification fixture renders chrome directly; it does not prove server delivery,
+  notification preferences, or create an account notification/chat record.
+
 ## Push-to-talk entry points
 
 `PushToTalkManager` owns the one microphone and turn lifecycle. Every ingress
