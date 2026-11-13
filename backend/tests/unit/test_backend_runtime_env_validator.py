@@ -3707,6 +3707,9 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
     assert prod_worker['explicit'] == integration['explicit']
     assert prod_worker['effective']['bpp_decision_cache'] == 100
     assert prod_worker['effective']['batch_timeliness_leader'] == 0
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
+        assert surface['explicit']['bpp_decision_cache'] == 100
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'

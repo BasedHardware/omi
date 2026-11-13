@@ -270,6 +270,22 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     }
     container = pod['containers'][0]
     project_env = {item['name']: item for item in container['env']}
+    lever_manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    integration_levers = lever_manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']['explicit']
+    for candidate in deployments:
+        for worker in candidate['spec']['template']['spec']['containers']:
+            if worker['name'] != 'worker':
+                continue
+            worker_env = {item['name']: item.get('value') for item in worker['env']}
+            # SCA-1993/SCA-2024: default-off backoff must stay absent from every worker sibling.
+            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
+            if environment == 'prod':
+                assert worker_env['BATCH_HELD_POLL_SKIP_ENABLED'] == 'true'
+                assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == integration_levers
+            else:
+                assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
+                assert worker_env['FIRESTORE_READ_LEVERS'] == '{}'
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
     assert project_env['OMI_ENV_STAGE']['value'] == stage
     assert project_env['BATCH_PIPELINE_NAMESPACE']['value'] == namespace
