@@ -65,9 +65,16 @@ def guard_ticks(value: float, seconds: int = 7200) -> list[tuple[int, dict]]:
     return [(t, backtest.evaluate(rule(BLIND_UID), {"A": {(): [value]}})) for t in range(0, seconds, STEP)]
 
 
+EXPECTED_BILLED_TYPES = frozenset({"LOOKUP", "QUERY", "NOT_FOUND"})
+
+
 def guard_for(ages: dict[str, float]) -> float:
-    """The guard's semantics for a per-type sample-age map (max by type, then min)."""
-    if len(ages) != 3:
+    """The guard's semantics for a per-type sample-age map (max by type, then min).
+
+    The expression selects only LOOKUP, QUERY and NOT_FOUND, so an unknown type
+    cannot stand in for a missing expected type.
+    """
+    if set(ages) != EXPECTED_BILLED_TYPES:
         return 0.0
     return 1.0 if all(age < 900 for age in ages.values()) else 0.0
 
@@ -130,6 +137,9 @@ def test_blind_rule_shape_and_fail_closed_state():
     assert "max by (type)" in nodes["A"]["expr"]
     assert "timestamp(" in nodes["A"]["expr"]
     assert "< bool 900" in nodes["A"]["expr"]
+    # The expected billed types are named explicitly, so an unknown type cannot
+    # replace a missing LOOKUP, QUERY or NOT_FOUND sample.
+    assert nodes["A"]["expr"].count('type=~"LOOKUP|QUERY|NOT_FOUND"') == 2
     # Both halves are zero-filled so absence cannot turn the guard into NoData.
     assert nodes["A"]["expr"].count("or vector(0)") == 2
     assert nodes["B"]["conditions"][0]["evaluator"] == {"params": [1], "type": "lt"}
@@ -164,6 +174,19 @@ def test_blind_rule_requires_freshness_for_each_type():
     assert backtest.evaluate(
         rule(BLIND_UID), {"A": {(): [guard_for({"LOOKUP": 100, "QUERY": 100, "NOT_FOUND": 100})]}}
     ) == {(): 0.0}
+
+
+@pytest.mark.parametrize(
+    "replaced",
+    ["LOOKUP", "QUERY", "NOT_FOUND"],
+)
+def test_unknown_type_cannot_replace_an_expected_type(replaced):
+    # A fresh unknown type must not satisfy a missing expected type. The guard
+    # rule has no B query, so the ratio's billed frame is absent here.
+    ages = {expected: 100 for expected in EXPECTED_BILLED_TYPES if expected != replaced}
+    ages["FUTURE_TYPE"] = 100
+    assert guard_for(ages) == 0.0
+    assert backtest.evaluate(rule(BLIND_UID), {"A": {(): [guard_for(ages)]}}) == {(): 1.0}
 
 
 def test_selector_is_enabled_by_default_and_a_fixture_proves_disable(verifier, tmp_path, monkeypatch):
