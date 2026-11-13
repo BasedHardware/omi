@@ -1159,6 +1159,18 @@ an unready or fenced row is dropped from the set. Release commits carry
 source= head_state=` (closed labels only). `python -m
 testing.recovered_release_scenario` replays the run 18 shape.
 
+`BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED` defaults to `true` (kill
+switch: `false`). A provider-route unit settles in its own delivery, outside
+the pump, so the serving route wakes one coalesced owner drain after each
+delivery that settles a unit or ends it terminally
+(`Serving.drain_settled_async`: the owner-only merge drain and chain walk, with
+no release set, so no row skips the head wait or the depth hold). Provider
+settle stamps `ready_at` and provider admission stamps `fresh_capture`, as the
+GPU path does, and a provider row admitted before that stamp counts as
+catch-up. Without the switch a settled provider unit is found only by the
+100-row maintenance page and can use neither the head wait nor fresh-first.
+See `listen_pusher_pipeline/changes/2026-11-13-provider-merge-membership.md`.
+
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
 async projection, the persisted rows and their contents' persisted, not-ready

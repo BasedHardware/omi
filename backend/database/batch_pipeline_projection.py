@@ -96,6 +96,26 @@ class ProjectionStore:
         except Exception:
             logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
+    def _settle_allowance(self, binding: ProjectionBinding, now: float, accounting: dict, segment_ids) -> None:
+        """Post-billing shadow settlement; replay repairs a lost observer reply."""
+        if accounting.get('source_deleted'):
+            return
+        try:
+            from utils.stt.allowance_batch import observe_billed_batch
+
+            if not isinstance(accounting.get('updates'), dict) or 'seconds' not in accounting:
+                return
+            observe_billed_batch(
+                self.client,
+                binding.owner_id,
+                binding.content_id,
+                accounting.get('billing_generation'),
+                segment_ids,
+                now,
+            )
+        except Exception:
+            logger.warning('event=free_allowance_lease decision=settlement_unavailable')
+
     def _observe_transcription(self, binding: ProjectionBinding, now: float, accounting: dict, result: dict) -> None:
         """Fail-open C1 transcript-landed write: ``sealed -> transcribed``.
 
@@ -569,6 +589,11 @@ class ProjectionStore:
                 'charged': charged,
                 'steps': steps,
                 'step_times': step_times,
+                'billing_generation': (
+                    ledger.get('allowance_billing_started_at')
+                    if ledger.get('usage_committed_at') is not None
+                    else datetime.fromtimestamp(now, timezone.utc)
+                ),
             }
         stamp = datetime.fromtimestamp(now, timezone.utc)
         updates = {}
@@ -594,6 +619,11 @@ class ProjectionStore:
             'charged': charged,
             'steps': steps,
             'step_times': step_times,
+            'billing_generation': (
+                ledger.get('allowance_billing_started_at')
+                if ledger.get('usage_committed_at') is not None
+                else datetime.fromtimestamp(now, timezone.utc)
+            ),
         }
 
     def complete(
@@ -750,6 +780,8 @@ class ProjectionStore:
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
         self._mirror(binding, coalescing_receipts)
+        if result is not None and result.get('reason_code') != 'source_deleted':
+            self._settle_allowance(binding, now, accounting, binding.segment_ids)
         if changed:
             self._observe_transcription(binding, now, accounting, result)
             if result.get('reason_code') == 'source_deleted':
@@ -824,6 +856,12 @@ class ProjectionStore:
         # each recent step's once-key: a write lost after any earlier commit
         # still lands on a later attempt while that key is live.
         steps, times = extend_chain(*(charge_chain(ledger) if partial else ([0.0], [])), seconds, now)
+        # Observer provenance only: the existing hourly write above remains the
+        # billing authority. Unknown pre-rollout partials remain unobserved.
+        previous_billed = ledger.get('allowance_billed_seconds') if partial else 0
+        billed = None
+        if type(previous_billed) is int and 0 <= previous_billed <= int(charged):
+            billed = previous_billed + (int(seconds) - int(charged) if accounting['updates'] else 0)
         transaction.update(
             ledger_ref,
             {
@@ -831,6 +869,10 @@ class ProjectionStore:
                 'usage_committed_seconds': seconds,
                 'usage_steps': steps,
                 'usage_step_times': times,
+                'allowance_billed_seconds': billed,
+                'allowance_billing_started_at': (
+                    ledger.get('allowance_billing_started_at') if partial else datetime.fromtimestamp(now, timezone.utc)
+                ),
             },
         )
 
@@ -853,7 +895,7 @@ class ProjectionStore:
             ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
             ledger = ledger_ref.get(transaction=transaction).to_dict() or {}
             if ledger.get('status') == 'completed':
-                return None, False
+                return None, False, []
             if (
                 ledger.get('dispatch_protocol') != 'batch_v1'
                 or ledger.get('batch_pipeline')
@@ -868,6 +910,7 @@ class ProjectionStore:
             ):
                 raise ProjectionBlocked('content ledger owner lost')
             receipts, seconds, held = [], 0.0, 0
+            settled_ids = []
             source_deleted = False
             erased_count = terminal_empty_count = missing_count = 0
             for sibling in binding.segment_ids:
@@ -897,14 +940,15 @@ class ProjectionStore:
                     continue
                 receipt = entry.get('projection') or {}
                 if receipt.get('state') != 'ready':
-                    return None, False
+                    return None, False, []
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 seconds += receipt.get('speech_seconds', 0.0)
+                settled_ids.append(sibling)
                 parts = entry.get('projection_parts')
                 receipts.extend(parts.values() if parts else [receipt])
             if not held:
-                return None, False
+                return None, False, []
             new, updated = self._visible(transaction, binding, receipts, source_deleted=source_deleted)
             # Re-read canonical deletion fences before publishing any visible IDs.
             assert_batch_write_allowed(
@@ -934,7 +978,7 @@ class ProjectionStore:
             if superseded_count:
                 result['superseded_segments'] = superseded_count
             if ledger.get('status') == BATCH_PARTIAL_STATUS and ledger.get('result') == result:
-                return (result, ([0.0], []) if source_deleted else charge_chain(ledger)), False
+                return (result, ([0.0], []) if source_deleted else charge_chain(ledger)), False, settled_ids
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             chain = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
@@ -950,10 +994,12 @@ class ProjectionStore:
                 run_token=binding.run_token,
                 run_epoch=binding.run_epoch,
             )
-            return (result, ([0.0], []) if source_deleted else extend_chain(*chain, seconds, now)), True
+            return (result, ([0.0], []) if source_deleted else extend_chain(*chain, seconds, now)), True, settled_ids
 
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
-            outcome, changed = self.run(commit)
+            outcome, changed, settled_ids = self.run(commit)
+        if outcome is not None and outcome[0].get('reason_code') != 'source_deleted':
+            self._settle_allowance(binding, now, accounting, settled_ids)
         if changed:
             logger.info('event=batch_held_partial outcome=completed held=%d', outcome[0]['held_segments'])
         return outcome

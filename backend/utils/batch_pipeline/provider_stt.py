@@ -34,6 +34,7 @@ import wave
 
 from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
+from config.batch_pipeline import provider_merge_membership_enabled
 from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
@@ -379,6 +380,10 @@ class ProviderSttStore:
                 _record_held_vad(job, measured_held_vad_speech_seconds)
             else:
                 job.update(state='result_ready', result=WorkResult(segment_id, result_uri or '', outcome).to_dict())
+                if provider_merge_membership_enabled():
+                    # As Scheduler.complete stamps it: the merge's head wait orders by ready_at, and
+                    # a row without one can never commit past an unready head.
+                    job['ready_at'] = now
             owner['revision'] = owner.get('revision', 0) + 1
             tx.put('owners', owner_key(job['owner_id']), owner)
             tx.put('jobs', segment_id, job)
@@ -591,12 +596,18 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
+    from utils.stt.allowance_session import Operation, current, track
 
     pcm, duration, spans = inspected
     if service not in _CALLABLE_SERVICES:
         raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.LOCAL_FAILURE)
+    scope = current.get()
+    if scope is None or scope.uid != item.owner_id or scope.operation != f'batch-unit:{item.segment_id}':
+        scope = Operation(item.owner_id, 'batch_provider', operation=f'batch-unit:{item.segment_id}', seconds=duration)
     try:
-        response = await _vendor_words(service, _wav(pcm), duration, language)
+        async with track(scope):
+            await scope.reserve_async(service)
+            response = await _vendor_words(service, _wav(pcm), duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception:
@@ -664,6 +675,7 @@ class _Call:
     inspected: tuple | None
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
+    allowance_period: str | None = None
 
 
 def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
@@ -827,6 +839,16 @@ class ProviderSttStage:
             return RecoveryFailure(failure['stage'], failure['reason'])
         if not plan.inspected[2]:
             return silence_payload(plan.inspected[1])
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -835,10 +857,23 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
         if self.stt_async is None or plan.failure is not None or not plan.inspected or not plan.inspected[2]:
             return self._call_sync(plan)
+        from utils.stt.allowance_session import Operation, current
+
+        scope = Operation(
+            plan.item.owner_id,
+            'batch_provider',
+            operation=f'batch-unit:{plan.segment_id}',
+            seconds=plan.item.duration_seconds,
+            billing_period=plan.allowance_period,
+        )
+        scope_token = current.set(scope)
         try:
             return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
         except BatchPrivacyBlocked:
@@ -847,6 +882,9 @@ class ProviderSttStage:
             return error
         except Exception:
             return RecoveryFailure('provider', 'operation_failed')
+        finally:
+            scope.closed = True
+            current.reset(scope_token)
 
     # -- phases -----------------------------------------------------------------------------------
 
@@ -943,7 +981,15 @@ class ProviderSttStage:
             return self._reconcile(segment_id, started, item, route)
         if service != route.provider_service:
             vendor_metrics.failover(route.provider_service, service)
-        return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates))
+
+        def read_intake(tx):
+            binding = started.get('projection_binding') or {}
+            return tx.get('intakes', binding.get('job_id', 'missing')) or {}
+
+        intake = self.protocol.store.run(read_intake)
+        return _Call(
+            segment_id, item, route, token, service, inspected, failure, tuple(candidates), intake.get('usage_period')
+        )
 
     def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token
@@ -1230,8 +1276,28 @@ class ProviderSttConsumer:
     lease_seconds: ClassVar[float] = 1800.0
     heartbeat_seconds: ClassVar[float] = 0.0
 
-    def __init__(self, stage_factory: Callable[[], ProviderSttStage] = _service_stage, clock=time.time):
+    def __init__(
+        self,
+        stage_factory: Callable[[], ProviderSttStage] = _service_stage,
+        clock=time.time,
+        *,
+        settled: Callable[[str], None] | None = None,
+    ):
         self.stage_factory, self.clock = stage_factory, clock
+        # Called with the owner id after a delivery that changed the owner's merge order (a result,
+        # or a terminal unit leaving it), so the host can wake that owner's ordered merge. Only the
+        # serving route passes one; a hint, never a dependency of the delivery.
+        self.settled = settled
+
+    def _wake_merge(self, owner_id: str, unit: UnitOutcome) -> None:
+        if self.settled is None or (unit.outcome, unit.reason) != ('done', 'processed'):
+            return
+        try:
+            self.settled(owner_id)
+        except Exception as error:
+            logger.warning(
+                'event=batch_provider_stt action=merge_wake outcome=failed exception_type=%s', type(error).__name__
+            )
 
     def _segment(self, claim: Claim) -> str | None:
         segment_id = claim.payload.get('segment_id')
@@ -1259,4 +1325,6 @@ class ProviderSttConsumer:
         if segment_id is None:
             return Result(Outcome.DISCARDED, ConsumerReason.UNKNOWN)
         stage = await run_sync(self.stage_factory)
-        return self._result(await stage.run_async(segment_id, run_sync))
+        unit = await stage.run_async(segment_id, run_sync)
+        self._wake_merge(claim.owner_id, unit)
+        return self._result(unit)
