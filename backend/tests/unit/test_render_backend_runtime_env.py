@@ -1380,6 +1380,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # Ruling ec191a row 3: pin the live Cloud Run literals without widening other hosts.
         if enabled:
             wanted.update(
+                bpp_decision_cache=100,
                 privacy_negative_lookup_cache=100,
                 privacy_checks_shadow=100 if name == 'cloud_run/backend-sync-backfill' else 10,
                 batch_timeliness_leader=0,

@@ -114,7 +114,10 @@ establishes no realized savings.
 
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
-and `firestoreReadLevers: '{}'`. The three control knobs
+and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
+complete lever map, including `bpp_decision_cache:100`, and enables held-poll
+skip and projection finish backoff; each flag is disabled by setting it to false.
+The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
 The retired WQ12 privacy lever is absent from worker and serving-role literals.
@@ -146,7 +149,7 @@ No broad exception grants expiry coverage to another surface or percentage.
 
 UNRESOLVED: chart-vs-CR `batch_timeliness_leader`: worker chart `{}` inherits
 100 from `DEFAULT_PERCENTAGES`; prod Cloud Run literals explicitly carry 0.
-The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev/prod
+The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
 worker surfaces and annotates the generated differences. It does not resolve them.
 
 UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
