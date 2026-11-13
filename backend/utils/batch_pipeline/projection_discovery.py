@@ -53,13 +53,19 @@ class ProjectionDiscovery:
                 ceiling = float(due_before) if due_mode else time.time()
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
+        recent_before = (self.recent_after, self.recent_started)
         newest = self.recent_page(limit, scope) if self.recent and not due_mode else []
         if newest:
             limit = max(1, limit - len(newest))
-        segments, after = self.store.projection_page(limit=limit, after=after, **scope)
-        if not segments and seeding:
-            # Sparse/short collections or clock skew: do not waste a sweep tick.
-            segments, after = self.store.projection_page(limit=limit, after=None, **scope)
+        try:
+            segments, after = self.store.projection_page(limit=limit, after=after, **scope)
+            if not segments and seeding:
+                # Sparse/short collections or clock skew: do not waste a sweep tick.
+                segments, after = self.store.projection_page(limit=limit, after=None, **scope)
+        except Exception:
+            # The newest rows read above are not returned, so their cursor must not move.
+            self.recent_after, self.recent_started = recent_before
+            raise
         # Commit the hint only after a successful query. Errors retry this page.
         self.after = after
         self.seeded = True

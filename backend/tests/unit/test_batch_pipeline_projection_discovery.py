@@ -269,6 +269,26 @@ def test_a_failed_recent_query_costs_only_that_half_page(monkeypatch):
     assert page[0] == 'old000' and len(page) == 100
 
 
+def test_a_failed_main_query_does_not_move_the_recent_cursor(monkeypatch):
+    """The newest rows read before a failed main query are offered again on the next tick."""
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new(old=400, new=120))
+    real = scan.store.projection_page.side_effect
+    calls = []
+
+    def flaky(**kw):
+        calls.append(kw)
+        if len(calls) == 2:
+            raise RuntimeError('query unavailable')
+        return real(**kw)
+
+    scan.store.projection_page.side_effect = flaky
+    with pytest.raises(RuntimeError):
+        scan.next(100)
+    assert scan.recent_after is None and scan.recent_started is False and scan.after is None
+    lost = real(limit=50, after=calls[0]['after'], states=('pending',))[0]
+    assert len(lost) == 50 and scan.next(100)[:50] == lost
+
+
 def test_recent_discovery_setting_bounds(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', raising=False)
     assert batch_pipeline.projection_recent_discovery_seconds() == 900
