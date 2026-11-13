@@ -893,7 +893,9 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
 
 # 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
 # (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
-TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+# provider_running is in-flight vendor work; provider_pending stays out (allowance holds park it for a
+# day) and is exported by the provider-stage stock gauges instead.
+TIMELINESS_ACTIVE_STATES = ('leased', 'provider_running', 'result_ready')
 TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
 TIMELINESS_PROJECTION_SCAN_LIMIT = 50
