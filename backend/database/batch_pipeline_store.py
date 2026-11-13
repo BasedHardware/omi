@@ -609,7 +609,10 @@ FRESH_PROBE_PAGES = 4
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
     """The owner's earliest-captured pending fresh rows, ready or not (fresh-first merge).
 
-    Non-transactional discovery hint: it takes no transactional query lock.
+    Non-transactional discovery hint: it takes no transactional query lock. ``limit`` (at most
+    32) is the page size, not a total: up to ``FRESH_PROBE_PAGES`` pages are read while a full
+    page holds no ready row, so the result has at most ``FRESH_PROBE_PAGES * limit`` rows and is
+    not one consistent view when more than one page was read.
     """
     query = (
         client.collection(f'{namespace}_jobs')

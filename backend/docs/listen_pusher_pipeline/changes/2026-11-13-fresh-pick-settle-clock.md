@@ -26,7 +26,9 @@ dependency on that field for provider rows.
 - The fresh-pending probe (`fresh_pending` in the Firestore store, the Postgres job store and the
   simulator store) reads up to four pages of 32 while a full page holds no ready row. Same query,
   same index. It stops at the first page that is short or contains a ready row, so the common case
-  is still one page.
+  is still one page. A probe of more than one page is not one consistent view, so its pick commits
+  only if the owner revision is unchanged since the strict transaction; otherwise nothing commits
+  and the next drain probes again.
 - The newest-commits read in projection discovery records a fallback
   (`recent_discovery` to `main_cursor`) when its query fails, instead of failing silently.
 
@@ -42,6 +44,8 @@ commit that passes N unready rows reads N job documents, at most 127.
   later ready rows pass it and it appends afterwards as a late capture, as before.
 - Past four pages of unready fresh rows the ready rows behind them are still not seen.
 - A GPU row without `ready_at` is unchanged: the settle instant stands in only for provider rows.
+- A recovered provider unit whose `ready_at` was removed would be measured from an earlier
+  attempt's settle instant, which can shorten its wait behind an unready row.
 
 ## Off switch
 

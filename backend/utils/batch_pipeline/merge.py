@@ -245,6 +245,7 @@ class OrderedMerge:
             held.clear()
             head.clear()
             owner = tx.get('owners', key)
+            head['revision'] = owner.get('revision', 0)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
             candidate = tx.first_pending(key)
@@ -303,6 +304,12 @@ class OrderedMerge:
                     and current.get('state') == 'result_ready'
                     and current.get('fresh_capture') is True
                 ):
+                    return None
+                if skipped is not None and 'revision' in skipped and head['revision'] != skipped['revision']:
+                    # A probe that read more than one page is not one consistent view: a fresh
+                    # row admitted behind its cursor would be missed. Any job change for this
+                    # owner moves the revision; then nothing commits here and the next drain
+                    # probes again.
                     return None
                 if skipped is not None:
                     # Every skipped earlier fresh row must still be unready;
@@ -400,6 +407,7 @@ class OrderedMerge:
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
+        strict_revision = head.get('revision')
         # A held backlog row at or behind the head needs the fresh probe even when the depth
         # hold is switched off: a ready head is refused, and behind an unready one the head
         # wait would pick a held row and commit nothing.
@@ -453,6 +461,8 @@ class OrderedMerge:
                 )
                 pending = []
             fresh, skipped = _fresh_pick(pending, now, wait)
+            if skipped is not None and len(pending) > FRESH_PROBE_ROWS:
+                skipped['revision'] = strict_revision
             if fresh is not None:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))

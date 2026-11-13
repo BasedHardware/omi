@@ -115,12 +115,8 @@ class ProjectionDiscovery:
         try:
             start = now - window + window * self.random()
             segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
-        except Exception as error:
-            # The main cursor still reads this tick; say that the newest-commits read did not.
-            logger.warning(
-                'event=batch_projection action=recent_discovery outcome=unavailable exception_type=%s count=1',
-                type(error).__name__,
-            )
+        except Exception:
+            # The main cursor still reads this tick; record that the newest-commits read did not.
             record_fallback(
                 component='firestore_read',
                 from_mode='recent_discovery',
