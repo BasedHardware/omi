@@ -71,4 +71,9 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
     await ledger.addExternalWal(wal, admittedGeneration: generation);
     if (!await ledger.nativeWalIsDurable(wal, generation)) throw StateError('Overflow WAL index is not durable');
   }
+  // The headless on-device worker calls this intake without Home/native intake.
+  // Re-admit legacy rows whose owner was just resolved into its existing ledger.
+  if (generation == ledger.sessionGeneration && uid == SharedPreferencesUtil().uid) {
+    await ledger.rehydrateForCurrentUser();
+  }
 }

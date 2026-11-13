@@ -6,6 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/pages/settings/sign_out.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import '../support/custody_test_helpers.dart';
@@ -246,5 +247,23 @@ void main() {
     await oldRefresh;
     expect(view.recordings.single.fileName, name);
     view.dispose();
+  });
+  test('headless overflow intake restores upgraded rows without a Home refresh', () async {
+    const overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_1720000000.bin';
+    await audio(overflow);
+    final initial = await custodyLedger();
+    await intakeOnDeviceOverflow(initial);
+    final wal = (await initial.getAllWals()).single;
+    wal.ownerUid = null;
+    await initial.persistRetryMetadata(wal);
+    await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({overflow: 'owner'}));
+    final restarted = await custodyLedger();
+    expect(await restarted.getAllWals(), isEmpty);
+    await intakeOnDeviceOverflow(restarted);
+    final restored = (await restarted.getAllWals()).single;
+    expect(restored.ownerUid, 'owner');
+    expect(restored.onDeviceOnly, isTrue);
+    expect(isAutoUploadEligible(restored), isFalse);
+    expect(await File('${dir.path}/$overflow').exists(), isTrue);
   });
 }
