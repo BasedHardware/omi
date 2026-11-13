@@ -599,7 +599,13 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
         assert PREFIX_SECONDS - 0.1 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
         expected = original[-PREFIX_BYTES:] + b''.join(tail)
-        await until(lambda: raws[-1]._ws.byte_count == len(expected))
+        await until(lambda: raws[-1]._ws.byte_count >= len(expected) or raws[-1].is_connection_dead)
+        assert not raws[-1].is_connection_dead, (
+            raws[-1].death_reason,
+            raws[-1]._ws.byte_count,
+            len(expected),
+            virtual_clock.now,
+        )
         transport = raws[-1]._ws
         assert transport.pcm == expected
         assert raws[-1]._send_queue.high_water <= 2

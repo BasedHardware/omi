@@ -1470,18 +1470,24 @@ async def transcribe_voice_message_stream(
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
             await record_stt_usage_once()
-        else:
-            # Provider never drained successfully — refund the connect-time reservation.
-            await refund_reservation_once()
 
-        if dg_socket and not stt_drained:
-            try:
-                await drain_stt_socket(dg_socket)
-            except Exception:
+        # Close the failed provider before the optional shadow settlement can
+        # yield. The peer has already received its terminal close and may
+        # cancel the route while that observer is waiting on its executor.
+        try:
+            if dg_socket and not stt_drained:
                 try:
-                    dg_socket.finish()
+                    await drain_stt_socket(dg_socket)
                 except Exception:
-                    pass
+                    try:
+                        dg_socket.finish()
+                    except Exception:
+                        pass
+        finally:
+            if not stt_drained:
+                # The synchronous daily refund must also survive cancellation
+                # during the failed provider's asynchronous close.
+                await refund_reservation_once()
 
         # Signal sender task to drain and stop, then wait for it
         loop.call_soon_threadsafe(segment_queue.put_nowait, _SENTINEL)

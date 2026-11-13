@@ -223,7 +223,10 @@ def work_state_token(name: str) -> str | None:
 
 def _excluded(relative: str) -> bool:
     parts = Path(relative).parts
-    if 'node_modules' in parts or '.next' in parts:
+    # These are repository-owned generated dependency trees, not either
+    # first-party Firestore surface. In particular the OpenAPI runner creates
+    # its environment before CI hygiene scans the working tree.
+    if any(part in {'node_modules', '.next', '.venv', '.openapi-venv'} for part in parts):
         return True
     if '/tests/' in relative or '/__tests__/' in relative or '/.test/' in relative:
         return True
