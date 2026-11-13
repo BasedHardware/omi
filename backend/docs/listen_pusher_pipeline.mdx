@@ -3131,7 +3131,10 @@ backend reconciliation sweep (or the opt-in self-heal sweep) as a
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
 kept output carrying only the deterministic minimum raises before the
-completed-status transaction. An explicit relevance discard is a valid
+completed-status transaction. The one exception is a kept, plain, decoded
+conversation whose enrichment returned no structure at all: it completes on the
+deterministic minimum unless `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED`
+is set off (default on; see `changes/2026-11-12-capfix-finalization.md`). An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level

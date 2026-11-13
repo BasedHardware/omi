@@ -260,6 +260,27 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    # Source-effective lever declarations and expiry metadata share the existing unit lane.
+    (
+        (
+            'backend/config/firestore_read_levers.py',
+            'backend/deploy/runtime_env/',
+            'backend/deploy/runtime_env.yaml',
+            'backend/deploy/compose_runtime_env.py',
+            'backend/deploy/generate_read_lever_manifest.py',
+            'backend/deploy/firestore_read_levers_manifest.json',
+            'backend/charts/batch-pipeline-worker/',
+            'backend/charts/backend-listen/',
+            'backend/charts/pusher/',
+        ),
+        (),
+        (
+            'tests/unit/test_backend_runtime_env_validator.py',
+            'tests/unit/test_batch_pipeline_chart.py',
+            'tests/unit/test_config_train.py',
+            'tests/unit/test_runtime_env_sources.py',
+        ),
+    ),
     (
         (
             'backend/utils/conversations/',

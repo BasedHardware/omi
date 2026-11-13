@@ -220,11 +220,12 @@ def wire_common_stubs(install) -> SimpleNamespace:
             self.outcomes = []
             self.__class__.instances.append(self)
 
-        def finish(self, outcome):
+        def finish(self, outcome, *, failure_reason=None, error_type=None):
             if self.finished:
                 return
             self.finished = True
             self.outcomes.append(outcome)
+            self.failure_reasons = [*getattr(self, 'failure_reasons', []), failure_reason]
 
     class ClientJourneyAttempt:
         """Stream-aware spy for the client-segmented journey wired by the router."""

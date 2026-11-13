@@ -4,7 +4,7 @@
   "schemaVersion": 39,
   "version": 1,
   "timezone": "utc",
-  "refresh": "1m",
+  "refresh": "5m",
   "editable": true,
   "graphTooltip": 1,
   "tags": [
@@ -3846,7 +3846,7 @@
     {
       "type": "stat",
       "title": "Variable margin (live est.)",
-      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
+      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. The meter's figure is its own 24-hour basis, so the last point can step away from the trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. Settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
