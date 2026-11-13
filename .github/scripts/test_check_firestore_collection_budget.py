@@ -285,6 +285,13 @@ class LiteralCollectionTests(GuardFixture):
 
 
 class ComputedNameTests(GuardFixture):
+    def test_local_virtualenv_sources_are_not_scanned(self) -> None:
+        for venv in ('.venv', '.openapi-venv'):
+            installed = self.root / 'backend' / venv / 'lib' / 'python3.11' / 'site-packages' / 'sdk' / 'client.py'
+            installed.parent.mkdir(parents=True)
+            installed.write_text(COMPUTED_PYTHON, encoding='utf-8')
+        self.assertEqual(self.evaluate(), [])
+
     def test_computed_python_name_fails(self) -> None:
         self.write_python(COMPUTED_PYTHON)
         errors = self.evaluate()
