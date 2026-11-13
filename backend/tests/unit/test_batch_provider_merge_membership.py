@@ -265,46 +265,17 @@ def test_ready_fresh_rows_without_ready_at_pass_an_unready_fresh_row_behind_a_he
     assert [job(store, name)['state'] for name in names] == ['result_ready', 'result_ready']
 
 
-def _long_unready_prefix(world, monkeypatch, held=33):
-    """A held backlog head, ``held`` fresh units that never settle, then one ready fresh unit."""
-    store, names = _legacy_backlog(world, monkeypatch, 1)
-    for n in range(held):
+def test_a_full_probe_page_with_no_ready_row_is_logged(world, monkeypatch, caplog):
+    """The probe sees 32 rows. A full page of unready fresh rows can hide ready ones: say so."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    for n in range(32):
         admit(monkeypatch, store, [item(f'stuck{n:02d}', 40 + n)], f'content-stuck{n}', JA)
     admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
     settle(store, 'ready', now=200.0)
-    return store, names
-
-
-def test_a_ready_fresh_row_behind_more_than_one_page_of_unready_rows_commits(world, monkeypatch):
-    store, names = _long_unready_prefix(world, monkeypatch)
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
-    assert merge.commit_next(OWNER, 230.0) is None  # inside the wait
-    entry = merge.commit_next(OWNER, 261.0)
-    assert entry['segment_id'] == 'ready' and entry['fresh_first'] is True
-    assert job(store, 'stuck00')['merge_pending'] is True and job(store, names[0])['state'] == 'result_ready'
-
-
-def test_a_paged_probe_does_not_commit_when_the_owner_changed_behind_it(world, monkeypatch):
-    """A probe of several pages is not one view: a row admitted behind its cursor is missed.
-    Any job change moves the owner revision; the pick is then dropped and the next drain probes again."""
-    store, _ = _long_unready_prefix(world, monkeypatch)
-    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
-    real = store.fresh_pending
-    injected = []
-
-    def probe_then_admission(key, limit):
-        rows = real(key, limit)
-        if not injected:
-            injected.append(True)
-            admit(monkeypatch, store, [item('earlier', 30)], 'content-earlier', JA)
-        return rows
-
-    monkeypatch.setattr(store, 'fresh_pending', probe_then_admission)
-    assert merge.commit_next(OWNER, 261.0) is None
-    assert job(store, 'ready')['merge_pending'] is True
-    # Nothing changed behind the next probe: the ready row commits, the earlier row stays pending.
-    entry = merge.commit_next(OWNER, 262.0)
-    assert entry['segment_id'] == 'ready' and job(store, 'earlier')['merge_pending'] is True
+    with caplog.at_level(logging.WARNING):
+        assert merge.commit_next(OWNER, 261.0) is None
+    assert 'outcome=fresh_probe_full_no_ready' in caplog.text
 
 
 def _project_through(store, segment):

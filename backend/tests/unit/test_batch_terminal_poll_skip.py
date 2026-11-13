@@ -59,12 +59,6 @@ class Query:
         query.count = count
         return query
 
-    def start_after(self, snapshot):
-        self.calls.append(('start_after', snapshot.to_dict()['segment_id']))
-        query = copy(self)
-        query.after = snapshot.to_dict()
-        return query
-
     def stream(self, **kwargs):
         self.calls.append(('stream', kwargs))
         rows = self.rows
@@ -75,10 +69,6 @@ class Query:
                 if field in r and (r[field] == value if op == '==' else r[field] is not None and r[field] not in value)
             ]
         rows = sorted(rows, key=lambda row: tuple(row[field] for field in self.orders))
-        after = getattr(self, 'after', None)
-        if after is not None:
-            key = lambda row: tuple(row[field] for field in self.orders)
-            rows = [r for r in rows if key(r) > key(after)]
         for row in rows[: self.count]:
             self.reads.append(row['segment_id'])
             yield SimpleNamespace(to_dict=lambda row=row: deepcopy(row))
@@ -308,38 +298,6 @@ def test_census_cli_combines_both_collections_and_only_aggregates(monkeypatch, c
         assert (actual.field_path, actual.op_string, actual.value) == (
             ('merge_pending', '==', True) if index % 2 == 0 else ('state', 'in', tool.KNOWN_STATES)
         )
-
-
-def _numbered(state, index, **fields):
-    return dict(row(state, index, **fields), segment_id=f'{index:03d}')
-
-
-def test_the_fresh_probe_reads_on_while_a_full_page_has_no_ready_row(monkeypatch):
-    """2026-11-13: the probe saw 32 rows; a longer run of unready fresh rows hid every ready one."""
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
-    rows = [_numbered('vendor_held', i) for i in range(40)] + [_numbered('result_ready', 40, ready_at=10)]
-    query = Query(rows)
-    found = fresh_pending(query, 'ns', 'owner', 32)
-    assert [r['segment_id'] for r in found] == [f'{i:03d}' for i in range(41)]
-    assert [call for call in query.calls if call[0] == 'start_after'] == [('start_after', '031')]
-    picked, skipped = _fresh_pick(found, 400, 300)
-    assert picked['segment_id'] == '040' and len(skipped['segment_ids']) == 40
-
-
-def test_the_fresh_probe_stops_at_one_page_when_it_holds_a_ready_row_or_is_short(monkeypatch):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
-    ready_inside = [_numbered('vendor_held', 0)] + [_numbered('result_ready', i, ready_at=10) for i in range(1, 60)]
-    query = Query(ready_inside)
-    assert len(fresh_pending(query, 'ns', 'owner', 32)) == 32
-    short = Query([_numbered('vendor_held', i) for i in range(5)])
-    assert len(fresh_pending(short, 'ns', 'owner', 32)) == 5
-    assert not [call for q in (query, short) for call in q.calls if call[0] == 'start_after']
-
-
-def test_the_fresh_probe_is_bounded_to_four_pages(monkeypatch):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
-    query = Query([_numbered('vendor_held', i) for i in range(300)])
-    assert len(fresh_pending(query, 'ns', 'owner', 32)) == 128
 
 
 def test_a_ready_provider_row_without_ready_at_waits_on_its_settle_instant(monkeypatch):

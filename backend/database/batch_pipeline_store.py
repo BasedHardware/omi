@@ -603,16 +603,10 @@ def held_merge_owners(
     return owners
 
 
-FRESH_PROBE_PAGES = 4
-
-
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
     """The owner's earliest-captured pending fresh rows, ready or not (fresh-first merge).
 
-    Non-transactional discovery hint: it takes no transactional query lock. ``limit`` (at most
-    32) is the page size, not a total: up to ``FRESH_PROBE_PAGES`` pages are read while a full
-    page holds no ready row, so the result has at most ``FRESH_PROBE_PAGES * limit`` rows and is
-    not one consistent view when more than one page was read.
+    Non-transactional discovery hint: it takes no transactional query lock.
     """
     query = (
         client.collection(f'{namespace}_jobs')
@@ -624,25 +618,18 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
     skip = held_poll_skip_enabled()
     if skip:
         query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
-    # The probe reads on while a full page holds no ready row, so a run of unready fresh rows
-    # longer than one page cannot hide the ready ones behind it. Same query and index, more pages.
-    size = max(1, min(limit, 32))
-    for attempt in (query, base) if skip else (query,):
-        ordered = attempt.order_by('capture_at').order_by('segment_id')
-        rows: list[dict] = []
-        last = None
-        try:
-            for _ in range(FRESH_PROBE_PAGES):
-                docs = list((ordered if last is None else ordered.start_after(last)).limit(size).stream())
-                rows.extend(doc.to_dict() for doc in docs)
-                if len(docs) < size or any(row.get('state') == 'result_ready' for row in rows):
-                    break
-                last = docs[-1]
-            return rows
-        except (FailedPrecondition, InvalidArgument):
-            if attempt is base:
-                raise
-    return []
+    try:
+        return [
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
+    except (FailedPrecondition, InvalidArgument):
+        if not skip:
+            raise
+        return [
+            doc.to_dict()
+            for doc in base.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
 
 
 def ready_predecessor(

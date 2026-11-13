@@ -327,20 +327,13 @@ class PostgresStore:
         params: tuple[Any, ...] = (self.namespace, owner_key)
         if state:
             params += (list(MERGE_POLL_TERMINAL_STATES),)
-        # Like the Firestore probe: read on (up to four pages) while a full page has no ready row.
-        size = max(1, min(limit, 32))
-        found: list[dict] = []
         with self._read_conn() as conn:
-            for pages in range(1, 5):
-                rows = conn.execute(
-                    "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                    f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
-                    (*params, size * pages),
-                ).fetchall()
-                found = [row[0] for row in rows]
-                if len(found) < size * pages or any(row.get('state') == 'result_ready' for row in found):
-                    break
-        return found
+            rows = conn.execute(
+                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 32))),
+            ).fetchall()
+        return [row[0] for row in rows]
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         """Owners whose catch-up commits are held: (owner key, owner id from the earliest pending job, or None)."""
