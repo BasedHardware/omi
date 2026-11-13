@@ -30,6 +30,7 @@ import hashlib
 from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -387,6 +388,9 @@ class SimStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""

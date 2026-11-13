@@ -24,6 +24,11 @@ def backfill_ref(client, namespace):
 
 def backfill_complete(client, namespace) -> bool:
     marker = backfill_ref(client, namespace).get().to_dict() or {}
+    return backfill_marker_complete(marker)
+
+
+def backfill_marker_complete(marker: dict) -> bool:
+    """Trust only this version's completion in the selected store/namespace."""
     return marker.get('version') == BACKFILL_VERSION and marker.get('complete') is True
 
 

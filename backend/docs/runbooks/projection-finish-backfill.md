@@ -22,6 +22,13 @@ insert an unstamped row behind the checkpoint. Post-marker rollback of the read
 flag is safe; rollback of writer code requires repeating maintenance with a new
 marker version before enabling filtering again.
 
+The Store contract includes marker readiness for every backend. Postgres and
+simulation stores read the versioned marker from their own namespaced control
+store; the Postgres simulation delegates to Postgres. A missing or wrong-version
+marker keeps legacy discovery active. The stamping CLI in this runbook operates
+on Firestore only: its completion does not certify a different store's result
+population or authorize native Postgres filtering.
+
 ## Re-enable bar (2026-11-13 agreement)
 
 Keep `BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false` until **all** conditions hold:

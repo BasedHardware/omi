@@ -98,6 +98,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def projection_finish_backfill_complete(self) -> bool:
+        return self.pg.projection_finish_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
