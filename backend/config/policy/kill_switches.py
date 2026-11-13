@@ -8,6 +8,7 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED': False,
     'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED': False,
     'CONVERSATION_TERMINAL_FAMILY_MODE': True,
@@ -86,7 +87,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         enabled = value != 'off'
         if value in {'false', '0', 'no'}:
             logger.warning("only 'off' disables %s; value '%s' keeps it ON", name, value)
-    elif name == 'CONVERSATION_TERMINAL_FAMILY_MODE':
+    elif name in {'CONVERSATION_TERMINAL_FAMILY_MODE', 'BATCH_PIPELINE_FRESH_GUARD_ENABLED'}:
         enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}

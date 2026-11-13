@@ -202,6 +202,8 @@ class Serving:
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
+        elif self.metrics:
+            self.metrics.fresh_guard.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -292,6 +294,12 @@ class Serving:
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        if self.metrics:
+            # Explicit reconcile bypasses the periodic lease; the guard never does.
+            if self._leads(True):
+                self.metrics.fresh_guard.refresh(self.store)
+            else:
+                self.metrics.fresh_guard.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:

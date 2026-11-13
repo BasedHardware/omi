@@ -2715,6 +2715,7 @@ FIELD_SITES = {
             (
                 'committed_at',
                 'conversation_id',
+                'fresh_capture',
                 'late_capture',
                 'log_sequence',
                 'owner_id',
