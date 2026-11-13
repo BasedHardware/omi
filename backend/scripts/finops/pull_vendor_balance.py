@@ -19,6 +19,7 @@ raw response body. A missing key or an unavailable API is a skipped artifact
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 from decimal import Decimal
 import json
@@ -135,6 +136,19 @@ def pull(raw: pathlib.Path, now: dt.datetime | None = None) -> None:
     )
 
 
+def main() -> None:
+    """CLI entry the daily job runs (`pull_vendor_balance.py --raw DIR`).
+
+    Without this the file defined `pull()` but nothing called it: the step ran,
+    exited 0 and wrote no artifact, and the loader treats a missing artifact as
+    "dark", so `vendor_balance_snapshot` was never created.
+    """
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--raw", required=True, help="the run's raw directory")
+    args = ap.parse_args()
+    pull(pathlib.Path(args.raw))
+
+
 def _day(ts: str) -> str:
     return ts[:10]
 
@@ -186,3 +200,7 @@ def daily_deltas(snapshots: list[dict]) -> list[dict]:
                 }
             )
     return rows
+
+
+if __name__ == "__main__":
+    main()
