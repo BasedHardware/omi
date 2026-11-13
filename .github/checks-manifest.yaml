@@ -1154,14 +1154,14 @@ checks:
     reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
   - id: firestore-collection-budget
     command: ["python3", ".github/scripts/check_firestore_collection_budget.py", "--base", "{base}"]
-    triggers: ["backend/**/*.py", ".github/scripts/check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
+    triggers: ["backend/**/*.py", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.cjs", ".github/scripts/check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "M8 / firestore-reads-program: a new Firestore queue/job/lease collection must state a reviewed read budget before it ships; the batch pipeline reached ~1.36B reads/day on unbudgeted job/queue/lease state"
+    reason: "M8 / firestore-reads-program: a new Firestore queue/job/lease collection, literal or computed, must state a reviewed read budget before it ships on either in-repo surface (backend Python, web TypeScript); the batch pipeline reached ~1.36B reads/day on unbudgeted job/queue/lease state"
   - id: firestore-collection-budget-fixtures
     command: ["python3", ".github/scripts/test_check_firestore_collection_budget.py"]
     triggers: [".github/scripts/check_firestore_collection_budget.py", ".github/scripts/test_check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "offline fixtures pin both directions: an unbudgeted new queue/job/lease collection fails, a budgeted one passes, and an existing collection is grandfathered"
+    reason: "offline fixtures pin both directions on both surfaces: an unbudgeted new queue/job/lease collection fails, a budgeted one passes, an existing collection is grandfathered, and a computed name fails until its family budget is declared"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
