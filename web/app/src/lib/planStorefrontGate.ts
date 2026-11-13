@@ -13,7 +13,7 @@ export class PlanStorefrontGate {
    * keeps yearly preselected (ops_kill, owner dazheng); true returns the panel
    * to monthly-first on the next open without a deploy.
    */
-  static readonly yearlyDefaultOffFlag = 'web-plan-storefront-yearly-default-off';
+  static readonly killSwitchFlag = 'web-plan-storefront-yearly-default-off';
 
   static sheetEnabled(
     read = PostHogManager.isFeatureEnabled.bind(PostHogManager),
@@ -24,7 +24,7 @@ export class PlanStorefrontGate {
   static yearlyDefaultEnabled(
     read = PostHogManager.isFeatureEnabled.bind(PostHogManager),
   ): Promise<boolean> {
-    return read(PlanStorefrontGate.yearlyDefaultOffFlag)
+    return read(PlanStorefrontGate.killSwitchFlag)
       .then((killed) => !killed)
       .catch(() => true);
   }

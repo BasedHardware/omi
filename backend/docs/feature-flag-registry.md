@@ -642,13 +642,16 @@ and an explicit empty literal renders as `''`.
 | `VERTEX_EMBEDDING_DEDUPE_ENABLED` | Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | keep | — | auditfix |
+| `desktop-plan-storefront-yearly-default-off` | Default on; true returns the macOS plans panel to monthly-first without a release | macos | posthog | inverted | — | — | — | absent (kill) | keep | keep | — | uicleanup (dazheng) |
 | `desktop-rating-prompt-disabled` | Stop the rating prompt | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `mobile-local-preview-disabled` | Stop the iOS and Android clients declaring local_preview=enabled on /v4/listen; false or absent keeps the on-device live preview request on for batch-lane sessions | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
+| `mobile-plan-storefront-yearly-default-off` | Default on; true returns the mobile plans sheet to monthly-first without a release | mobile | posthog | inverted | — | — | — | absent (kill) | keep | keep | — | uicleanup (dazheng) |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `mobile-wal-delta-index-off` | True makes the iOS and Android clients save the WAL recording index through the pre-delta full-snapshot writer; false or absent keeps the delta index worker on | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | auditfix |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | auditfix |
+| `web-plan-storefront-yearly-default-off` | Default on; true returns the web plans panel to monthly-first without a deploy | web-app | posthog | inverted | — | — | — | absent (kill) | keep | keep | — | uicleanup (dazheng) |
 
 ### config_switch
 

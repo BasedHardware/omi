@@ -35,7 +35,7 @@ void main() {
     final keys = <String>[];
     Future<bool> read(String key) async {
       keys.add(key);
-      return key == PlanStorefrontGate.yearlyDefaultOffFlag;
+      return key == PlanStorefrontGate.killSwitchFlag;
     }
 
     expect(await PlanStorefrontGate.yearlyDefaultEnabled(readFlag: read), isFalse);
