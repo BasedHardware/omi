@@ -396,6 +396,15 @@ def test_workflow_commands_mutate_only_selected_services_and_rollback(tmp_path, 
     for script in ('validate-backend-runtime-env.py', 'check_cloud_run_env_drift.py'):
         command = next(args for args in records if args[:2] == ['python3', script])
         assert {command[i + 1] for i, item in enumerate(command) if item == '--service'} == set(selected)
+    # Validate explicit project/region binding on the executed service reads
+    # and mutations, including the loop-based revision fence and promotion.
+    for command in records:
+        if command[:3] != ['gcloud', 'run', 'services']:
+            continue
+        for flag, expected in (('--project', workflow.values['inputs.project_id']), ('--region', 'us-central1')):
+            values = [item.split('=', 1)[1] for item in command if item.startswith(flag + '=')]
+            values += [command[i + 1] for i, item in enumerate(command[:-1]) if item == flag]
+            assert values == [expected], command
     sidecars = [args for args in records if args[:2] == ['python3', 'attach_cloud_run_gmp_sidecar.py']]
     assert {next(arg.split('=', 1)[1] for arg in args if arg.startswith('--service=')) for args in sidecars} == set(
         selected
@@ -436,6 +445,10 @@ def test_subset_verifier_rejects_unselected_images_and_empty_scope():
     'raw,mode,targets',
     [
         ('backend,', 'deploy', 'cloud-run-only'),
+        (' ', 'deploy', 'cloud-run-only'),
+        ('\t', 'deploy', 'cloud-run-only'),
+        ('\r\n', 'deploy', 'cloud-run-only'),
+        (' \t\r\n ', 'deploy', 'cloud-run-only'),
         ('backend', 'build-only', 'cloud-run-only'),
         ('backend', 'repair-traffic-only', 'cloud-run-only'),
         ('backend', 'deploy', 'all'),

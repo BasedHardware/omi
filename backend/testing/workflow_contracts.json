@@ -653,6 +653,8 @@
         "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_verify_llm_gateway_serving.py",
         "tests/unit/test_llm_gateway_deploy_contract.py",
+        "tests/unit/test_fleet_deployment.py",
+        "tests/unit/test_batch_pipeline_recovery_runtime_contract.py",
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
