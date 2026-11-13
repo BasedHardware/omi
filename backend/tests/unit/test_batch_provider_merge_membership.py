@@ -325,6 +325,43 @@ def test_a_drain_that_stops_with_ready_fresh_rows_left_keeps_the_marker(world, m
     assert not _marker(store).get('held')
 
 
+def test_the_marker_write_is_logged_and_has_a_kill_switch(world, monkeypatch, caplog):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED', 'false')
+    assert merge.commit_next(OWNER, 230.0) is None
+    assert not _marker(store).get('held')  # off: the owner is left with no wake, as before
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED')
+    with caplog.at_level(logging.INFO):
+        assert merge.commit_next(OWNER, 231.0) is None
+    assert _marker(store).get('held') is True
+    assert caplog.text.count('outcome=fresh_reoffer_marked') == 1
+
+
+def test_an_owner_whose_ready_fresh_row_never_commits_is_dropped_after_the_bound(world, monkeypatch, caplog):
+    """Loop bound: a ready fresh row that cannot commit must not keep its owner on every
+    maintenance pass for good. After 30 minutes without a commit the marker is let go."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    # A head wait longer than the bound stands in for a row that never becomes committable.
+    merge = OrderedMerge(store, head_wait_seconds=100_000, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None
+    assert _marker(store).get('held') is True
+    for minutes in (8, 16, 24):
+        merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 230.0 + 60 * minutes))
+        assert _marker(store).get('held') is True  # still re-offered
+    with caplog.at_level(logging.WARNING):
+        merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 230.0 + 1800))
+    assert not _marker(store).get('held')
+    assert 'outcome=fresh_reoffer_gave_up' in caplog.text
+    assert job(store, 'ready')['merge_pending'] is True
+
+
 def test_no_marker_when_no_fresh_row_is_ready(world, monkeypatch):
     store, _ = _legacy_backlog(world, monkeypatch, 1)
     admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
