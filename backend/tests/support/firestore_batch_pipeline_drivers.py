@@ -225,9 +225,9 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.run',
             covered_by=('database.batch_pipeline_store.service_frontier',),
-            reason='queries only through reseed_hinted_activation after the body transaction commits',
+            reason='queries only through reseed_hinted_activation after commit; optional queue authority adds direct point reads and a Commit precondition, not a query shape',
             expect_observed=False,
-            body_digest='d7cced46951bbfea06f7c501288ee41c76d972f6149aa7ead6e3c31573055b52',
+            body_digest='a2a53a101f9b02308b65b241fb733a650575696bb22c404d498d1fe4cc9aef93',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreTransaction.service_frontier',

@@ -1,6 +1,10 @@
 {
   "entries": [
     {
+      "path": "backend/database/jobstore/handoff.py",
+      "reason": "SCA-1959 explicitly injected dark custody protocol. Real local FS/PG integration exercises intent/result/receipt replay; serving selection and remaining cohort/projection adapters are deliberately absent until the complete G2 qualification passes."
+    },
+    {
       "path": "backend/utils/external_oauth/admission.py",
       "reason": "External OAuth control-plane scaffold is intentionally unwired: activation requires an explicit owner admission decision against config/external_oauth_admission.json (fail-closed by design). Contract behavior is exercised by backend/tests/unit/external_oauth/*; see docs/integrations/oauth-control-plane.md"
     },

@@ -202,9 +202,18 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:dead` | `R:expire_held_in_transaction` for `dead_letter_reason=held_expired`; historical dead reasons predate this expiry writer | `R:RecoveryStore.requeue_quarantined` → `J:Scheduler.requeue_quarantined_in_transaction`; legacy `J:Scheduler.redrive_dead` | `held_deadline_at`, retained after expiry | `omi_batch_held_expired_units` (stock, not dwell) | `omi-batch-held-expired-volume` (agent) | `BATCH_HELD_DEAD_LETTER_ENABLED` for new held expiry/nightly GPU requeue | `merge_pending=true` keeps pre-4a re-drive possible; unrelated dead reasons excluded. Record reason `record_barrier_aged` retains `merge_pending=false`; private OIDC requeue-record, separate record inflow/stock alert. |
 | `batch:dead/input_expiring` | `R:expire_input_in_transaction` via existing held sweep; GPU-quarantined or assignment-held staging input | Manual `RecoveryStore.requeue_quarantined` (GPU), target-restorable `ProjectionReleaseStore.release(operator=True)` (assignment), or existing exact-bundle client re-upload (GPU uploads) | `audio_staged_at + 29d`, else legacy `enqueued_at + 29d`; repair stamps the current object | `omi_batch_held_oldest_age_seconds{leg="staged_input"}` before terminal | `omi-batch-staged-input-age` warning above 21d | `BATCH_INPUT_EXPIRING_ENABLED` default on, plus existing held-sweep kill | Retained audio/results/paid history. No polling/nightly resurrection; no lifecycle change. [Runbook](../../docs/runbooks/held-staging-inputs.md). |
 | `batch:privacy_blocked` | `database/batch_pipeline_recovery.py:quarantine_fenced.revoke`; `database/jobstore/postgres_store.py:PostgresStore.quarantine_fenced` privacy fence | Terminal; privacy owner only | none | none | none | No held switch bypasses privacy | Retain fence; no held requeue |
-| `batch:privacy_deferred` | G2 owner `closed`, including deletion grace; status and hold writes only | Restore sweep performs a fresh allowing walk and mints a new admission ID | Existing available-at backoff repairs a lost sweep; no work/result persistence | Retain jobs and held outbox through grace and until purge succeeds; no maximum purge retry/outage time (A9) | Purging/erased becomes terminal `privacy_blocked`, then purge deletes rows | G2 is dark by default; no runtime path is activated by the schema | Old STARTed effects may transmit arbitrarily late (A3); COMPLETE refuses their results |
 | `batch:partial_retired` | `database/record_partial.py:update_run` | Terminal placeholder; replacement units own work | none | none | none | `RECORD_AUDIO_PARTIAL_ENABLED` | Retain partial inventory lineage |
 | `batch:committed` | `M:OrderedMerge.commit_next` | Job terminal; P/S still owe projection | none | none | none | No held-specific switch | Job commit is not conversation/finalization completion |
+
+G2's required `privacy_deferred` disposition is currently a dark refusal, not an
+implemented job-state writer/restore runner. Its required integration retains
+jobs and held outbox throughout deletion grace and until purge succeeds, with no
+maximum outage/purge-retry bound (A9). Restore must perform a fresh allowing walk
+and mint a new admission ID before work resumes; purging/erased is terminal
+`privacy_blocked`. Status/hold writes alone are allowed while closed. No serving
+path is enabled by this contract. A STARTed effect can transmit arbitrarily late
+(A3), and COMPLETE refuses its result. The missing durable writer/runner blocks
+source readiness; this requirement is not a claim that the state exists today.
 
 `recovery_state` is an orthogonal job field: `held` → `prepared` → `running`
 → `failed_held` or `recovered`; revocation can write `cancelled`

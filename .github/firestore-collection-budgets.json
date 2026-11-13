@@ -31,6 +31,16 @@
   },
   "budgets": [
     {
+      "collection": "jobstore_handoffs",
+      "owner": "pgfoundation / SCA-1959 dark D custody",
+      "unit": "one handoff cycle with one attempt per phase",
+      "reads_per_unit_budget": 9,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Explicit Handoff source: stage 2 reads (authority/intent), deliver 1 intent, export 2 (authority/completion), project 3 (authority/completion/receipt), ack 1 receipt = 9 reads per cycle with one attempt per phase. Replay/conflict attempts are separately counted; customer/privacy reads belong to their existing budgets. Queue-writer guards add a handoff authority read per attempt and require a measured writer-volume budget before activation. No production selector: expected 0/day, 1/day sentinel only. Measured cycle/conflict/recovery/writer volume and a replacement reviewed daily budget are required before activation; local synthetic receipts book no savings.",
+      "reviewed": "2026-11-13"
+    },
+    {
       "collection": "conversation_erasure_jobs",
       "owner": "backend conversation deletion (accepted-delete erasure obligations)",
       "unit": "conversation delete accepted behind a busy account gate",

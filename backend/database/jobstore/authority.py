@@ -89,7 +89,7 @@ def committed_prefix(conn, namespace):
 
 
 def fingerprint(value):
-    return hashlib.sha256(codec.dumps(value).encode()).hexdigest()
+    return hashlib.sha256(codec.canonical(value).encode()).hexdigest()
 
 
 def stop_copier(conn, namespace):

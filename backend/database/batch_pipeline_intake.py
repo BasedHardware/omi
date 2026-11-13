@@ -37,6 +37,7 @@ def admit(
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
     coalescing_group: dict | None = None,
+    handoff=None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -47,6 +48,21 @@ def admit(
     row legacy can no longer finish); the batch ledger write below replaces it.
     With both unset, behaviour is unchanged.
     """
+    run = store.run
+    if handoff is not None:
+        from database.jobstore.authority import AuthorityRefused
+        from database.jobstore.intent_store import IntentStore, plan_enqueue
+
+        if (
+            enqueue is not None
+            or binding.record_origin
+            or binding.partial_record
+            or coalescing_group is not None
+            or (policy or resolve_batch_policy(binding.owner_id)).stt_route == 'provider'
+        ):
+            raise AuthorityRefused('this cohort requires its dedicated PG intent adapter')
+        run = IntentStore(store, handoff, binding).run
+        enqueue = plan_enqueue
     enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
         raise ValueError('complete ordered sibling set must match immutable projection binding')
@@ -221,7 +237,7 @@ def admit(
             '_admitted_seconds': sum(i.duration_seconds for i in items),
         }
 
-    outcome = store.run(commit)
+    outcome = run(commit)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:

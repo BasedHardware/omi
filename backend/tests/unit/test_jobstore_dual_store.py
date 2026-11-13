@@ -640,6 +640,7 @@ class TestParityDiagnostics:
         client = Client()
         primary = object.__new__(batch_store.FirestoreStore)
         primary.namespace, primary._client = 'batch_pipeline_dev', client
+        primary.queue_authority = None
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv('OMI_ENV_STAGE', 'dev')
             got = dual_store.read_current(primary, [('jobs', 'a'), ('jobs', 'b')])

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database.jobstore import codec
+from database.jobstore.authority import fingerprint
 
 
 def test_round_trip_keeps_datetimes_offsets_bytes_and_plain_json():
@@ -19,3 +20,8 @@ def test_round_trip_keeps_datetimes_offsets_bytes_and_plain_json():
 def test_unknown_types_are_refused_not_stringified():
     with pytest.raises(TypeError):
         codec.dumps({'x': {1, 2}})
+
+
+def test_custody_fingerprint_survives_fs_utc_normalization_and_key_order():
+    stamp = datetime(2026, 1, 2, 3, 4, 5, 678901, tzinfo=timezone(timedelta(hours=-7)))
+    assert fingerprint({'a': stamp, 'b': 1}) == fingerprint({'b': 1, 'a': stamp.astimezone(timezone.utc)})

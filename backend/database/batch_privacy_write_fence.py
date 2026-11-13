@@ -16,6 +16,7 @@ from uuid import uuid4
 from google.api_core.exceptions import Aborted, AlreadyExists, FailedPrecondition, GoogleAPICallError
 from google.cloud.firestore_v1.services.firestore import FirestoreAsyncClient, FirestoreClient
 from google.cloud.firestore_v1.field_path import FieldPath
+from google.cloud.firestore_v1.bulk_writer import BulkWriter
 from google.cloud.firestore_v1.types import (
     BatchWriteRequest,
     BatchWriteResponse,
@@ -45,6 +46,7 @@ _AUTHORITY_STATE_TYPES = {'generation': 'integer_value', 'blocked': 'boolean_val
 # inject an owner-scoped coordinator. Bulk authority writes use this same Commit
 # wrapper. It is unset in every existing serving process.
 g2_coordinator: ContextVar[Any] = ContextVar('g2_coordinator', default=None)
+queue_coordinator: ContextVar[Any] = ContextVar('queue_coordinator', default=None)
 
 
 def authority_path(path: str) -> tuple[str, ...]:
@@ -191,6 +193,11 @@ def _wrap_commit(original: Any) -> Any:
         @functools.wraps(original)
         async def async_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
+            queue = queue_coordinator.get()
+            queue_guarded = False
+            if queue is not None:
+                prepared = CommitRequest(prepared)
+                queue_guarded = await asyncio.to_thread(queue.prepare, prepared)
             coordinator = g2_coordinator.get()
             receipts = []
             if coordinator is not None:
@@ -199,6 +206,8 @@ def _wrap_commit(original: Any) -> Any:
             try:
                 result = await original(client, request=prepared, **kwargs)
             except (FailedPrecondition, AlreadyExists) as error:
+                if queue_guarded and isinstance(error, FailedPrecondition):
+                    raise Aborted('queue authority changed; retry the complete transaction') from error
                 if coordinator is not None and receipts:
                     raise Aborted('privacy guard changed; retry the complete authority transaction') from error
                 raise
@@ -213,6 +222,11 @@ def _wrap_commit(original: Any) -> Any:
         @functools.wraps(original)
         def sync_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
+            queue = queue_coordinator.get()
+            queue_guarded = False
+            if queue is not None:
+                prepared = CommitRequest(prepared)
+                queue_guarded = queue.prepare(prepared)
             coordinator = g2_coordinator.get()
             receipts = []
             if coordinator is not None:
@@ -221,6 +235,8 @@ def _wrap_commit(original: Any) -> Any:
             try:
                 result = original(client, request=prepared, **kwargs)
             except (FailedPrecondition, AlreadyExists) as error:
+                if queue_guarded and isinstance(error, FailedPrecondition):
+                    raise Aborted('queue authority changed; retry the complete transaction') from error
                 if coordinator is not None and receipts:
                     raise Aborted('privacy guard changed; retry the complete authority transaction') from error
                 raise
@@ -243,7 +259,12 @@ def _bulk_parts(request, kwargs):
     # BatchWrite is non-atomic and forbids duplicate documents. Relevant writes
     # become independent atomic Commits, each containing its own fence. Unrelated
     # writes retain BatchWrite, its labels and its per-write status semantics.
-    indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write])]
+    queue = queue_coordinator.get()
+    indices = [
+        i
+        for i, write in enumerate(prepared.writes)
+        if authority_tokens([write]) or queue is not None and queue.covers(write)
+    ]
     return supplied, prepared, indices
 
 
@@ -332,7 +353,94 @@ def _wrap_bulk(original: Any) -> Any:
     return wrapped
 
 
+def _wrap_bulk_executor(original):
+    if getattr(original, '_omi_batch_privacy_fence', False):
+        return original
+
+    @functools.wraps(original)
+    def instantiate(writer):
+        # The SDK submits BulkWriter RPCs to threads, which do not inherit
+        # ContextVars. Bind at construction, including flush/retries after the
+        # caller's scope exits. Never let a later flush downgrade a bound writer.
+        if not hasattr(writer, '_omi_fence_binding'):
+            writer._omi_fence_binding = (queue_coordinator.get(), g2_coordinator.get())
+            writer._omi_fence_errors = []
+        executor = original(writer)
+        submit = executor.submit
+
+        def fenced_submit(fn, /, *args, **kwargs):
+            queue, privacy = writer._omi_fence_binding
+            if queue is None and privacy is None:
+                return submit(fn, *args, **kwargs)
+
+            def run():
+                qtoken = queue_coordinator.set(queue)
+                ptoken = g2_coordinator.set(privacy)
+                try:
+                    return fn(*args, **kwargs)
+                except Exception as error:
+                    writer._omi_fence_errors.append(error)
+                    raise
+                finally:
+                    g2_coordinator.reset(ptoken)
+                    queue_coordinator.reset(qtoken)
+
+            return submit(run)
+
+        executor.submit = fenced_submit
+        return executor
+
+    setattr(instantiate, '_omi_batch_privacy_fence', True)
+    return instantiate
+
+
+def _bind_bulk(writer):
+    binding = (queue_coordinator.get(), g2_coordinator.get())
+    previous = getattr(writer, '_omi_fence_binding', (None, None))
+    if binding == (None, None):
+        return  # Later flushes keep the original binding.
+    if previous != (None, None) and previous != binding:
+        raise ValueError('bulk writer cannot change authority binding')
+    writer._omi_fence_binding = binding
+
+
+def _wrap_bulk_operation(original):
+    if getattr(original, '_omi_batch_privacy_fence', False):
+        return original
+
+    @functools.wraps(original)
+    def operation(writer, *args, **kwargs):
+        _bind_bulk(writer)
+        return original(writer, *args, **kwargs)
+
+    setattr(operation, '_omi_batch_privacy_fence', True)
+    return operation
+
+
+def _wrap_bulk_flush(original):
+    if getattr(original, '_omi_batch_privacy_fence', False):
+        return original
+
+    @functools.wraps(original)
+    def flush(writer):
+        _bind_bulk(writer)
+        result = original(writer)
+        # SDK flush waits on futures without retrieving their exceptions. A
+        # closed authority must not look like successful durable bulk custody.
+        errors = getattr(writer, '_omi_fence_errors', ())
+        if errors:
+            raise errors[0]
+        return result
+
+    setattr(flush, '_omi_batch_privacy_fence', True)
+    return flush
+
+
 def install_write_fence() -> None:
     for cls in (FirestoreClient, FirestoreAsyncClient):
         cls.commit = _wrap_commit(cls.commit)
         cls.batch_write = _wrap_bulk(cls.batch_write)
+    setattr(BulkWriter, '_instantiate_executor', _wrap_bulk_executor(getattr(BulkWriter, '_instantiate_executor')))
+    setattr(BulkWriter, 'flush', _wrap_bulk_flush(getattr(BulkWriter, 'flush')))
+    for name in ('create', 'set', 'update', 'delete'):
+        setattr(BulkWriter, name, _wrap_bulk_operation(getattr(BulkWriter, name)))

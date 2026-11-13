@@ -38,12 +38,29 @@ file, never executed remotely by the harness.
 - D epoch CAS, committed-prefix allocator/journal, database fencing of registered
   PG namespaces (including old-image writes), copier stop/checkpoint primitives.
   Reverse-open refuses without the missing reverse-certificate integration.
+- Continuation adds migration 0008 immutable handoff rows, FS admission intents,
+  idempotent epoch-fenced PG mutation callbacks, immutable completion publication,
+  customer-transaction projection receipts and PG acknowledgement. The existing
+  admission function can explicitly inject the ordinary GPU intent adapter;
+  original-capture repair lineage remains in the existing FS intake receipt and
+  never enters PG custody. Outstanding intents/receipts have no automatic expiry.
+  Canonical fingerprints normalize timestamps to UTC and sort object keys.
+- Explicit FS authority binding fences Store transactions, direct Commit/CAS and
+  BulkWriter RPCs. Bulk authority context survives SDK executor threads, deferred
+  flushes and retries; thread exceptions surface at flush instead of looking like
+  success. Unknown queue tables/subcollections and changed bindings refuse.
+  Imports/default constructors do not bind or enable any new path.
 
 ## Missing integration (blocks completion/readiness)
 
-1. All FS queue writers must read authority in each mutation transaction. Durable
-   FS admission intent -> PG admission -> immutable completion -> FS projection
-   transaction -> durable receipt -> epoch-fenced ack is not wired. Unknown
+1. All FS queue writer entry points must install the explicit authority binding.
+   The handoff protocol and ordinary GPU FS intent adapter now execute locally,
+   but the production Scheduler/typed admission, terminal-result sealing and
+   grouped existing ProjectionStore adapters are not wired. Callback tests are
+   not evidence that the complete production customer projection is qualified.
+   Native/partial/provider/coalesced admissions explicitly refuse the generic
+   adapter. Terminal custody cleanup needs the accepted per-record retention
+   manifest; no new indefinite terminal lifetime is authorized. Unknown
    shared/control/GPU owner bindings fail closed in the registered PG namespace.
 2. Production provider/vector/push/outbox/GCS FenceTicket adapters, H-25 dispatch
    lint and the real C4 sticky terminal-session adapter remain unwired. The
@@ -58,7 +75,7 @@ file, never executed remotely by the harness.
 5. Durable close-drain, restore, residue cadence and janitor runners; production
    no-account-label metrics; final admission class/owner_turn and budget reservation
    chunk policy; complete crash/kill/restart harness remain missing.
-6. Guard read budget is a dark sentinel (expected production 0, budget 1/day),
+6. Guard/handoff read budgets are dark sentinels (expected production 0, budget 1/day),
    not a serving forecast. Q15 volume/conflict/reconciliation measurements and a
    replacement reviewed daily budget block activation.
 7. Full G2 §5.2/P21-P25 and production/emulator update_time equivalence are NOT
@@ -72,6 +89,32 @@ the final pass may persist; push/provider transmissions cannot be recalled.
 A4 is per-record: fence/change rows survive; registry rows and sink capabilities
 are deleted on terminal outcomes; residue has its five-pass lifecycle. A9 keeps
 deferred jobs through grace and purge retries with no invented outage bound.
+
+## FS writer binding inventory (not an activation certificate)
+
+`FirestoreAuthority.writers()` is an explicit process/call scope. Every writer
+below must bind it when a runtime is eventually selected; raw client acquisition
+alone is not proof that its later RPC is fenced. A selected FirestoreStore reads
+authority in its mutation transaction and binds the complete run, including its
+post-commit reseed. An unbound existing process remains dark/legacy. The missing
+factory must refuse mixed/uninventoried writers before opening PG authority.
+
+| Writer family | Source entry points and bound coverage |
+|---|---|
+| Ring, leases, merge, heartbeats | `batch_pipeline_store.FirestoreStore.run`; Commit guard, no FIFO/DRR/head-wait algorithm replacement |
+| Direct pull-claim CAS/frontier reseed | `batch_pipeline_store` direct create/update; Commit update_time guard when explicitly scoped |
+| Projection/session/release/coalescing receipts | `batch_pipeline_projection`, `batch_pipeline_projection_session`, `batch_pipeline_projection_release`, `batch_pipeline_coalescing_completion`; PG projection-view/group adapters still missing |
+| Coalescing reservation/quotas | `batch_pipeline_coalescing`; caller must bind direct transactions; generic intent adapter refuses this cohort |
+| Native seals/restores/partial repair | `record_seal_repair`, `record_seal_sweeper`, partial/record admission; cohort-specific PG reservation adapter missing |
+| Retention/quarantine/purge | `retention`, `batch_pipeline_quarantine_recovery`, `batch_pipeline_purge`; binding alone cannot replace mode-independent retained-copy/legal-hold purge |
+| Bulk and direct transport | SDK Commit and BatchWrite wrapper; BulkWriter binds construction/enqueue/flush context and preserves it in worker threads |
+
+Tests in `tests/integration/test_jobstore_handoff.py` cover rollback before PG
+admission/result commit, lost-response replay after successful commits, immutable
+SQL/FS completion, customer effect plus receipt atomicity, forged/missing receipt,
+independent FS/PG closes, privacy deletion before projection, paused direct writer,
+deferred/threaded bulk and original ledger+intent admission. They use local real
+FS/PG; process-kill/restart and complete grouped projection remain gaps.
 
 ## Repeatable local commands
 
