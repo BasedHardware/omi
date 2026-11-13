@@ -20,7 +20,9 @@ dependency on that field for provider rows.
 - `_fresh_pick` measures the wait with `_ready_since`: `ready_at`, or for a provider row while
   provider merge membership is on, `provider_intent.settled_at`.
 - The merge logs `event=batch_merge outcome=fresh_probe_full_no_ready` when the fresh probe returns
-  a full page (32 rows) with no ready row. See the limit below.
+  a full page (32 rows) with no ready row: one line per commit attempt. An owner drain makes up to
+  100 attempts and repeats the line only after another of the owner's rows commits in between. See
+  the limit below.
 - The newest-commits read in projection discovery records a fallback
   (`recent_discovery` to `main_cursor`) when its query fails, instead of failing silently.
 
@@ -36,7 +38,10 @@ dependency on that field for provider rows.
 - The probe is a hint read outside the transaction. A row it did not return that becomes ready
   between the probe and the transaction can be passed by the picked row; it then commits on a later
   drain as a late capture. This window is unchanged by this change.
-- A GPU row without `ready_at` is unchanged: the settle instant stands in only for provider rows.
+- The pick takes the longest time any ready fresh row on the probe page has been ready and, once
+  that reaches the head wait, commits the earliest ready row on the page. Only a provider row
+  supplies a settle instant. A ready GPU row without `ready_at` still cannot start the wait by
+  itself, but a later provider row's settle instant can now make that earlier row the one picked.
 - A recovered provider unit whose `ready_at` was removed would be measured from an earlier
   attempt's settle instant, which can shorten its wait behind an unready row.
 
