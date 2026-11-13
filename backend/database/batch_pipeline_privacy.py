@@ -6,6 +6,7 @@ hashed generation survives recursive account wipes and contains no content.
 
 from collections.abc import Iterable
 import hashlib
+import logging
 from enum import Enum
 from typing import Any
 
@@ -14,7 +15,32 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from database.batch_privacy_attempt import current_attempt, token_version
 from database import privacy_check_metrics as metrics
 
+logger = logging.getLogger(__name__)
+
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
+
+# Static per-site operation labels: the fence writes the one hot
+# ``batch_pipeline_privacy`` control document every unit admission asserts
+# against, so every rung the fence burns must be attributable in the
+# contention logs and dampable per site, not per module.
+BATCH_PRIVACY_GENERATION_ADVANCE_LABEL = 'batch_privacy_generation_advance'
+BATCH_PRIVACY_PURGE_FINISH_LABEL = 'batch_privacy_purge_finish'
+
+
+def _privacy_storm_damper() -> Any:
+    """The fence partition's shared storm damper, or ``None`` while a switch is off.
+
+    The fence's control document is its own contention partition: it is not a
+    namespaced batch row, but purge bursts write it while every unit admission
+    asserts it inside the same window. The partition key gives the fence its
+    own process-shared damper and fleet window (same registry, same kill
+    switches) instead of borrowing a stage namespace's windows; both switches
+    resolve per call, so a dormant damper is ``None`` and the fence below
+    stays byte-for-byte the bare ladder.
+    """
+    from database.batch_pipeline_store import batch_lane_storm_damper
+
+    return batch_lane_storm_damper(PRIVACY_COLLECTION)
 
 
 class BatchPrivacyReason(str, Enum):
@@ -319,6 +345,7 @@ def _assert_batch_write_allowed_live(
 def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
     """Invalidate in-flight references before account/protection cleanup."""
     from google.cloud import firestore
+    from database.batch_pipeline_store import run_batch_pipeline_transaction
 
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
 
@@ -331,12 +358,19 @@ def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
         )
         return generation
 
-    return advance(client.transaction())
+    return run_batch_pipeline_transaction(
+        client,
+        advance,
+        operation_name=BATCH_PRIVACY_GENERATION_ADVANCE_LABEL,
+        storm_damper=_privacy_storm_damper(),
+        logger=logger,
+    )
 
 
 def finish_privacy_purge(client: Any, uid: str, generation: int) -> None:
     """Reopen admission only after this exact protection purge converges."""
     from google.cloud import firestore
+    from database.batch_pipeline_store import run_batch_pipeline_transaction
 
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
 
@@ -346,7 +380,13 @@ def finish_privacy_purge(client: Any, uid: str, generation: int) -> None:
         if previous.get('generation') == generation:
             transaction.update(reference, {'purging': False})
 
-    finish(client.transaction())
+    run_batch_pipeline_transaction(
+        client,
+        finish,
+        operation_name=BATCH_PRIVACY_PURGE_FINISH_LABEL,
+        storm_damper=_privacy_storm_damper(),
+        logger=logger,
+    )
 
 
 def erased_predecessors(

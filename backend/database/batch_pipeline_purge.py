@@ -90,87 +90,32 @@ def run_purge_transaction(
 ) -> Any:
     """Run one privacy-purge transaction with the namespace's bounded retries.
 
-    A bare ``operation(client.transaction())`` hands contention to the SDK's
-    same-id commit loop: one transaction id replayed inside the armed storm
-    window, retrying into the exact collision the batch-store damper has
-    already measured, with an expiry retirement the SDK never retries and an
-    exhaustion that surfaces as an anonymous fault with no label and no
-    window. Aborted and expired transactions write nothing, and the body
-    rereads every document, so a fresh transaction replays it safely.
-
-    The chain joins the process storm damper exactly like the store,
-    projection and retention lanes: the entry consult sleeps out the label's
-    residual window (fleet-adopted, spill share-capped) before the first
-    attempt — the first attempt itself is never gated — every rung after a
-    measured collision re-peeks the residual and, from the third failed rung
-    on, spaces itself by the same capped wave ladder, an exhaustion arms the
-    label and stamps the applied window onto ``retry_after``, and a commit
-    clears the ladder only when no concurrent arm bumped the generation.
-    With ``storm_damper`` ``None`` the schedule is the bare bounded ladder:
-    five fresh transactions, equal-jitter rungs, nothing recorded.
+    The purge chain rides the one shared batch-lane doctrine
+    (``run_batch_pipeline_transaction``): a bare ``operation(client.transaction())``
+    would hand contention to the SDK's same-id commit loop — one transaction id
+    replayed inside the armed storm window the store lane already measured,
+    with an anonymous, unattributable exhaustion. The entry consult sleeps out
+    the label's residual window before the first attempt (the first attempt
+    itself is never gated), rungs after a measured collision re-peek and space
+    by the capped wave ladder from the third failed rung, an exhaustion arms
+    the label and stamps the applied window onto ``retry_after``, and a
+    commit clears the ladder. With ``storm_damper`` ``None`` (a switch off)
+    the schedule is the bare bounded ladder, byte-for-byte. The doctrine's
+    failure class and engine accounting live on the shared runner; this
+    wrapper keeps the purge chain's labels and its own module logger so the
+    backoff lines stay attributable per lane.
 
     Failure-Class: FC-privacy-purge-chain-collides-inside-armed-storm-window
     """
-    from database._client import run_transactional
-    from database.batch_pipeline_store import FirestoreStore
-    from database.firestore_transaction_retry import (
-        FirestoreContentionExhausted,
-        run_with_transaction_contention_retry,
+    from database.batch_pipeline_store import run_batch_pipeline_transaction
+
+    return run_batch_pipeline_transaction(
+        client,
+        operation,
+        operation_name=operation_name,
+        storm_damper=storm_damper,
+        logger=logger,
     )
-
-    label = operation_name
-    latest_generation = 0
-
-    def mid_ladder_gate(failed_attempt: int) -> float:
-        nonlocal latest_generation
-        if storm_damper is None:
-            return 0.0
-        residual, gate_generation = storm_damper.peek(label, client=client)
-        latest_generation = gate_generation
-        wait = residual
-        if failed_attempt >= FirestoreStore.WAVE_ENGAGEMENT_ATTEMPT:
-            wait = max(residual, storm_damper.wave_rung_wait(failed_attempt))
-        if wait <= 0.0:
-            return 0.0
-        logger.info(
-            'event=%s_backoff scope=mid_ladder operation=%s attempt=%d waited_ms=%d',
-            label,
-            label,
-            failed_attempt,
-            round(wait * 1000),
-        )
-        return wait
-
-    if storm_damper is not None:
-        waited, generation = storm_damper.consult(label, client=client)
-        if waited > 0:
-            logger.info(
-                'event=%s_backoff operation=%s waited_ms=%d',
-                label,
-                label,
-                round(waited * 1000),
-            )
-        latest_generation = generation
-
-    try:
-        result = run_with_transaction_contention_retry(
-            # One SDK commit attempt per transaction: the outer helper is the only
-            # commit-contention budget (5 bodies, not 5 x 5).
-            lambda: client.transaction(max_attempts=1),
-            lambda transaction: run_transactional(client, operation, initial_transaction=transaction),
-            operation_name=operation_name,
-            inter_attempt_gate=mid_ladder_gate,
-        )
-    except FirestoreContentionExhausted as error:
-        # This label just burned its whole budget against the hot rows:
-        # space out the next re-strike instead of colliding immediately,
-        # and carry the applied window for the caller's own schedule.
-        if storm_damper is not None:
-            error.retry_after = storm_damper.arm(label, client=client)
-        raise
-    if storm_damper is not None:
-        storm_damper.note_success(label, latest_generation)
-    return result
 
 
 def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: bool) -> None:

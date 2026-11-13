@@ -1,5 +1,6 @@
 """Per-unit handoff; ordinary worker tokens and upload ownership never transfer."""
 
+import logging
 import math
 from typing import Any
 from uuid import uuid4
@@ -18,6 +19,13 @@ from config.batch_paid_attempt import attempted, renewed, retryable
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import owner_key
+
+logger = logging.getLogger(__name__)
+
+# Static per-site operation label: the cancel writes one hot ``jobs`` row the
+# scheduler/pump lanes storm on, so every rung it burns is attributable in the
+# contention logs and dampable per site.
+BATCH_QUARANTINE_RECOVERY_CANCEL_LABEL = 'batch_quarantine_recovery_cancel'
 
 # A receipt proves words existed, but deliberately contains no transcript.
 # Permit one replacement recognition only after the original intent's dwell.
@@ -610,6 +618,7 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
 
 def cancel_fenced_recovery(store, segment_id):
     """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+    from database.batch_pipeline_store import batch_lane_storm_damper, run_batch_pipeline_transaction
     from google.cloud import firestore
     from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
@@ -636,7 +645,13 @@ def cancel_fenced_recovery(store, segment_id):
             return True
         return False
 
-    cancelled = cancel(store.client.transaction())
+    cancelled = run_batch_pipeline_transaction(
+        store.client,
+        cancel,
+        operation_name=BATCH_QUARANTINE_RECOVERY_CANCEL_LABEL,
+        storm_damper=batch_lane_storm_damper(store.namespace),
+        logger=logger,
+    )
     if cancelled:
         from database.batch_pipeline_shadow_hook import mirror_refresh
 

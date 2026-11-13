@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import hashlib
+import logging
 import time
 
 from google.cloud import firestore
@@ -10,6 +11,15 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.voice_centroids import deadline
+
+logger = logging.getLogger(__name__)
+
+# Static per-site operation labels: both sites write the hot
+# ``jobs``/``results``/``artifacts`` rows the scheduler/pump lanes storm on,
+# so every rung they burn is attributable in the contention logs and dampable
+# per site.
+BATCH_VOICE_EVIDENCE_RECEIPT_READ_LABEL = 'batch_voice_evidence_receipt_read'
+BATCH_VOICE_EVIDENCE_PUBLISH_WRITE_LABEL = 'batch_voice_evidence_publish_write'
 
 
 def _ref(store, table, key):
@@ -68,7 +78,15 @@ def load_reference(store, uid, segment_id, conversation_id):
             return None
         return item, metadata['uri'], due
 
-    return read(store.client.transaction())
+    from database.batch_pipeline_store import batch_lane_storm_damper, run_batch_pipeline_transaction
+
+    return run_batch_pipeline_transaction(
+        store.client,
+        read,
+        operation_name=BATCH_VOICE_EVIDENCE_RECEIPT_READ_LABEL,
+        storm_damper=batch_lane_storm_damper(store.namespace),
+        logger=logger,
+    )
 
 
 def publish(store, item, uri, conversation_id):
@@ -109,7 +127,15 @@ def publish(store, item, uri, conversation_id):
         )
         transaction.update(job_ref, {'voice_evidence': artifact_id})
 
-    write(store.client.transaction())
+    from database.batch_pipeline_store import batch_lane_storm_damper, run_batch_pipeline_transaction
+
+    run_batch_pipeline_transaction(
+        store.client,
+        write,
+        operation_name=BATCH_VOICE_EVIDENCE_PUBLISH_WRITE_LABEL,
+        storm_damper=batch_lane_storm_damper(store.namespace),
+        logger=logger,
+    )
     mirror_refresh(store.namespace, [('jobs', item.segment_id), ('artifacts', artifact_id)])
 
 

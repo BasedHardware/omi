@@ -1,9 +1,25 @@
 """Restrictive lease revocation for privacy-fenced work, without resurrection."""
 
+import logging
 from typing import Any
 from google.cloud import firestore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.batch_pipeline_shadow_hook import mirror_refresh
+
+logger = logging.getLogger(__name__)
+
+# Static per-site operation label: the revocation writes one hot ``jobs`` row
+# the scheduler/pump lanes storm on, so every rung it burns is attributable in
+# the contention logs and dampable per site.
+BATCH_RECOVERY_FENCED_REVOKE_LABEL = 'batch_recovery_fenced_revoke'
+
+
+def _lane_storm_damper(namespace: str) -> Any:
+    """The namespace's shared storm damper, or ``None`` while a switch is off."""
+    from database.batch_pipeline_store import batch_lane_storm_damper
+
+    return batch_lane_storm_damper(namespace)
+
 
 # A provider-STT unit (C8) has no lease to revoke; its fenced release also clears merge_pending so
 # OrderedMerge stops holding the owner's later captures behind it (no purge follows every fence).
@@ -40,7 +56,15 @@ def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) 
             return True
         return False
 
-    revoked = revoke(client.transaction())
+    from database.batch_pipeline_store import run_batch_pipeline_transaction
+
+    revoked = run_batch_pipeline_transaction(
+        client,
+        revoke,
+        operation_name=BATCH_RECOVERY_FENCED_REVOKE_LABEL,
+        storm_damper=_lane_storm_damper(namespace),
+        logger=logger,
+    )
     if revoked:
         mirror_refresh(namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
     return revoked
