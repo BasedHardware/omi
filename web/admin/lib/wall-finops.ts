@@ -17,6 +17,7 @@ export const ADMIN_FINOPS_TABLES = [
   "omi_finops.stt_modulate_modelled_daily",
   "omi_finops.vendor_balance_snapshot",
   "omi_finops.vendor_balance_spend_daily",
+  "omi_finops.margin_meter_hourly",
 ] as const;
 
 /** Aggregate FinOps tables only; no user-level table is read.
@@ -634,4 +635,67 @@ export async function fetchModulateModelled(
     priceAsOf = r.price_as_of;
   }
   return { byDay, price, priceAsOf };
+}
+
+/** The margin meter's newest hourly row (`omi_finops.margin_meter_hourly`,
+ * written by the meter's publisher; the board's read grant is
+ * omi-admin-billing-ro dataViewer). It is the live headline for Variable
+ * margin (David 2026-11-13): one number from one owner, so the tile and the
+ * meter cannot disagree. Read directly, never through the per-day leg store:
+ * the row is hourly. Any failure is null, never a guess. */
+export interface MeterTile {
+  /** ISO timestamp of the row's hour. */
+  asOf: string;
+  variableMarginPct: number;
+  basisVersion: string | null;
+}
+
+export const METER_TILE_QUERY = `
+SELECT FORMAT_TIMESTAMP('%FT%TZ', as_of) AS as_of, variable_margin_pct, basis_version
+FROM \`based-hardware.omi_finops.margin_meter_hourly\`
+WHERE variable_margin_pct IS NOT NULL
+ORDER BY as_of DESC
+LIMIT 1`;
+
+export function parseMeterTile(
+  rows: {
+    as_of?: unknown;
+    variable_margin_pct?: unknown;
+    basis_version?: unknown;
+  }[]
+): MeterTile | null {
+  const row = rows[0];
+  if (!row) return null;
+  const asOf = typeof row.as_of === "string" ? row.as_of : null;
+  // Number(null) is 0: a missing margin must not become a real 0%.
+  const raw = row.variable_margin_pct;
+  const pct =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+      ? Number(raw)
+      : NaN;
+  if (!asOf || !Number.isFinite(Date.parse(asOf)) || !Number.isFinite(pct))
+    return null;
+  return {
+    asOf,
+    variableMarginPct: pct,
+    basisVersion:
+      typeof row.basis_version === "string" ? row.basis_version : null,
+  };
+}
+
+export async function fetchMeterTile(): Promise<MeterTile | null> {
+  try {
+    const bq = getGcpBillingClient();
+    if (!bq) return null;
+    const [rows] = await bq.query({
+      query: METER_TILE_QUERY,
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+    return parseMeterTile(rows as Parameters<typeof parseMeterTile>[0]);
+  } catch {
+    return null;
+  }
 }
