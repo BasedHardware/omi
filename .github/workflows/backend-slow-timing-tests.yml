@@ -42,7 +42,10 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
       - name: Install native audio dependencies
         timeout-minutes: 5
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg libopus0
+        run: |
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_options[@]}" update -qq
+          sudo apt-get "${apt_options[@]}" install -y --no-install-recommends ffmpeg libopus0
       - name: Run slow timing coverage
         working-directory: backend
         env:
