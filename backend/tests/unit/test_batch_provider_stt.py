@@ -137,7 +137,7 @@ class Vendor:
         }
 
 
-SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
+SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 3.0}])
 SILENCE = (b'\0\0' * 16000 * 5, 5.0, [])
 
 
@@ -1427,6 +1427,60 @@ def test_a_silent_unit_intent_is_marked_vendor_skipped(world, monkeypatch):
     stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
     assert vendor.calls == 0
     assert job(store, 'p1')['provider_intent']['vendor_skipped'] is True
+
+
+SHORT_SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}, {'start': 2.0, 'end': 2.5}])
+
+
+def test_short_speech_settles_as_silence_without_a_vendor_call(world, monkeypatch):
+    # David 2026-11-13: under 2 s of strict-VAD speech in a ~31 s span is not worth a paid call.
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    before = _sample('omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total', {'provider': 'modulate'})
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1').reason == 'processed'
+    assert vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['result']['outcome'] == 'silence'
+    assert row['provider_intent']['vendor_skipped'] is True
+    # Measured speech stays on the intent, so a short-speech skip is distinguishable from silence.
+    assert row['provider_intent']['measured_vad_speech_seconds'] == pytest.approx(1.0)
+    after = _sample('omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total', {'provider': 'modulate'})
+    assert after - before == pytest.approx(10.0)
+
+
+def test_short_speech_skip_threshold_zero_restores_the_no_spans_rule(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1')
+    assert vendor.calls == 1
+    assert 'vendor_skipped' not in job(store, 'p1')['provider_intent']
+
+
+@pytest.mark.parametrize('raw', ['abc', '-1', 'nan', '11'])
+def test_malformed_min_speech_keeps_the_default(monkeypatch, raw):
+    from config.batch_pipeline_vendor_failover import min_speech_seconds
+
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', raw)
+    assert min_speech_seconds() == 2.0
+
+
+def test_speech_at_the_minimum_still_calls_the_vendor(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '2')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    stage(store, artifacts, vendor, inspect=lambda *_: (SPEECH[0], 5.0, [{'start': 0.0, 'end': 2.0}])).run('p1')
+    assert vendor.calls == 1
+
+
+def _sample(name, labels):
+    from prometheus_client import REGISTRY
+
+    value = REGISTRY.get_sample_value(name, labels)
+    return value or 0.0
 
 
 def test_a_speech_unit_intent_is_not_marked_vendor_skipped(world, monkeypatch):

@@ -35,7 +35,12 @@ import wave
 from config.batch_conversation_speakers import vendor_turns_enabled
 from config.batch_language_recovery import enabled as independent_recovery_enabled, language_guarded
 from config.batch_pipeline import provider_merge_membership_enabled
-from config.batch_pipeline_vendor_failover import failover_enabled, held_redrive_enabled, held_redrive_seconds
+from config.batch_pipeline_vendor_failover import (
+    failover_enabled,
+    held_redrive_enabled,
+    held_redrive_seconds,
+    min_speech_seconds,
+)
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.outbox import Claim, OutboxKind, Outcome
@@ -516,6 +521,24 @@ def _speech_seconds(inspected: tuple | None) -> float | None:
         return None
 
 
+def _skips_vendor(inspected: tuple | None) -> bool:
+    """True when this inspected unit is answered as local silence without a vendor call.
+
+    Strict VAD found no speech spans, or found less speech than ``min_speech_seconds()``
+    (``BATCH_VENDOR_MIN_SPEECH_SECONDS``, default 2 s; 0 restores the no-spans-only rule). A unit is
+    billed for its whole ~31 s span, so a sub-2 s fragment costs as much as a full one for a word
+    or two. The intent records ``vendor_skipped`` with the measured speech, so a short-speech skip
+    stays distinguishable from true silence (speech > 0).
+    """
+    if not inspected:
+        return False
+    if not inspected[2]:
+        return True
+    threshold = min_speech_seconds()
+    speech = _speech_seconds(inspected)
+    return threshold > 0 and speech is not None and speech < threshold
+
+
 def _wav(pcm: bytes) -> bytes:
     output = io.BytesIO()
     with wave.open(output, 'wb') as clean:
@@ -669,6 +692,8 @@ class _Call:
     inspected: tuple | None
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
+    # Decided once in ``_prepare`` and recorded on the intent as ``vendor_skipped``.
+    skip_vendor: bool = False
 
 
 def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
@@ -807,7 +832,7 @@ class ProviderSttStage:
         if plan.failure is not None or plan.inspected is None:
             failure = plan.failure or {'stage': 'provider', 'reason': 'operation_failed'}
             return RecoveryFailure(failure['stage'], failure['reason'])
-        if not plan.inspected[2]:
+        if plan.skip_vendor or not plan.inspected[2]:
             return silence_payload(plan.inspected[1])
         try:
             return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
@@ -819,7 +844,13 @@ class ProviderSttStage:
             return RecoveryFailure('provider', 'operation_failed')
 
     async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
-        if self.stt_async is None or plan.failure is not None or not plan.inspected or not plan.inspected[2]:
+        if (
+            self.stt_async is None
+            or plan.failure is not None
+            or not plan.inspected
+            or plan.skip_vendor
+            or not plan.inspected[2]
+        ):
             return self._call_sync(plan)
         try:
             return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
@@ -886,7 +917,8 @@ class ProviderSttStage:
             if self.protocol.terminal(segment_id, self.clock(), reason, measured_held_vad_speech_seconds=speech):
                 self._log('failed_held', reason['reason'])
             return UnitOutcome('done', 'processed', provider_reason='provider_failed')
-        if failure is not None or inspected is None or not inspected[2] or not self._armed():
+        skip_vendor = failure is None and _skips_vendor(inspected)
+        if failure is not None or inspected is None or skip_vendor or not self._armed():
             # No vendor call (invalid audio, or strict-VAD silence), or routing not armed: the
             # admitted vendor, no health gate, no hold (pre-D semantics).
             service = open_services[0]
@@ -907,7 +939,7 @@ class ProviderSttStage:
                 service,
                 measured_vad_speech_seconds=_speech_seconds(inspected) if failure is None else None,
                 # Same condition _call_sync uses to answer silence without a vendor call.
-                vendor_skipped=failure is None and inspected is not None and not inspected[2],
+                vendor_skipped=skip_vendor,
             )
         except AttemptRefused:
             # Read-to-mint race on the attempt list; never mint past the bounds. Re-evaluate later.
@@ -919,7 +951,7 @@ class ProviderSttStage:
             return self._reconcile(segment_id, started, item, route)
         if service != route.provider_service:
             vendor_metrics.failover(route.provider_service, service)
-        return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates))
+        return _Call(segment_id, item, route, token, service, inspected, failure, tuple(candidates), skip_vendor)
 
     def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token
@@ -985,6 +1017,8 @@ class ProviderSttStage:
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
             vendor_metrics.overflow_attempt(route, plan.service, 0.0 if silence else duration)
+            if plan.skip_vendor and plan.inspected and plan.inspected[2]:
+                vendor_metrics.short_speech_skip(plan.service, duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
         else:

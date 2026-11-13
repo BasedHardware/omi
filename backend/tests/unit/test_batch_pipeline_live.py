@@ -1077,7 +1077,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
             Artifacts(),
             vendor,
             now=2,
-            inspect=lambda *_: (b'\0\0' * 16000, 1.0, [{'start': 0.5, 'end': 1.0}]),
+            inspect=lambda *_: (b'\0\0' * 16000 * 3, 3.0, [{'start': 0.5, 'end': 3.0}]),
         )
         outcome = provider.run(segment)
         assert outcome.outcome == 'done' and vendor.calls == 1

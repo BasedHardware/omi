@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 272,
+  "count": 273,
   "names": {
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {"owner": "margin / SCA-1800", "review_by": "2026-11-26"},
     "SYNC_RECORD_COVERAGE_WAIT_MEMO": {"owner": "cl2-fixnow", "review_by": "2026-12-11"},
@@ -85,6 +85,7 @@
     "BATCH_VENDOR_HELD_REDRIVE_ENABLED": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_REDRIVE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_STALE_GRACE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
+    "BATCH_VENDOR_MIN_SPEECH_SECONDS": {"owner": "blindspot-audit / two-lane lead", "review_by": "2026-12-13"},
     "BATCH_VENDOR_OVERFLOW_ENABLED": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_OVERFLOW_ENTER_SECONDS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},

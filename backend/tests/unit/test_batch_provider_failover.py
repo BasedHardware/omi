@@ -30,7 +30,7 @@ from utils.observability.reasons import VendorAttemptOutcome, VendorHealthReason
 
 OWNER = 'synthetic-owner'
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
-SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
+SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 3.0}])
 SILENCE = (b'\0\0' * 16000 * 5, 5.0, [])
 BOTH = lambda language: ('modulate', 'soniox')  # noqa: E731  # a configured table listing Soniox
 
