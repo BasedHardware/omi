@@ -66,8 +66,12 @@ MACOS_JOB_TIMEOUT_MINUTES = {
     # runs were cancelled by tighter ceilings before completing. The first
     # pinned-Xcode 26.6 full lane on macos-26 was cancelled by the old
     # 60-minute ceiling mid serial cluster with every completed suite green
-    # (run 34687313733), so the ceiling is 90.
-    "desktop-swift-verify": 90,
+    # (run 34687313733), so the ceiling was 90. SCA-1981 (nightly run
+    # 43357908980) then measured the prelude ahead of the suite step at 41
+    # minutes, which 90 could not admit alongside the declared 70-minute
+    # suite budget; the ceiling is 120 so the step-budget guard fires before
+    # the job is cancelled.
+    "desktop-swift-verify": 120,
     # A notification-boundary change compiles release mode AND builds the
     # release test target for the regression (~50 min observed on
     # run 34239723019). Combined app/test build avoids the duplicate
@@ -206,11 +210,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         timeout_seconds = timeout_minutes * 60
         # 300s per-suite budget + 30s per additional suite at batch 100.
         scaled_budget = 300 + 99 * 30
-        self.assertGreater(
+        # At the 120-minute ceiling (SCA-2046) the uncapped 3270s scaled
+        # budget no longer reaches half the job, so the premise that first
+        # motivated a separate cap — a wedged batch eating the entire ceiling —
+        # is historical. The cap must still bite and leave the bisect fallback
+        # at least half the job, asserted below.
+        self.assertLess(
             scaled_budget,
-            timeout_seconds // 2,
-            "this guard lost its premise: the scaled batch budget no longer "
-            "threatens the job ceiling at this batch size",
+            timeout_seconds,
+            "the uncapped scaled budget now exceeds the whole job ceiling; "
+            "re-derive the batch and watchdog budgets before raising the ceiling",
         )
         self.assertGreater(
             ceiling,
