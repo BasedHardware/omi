@@ -417,7 +417,7 @@ def test_flag_off_writer_fields_remain_discoverable_on_listen_host(monkeypatch):
 
     monkeypatch.setenv(LEVER, 'false')
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'false')
-    monkeypatch.setenv('ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     for state in ('persisted', 'ready'):
         assert projection_finish_entry_fields(state, 123.0) == {
             PROJECTION_FINISH_DUE_FIELD: 123.0,

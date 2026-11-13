@@ -9,7 +9,7 @@ most one read per process per minute before completion and one per process
 lifetime afterward; the read flag off performs no marker reads. New replicas read that same marker and filter on their first tick.
 
 Deploy this code to **every writer first**, including backend-listen
-(`BATCH_PIPELINE_SERVING_ENABLED=false`, `ASYNC_PROJECTION_ENABLED=true`). The
+(`BATCH_PIPELINE_SERVING_ENABLED=false`, `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED=true`). The
 shared `projection_finish_state_fields` and `projection_finish_entry_fields`
 helpers now stamp persisted/ready transitions regardless of the read lever.
 Writer audit: ordinary and multipart persistence/receipt transitions go through
@@ -21,6 +21,26 @@ Do not finish the pass while any old writer binary is still active: it could
 insert an unstamped row behind the checkpoint. Post-marker rollback of the read
 flag is safe; rollback of writer code requires repeating maintenance with a new
 marker version before enabling filtering again.
+
+## Re-enable bar (2026-11-13 agreement)
+
+Keep `BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false` until **all** conditions hold:
+
+1. The per-process survey has been replaced by the one-time stamping pass and
+   shared completion marker, and the pass has completed after every writer deploy.
+2. #25145 / SCA-1799 is merged **and deployed**, and both
+   `omi_batch_projection_finish_reads_total` and
+   `omi_batch_projection_finish_completed_total` read **nonzero in GMP**.
+3. Every persisted/ready writer maintains the clock, including backend-listen,
+   Cloud Run jobs, and operator scripts. Review the attached source evidence in
+   [projection-finish-writer-audit.md](projection-finish-writer-audit.md), and
+   confirm the admitted writer revision is deployed on all hosts before stamping.
+
+All production rolls and re-enable decisions go through the rollout lead.
+The lead reported 37 listen pods and the integration flag off since
+2026-11-13 17:31:30Z (img5); those are supplied rollout facts, not measurements
+made by this code-only task. Flags remaining on non-sweeping services do not
+satisfy this bar. Repo disablement is owned by SCA-1993.
 
 Use the approved read-only/operator identity for the selected stage. This PR
 performs no production writes. Example operator commands from `backend/`:
