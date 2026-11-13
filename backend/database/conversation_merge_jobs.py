@@ -3,6 +3,20 @@
 Lifecycle owns every caller. Source rows carry an exact job binding; an expired
 worker cannot restore a source admitted by a newer job. Recovery before source
 retraction cleans the provisional target before releasing the source claims.
+
+Every transactional entry here (admission, claim, renew, finish, recovery
+begin/finish) used to hand its body to the Firestore SDK's bare transaction
+path: one transaction id replayed by the SDK's same-id commit loop, a
+read-time ``Aborted`` fault escaping as an unclassified error that fails the
+merge lifecycle on the first collision, and an exhaustion with no label. Each
+entry now rides the shared bounded engine
+(``database.bounded_lane_transaction``) — five fresh single-commit
+transactions, equal-jitter rungs, replayed aborts and expiries, and a typed,
+per-entry-labeled ``FirestoreContentionExhausted``. An aborted or expired
+chain wrote nothing and every body re-reads its documents inside its
+transaction, so the replay is safe.
+
+Failure-Class: FC-bare-sync-backfill-and-conversation-job-transactions-fail-on-first-contention
 """
 
 from datetime import datetime, timedelta, timezone
@@ -14,11 +28,21 @@ from google.cloud import firestore
 from database.quiet_check_retirement import stop_quiet_checks_for_job
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database._client import get_firestore_client
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.conversation_merge_policy import source_has_merge_receipt
 
 COLLECTION = 'conversation_finalization_jobs'
 KIND = 'conversation_merge'
 LEASE = timedelta(minutes=10)
+
+# Static per-entry operation labels: the lane's exhaustion marker names the
+# flow on the calling module's logger (database.bounded_lane_transaction).
+MERGE_JOB_ADMIT_LABEL = 'merge_job_admit'
+MERGE_JOB_CLAIM_LABEL = 'merge_job_claim'
+MERGE_JOB_RENEW_LABEL = 'merge_job_renew'
+MERGE_JOB_FINISH_LABEL = 'merge_job_finish'
+MERGE_JOB_BEGIN_RECOVERY_LABEL = 'merge_job_begin_recovery'
+MERGE_JOB_FINISH_RECOVERY_LABEL = 'merge_job_finish_recovery'
 
 
 def _now() -> datetime:
@@ -83,7 +107,7 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
             transaction.update(ref, {'status': 'merging', 'merge_job_id': job_id})
         return job | {'job_id': job_id}
 
-    job = commit(client.transaction())
+    job = run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_ADMIT_LABEL)
     if job is not None:
         stop_quiet_checks_for_job(job['job_id'], firestore_client=client)
     return job
@@ -120,7 +144,7 @@ def claim(job_id: str, *, generation: int | None = None, firestore_client: Any =
         transaction.update(ref, patch)
         return row | patch | {'job_id': job_id}
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_CLAIM_LABEL)
 
 
 def owned(job: dict, epoch: int, now: datetime) -> bool:
@@ -176,7 +200,7 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
         transaction.update(ref, patch)
         return True
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_RENEW_LABEL)
 
 
 def finish(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
@@ -191,7 +215,7 @@ def finish(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
         transaction.update(ref, dict(status='completed', updated_at=_now(), reconcile_after_at=firestore.DELETE_FIELD))
         return True
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_FINISH_LABEL)
 
 
 def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
@@ -246,7 +270,7 @@ def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
         transaction.update(ref, patch)
         return row | patch | {'job_id': job_id, 'recovery': 'rollback'}
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_BEGIN_RECOVERY_LABEL)
 
 
 def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
@@ -275,7 +299,7 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
         )
         return True
 
-    finished = commit(client.transaction())
+    finished = run_bounded_lane_transaction(client, commit, operation_name=MERGE_JOB_FINISH_RECOVERY_LABEL)
     if finished:
         stop_quiet_checks_for_job(job_id, firestore_client=client)
     return finished

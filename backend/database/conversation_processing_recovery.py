@@ -1,7 +1,23 @@
-"""Age-bounded processing orphan recovery, fenced against every active job owner."""
+"""Age-bounded processing orphan recovery, fenced against every active job owner.
+
+Each transactional entry here (the admission-fence stamp and both orphan
+terminalizations) used to hand its body to the Firestore SDK's bare
+transaction path: one transaction id replayed by the SDK's same-id commit
+loop, a read-time ``Aborted`` fault escaping as an unclassified error that
+fails the orphan sweep on the first collision, and an exhaustion with no
+label. Each entry now rides the shared bounded engine
+(``database.bounded_lane_transaction``) — five fresh single-commit
+transactions, equal-jitter rungs, replayed aborts and expiries, and a typed,
+per-entry-labeled ``FirestoreContentionExhausted``. An aborted or expired
+chain wrote nothing and every body re-reads its documents inside its
+transaction, so the replay is safe.
+
+Failure-Class: FC-bare-sync-backfill-and-conversation-job-transactions-fail-on-first-contention
+"""
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
@@ -9,9 +25,18 @@ from google.cloud import firestore
 
 from database import conversation_finalization_jobs as jobs
 from database._client import get_firestore_client
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.conversation_finalization_values import parse_timestamp, uid_from_conversation_path
 from database.conversation_terminal_title import kept_row_terminal_update, user_time_zone
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
+
+logger = logging.getLogger(__name__)
+
+# Static per-entry operation labels: the lane's exhaustion marker names the
+# flow on the calling module's logger (database.bounded_lane_transaction).
+PROCESSING_RECOVERY_STAMP_ADMISSION_LABEL = 'processing_recovery_stamp_admission'
+PROCESSING_RECOVERY_COMPLETE_UNSTAMPABLE_LABEL = 'processing_recovery_complete_unstampable'
+PROCESSING_RECOVERY_COMPLETE_ORPHAN_LABEL = 'processing_recovery_complete_orphan'
 
 
 def _has_active_processing_job(transaction: Any, data: dict, job_ref_for_id: Callable | None) -> bool:
@@ -53,13 +78,21 @@ def _stamp_processing_admission_if_absent_txn(
 def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Stamp the authoritative admission fence on a legacy processing conversation."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    transaction = client.transaction()
     transactional = firestore.transactional(_stamp_processing_admission_if_absent_txn)
-    return transactional(
-        transaction,
-        client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id),
-        datetime.now(timezone.utc),
-        lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+
+    def apply(transaction: Any) -> bool:
+        conversation_ref = (
+            client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id)
+        )
+        return transactional(
+            transaction,
+            conversation_ref,
+            datetime.now(timezone.utc),
+            lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+        )
+
+    return run_bounded_lane_transaction(
+        client, apply, operation_name=PROCESSING_RECOVERY_STAMP_ADMISSION_LABEL, logger=logger
     )
 
 
@@ -101,13 +134,21 @@ def complete_unstampable_orphan_conversation(
 ) -> bool:
     """Terminalize a legacy orphan that is too large to accept the admission fence."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    completed = transactional(
-        transaction,
-        client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id),
-        datetime.now(timezone.utc) - stale_after,
-        lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+
+    def apply(transaction: Any) -> bool:
+        conversation_ref = (
+            client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id)
+        )
+        return transactional(
+            transaction,
+            conversation_ref,
+            datetime.now(timezone.utc) - stale_after,
+            lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+        )
+
+    completed = run_bounded_lane_transaction(
+        client, apply, operation_name=PROCESSING_RECOVERY_COMPLETE_UNSTAMPABLE_LABEL, logger=logger
     )
     if completed:
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
@@ -165,16 +206,24 @@ def complete_orphan_conversation(
 ) -> bool:
     """Close one crash orphan through the generation/ownership fence."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    completed = transactional(
-        transaction,
-        client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id),
-        expected_admitted_at,
-        datetime.now(timezone.utc),
-        uid,
-        lambda zone_uid: user_time_zone(client, zone_uid),
-        lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+
+    def apply(transaction: Any) -> bool:
+        conversation_ref = (
+            client.collection('users').document(uid).collection(jobs.CONVERSATIONS_COLLECTION).document(conversation_id)
+        )
+        return transactional(
+            transaction,
+            conversation_ref,
+            expected_admitted_at,
+            datetime.now(timezone.utc),
+            uid,
+            lambda zone_uid: user_time_zone(client, zone_uid),
+            lambda job_id: client.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id),
+        )
+
+    completed = run_bounded_lane_transaction(
+        client, apply, operation_name=PROCESSING_RECOVERY_COMPLETE_ORPHAN_LABEL, logger=logger
     )
     if completed:
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)

@@ -8,10 +8,23 @@ is the one lifecycle write such a document still accepts. This is the
 ``in_progress`` sibling of ``complete_unstampable_orphan_conversation``
 (FC-permanent-write-rejection-retried-forever). Only the lifecycle owner
 (``utils.conversations.lifecycle``) calls it.
+
+The transactional entry here used to hand its body to the Firestore SDK's
+bare transaction path; it now rides the shared bounded engine
+(``database.bounded_lane_transaction.run_bounded_lane_transaction``) — five
+fresh single-commit transactions, equal-jitter rungs, replayed aborts and
+expiries, and a typed, labeled ``FirestoreContentionExhausted`` — instead of
+the bare SDK transaction mint whose read-time ``Aborted`` faults escaped
+unclassified and whose same-id commit replay could not survive a retired
+transaction id. An aborted or expired chain wrote nothing and the body
+re-reads every fence inside its transaction, so the replay is safe.
+
+Failure-Class: FC-bare-sync-backfill-and-conversation-job-transactions-fail-on-first-contention
 """
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal
 
@@ -19,12 +32,19 @@ from google.cloud import firestore
 
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.conversation_terminal_title import (
     TERMINAL_SIZE_HEADROOM_BYTES,
     kept_row_terminal_update,
     user_time_zone,
 )
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
+
+logger = logging.getLogger(__name__)
+
+# Static per-entry operation label: the lane's exhaustion marker names the
+# flow on the calling module's logger (database.bounded_lane_transaction).
+OVERSIZED_IN_PROGRESS_TERMINAL_LABEL = 'oversized_in_progress_terminal'
 
 # A bounded log token.
 OversizedInProgressOutcome = Literal['closed', 'missing', 'not_in_progress', 'owned', 'recent_write', 'below_ceiling']
@@ -75,12 +95,18 @@ def complete_oversized_in_progress_conversation(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
     transactional = firestore.transactional(_complete_oversized_in_progress_conversation_txn)
-    outcome = transactional(
-        client.transaction(),
-        conversation_ref,
-        datetime.now(timezone.utc) - quiet_for,
-        uid,
-        lambda zone_uid: user_time_zone(client, zone_uid),
+
+    def apply(transaction: Any) -> OversizedInProgressOutcome:
+        return transactional(
+            transaction,
+            conversation_ref,
+            datetime.now(timezone.utc) - quiet_for,
+            uid,
+            lambda zone_uid: user_time_zone(client, zone_uid),
+        )
+
+    outcome = run_bounded_lane_transaction(
+        client, apply, operation_name=OVERSIZED_IN_PROGRESS_TERMINAL_LABEL, logger=logger
     )
     if outcome == 'closed':
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)

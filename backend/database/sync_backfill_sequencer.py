@@ -3,6 +3,23 @@
 Pending jobs are separate documents so a large account never grows a single
 Firestore document without bound. Only one payload per UID is active; Cloud
 Tasks sees that job only after its owner/epoch has committed.
+
+Every transactional entry here (registration, retirement, claim, begin,
+renew, finish, worker claim/fail, owner defer/repair, budget-deferral note,
+expired release, redrive and the release-due fence) used to hand its body to
+the Firestore SDK's bare transaction path: one transaction id replayed by the
+SDK's same-id commit loop, a read-time ``Aborted`` fault escaping as an
+unclassified error that fails the sync dispatch on the first collision, and
+an exhaustion with no label. Each entry now rides the shared bounded engine
+(``database.bounded_lane_transaction``) — five fresh single-commit
+transactions, equal-jitter rungs, replayed aborts and expiries, and a typed,
+per-entry-labeled ``FirestoreContentionExhausted``. An aborted or expired
+chain wrote nothing and every body re-reads its documents inside its
+transaction, so the replay is safe; the read-only diagnostics (dry-run
+repair, waiting sample, preparation snapshot) keep their legacy read-only
+mints.
+
+Failure-Class: FC-bare-sync-backfill-and-conversation-job-transactions-fail-on-first-contention
 """
 
 from __future__ import annotations
@@ -19,6 +36,7 @@ from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
 from database._client import get_firestore_client
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database import sync_redrive, sync_jobs
 from database.sync_ledger import is_valid_completed_sync_content_result
 from config.firestore_read_levers import lever_enabled
@@ -29,6 +47,24 @@ from utils.sync.backfill_order import newest_first
 from utils.sync.retry_hygiene import dispatch_cap
 
 logger = logging.getLogger(__name__)
+
+# Static per-entry operation labels: the lane's exhaustion marker names the
+# flow on the calling module's logger (database.bounded_lane_transaction).
+SYNC_BACKFILL_OWNER_REPAIR_LABEL = 'sync_backfill_owner_repair'
+SYNC_BACKFILL_REGISTER_LABEL = 'sync_backfill_register'
+SYNC_BACKFILL_RETIRE_EXPIRED_LABEL = 'sync_backfill_retire_expired'
+SYNC_BACKFILL_CLAIM_NEXT_LABEL = 'sync_backfill_claim_next'
+SYNC_BACKFILL_BEGIN_JOB_LABEL = 'sync_backfill_begin_job'
+SYNC_BACKFILL_RENEW_JOB_LABEL = 'sync_backfill_renew_job'
+SYNC_BACKFILL_FINISH_JOB_LABEL = 'sync_backfill_finish_job'
+SYNC_BACKFILL_CLAIM_WORKER_LABEL = 'sync_backfill_claim_worker'
+SYNC_BACKFILL_FAIL_WORKER_LABEL = 'sync_backfill_fail_worker'
+SYNC_BACKFILL_DEFER_OWNER_LABEL = 'sync_backfill_defer_owner'
+SYNC_BACKFILL_BUDGET_DEFERRAL_LABEL = 'sync_backfill_budget_deferral'
+SYNC_BACKFILL_FINISH_EXPIRED_JOB_LABEL = 'sync_backfill_finish_expired_job'
+SYNC_BACKFILL_OWNER_RELEASE_DUE_LABEL = 'sync_backfill_owner_release_due'
+SYNC_BACKFILL_REDRIVE_JOB_LABEL = 'sync_backfill_redrive_job'
+
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
 
 COLLECTION = 'sync_backfill_sequencer'
@@ -161,7 +197,14 @@ def repair_owner(
             return False
         return True if dry_run else _ensure_owner(transaction, root, owner, current, repair_at=repair_at)
 
-    repaired = commit(client.transaction(read_only=True) if dry_run else client.transaction())
+    if dry_run:
+        # Diagnostic read-only form: one snapshot read, never a write, so the
+        # legacy read-only mint stays byte-for-byte.
+        repaired = commit(client.transaction(read_only=True))
+    else:
+        repaired = run_bounded_lane_transaction(
+            client, commit, operation_name=SYNC_BACKFILL_OWNER_REPAIR_LABEL, logger=logger
+        )
     if repaired and not dry_run:
         OWNER_REPAIRED.inc()
         logger.info('event=sync_backfill_owner_repaired count=1')
@@ -234,7 +277,7 @@ def register_job(
         )
         return True
 
-    created = commit(client.transaction())
+    created = run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_REGISTER_LABEL, logger=logger)
     if created:
         logger.info('event=sync_uid_sequencer action=registered outcome=queued')
     return created
@@ -456,7 +499,9 @@ def retire_expired(
             transaction.delete(pending)
         return True
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(
+        client, commit, operation_name=SYNC_BACKFILL_RETIRE_EXPIRED_LABEL, logger=logger
+    )
 
 
 def claim_next(
@@ -522,7 +567,7 @@ def claim_next(
             'worker_fallback_at': active['worker_fallback_at'],
         }
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_CLAIM_NEXT_LABEL, logger=logger)
 
 
 def begin_job(
@@ -560,7 +605,9 @@ def begin_job(
         return True
 
     try:
-        began = commit(client.transaction())
+        began = run_bounded_lane_transaction(
+            client, commit, operation_name=SYNC_BACKFILL_BEGIN_JOB_LABEL, logger=logger
+        )
     except NotFound:
         return None
     if not began:
@@ -598,7 +645,7 @@ def renew_job(
         return True
 
     try:
-        return commit(client.transaction())
+        return run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_RENEW_JOB_LABEL, logger=logger)
     except NotFound:
         return False
 
@@ -628,7 +675,9 @@ def finish_job(
         _release_owner(transaction, root, owner, current, has_pending=has_pending)
         return True
 
-    released = commit(client.transaction())
+    released = run_bounded_lane_transaction(
+        client, commit, operation_name=SYNC_BACKFILL_FINISH_JOB_LABEL, logger=logger
+    )
     if released:
         logger.info('event=sync_uid_sequencer action=finished outcome=%s', outcome)
     return released
@@ -717,7 +766,7 @@ def claim_worker(
         )
         return {**payload, 'sequencer_epoch': epoch}
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_CLAIM_WORKER_LABEL, logger=logger)
 
 
 def fail_worker(
@@ -753,7 +802,7 @@ def fail_worker(
         )
         return True
 
-    return commit(client.transaction())
+    return run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_FAIL_WORKER_LABEL, logger=logger)
 
 
 def get_owner(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
@@ -796,7 +845,7 @@ def defer_owner(uid: str, seconds: int, *, firestore_client: Any = None, now: Op
         transaction.update(root, {'reconcile_at': reconcile_at, 'updated_at': current})
 
     try:
-        commit(client.transaction())
+        run_bounded_lane_transaction(client, commit, operation_name=SYNC_BACKFILL_DEFER_OWNER_LABEL, logger=logger)
     except NotFound:
         pass
 
@@ -832,7 +881,9 @@ def note_budget_deferral(
         return True
 
     try:
-        return commit(client.transaction())
+        return run_bounded_lane_transaction(
+            client, commit, operation_name=SYNC_BACKFILL_BUDGET_DEFERRAL_LABEL, logger=logger
+        )
     except NotFound:
         return False
 
@@ -872,7 +923,9 @@ def finish_expired_job(
 
     released = False
     try:
-        released = commit(client.transaction())
+        released = run_bounded_lane_transaction(
+            client, commit, operation_name=SYNC_BACKFILL_FINISH_EXPIRED_JOB_LABEL, logger=logger
+        )
     except NotFound:
         return False
     if released:
@@ -914,7 +967,9 @@ def owner_release_due(
         return True
 
     try:
-        return check(client.transaction())
+        return run_bounded_lane_transaction(
+            client, check, operation_name=SYNC_BACKFILL_OWNER_RELEASE_DUE_LABEL, logger=logger
+        )
     except NotFound:
         return False
 
@@ -975,7 +1030,9 @@ def redrive_job(
         }
 
     try:
-        replacement = commit(client.transaction())
+        replacement = run_bounded_lane_transaction(
+            client, commit, operation_name=SYNC_BACKFILL_REDRIVE_JOB_LABEL, logger=logger
+        )
     except NotFound:
         return None
     if replacement:
