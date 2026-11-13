@@ -294,13 +294,14 @@ class OrderedMerge:
                 # rows in capture order. The bypassed head later appends as
                 # late_capture through the unchanged body below.
                 current = tx.get('jobs', waiter['segment_id'])
-                if not (
+                since = _ready_since(waiter)
+                if since is None or not (
                     current.get('merge_pending')
                     and current.get('state') == 'result_ready'
-                    and _ready_since(current) == _ready_since(waiter)
+                    and _ready_since(current) == since
                 ):
                     return None
-                bypass.update(head_state=candidate['state'], waited=now - _ready_since(waiter))
+                bypass.update(head_state=candidate['state'], waited=now - since)
                 try:
                     candidate = tx.first_ready_pending(key)
                 except FailedPrecondition as error:
