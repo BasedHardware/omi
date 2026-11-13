@@ -72,6 +72,7 @@ final class WALService: ObservableObject {
       _ mode: MetadataWriteMode
     ) throws -> Void
   typealias TimestampProvider = @Sendable () -> Int
+  typealias FrameWriteOverride = @Sendable (Data, URL) async throws -> Void
 
   private struct ActiveFrameBuffer {
     let device: String
@@ -150,6 +151,10 @@ final class WALService: ObservableObject {
   private let frameWriter: FrameWriter
   private let metadataWriter: MetadataWriter
   private let timestampProvider: TimestampProvider
+
+  /// Test seam: replaces the off-main frame-file write so a test can hold the
+  /// write open and prove the main actor stays responsive. `nil` in production.
+  private let frameWriteOverride: FrameWriteOverride?
   private let walMetadataWriteQueue = DispatchQueue(label: "me.omi.desktop.wal.metadata.write")
   private let walMetadataWriteState = WALMetadataWriteState()
   private var walMetadataRevision = 0
@@ -241,10 +246,12 @@ final class WALService: ObservableObject {
     metadataWriter: MetadataWriter? = nil,
     walDirectoryForTesting: URL? = nil,
     walDirectoryUnavailableForTesting: Bool = false,
-    timestampProvider: TimestampProvider? = nil
+    timestampProvider: TimestampProvider? = nil,
+    frameWriteOverride: FrameWriteOverride? = nil
   ) {
     self.apiClient = apiClient
     self.reconciler = reconciler ?? .shared
+    self.frameWriteOverride = frameWriteOverride
     self.frameWriter =
       frameWriter ?? { request in
         try await Self.writeFrameTransaction(request)
@@ -930,7 +937,8 @@ final class WALService: ObservableObject {
     let writeSucceeded = await Self.writeFramesOffMain(
       fileDataPayload,
       to: fileUrl,
-      frameCount: frameCount
+      frameCount: frameCount,
+      override: frameWriteOverride
     )
 
     if writeSucceeded, let index = wals.firstIndex(where: { $0.id == walId }) {
@@ -950,9 +958,25 @@ final class WALService: ObservableObject {
   nonisolated private static func writeFramesOffMain(
     _ data: Data,
     to fileUrl: URL,
-    frameCount: Int
+    frameCount: Int,
+    override: FrameWriteOverride? = nil
   ) async -> Bool {
-    await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+    if let override {
+      do {
+        try await override(data, fileUrl)
+        log("WALService: Wrote \(frameCount) frames to \(fileUrl.lastPathComponent)")
+        return true
+      } catch {
+        let reason = error.localizedDescription
+        log(
+          "WALService: Failed to write frames to disk "
+            + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+            + reason)
+        return false
+      }
+    }
+
+    return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
       DispatchQueue.global(qos: .utility).async {
         do {
           try data.write(to: fileUrl, options: .atomic)

@@ -64,6 +64,53 @@ final class WALServiceDownloadedDataTests: XCTestCase {
     XCTAssertTrue(service.wals.isEmpty)
   }
 
+  /// Proves the main actor stays responsive while a frame write is in flight.
+  ///
+  /// The write is held open by an injected override. If the old synchronous
+  /// wait were still in place, the main actor would be blocked inside
+  /// `updateWalWithDownloadedData` and this test would deadlock instead of
+  /// reaching the assertion after the write starts.
+  func testMainActorStaysResponsiveDuringSlowWrite() async throws {
+    let (startedStream, startedContinuation) = AsyncStream<Void>.makeStream()
+    let (gateStream, gateContinuation) = AsyncStream<Void>.makeStream()
+
+    let slowService = WALService(
+      apiClient: APIClient(session: URLSession(configuration: .ephemeral)),
+      walDirectoryForTesting: walDir.appendingPathComponent("slow", isDirectory: true),
+      frameWriteOverride: { data, url in
+        startedContinuation.yield()
+        var gate = gateStream.makeAsyncIterator()
+        _ = await gate.next()
+        try data.write(to: url, options: .atomic)
+      }
+    )
+    slowService.setWalsForTesting([])
+
+    let wal = slowService.createSdCardWal(
+      device: "dev1", deviceModel: "Omi", codec: "opus", totalBytes: 2, currentOffset: 0)
+
+    let update = Task { @MainActor in
+      await slowService.updateWalWithDownloadedData(
+        walId: wal.id, downloadedBytes: 2, frames: [Data([0xAA, 0xBB])])
+    }
+
+    var started = startedStream.makeAsyncIterator()
+    let startedSignal: Void? = await started.next()
+    XCTAssertNotNil(startedSignal, "the frame write should have started")
+
+    // Reaching this line while the write is still gated proves the main actor
+    // was not blocked by it.
+    XCTAssertNil(
+      slowService.getWal(id: wal.id)?.filePath,
+      "filePath must not be set until the write completes")
+
+    gateContinuation.yield()
+    gateContinuation.finish()
+    await update.value
+
+    XCTAssertNotNil(slowService.getWal(id: wal.id)?.filePath)
+  }
+
   /// Source guard: the persistence path must not reintroduce a blocking wait on
   /// the main actor. `WALService` is `@MainActor`, so `group.wait()` or a
   /// synchronous `DispatchQueue.sync` here freezes the UI for the whole write.

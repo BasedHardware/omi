@@ -49,6 +49,15 @@ final class StorageSyncService: ObservableObject {
   private var lastProgressUpdate = Date()
   private var lastProgressBytes = 0
 
+  /// Monotonic identity for the current sync attempt.
+  ///
+  /// `stopSync` and `finishSync` both suspend on the async WAL write. Without an
+  /// identity check, a stop that resumes after a new sync has started would
+  /// clear the new sync's state, and a cancelled `finishSync` could upload and
+  /// reset a newer attempt. Every start/stop bumps this; a suspended path only
+  /// mutates shared state while its captured generation is still current.
+  private var syncGeneration = 0
+
   // MARK: - Initialization
 
   private init() {}
@@ -105,6 +114,12 @@ final class StorageSyncService: ObservableObject {
     lastProgressUpdate = Date()
     lastProgressBytes = 0
 
+    // Claim a fresh generation for this attempt. A stop or completion from an
+    // earlier attempt that resumes after an await will see a stale generation
+    // and leave this sync's state alone.
+    syncGeneration &+= 1
+    let generation = syncGeneration
+
     // Create WAL for this sync
     currentWal = walService.createSdCardWal(
       device: device.id,
@@ -123,7 +138,7 @@ final class StorageSyncService: ObservableObject {
 
     // Start sync task
     syncTask = Task { [weak self] in
-      await self?.performSync(connection: connection, offset: currentOffset)
+      await self?.performSync(connection: connection, offset: currentOffset, generation: generation)
     }
   }
 
@@ -131,21 +146,30 @@ final class StorageSyncService: ObservableObject {
   func stopSync() async {
     syncTask?.cancel()
     syncTask = nil
+
+    // Invalidate the cancelled attempt before suspending, and take ownership of
+    // its state up front. Clearing before the await means a sync started while
+    // the partial write is in flight owns fresh state and cannot be clobbered
+    // when this stop resumes.
+    syncGeneration &+= 1
+    let wal = currentWal
+    let frames = downloadedFrames
+    let bytes = totalBytesDownloaded
+
     isSyncing = false
-
-    // Save partial progress
-    if let wal = currentWal, !downloadedFrames.isEmpty {
-      await walService.updateWalWithDownloadedData(
-        walId: wal.id,
-        downloadedBytes: totalBytesDownloaded,
-        frames: downloadedFrames
-      )
-    }
-
     currentWal = nil
     downloadedFrames = []
     totalBytesDownloaded = 0
     lastProgressBytes = 0
+
+    // Save partial progress
+    if let wal, !frames.isEmpty {
+      await walService.updateWalWithDownloadedData(
+        walId: wal.id,
+        downloadedBytes: bytes,
+        frames: frames
+      )
+    }
 
     logger.info("Sync stopped")
   }
@@ -174,7 +198,7 @@ final class StorageSyncService: ObservableObject {
 
   // MARK: - Private Methods
 
-  private func performSync(connection: DeviceConnection, offset: Int) async {
+  private func performSync(connection: DeviceConnection, offset: Int, generation: Int) async {
     // Send read command to start transfer
     let success = await connection.writeToStorage(
       fileNum: 1,
@@ -183,10 +207,9 @@ final class StorageSyncService: ObservableObject {
     )
 
     guard success else {
-      await MainActor.run {
-        errorMessage = "Failed to start storage transfer"
-        isSyncing = false
-      }
+      guard generation == syncGeneration else { return }
+      errorMessage = "Failed to start storage transfer"
+      isSyncing = false
       return
     }
 
@@ -195,7 +218,9 @@ final class StorageSyncService: ObservableObject {
 
     do {
       for try await data in stream {
-        if Task.isCancelled { break }
+        // A stop or a newer sync invalidates this attempt; stop consuming so we
+        // never append frames to another attempt's buffer.
+        if Task.isCancelled || generation != syncGeneration { break }
 
         let result = processPacket(data)
 
@@ -205,25 +230,23 @@ final class StorageSyncService: ObservableObject {
 
         case .complete:
           logger.info("Transfer complete")
-          await finishSync()
+          await finishSync(generation: generation)
           return
 
         case .error(let message):
           logger.error("Transfer error: \(message)")
-          await MainActor.run {
-            errorMessage = message
-            isSyncing = false
-          }
+          guard generation == syncGeneration else { return }
+          errorMessage = message
+          isSyncing = false
           return
         }
       }
     } catch {
       if !Task.isCancelled {
         logger.error("Stream error: \(error.localizedDescription)")
-        await MainActor.run {
-          errorMessage = error.localizedDescription
-          isSyncing = false
-        }
+        guard generation == syncGeneration else { return }
+        errorMessage = error.localizedDescription
+        isSyncing = false
       }
     }
   }
@@ -354,8 +377,11 @@ final class StorageSyncService: ObservableObject {
     let bytesPerSecond = Self.bytesPerSecond(bytesDelta: bytesDelta, interval: interval)
     lastProgressUpdate = now
     lastProgressBytes = totalBytesDownloaded
+    let generation = syncGeneration
 
     Task { @MainActor in
+      // A stop or newer sync may have replaced this attempt's progress.
+      guard generation == syncGeneration else { return }
       progress = SyncProgress(
         totalBytes: progress.totalBytes,
         downloadedBytes: totalBytesDownloaded,
@@ -365,29 +391,43 @@ final class StorageSyncService: ObservableObject {
     }
   }
 
-  private func finishSync() async {
-    guard let wal = currentWal else { return }
+  private func finishSync(generation: Int) async {
+    guard generation == syncGeneration, let wal = currentWal else { return }
+
+    // Snapshot this attempt's frames before suspending: a stop or a newer sync
+    // may mutate the shared buffers while the write is in flight.
+    let frames = downloadedFrames
+    let bytes = totalBytesDownloaded
+    let frameCount = frames.count
 
     // Save downloaded data
     await walService.updateWalWithDownloadedData(
       walId: wal.id,
-      downloadedBytes: totalBytesDownloaded,
-      frames: downloadedFrames
+      downloadedBytes: bytes,
+      frames: frames
     )
 
-    let frameCount = downloadedFrames.count
+    // A stop or a newer sync took over while we were writing. Do not upload or
+    // reset state that no longer belongs to this attempt.
+    guard generation == syncGeneration else {
+      logger.info("Sync completion superseded; skipping upload and state reset")
+      return
+    }
 
     // Upload downloaded WALs to cloud (real POST /v2/sync-local-files) before
     // resetting isSyncing, so a concurrent BLE download cannot start and get
     // its own syncToCloud() skipped by WALService's isSyncing guard.
     await walService.syncToCloud()
 
-    await MainActor.run {
-      isSyncing = false
-      currentWal = nil
-      downloadedFrames = []
-      totalBytesDownloaded = 0
+    guard generation == syncGeneration else {
+      logger.info("Sync completion superseded during upload; skipping state reset")
+      return
     }
+
+    isSyncing = false
+    currentWal = nil
+    downloadedFrames = []
+    totalBytesDownloaded = 0
 
     logger.info("Sync completed: \(frameCount) frames downloaded")
   }
