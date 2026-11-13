@@ -319,6 +319,21 @@ def test_a_held_backlog_head_at_the_depth_cap_writes_no_marker(world, monkeypatc
     assert not store.run(lambda tx: tx.get('merge_holds', owner_key(OWNER))).get('held')
 
 
+def test_an_unready_backlog_head_at_the_depth_cap_writes_no_marker(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv(SWITCH, 'false')
+    admit(monkeypatch, store, [item('head', 10)], 'content-head', JA)
+    monkeypatch.delenv(SWITCH)
+    admit(monkeypatch, store, [item('new1', 90), item('new2', 95)], 'content-new', JA)
+    settle(store, 'new1', now=200.0)
+    settle(store, 'new2', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=1)
+    assert [e['segment_id'] for e in drain(merge, 201.0)] == ['new1', 'new2']
+    assert merge.commit_next(OWNER, 202.0) is None
+    assert merge.held_owners == set()
+    assert not store.run(lambda tx: tx.get('merge_holds', owner_key(OWNER))).get('held')
+
+
 def test_unstamped_gpu_rows_keep_the_plain_order(world, monkeypatch):
     """Only provider rows are reclassified: a record-lane or older GPU row has no class either."""
     from utils.batch_pipeline.merge import _catch_up

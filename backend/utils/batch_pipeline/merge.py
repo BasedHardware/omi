@@ -276,7 +276,8 @@ class OrderedMerge:
                 over_cap
                 and waiter is None
                 and fresh is None
-                and not (candidate['state'] == 'result_ready' and _backlog_held(candidate))
+                # A held backlog head, ready or not, is not a depth hold: no marker, no re-offer.
+                and not _backlog_held(candidate)
             ):
                 # At the depth cap with rows pending, whatever the head's state:
                 # maintenance re-offers this owner, and the durable marker
@@ -331,8 +332,9 @@ class OrderedMerge:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
                 return None
-            if not fresh_first and not released.get('recovered') and _backlog_held(candidate):
+            if not fresh_first and _backlog_held(candidate):
                 # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.
+                # A recovered unit is held too: recovery does not make an old capture fresh.
                 held['catch_up'] = True
                 held['backlog'] = True
                 return None
