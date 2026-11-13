@@ -38,33 +38,54 @@ VENDOR = "soniox"
 GAP_FLAG = "gap_spread"
 RESET_FLAG = "baseline_reset"
 
+# Bounded, sanitized skip vocabulary. The daily job copies this token into Cloud
+# Logging, so it is a fixed set: never a vendor message, URL, header, response
+# body or account value.
+SKIP_REASONS = frozenset(
+    {
+        "key_unavailable",
+        "permission_unavailable",
+        "redirect_refused",
+        "http_error",
+        "transport_error",
+        "invalid_response",
+    }
+)
+
 
 class BalanceError(RuntimeError):
     """A sanitized transport/shape failure; never the HTTP body or the key."""
+
+    def __init__(self, reason: str, detail: str = "", http_status: int | None = None):
+        if reason not in SKIP_REASONS:
+            raise ValueError("unbounded balance skip reason")
+        super().__init__(detail or reason)
+        self.reason = reason
+        self.http_status = http_status
 
 
 def usd(value) -> Decimal:
     """Parse one balance field. Soniox sends strings; accept numbers leniently."""
     if isinstance(value, bool):
-        raise BalanceError("invalid balance value")
+        raise BalanceError("invalid_response", "invalid balance value")
     try:
         amount = Decimal(str(value))
     except Exception:
-        raise BalanceError("invalid balance value") from None
+        raise BalanceError("invalid_response", "invalid balance value") from None
     if not amount.is_finite() or amount < 0:
-        raise BalanceError("invalid balance value")
+        raise BalanceError("invalid_response", "invalid balance value")
     return amount
 
 
 def parse_balance(payload) -> dict:
     """Validate the balance document and return parsed numbers only."""
     if not isinstance(payload, dict):
-        raise BalanceError("balance response is not an object")
+        raise BalanceError("invalid_response", "balance response is not an object")
     used = usd(payload.get("used_balance_usd"))
     available = usd(payload.get("available_balance_usd"))
     invoice = payload.get("invoice_billing_enabled")
     if not isinstance(invoice, bool):
-        raise BalanceError("balance response missing invoice_billing_enabled")
+        raise BalanceError("invalid_response", "balance response missing invoice_billing_enabled")
     return {
         "used_usd": str(used),
         "available_usd": str(available),
@@ -97,13 +118,29 @@ def fetch_balance(key: str) -> dict:
         with auth_http.open_authenticated(request, timeout=60) as response:
             return parse_balance(json.load(response))
     except auth_http.RedirectRefused:
-        raise BalanceError("balance redirect refused") from None
+        raise BalanceError("redirect_refused", "balance redirect refused") from None
     except urllib.error.HTTPError as error:
         if error.code in (401, 403):
             raise PermissionError("balance permission unavailable") from None
-        raise BalanceError("balance HTTP %d" % error.code) from None
+        raise BalanceError("http_error", "balance HTTP %d" % error.code, http_status=error.code) from None
     except (OSError, ValueError):
-        raise BalanceError("balance transport/JSON failure") from None
+        raise BalanceError("transport_error", "balance transport/JSON failure") from None
+
+
+def write_skip(path: pathlib.Path, reason: str, http_status: int | None = None) -> None:
+    """Record a bounded skip reason in the artifact and on stderr.
+
+    The reason is a fixed token from ``SKIP_REASONS``; the optional HTTP status is
+    an integer. Neither the key, the request, nor any response body is written.
+    """
+    if reason not in SKIP_REASONS:
+        raise ValueError("unbounded balance skip reason")
+    document = {"status": "skipped", "reason": reason}
+    if http_status is not None:
+        document["http_status"] = http_status
+    path.write_text(json.dumps(document))
+    suffix = " http_status=%d" % http_status if http_status is not None else ""
+    sys.stderr.write("WARNING: Soniox balance snapshot skipped: %s%s\n" % (reason, suffix))
 
 
 def pull(raw: pathlib.Path, now: dt.datetime | None = None) -> None:
@@ -112,18 +149,15 @@ def pull(raw: pathlib.Path, now: dt.datetime | None = None) -> None:
     path.unlink(missing_ok=True)  # a skipped refresh must not reuse a prior artifact
     key = optional_org_key("soniox_org")
     if not key:
-        sys.stderr.write("WARNING: Soniox balance snapshot skipped: org key unavailable\n")
-        path.write_text(json.dumps({"status": "skipped", "reason": "key_unavailable"}))
+        write_skip(path, "key_unavailable")
         return
     try:
         parsed = fetch_balance(key)
     except PermissionError:
-        sys.stderr.write("WARNING: Soniox balance snapshot skipped: API permission unavailable\n")
-        path.write_text(json.dumps({"status": "skipped", "reason": "permission_unavailable"}))
+        write_skip(path, "permission_unavailable")
         return
     except BalanceError as error:
-        sys.stderr.write("WARNING: Soniox balance snapshot skipped: %s\n" % error)
-        path.write_text(json.dumps({"status": "skipped", "reason": "error"}))
+        write_skip(path, error.reason, error.http_status)
         return
     ts = (now or dt.datetime.now(dt.timezone.utc)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     document = {"status": "ready", "vendor": VENDOR, "ts": ts, **parsed}

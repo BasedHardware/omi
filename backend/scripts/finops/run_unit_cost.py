@@ -43,6 +43,7 @@ if AUTH_MODE == "cloudrun":
     import cloudrun as gcpauth  # noqa: E402
 else:
     import gcpauth  # noqa: E402
+import pull_vendor_balance  # noqa: E402
 
 RUN_ROOT = pathlib.Path(
     os.environ.get("FINOPS_RUN_ROOT", os.environ.get("SCRATCH_ROOT", "/Volumes/scratch") + "/finops-runs")
@@ -58,6 +59,46 @@ def pull_log_tail(log: pathlib.Path, n: int = 80) -> str:
     except OSError:
         return ""
     return "\n".join(lines[-n:])
+
+
+# Bounded tokens this job may copy into Cloud Logging for a balance skip: the
+# puller's own vocabulary plus orchestrator-local states. Anything else in the
+# artifact is reported as `reason_unrecognized`, never echoed.
+def vendor_balance_skip(raw: pathlib.Path) -> tuple[str, int | None] | None:
+    """Bounded skip reason from the balance artifact; None when ready or absent.
+
+    Only a fixed token (and an integer HTTP status) leaves this function, so a
+    tampered or unexpected artifact can never inject free text into the log.
+    """
+    path = raw / "vendor_balance_snapshot.json"
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ("artifact_unreadable", None)
+    if not isinstance(document, dict) or document.get("status") != "skipped":
+        return None
+    reason = document.get("reason")
+    if reason not in pull_vendor_balance.SKIP_REASONS:
+        return ("reason_unrecognized", None)
+    status = document.get("http_status")
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        status = None
+    return (reason, status)
+
+
+def log_vendor_balance_skip(raw: pathlib.Path, skipped: set[str]) -> None:
+    """Surface the balance skip reason in Cloud Logging (pull.log is ephemeral)."""
+    skip = vendor_balance_skip(raw)
+    if skip:
+        reason, http_status = skip
+        sys.stderr.write(
+            "WARNING: Soniox balance snapshot skipped: %s%s; see pull.log\n"
+            % (reason, " http_status=%d" % http_status if http_status is not None else "")
+        )
+    elif "balance" not in skipped and not (raw / "vendor_balance_snapshot.json").exists():
+        sys.stderr.write("WARNING: Soniox balance snapshot skipped: artifact_missing; see pull.log\n")
 
 
 def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) -> bool:
@@ -296,9 +337,7 @@ def main() -> None:
     if stripe_fees.exists() and json.loads(stripe_fees.read_text()).get("status") == "skipped":
         sys.stderr.write("WARNING: Stripe fee line unavailable; see pull.log\n")
 
-    vendor_balance = raw / "vendor_balance_snapshot.json"
-    if vendor_balance.exists() and json.loads(vendor_balance.read_text()).get("status") == "skipped":
-        sys.stderr.write("WARNING: Soniox balance snapshot unavailable; see pull.log\n")
+    log_vendor_balance_skip(raw, skip)
 
     modulate_modelled = raw / "stt_modulate_modelled_daily.json"
     if modulate_modelled.exists() and json.loads(modulate_modelled.read_text()).get("status") == "skipped":

@@ -5,6 +5,7 @@ credentials. Fixtures use the published balance response shape (strings)."""
 import datetime as dt
 from decimal import Decimal
 import importlib.util
+import io
 import json
 import pathlib
 import urllib.error
@@ -79,10 +80,11 @@ def test_pull_skips_without_key_and_never_fails_the_job(vb, tmp_path, capsys):
     vb.pull(tmp_path)
     artifact = json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())
     assert artifact == {"status": "skipped", "reason": "key_unavailable"}
-    assert "WARNING" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "key_unavailable" in err
 
 
-def test_pull_skips_on_permission_and_on_error(vb, tmp_path, monkeypatch):
+def test_pull_skips_on_permission_and_on_error(vb, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("FINOPS_SONIOX_ORG_KEY", "org-key-value")
 
     def denied(key):
@@ -91,13 +93,49 @@ def test_pull_skips_on_permission_and_on_error(vb, tmp_path, monkeypatch):
     monkeypatch.setattr(vb, "fetch_balance", denied)
     vb.pull(tmp_path)
     assert json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())["reason"] == "permission_unavailable"
+    assert "permission_unavailable" in capsys.readouterr().err
 
     def broken(key):
-        raise vb.BalanceError("balance HTTP 500")
+        raise vb.BalanceError("http_error", "balance HTTP 500", http_status=500)
 
     monkeypatch.setattr(vb, "fetch_balance", broken)
     vb.pull(tmp_path)
-    assert json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())["reason"] == "error"
+    artifact = json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())
+    assert artifact == {"status": "skipped", "reason": "http_error", "http_status": 500}
+    err = capsys.readouterr().err
+    assert "http_error" in err and "http_status=500" in err
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "key_unavailable",
+        "permission_unavailable",
+        "redirect_refused",
+        "http_error",
+        "transport_error",
+        "invalid_response",
+    ],
+)
+def test_every_skip_reason_is_bounded_and_logged(vb, tmp_path, monkeypatch, capsys, reason):
+    assert reason in vb.SKIP_REASONS
+    monkeypatch.setenv("FINOPS_SONIOX_ORG_KEY", "org-key-value")
+
+    def broken(key):
+        raise vb.BalanceError(reason, "synthetic detail")
+
+    monkeypatch.setattr(vb, "fetch_balance", broken)
+    vb.pull(tmp_path)
+    artifact = json.loads((tmp_path / "vendor_balance_snapshot.json").read_text())
+    assert artifact == {"status": "skipped", "reason": reason}
+    assert reason in capsys.readouterr().err
+
+
+def test_balance_error_refuses_an_unbounded_reason(vb):
+    with pytest.raises(ValueError, match="unbounded"):
+        vb.BalanceError("Bearer sk-live-SENTINEL", "detail")
+    with pytest.raises(ValueError, match="unbounded"):
+        vb.write_skip(pathlib.Path("unused.json"), "raw vendor response")
 
 
 def test_pull_writes_parsed_numbers_only_and_stays_idempotent(vb, tmp_path, monkeypatch, capsys):
@@ -125,13 +163,41 @@ def test_pull_never_logs_the_key_even_on_transport_paths(vb, tmp_path, monkeypat
     monkeypatch.setenv("FINOPS_SONIOX_ORG_KEY", secret)
 
     def boom(key):
-        raise vb.BalanceError("balance transport/JSON failure")
+        raise vb.BalanceError("transport_error", "balance transport/JSON failure")
 
     monkeypatch.setattr(vb, "fetch_balance", boom)
     vb.pull(tmp_path)
     out = capsys.readouterr()
     assert secret not in out.err and secret not in out.out
     assert (tmp_path / "vendor_balance_snapshot.json").read_text().find(secret) == -1
+
+
+def test_pull_never_logs_a_raw_response_or_request_url(vb, tmp_path, monkeypatch, capsys):
+    """An HTTPError carries the URL and body; only its integer status may escape."""
+    import auth_http
+
+    secret = "soniox-org-secret-DO-NOT-PRINT"
+    body = b'{"error":"raw vendor body SENTINEL-BODY","key":"' + secret.encode() + b'"}'
+    monkeypatch.setenv("FINOPS_SONIOX_ORG_KEY", secret)
+
+    class ErrorOpener:
+        def open(self, req, timeout=None):
+            raise urllib.error.HTTPError(
+                vb.BALANCE_URL + "?token=" + secret,
+                404,
+                "x",
+                {"Authorization": "Bearer " + secret},
+                io.BytesIO(body),
+            )
+
+    monkeypatch.setattr(auth_http, "build_opener", lambda *a, **k: ErrorOpener())
+    vb.pull(tmp_path)
+    out = capsys.readouterr()
+    artifact = (tmp_path / "vendor_balance_snapshot.json").read_text()
+    for leaked in (secret, "SENTINEL-BODY", "token=", "Authorization"):
+        assert leaked not in out.err and leaked not in out.out and leaked not in artifact
+    assert json.loads(artifact) == {"status": "skipped", "reason": "http_error", "http_status": 404}
+    assert "http_error" in out.err and "http_status=404" in out.err
 
 
 def test_fetch_balance_classifies_permission_and_http_errors(vb, monkeypatch):
@@ -149,8 +215,76 @@ def test_fetch_balance_classifies_permission_and_http_errors(vb, monkeypatch):
         vb.fetch_balance("k")
 
     monkeypatch.setattr(auth_http, "build_opener", lambda *a, **k: ErrorOpener(500))
-    with pytest.raises(vb.BalanceError):
+    with pytest.raises(vb.BalanceError) as caught:
         vb.fetch_balance("k")
+    assert caught.value.reason == "http_error" and caught.value.http_status == 500
+
+
+# ---------------------------------------------------------------- daily job surfacing
+
+
+@pytest.fixture
+def runner(monkeypatch):
+    monkeypatch.syspath_prepend(str(FINOPS))
+    monkeypatch.delenv("FINOPS_AUTH", raising=False)
+    return load("run_unit_cost")
+
+
+def test_daily_job_surfaces_the_bounded_skip_reason(runner, tmp_path, capsys):
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps({"status": "skipped", "reason": "http_error", "http_status": 404})
+    )
+    runner.log_vendor_balance_skip(tmp_path, set())
+    err = capsys.readouterr().err
+    assert "WARNING: Soniox balance snapshot skipped: http_error http_status=404" in err
+
+
+def test_daily_job_never_echoes_artifact_free_text(runner, tmp_path, capsys):
+    sentinel = "Bearer sk-live-SENTINEL /v1/organization/balance?token=abc"
+    (tmp_path / "vendor_balance_snapshot.json").write_text(json.dumps({"status": "skipped", "reason": sentinel}))
+    runner.log_vendor_balance_skip(tmp_path, set())
+    err = capsys.readouterr().err
+    assert "reason_unrecognized" in err
+    assert sentinel not in err and "SENTINEL" not in err and "token=" not in err
+
+
+def test_daily_job_reports_an_unreadable_artifact(runner, tmp_path, capsys):
+    (tmp_path / "vendor_balance_snapshot.json").write_text("{not json")
+    runner.log_vendor_balance_skip(tmp_path, set())
+    assert "artifact_unreadable" in capsys.readouterr().err
+
+
+def test_daily_job_reports_a_missing_artifact_only_when_balance_ran(runner, tmp_path, capsys):
+    runner.log_vendor_balance_skip(tmp_path, set())
+    assert "artifact_missing" in capsys.readouterr().err
+    runner.log_vendor_balance_skip(tmp_path, {"balance"})
+    assert capsys.readouterr().err == ""
+
+
+def test_daily_job_stays_quiet_on_a_ready_artifact(runner, tmp_path, capsys):
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "vendor": "soniox",
+                "ts": "2026-10-22T14:30:00Z",
+                "used_usd": "100",
+                "available_usd": "50",
+                "invoice_billing_enabled": False,
+            }
+        )
+    )
+    runner.log_vendor_balance_skip(tmp_path, set())
+    assert capsys.readouterr().err == ""
+
+
+def test_daily_job_ignores_a_non_integer_http_status(runner, tmp_path, capsys):
+    (tmp_path / "vendor_balance_snapshot.json").write_text(
+        json.dumps({"status": "skipped", "reason": "http_error", "http_status": "404 SENTINEL"})
+    )
+    runner.log_vendor_balance_skip(tmp_path, set())
+    err = capsys.readouterr().err
+    assert "http_error" in err and "SENTINEL" not in err and "http_status" not in err
 
 
 # ---------------------------------------------------------------- delta math
