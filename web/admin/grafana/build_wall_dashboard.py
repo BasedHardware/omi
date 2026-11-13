@@ -259,6 +259,9 @@ PLATFORM_COLUMNS = [("mobile", "Mobile", "number"), ("macos", "macOS", "number")
                     ("other", "Other", "number")]
 PLATFORM_OVERRIDES = [color(n, h) for n, h in PLATFORM.items()]
 DATE = ("date", "date", "timestamp")
+# The uptime sidecar emits the UTC day as epoch milliseconds (a number); a plain "timestamp"
+# column parses it to null and the panel reads "Data outside time range".
+UPTIME_DATE = ("date", "date", "timestamp_epoch")
 
 
 MATURING = ("The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days "
@@ -424,7 +427,7 @@ def columns():
                    UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
                    "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
                    "failures for the last 7 days are in the Health stat's source frame `journeys`.",
-                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                   [target("uptime", "daily", [UPTIME_DATE, ("all", "All journeys", "number"),
                                                ("capture", "Live capture", "number"),
                                                ("saved", "Conversation saved", "number"),
                                                ("chat", "Chat answer", "number"),

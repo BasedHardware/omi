@@ -244,6 +244,10 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
         fields = [c["selector"] for c in target["columns"]]
         self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
+        # the sidecar emits the UTC day as epoch milliseconds; a plain "timestamp" column parses
+        # that to null and the panel reads "Data outside time range"
+        date_col = next(c for c in target["columns"] if c["selector"] == "date")
+        self.assertEqual(date_col["type"], "timestamp_epoch")
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
         hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
