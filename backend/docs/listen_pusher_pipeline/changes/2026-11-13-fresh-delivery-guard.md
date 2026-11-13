@@ -43,7 +43,10 @@ sample. The existing advisory maintenance lease's fail-open behavior is
 unchanged; this measurement is not an authorization gate.
 
 `BATCH_PIPELINE_FRESH_GUARD_ENABLED=off` (also false/0/no) suppresses queries and
-all four gauges, including at scrape time. It is on by default. The unconditional
+all four gauges, including at scrape time. It is on by default and read through
+the registered policy kill-switch helper, with a helper-backed flag-budget entry.
+The reviewed lifecycle writer inventory includes `fresh_capture` in the merge
+transaction payload. The unconditional
 row field rolls back by revert only; stamped rows have no other semantic reader.
 
 Read cost per sample: two count RPCs, about one billed document read per 1,000

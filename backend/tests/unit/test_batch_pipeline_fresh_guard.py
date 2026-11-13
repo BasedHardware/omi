@@ -201,3 +201,26 @@ def test_scrape_does_not_wait_for_count_rpc_and_overlapping_refresh_is_coalesced
             release.set()
         future.result(timeout=2)
     assert samples(registry)['unprojected_ratio'] == 0.25
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no', ' OFF '])
+def test_registered_kill_switch_stops_queries_in_every_parser_mode(guard, monkeypatch, mode, value):
+    sampler, registry, _ = guard
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_GUARD_ENABLED', value)
+    client = CountClient()
+    sampler.refresh(store(client))
+    assert client.calls == []
+    assert samples(registry) == {}
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+@pytest.mark.parametrize('value', [None, '', 'true', 'unexpected'])
+def test_registered_kill_switch_defaults_on_in_every_parser_mode(monkeypatch, mode, value):
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_FRESH_GUARD_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_FRESH_GUARD_ENABLED', value)
+    assert module.enabled()

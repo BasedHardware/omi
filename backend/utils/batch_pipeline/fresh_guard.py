@@ -1,12 +1,12 @@
 """Leader-owned, once-a-minute fresh-delivery samples. Scrapes never do IO."""
 
 import logging
-import os
 import threading
 import time
 
 from prometheus_client.core import GaugeMetricFamily
 
+from config.policy import kill_switch
 from database.batch_pipeline_fresh_guard import fresh_committed_counts
 
 PREFIX = 'omi_batch_pipeline_fresh_'
@@ -19,7 +19,7 @@ METRICS = {
 
 
 def enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_FRESH_GUARD_ENABLED', '').strip().lower() not in {'0', 'false', 'off', 'no'}
+    return kill_switch('BATCH_PIPELINE_FRESH_GUARD_ENABLED', log=False)
 
 
 class FreshGuard:
