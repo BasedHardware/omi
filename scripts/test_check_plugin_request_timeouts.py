@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -9,6 +11,10 @@ import urllib.request
 from pathlib import Path
 
 from check_plugin_request_timeouts import unbounded_calls
+
+SCRIPT = Path(__file__).with_name('check_plugin_request_timeouts.py')
+BARE = 'import requests\nrequests.get(url)\n'
+BOUNDED = 'import requests\nrequests.get(url, timeout=(5, 30))\n'
 
 
 def scan(source):
@@ -61,6 +67,36 @@ class ScannerTests(unittest.TestCase):
         for sock in accepted:
             sock.close()
         listener.close()
+
+
+class RootTests(unittest.TestCase):
+    def run_in(self, root):
+        return subprocess.run([sys.executable, str(SCRIPT)], cwd=root, capture_output=True, text=True)
+
+    def test_the_mcp_server_is_scanned_along_with_the_plugins(self):
+        with tempfile.TemporaryDirectory() as root:
+            files = [Path(root, 'plugins', 'app', 'main.py'), Path(root, 'mcp', 'src', 'server', 'main.py')]
+            for path in files:
+                path.parent.mkdir(parents=True)
+                path.write_text(BARE)
+            result = self.run_in(root)
+            reported = result.stderr.replace('\\', '/')
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('plugins/app/main.py:2', reported)
+            self.assertIn('mcp/src/server/main.py:2', reported)
+
+            for path in files:
+                path.write_text(BOUNDED)
+            self.assertEqual(self.run_in(root).returncode, 0)
+
+    def test_test_files_installed_packages_and_other_trees_are_left_out(self):
+        with tempfile.TemporaryDirectory() as root:
+            for relative in ['mcp/tests/test_server.py', 'mcp/.venv/lib/site-packages/pkg/mod.py', 'backend/main.py']:
+                path = Path(root, relative)
+                path.parent.mkdir(parents=True)
+                path.write_text(BARE)
+            Path(root, 'plugins').mkdir()
+            self.assertEqual(self.run_in(root).returncode, 0)
 
 
 if __name__ == '__main__':
