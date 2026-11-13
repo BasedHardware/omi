@@ -7,7 +7,7 @@ they refuse before any write instead of falling back to FS queue ownership.
 
 from copy import deepcopy
 
-from database.jobstore.authority import AuthorityRefused
+from database.jobstore.authority import AuthorityRefused, fingerprint
 
 
 class IntentTransaction:
@@ -81,6 +81,20 @@ class IntentStore:
                 # body writes above remain buffered in the original view. These
                 # authority/intent reads happen before the first raw FS write.
                 self.handoff.stage(view.transaction, self.binding.job_id, self.binding.owner_id, targets, payload)
+            elif result.get('outcome') == 'batch':
+                # A legacy FS ledger alone cannot attest PG custody after a
+                # cutover. Never acknowledge accepted work with no durable intent.
+                self.handoff.authority.check(view.transaction, phases=('PG_OPEN',))
+                source = self.handoff.ref('intent', result['job_id']).get(transaction=view.transaction).to_dict() or {}
+                intent = source.get('intent', {})
+                if (
+                    intent.get('uid') != self.binding.owner_id
+                    or intent.get('identity') != result['job_id']
+                    or intent.get('namespace') != self.handoff.ticket.namespace
+                    or intent.get('epoch') != self.handoff.ticket.value
+                    or source.get('fingerprint') != fingerprint(intent)
+                ):
+                    raise AuthorityRefused('existing batch ledger has no matching PG admission intent')
             return result
 
         return self.source.run(commit)

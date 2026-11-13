@@ -335,3 +335,6 @@ def test_existing_admission_joins_customer_ledger_and_intent_without_fs_queue(co
     assert not handoff.client.collection(source.namespace + '_jobs').document('one').get().exists
     assert not handoff.client.collection(source.namespace + '_control').limit(1).get()
     assert sync_content_ledger_ref(handoff.client, uid, 'content').get().to_dict()['job_id'] == 'recording'
+    handoff.ref('intent', 'recording').delete()
+    with pytest.raises(AuthorityRefused, match='no matching PG admission intent'):
+        admit(source, [item], binding, 103, **kwargs)
