@@ -57,6 +57,16 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
         data.tiers.any((tier) => tier.priceFor('year') != null)) {
       return;
     }
+    // Monthly, except when the current card publishes only a yearly price: that
+    // subscriber keeps the yearly chip so the picker matches their own plan.
+    if (data.current?.interval == 'year') {
+      for (final tier in data.tiers) {
+        if (tier.isCurrent && tier.priceFor('month') == null && tier.priceFor('year') != null) {
+          _interval = 'year';
+          return;
+        }
+      }
+    }
     _interval = 'month';
   }
 

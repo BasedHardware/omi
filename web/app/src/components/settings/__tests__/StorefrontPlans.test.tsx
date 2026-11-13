@@ -18,6 +18,13 @@ vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
   trackUpgradeSucceeded: vi.fn(),
 }));
 
+const flags = vi.hoisted(() => ({ omiFlagEnabled: vi.fn() }));
+vi.mock('@/lib/omiFlags', () => ({
+  omiFlagEnabled: flags.omiFlagEnabled,
+  loadOmiFlags: vi.fn(),
+  resetOmiFlags: vi.fn(),
+}));
+
 import { StorefrontPlans } from '@/components/settings/storefront/StorefrontPlans';
 import {
   BudgetUpsellBanner,
@@ -26,6 +33,8 @@ import {
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
+  flags.omiFlagEnabled.mockReset();
+  flags.omiFlagEnabled.mockResolvedValue(false);
   vi.stubGlobal('open', vi.fn());
   window.localStorage.clear();
 });
@@ -144,6 +153,33 @@ describe('StorefrontPlans', () => {
 });
 
 describe('StorefrontPanel purchase routing', () => {
+  it('the yearly default kill switch applies when it resolves after the panel mounted', async () => {
+    let resolveFlag: (value: boolean) => void = () => {};
+    flags.omiFlagEnabled.mockImplementation((key: string) =>
+      key === 'web-plan-storefront-yearly-default-off'
+        ? new Promise<boolean>((resolve) => {
+            resolveFlag = resolve;
+          })
+        : Promise.resolve(false),
+    );
+    api.getStorefront.mockResolvedValue(golden('free_settings'));
+    render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    const plus = await screen.findByTestId('storefront-tier-plus');
+    // The payload arrived before the flag, so the panel is still on yearly.
+    expect(screen.getByRole('radio', { name: 'Yearly · 2 months free' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    resolveFlag(true);
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    );
+    expect(within(plus).getByText('US$19.99/month')).toBeTruthy();
+  });
+
   it('same-tier annual requires backend confirmation before any billing call', async () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });

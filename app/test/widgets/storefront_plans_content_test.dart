@@ -219,6 +219,23 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the kill switch keeps yearly for a yearly-only current plan', (tester) async {
+    await pumpSheet(
+      tester,
+      content: StorefrontPlansContent(
+        storefront: PlanStorefront.fromJson(fixture('plus_annual_current')),
+        yearlyDefault: false,
+        onRetry: () async {},
+        onSelect: (_, __) async {},
+        onManage: () async {},
+      ),
+    );
+    // The current card publishes only a yearly price, so the picker stays on yearly.
+    expect(find.text(r'US$499.90/year'), findsOneWidget);
+    expect(find.text(r'US$49.99/month'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('see all plans stays collapsed until opened', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
     expect(find.text('See all plans'), findsOneWidget);
