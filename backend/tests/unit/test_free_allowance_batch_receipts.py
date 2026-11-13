@@ -10,7 +10,7 @@ from database import free_allowance_leases as ledger
 from database import batch_pipeline_projection as projection
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.observability.stt_cap_dispatch import observe_billed_batch
+from utils.stt.allowance_batch import observe_billed_batch
 
 NOW = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
 

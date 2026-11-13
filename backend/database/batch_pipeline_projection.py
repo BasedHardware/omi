@@ -100,7 +100,7 @@ class ProjectionStore:
         if accounting.get('source_deleted'):
             return
         try:
-            from utils.observability.stt_cap_dispatch import observe_billed_batch
+            from utils.stt.allowance_batch import observe_billed_batch
 
             if not isinstance(accounting.get('updates'), dict) or 'seconds' not in accounting:
                 return

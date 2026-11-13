@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import os
 import threading
+from types import SimpleNamespace
 from uuid import uuid4
 
 from google.api_core.exceptions import Aborted
@@ -15,7 +16,8 @@ from database import free_allowance_leases as ledger, monthly_usage_totals as to
 from database.legal_holds import DestructiveOperationInProgress
 from utils import analytics
 from utils.stt.allowance_session import Operation
-from utils.observability.stt_cap_dispatch import observe_billed_batch
+from utils.stt.allowance_batch import observe_billed_batch
+from utils.stt import allowance_batch
 
 NOW = datetime(2026, 11, 12, 12, tzinfo=timezone.utc)
 pytestmark = pytest.mark.integration
@@ -44,6 +46,26 @@ def lane(monkeypatch):
 def reserve(lane, operation, seconds=6, **kwargs):
     client, uid, _ = lane
     return ledger.reserve(uid, operation, seconds, 100, now=NOW, firestore_client=client, **kwargs)
+
+
+@pytest.fixture
+def finish_batch_observations(monkeypatch):
+    """Await real DB workers separately from the observer's serving deadline."""
+    executor = allowance_batch.free_allowance_executor
+    pending = []
+
+    def submit(*args, **kwargs):
+        future = executor.submit(*args, **kwargs)
+        pending.append(future)
+        return future
+
+    def finish():
+        for future in pending:
+            future.result(timeout=30)
+
+    monkeypatch.setattr(allowance_batch, 'free_allowance_executor', SimpleNamespace(submit=submit))
+    yield finish
+    finish()
 
 
 def test_two_replicas_race_for_the_last_allowance(lane):
@@ -208,7 +230,9 @@ def test_genuine_zero_requires_a_successful_source_query(lane):
     assert totals.read_verified_transcription_seconds(uid, NOW, firestore_client=client) == 0
 
 
-def test_batch_writer_and_late_registered_chunk_preserve_exact_partial_billing(lane, monkeypatch):
+def test_batch_writer_and_late_registered_chunk_preserve_exact_partial_billing(
+    lane, monkeypatch, finish_batch_observations
+):
     from types import SimpleNamespace
     from database.batch_pipeline_projection import ProjectionStore
     from database.sync_ledger import sync_content_ledger_ref
@@ -250,12 +274,13 @@ def test_batch_writer_and_late_registered_chunk_preserve_exact_partial_billing(l
     ids = [str(i) for i in range(65)]
     observe_billed_batch(client, uid, content, NOW, ids, NOW.timestamp() + 10)
     observe_billed_batch(client, uid, content, NOW, ids, NOW.timestamp() + 20)
+    finish_batch_observations()
     receipts = [row.to_dict() for row in user.collection('free_allowance_receipts').stream()]
     assert sum(row['billed_seconds'] for row in receipts) == 7
     assert ledger.chargeable_seconds(uid, NOW, firestore_client=client) == 97
 
 
-def test_concurrent_batch_replays_share_one_cumulative_receipt(lane, monkeypatch):
+def test_concurrent_batch_replays_share_one_cumulative_receipt(lane, monkeypatch, finish_batch_observations):
     from database.sync_ledger import sync_content_ledger_ref
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
@@ -277,6 +302,7 @@ def test_concurrent_batch_replays_share_one_cumulative_receipt(lane, monkeypatch
     with ThreadPoolExecutor(max_workers=2) as workers:
         list(workers.map(replay, range(2)))
     replay(None)  # Repair any conservative bounded-contention failure.
+    finish_batch_observations()
     receipts = [row.to_dict() for row in user.collection('free_allowance_receipts').stream()]
     assert sum(row['billed_seconds'] for row in receipts) == 7
     assert not user.collection('free_allowance_months').document('2026-11').get().to_dict()['holds']

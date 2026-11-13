@@ -1,6 +1,11 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Shadow allowance operation lifecycle, separate from audio custody.
+    'database/free_allowance_leases.py': [
+        ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),
+        ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
+    ],
     'utils/retrieval/tools/edit_tools.py': [
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),

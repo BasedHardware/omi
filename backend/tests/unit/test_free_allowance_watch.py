@@ -163,6 +163,7 @@ async def test_async_observer_has_a_bounded_wait_without_reclassifying_timeout(m
     from utils import executors
 
     cancelled = []
+    budgets = []
 
     async def unavailable(*args, **kwargs):
         try:
@@ -171,9 +172,21 @@ async def test_async_observer_has_a_bounded_wait_without_reclassifying_timeout(m
             cancelled.append(True)
 
     decisions = Mock()
+
+    async def expire(awaitable, *, timeout):
+        budgets.append(timeout)
+        task = asyncio.create_task(awaitable)
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        raise asyncio.TimeoutError
+
     monkeypatch.setattr(executors, 'run_blocking', unavailable)
+    monkeypatch.setattr(asyncio, 'wait_for', expire)
     monkeypatch.setattr(watch, 'DECISIONS', decisions)
-    assert await watch.observe_async('u', 'batch_gpu', 'parakeet', 60, timeout=0.001) is None
+    assert await watch.observe_async('u', 'batch_gpu', 'parakeet', 60) is None
+    assert budgets == [2.5]
     assert cancelled == [True]
     decisions.labels.assert_not_called()
 

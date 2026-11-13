@@ -1245,7 +1245,6 @@ class ListenSessionRuntime:
             background.extend(
                 [
                     self.task_supervisor.create_lifetime_task(self._heartbeat(), name='heartbeat'),
-                    self.task_supervisor.create_lifetime_task(self._allowance_watch(), name='allowance_watch'),
                     self.task_supervisor.create_lifetime_task(
                         self.transcripts.process_loop(), name='stream_transcript'
                     ),
@@ -1253,6 +1252,10 @@ class ListenSessionRuntime:
                     *self.pusher_tasks,
                 ]
             )
+            if getattr(self, 'allowance_operation', None) is not None:
+                background.append(
+                    self.task_supervisor.create_lifetime_task(self._allowance_watch(), name='allowance_watch')
+                )
             if self.is_multi_channel:
                 self.state.speaker_id_done.set()
             else:
@@ -1298,6 +1301,10 @@ class ListenSessionRuntime:
                     except asyncio.CancelledError:
                         pass
             self.state.shutdown_event.set()
+            scope = getattr(self, 'allowance_operation', None)
+            if scope is not None:
+                scope.closed = True
+                scope.changed.set()
             if self.recovery_enabled:
                 await self.task_supervisor.drain_monitored(
                     timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
