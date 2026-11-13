@@ -172,3 +172,106 @@ def test_due_before_mode_resets_the_cursor_and_seeds_on_the_clock(monkeypatch):
     # A cursor from the due ordering is not reused in the legacy ordering.
     assert scan.next(limit=2) == ['legacy']
     assert scan.due_mode is False and scan.after is None
+
+
+# --- the newest-commits half page (2026-11-13) --------------------------------------------------
+
+
+def recent_scanner(monkeypatch, rows, *, stripe=0, now=10_000.0, window='900'):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', window)
+    monkeypatch.setattr(projection_discovery, 'projection_discovery_stripe', lambda: stripe)
+    clock = {'now': now}
+    monkeypatch.setattr(projection_discovery.time, 'time', lambda: clock['now'])
+    query = ResultQuery(rows)
+    store = Mock()
+    store.projection_page.side_effect = lambda **kw: projection_page(query, 'synthetic', **kw)
+    return ProjectionDiscovery(store, states=('pending',), recent=True), clock
+
+
+def backlog_and_new(old=400, new=6, now=10_000.0):
+    rows = {f'old{i:03d}': {'committed_at': 100.0 + i, 'projection_state': 'pending'} for i in range(old)}
+    rows.update({f'new{i}': {'committed_at': now - 60.0 + i, 'projection_state': 'pending'} for i in range(new)})
+    return rows
+
+
+def test_a_new_commit_is_discovered_on_the_first_page_behind_a_long_backlog(monkeypatch):
+    """2026-11-13: with 154,000 pending rows a new commit waited about 15 minutes to be paged."""
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new())
+    page = scan.next(100)
+    assert page[:6] == [f'new{i}' for i in range(6)]
+    # The page is no larger, and the main cursor still walks the backlog from its head.
+    assert len(page) == 100 and page[6] == 'old000'
+
+
+def test_the_main_cursor_still_visits_every_backlog_row(monkeypatch):
+    rows = backlog_and_new()
+    scan, _ = recent_scanner(monkeypatch, rows)
+    seen = set()
+    for _ in range(12):
+        seen.update(scan.next(100))
+    assert seen == set(rows)
+
+
+def test_recent_half_is_bounded_and_resumes_where_it_stopped(monkeypatch):
+    rows = backlog_and_new(old=10, new=120)
+    scan, _ = recent_scanner(monkeypatch, rows)
+    first = scan.next(100)
+    assert (
+        first[:50]
+        == [f'new{i}' for i in sorted(range(120), key=lambda i: (rows[f'new{i}']['committed_at'], f'new{i}'))][:50]
+    )
+    second = scan.next(100)
+    assert not set(second[:50]) & set(first[:50]) and all(name.startswith('new') for name in second[:50])
+
+
+def test_recent_cursor_restarts_at_the_window_floor_once_it_falls_behind(monkeypatch):
+    rows = backlog_and_new(old=10, new=120)
+    scan, clock = recent_scanner(monkeypatch, rows)
+    scan.next(100)
+    assert scan.recent_after is not None
+    clock['now'] += 5_000.0  # Every row is now older than the window.
+    page = scan.next(100)
+    assert scan.recent_after is None and not any(page.count(name) > 1 for name in page)
+
+
+def test_first_recent_pass_starts_at_the_process_stripe(monkeypatch):
+    rows = {f'r{i:03d}': {'committed_at': 9_100.0 + i, 'projection_state': 'pending'} for i in range(900)}
+    scan, _ = recent_scanner(monkeypatch, rows, stripe=2048)
+    page = scan.next(20)
+    assert page[0] == 'r450'  # Half way into the 900 s window.
+    scan.recent_after = None
+    assert scan.next(20)[0] == 'r000'  # Later passes start at the floor.
+
+
+def test_recent_off_and_default_construction_keep_the_single_cursor(monkeypatch):
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new(), window='0')
+    assert scan.next(100)[0] == 'old000'
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '900')
+    plain = ProjectionDiscovery(scan.store, states=('pending',))
+    assert plain.next(100)[0] == 'old000'
+
+
+def test_a_failed_recent_query_costs_only_that_half_page(monkeypatch):
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new())
+    real = scan.store.projection_page.side_effect
+    calls = []
+
+    def flaky(**kw):
+        calls.append(kw)
+        if len(calls) == 1:
+            raise RuntimeError('query unavailable')
+        return real(**kw)
+
+    scan.store.projection_page.side_effect = flaky
+    page = scan.next(100)
+    assert page[0] == 'old000' and len(page) == 100
+
+
+def test_recent_discovery_setting_bounds(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', raising=False)
+    assert batch_pipeline.projection_recent_discovery_seconds() == 900
+    for raw, want in (('0', 0), ('120', 120), ('99999', 3600), ('-1', 0), ('junk', 900)):
+        monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', raw)
+        assert batch_pipeline.projection_recent_discovery_seconds() == want

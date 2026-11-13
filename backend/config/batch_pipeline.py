@@ -775,6 +775,18 @@ def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
 
 
+def projection_recent_discovery_seconds() -> int:
+    """Seconds of the newest commits that half of each assignment discovery page covers
+    (2026-11-13); 0 is off.
+
+    Discovery pages the pending results oldest first, 100 rows a tick per process. With
+    154,000 pending rows a newly committed result waited about 15 minutes to be seen at
+    all, and GPU-route commits have no other wake. Half of each page now starts inside
+    this window, so a new result is found within a tick or two however long the backlog.
+    The other half keeps walking the whole log. 0 restores the single cursor."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '900'), 900, 3600, 0)
+
+
 def owner_drain_first_turn_seconds() -> int:
     """Seconds a newly requested owner's first projection turn may run (2026-11-13); 0 is off.
 

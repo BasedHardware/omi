@@ -23,13 +23,26 @@ waiting fresh rows belonged to owners with no backlog of their own.
 - If no backlog owner is running, one goes ahead after four rounds of new owners, so the backlog
   advances however many new owners arrive.
 
+`utils/batch_pipeline/projection_discovery.py`: half of each assignment discovery page now comes
+from the newest `BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS` (default 900) of commits.
+
+- Why: discovery pages pending results oldest first, 100 rows a tick per process, and a GPU-route
+  commit has no other wake. With 154,000 pending rows the fleet (35 processes) passed a given row
+  about once in 15 minutes, which is the delay measured for fresh results.
+- A second cursor walks from the window's floor to the newest row and starts again. A process's
+  first pass starts at its stripe's point in the window. It uses the same query and index as the
+  main cursor with a start point; the page is no larger, so a sweep reads no more rows.
+- The main cursor gets the rest of the page and still visits every row.
+- `0` restores the single cursor.
+
 Order inside one owner is unchanged: the chain is still walked in commit order under the
 assignment fence and the owner claim. An owner's fresh row behind that same owner's backlog still
 waits for it.
 
-## Off switch
+## Off switches
 
 `BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS=0`: one FIFO queue and 120-second turns, as before.
+`BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS=0`: one discovery cursor, as before.
 
 ## What to watch
 
