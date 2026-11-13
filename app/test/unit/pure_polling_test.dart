@@ -6,8 +6,10 @@ import 'package:fake_async/fake_async.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 
 void main() {
   setUp(() async {
@@ -123,6 +125,36 @@ void main() {
       [1, 2, 3],
     ]);
     expect(socket.bufferedBytes, 3);
+  });
+
+  test('aggregates on-device usage once per completed live session', () async {
+    final events = <RegisteredEvent>[];
+    final provider = _FakeSttProvider()
+      ..enqueueSuccess(SttTranscriptionResult(segments: [
+        SttSegment(text: 'one', start: 0, end: 1),
+        SttSegment(text: 'two', start: 1, end: 2),
+      ], audioEndSeconds: 2.5))
+      ..enqueueSuccess(
+          SttTranscriptionResult(segments: [SttSegment(text: 'three', start: 2.5, end: 5)], audioEndSeconds: 5.5));
+    final socket = PurePollingSocket(
+      config: const AudioPollingConfig(minBufferSizeBytes: 1),
+      sttProvider: provider,
+      onDeviceUsage: OnDeviceUsageTracker(route: OnDeviceUsageRoute.allowance, emit: events.add),
+    );
+    socket.setListener(_FakeListener());
+    await socket.connect();
+
+    socket.send(Uint8List.fromList([1]));
+    await socket.flushNow();
+    socket.send(Uint8List.fromList([2]));
+    await socket.flushNow();
+    expect(events, isEmpty);
+
+    await socket.disconnect();
+    await socket.stop();
+    expect(events, hasLength(1));
+    final usage = events.single as OnDeviceTranscriptionUsed;
+    expect(usage.properties, {'route': 'allowance', 'audio_ms': 5500, 'segment_count': 3});
   });
 
   test('trims the oldest buffered audio once past the configured cap', () async {
