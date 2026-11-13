@@ -201,15 +201,14 @@ class GuardFixture(unittest.TestCase):
 
 
 class VirtualenvExclusionTests(unittest.TestCase):
-    """Installed packages are not product code: a worktree's own backend/.venv must
-    never be scanned (it held Firestore's client library and failed every push)."""
+    """Installed packages are not product code: a worktree's own backend/.venv and
+    backend/.openapi-venv must never be scanned (they held Firestore's client library
+    and failed every push), while look-alike product directories still are."""
 
-    def test_virtualenv_and_site_packages_paths_are_excluded(self) -> None:
+    def test_worktree_virtualenv_roots_are_excluded(self) -> None:
         for relative in (
             "backend/.venv/lib/python3.11/site-packages/google/cloud/firestore_v1/client.py",
             "backend/.openapi-venv/lib/python3.11/site-packages/fake_firestore/client.py",
-            "backend/venv/lib/python3.11/site-packages/x.py",
-            "backend/some/site-packages/pkg/mod.py",
         ):
             self.assertTrue(_excluded(relative), relative)
 
@@ -217,6 +216,10 @@ class VirtualenvExclusionTests(unittest.TestCase):
         for relative in (
             "backend/database/conversations.py",
             "backend/utils/venv_helper.py",
+            "backend/venv/queue.py",
+            "backend/domain/site-packages/queue.py",
+            "backend/domain/.venv/queue.py",
+            "web/admin/venv/queue.ts",
             "web/admin/lib/queue.ts",
         ):
             self.assertFalse(_excluded(relative), relative)

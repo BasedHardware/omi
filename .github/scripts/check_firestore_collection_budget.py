@@ -226,9 +226,11 @@ def _excluded(relative: str) -> bool:
     if 'node_modules' in parts or '.next' in parts:
         return True
     # Installed packages are not product code. Every worktree owns backend/.venv
-    # (and .openapi-venv), so scanning them reports Firestore's own library as
-    # "computed collection name" sites and rejects every backend push.
-    if {'.venv', '.openapi-venv', 'venv', 'site-packages'} & set(parts):
+    # and backend/.openapi-venv, so scanning them reports Firestore's own library
+    # as "computed collection name" sites and rejects every backend push. Only
+    # those two exact roots are skipped: a product directory that happens to be
+    # named venv or site-packages is still scanned.
+    if parts[:2] in (('backend', '.venv'), ('backend', '.openapi-venv')):
         return True
     if '/tests/' in relative or '/__tests__/' in relative or '/.test/' in relative:
         return True
