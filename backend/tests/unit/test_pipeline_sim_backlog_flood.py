@@ -87,7 +87,7 @@ def test_unmetered_fifo_counterfactual_reproduces_the_incident_by_a_wide_margin(
 
 
 def test_seed_one_metrics_match_the_deterministic_golden(runs):
-    golden_path = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens' / 'backlog_flood_fresh_latency.json'
+    golden_path = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens' / 'backlog_flood' / 'fresh_latency.json'
     observed = {name: _flood(sample) for name, sample in runs.items()}
     if os.getenv('PIPELINE_GOLDEN_UPDATE') == '1':
         golden_path.write_text(json.dumps(observed, indent=2, sort_keys=True) + '\n')

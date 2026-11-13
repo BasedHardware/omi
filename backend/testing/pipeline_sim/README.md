@@ -89,7 +89,7 @@ and the peak fresh share unprojected in the real closed 10–20-minute commit wi
 virtual minute). The named `release='gated'` input is
 reserved for step 4; it must not be implemented by relabeling the unmetered rollback. Run the two
 projection queue shapes with `owner_drain_first_turn_seconds=15` and `0`. The deterministic fixture is
-`tests/unit/fixtures/pipeline_sim_goldens/backlog_flood_fresh_latency.json`; update it through
+`tests/unit/fixtures/pipeline_sim_goldens/backlog_flood/fresh_latency.json`; update it through
 `PIPELINE_GOLDEN_UPDATE=1 python -m pytest tests/unit/test_pipeline_sim_backlog_flood.py`.
 
 ## Limits
