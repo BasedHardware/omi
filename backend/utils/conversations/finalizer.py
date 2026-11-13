@@ -473,6 +473,7 @@ async def finalize_persisted_conversation(
                 recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
+                recovery_final_attempt=final_attempt,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),

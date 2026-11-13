@@ -66,6 +66,9 @@ def _restore_missing_due_marker_txn(transaction: Any, job_ref: Any, cutoff: date
     job = snapshot.to_dict() or {}
     if job.get('status') not in ('queued', 'leased') or job.get('kind') in _DUE_MARKER_SWEEP_EXCLUDED_KINDS:
         return 'skipped'
+    if job.get('requires_byok'):
+        # BYOK jobs have their own recovery scan; touching updated_at would keep them looking active.
+        return 'skipped'
     if isinstance(job.get('reconcile_after_at'), datetime):
         return 'skipped'
     created_at = job.get('created_at')

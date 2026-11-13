@@ -2608,6 +2608,7 @@ def process_conversation(
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    recovery_final_attempt: bool = True,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
@@ -2848,6 +2849,7 @@ def process_conversation(
         app_id,
         recovery_transcript_decoded,
         recovery_minimum_fallback,
+        recovery_final_attempt,
     )
     conversation = _get_conversation_obj(
         uid,
@@ -2938,7 +2940,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -2962,7 +2964,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded:
+    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,

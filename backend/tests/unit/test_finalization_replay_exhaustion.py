@@ -227,7 +227,7 @@ def test_exhausted_replay_without_valid_binding_closes_only_job(store, field, va
 
 
 @pytest.mark.parametrize('guard', ['deleting', 'cutover', 'malformed_cutover'])
-def test_replay_fences_exhausted_jobs_for_refused_accounts_instead_of_replaying_forever(store, monkeypatch, guard):
+def test_replay_preserves_worker_account_admission_fences(store, monkeypatch, guard):
     if guard == 'deleting':
         store.rows[('account_deletions', ROW_PATH[1])] = {'wipe_status': 'pending_deletion'}
     else:
@@ -238,21 +238,10 @@ def test_replay_fences_exhausted_jobs_for_refused_accounts_instead_of_replaying_
             else {'state': 'invalid'}
         )
     before_row = deepcopy(store.rows[ROW_PATH])
-    # The account refuses terminal writes, so replay neither dead-letters nor
-    # re-dispatches. It fences the job terminally: an exit, with no account write.
-    intent = replay(store)
-    assert intent['status'] == 'completed'
-    assert intent['created'] is False
-    job = store.rows[JOB_PATH]
-    assert job['status'] == 'completed'
-    assert job['fanout_status'] == 'fenced'
-    assert job['finalization_outcome'] == 'fenced'
-    assert job['reconcile_after_at'] == jobs.firestore.DELETE_FIELD
-    assert job['dispatch_generation'] == 52
+    # Existing worker owns account fencing; replay cannot bypass it to write
+    # a dead-letter update into a deleted or migrating account.
+    assert replay(store)['status'] == 'queued'
     assert store.rows[ROW_PATH] == before_row
-    # Terminal and fenced: a later reconciler pass cannot revive it.
-    assert replay(store)['status'] == 'completed'
-    assert store.rows[JOB_PATH]['dispatch_generation'] == 52
 
 
 def test_real_reconciler_claim_path_retires_without_enqueue(store, monkeypatch):
@@ -529,6 +518,7 @@ def _due_marker_row(**overrides):
         ({'created_at': NOW - timedelta(hours=23)}, 'skipped', False),
         ({'kind': 'listen_quiet_check'}, 'skipped', False),
         ({'kind': 'conversation_merge'}, 'skipped', False),
+        ({'requires_byok': True}, 'skipped', False),
         ({'status': 'completed'}, 'skipped', False),
         ({'created_at': None}, 'skipped', False),
     ],

@@ -22,7 +22,7 @@ from utils.conversations.recovery import (
     recovery_transcript_word_count,
     structured_is_rich,
 )
-from utils.conversations.relevance import final_relevance
+from utils.conversations.relevance import content_free_rule, final_relevance
 from utils.llm.notes_short_clip import has_explicit_reminder
 from utils.release_probe import is_release_probe_uid
 
@@ -40,7 +40,11 @@ def _eligible(
     app_id: Optional[str],
     recovery_transcript_decoded: bool,
     recovery_minimum_fallback: bool,
+    final_attempt: bool,
 ) -> bool:
+    if not final_attempt:
+        # Earlier attempts keep the typed refusal, so a transient empty answer is retried.
+        return False
     if not is_recovery_trigger(trigger) or not recovery_empty_structure_minimum_enabled():
         return False
     if recovery_minimum_fallback or discarded or structured_is_rich(structured):
@@ -53,6 +57,11 @@ def _eligible(
     if relevance is None or relevance.verdict != 'keep':
         return False
     if app_id or is_release_probe_uid(uid):
+        return False
+    segments = conversation.transcript_segments or []
+    texts = [segment.text for segment in segments] or [conversation.text or '']
+    if content_free_rule(texts, has_photos=False, trusted_wake_word=False):
+        # Mic checks and filler stay on the discard path, as in the ordinary rule.
         return False
     if conversation.photos or has_explicit_reminder(conversation.transcript_segments):
         return False
@@ -73,6 +82,7 @@ def apply_empty_structure_minimum(
     app_id: Optional[str],
     recovery_transcript_decoded: bool,
     recovery_minimum_fallback: bool,
+    final_attempt: bool = True,
 ) -> tuple[Structured, bool]:
     """Return ``(structured, applied)``; ``applied`` means the minimum replaced the empty structure."""
     if not _eligible(
@@ -85,6 +95,7 @@ def apply_empty_structure_minimum(
         app_id=app_id,
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback=recovery_minimum_fallback,
+        final_attempt=final_attempt,
     ):
         return structured, False
     minimum = build_deterministic_minimum_structured(

@@ -179,6 +179,10 @@ def _set_attribute(attribute, value):
     return mutate
 
 
+def _set_content_free_transcript(conversation):
+    conversation.transcript_segments = [SimpleNamespace(text='testing the microphone one two three')]
+
+
 def _set_stored_structure(conversation, **fields):
     from models.structured import Structured
 
@@ -191,6 +195,8 @@ def _set_stored_structure(conversation, **fields):
         (lambda conversation: None, {'app_id': 'app-1'}),
         (lambda conversation: None, {'recovery_transcript_decoded': False}),
         (lambda conversation: None, {'recovery_minimum_fallback': True}),
+        (lambda conversation: None, {'final_attempt': False}),
+        (_set_content_free_transcript, {}),
         (lambda conversation: None, {'discarded': True}),
         (lambda conversation: None, {'decisions': []}),
         (_set_attribute('photos', [SimpleNamespace(description='described photo')]), {}),

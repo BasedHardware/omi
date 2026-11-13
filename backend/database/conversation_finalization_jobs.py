@@ -2428,11 +2428,6 @@ def _claim_finalization_replay_txn(
             time_zone_for_uid,
         )
         return _intent_from_job(job_ref.id, {**job, 'status': 'dead_letter'}, created=True)
-    if max_attempts is not None and failed_attempts >= max_attempts and job.get('fanout_status') != 'completed':
-        update = _fenced_finalization_update(now)
-        transaction.update(job_ref, update)
-        _record_projection_delta(transaction, projection_collection, job, **{status: -1, 'completed': 1, 'stale': 1})
-        return _intent_from_job(job_ref.id, {**job, **update})
 
     lease_epoch = int(job.get('lease_epoch') or 0)
     unclaimed_dispatches = (
