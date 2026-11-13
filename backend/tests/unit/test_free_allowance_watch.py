@@ -219,13 +219,19 @@ async def test_live_watch_covers_fallback_with_legacy_dispatch_disabled(policy, 
     fallback.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_gpu_observations_cannot_starve_another_authorization(monkeypatch):
-    from copy import deepcopy
+@pytest.fixture
+def batch_admission_case(monkeypatch):
     from tests.unit.test_batch_pipeline_admission import setup, tokens
     from utils.batch_pipeline import admission
 
-    store, _, lease, _ = setup(monkeypatch)
+    return setup(monkeypatch), tokens, admission
+
+
+@pytest.mark.asyncio
+async def test_gpu_observations_cannot_starve_another_authorization(monkeypatch, batch_admission_case):
+    from copy import deepcopy
+
+    (store, _, lease, _), tokens, admission = batch_admission_case
     store.rows['jobs', 'second'] = deepcopy(store.rows['jobs', 'segment'])
     requests = tokens(lease) + [{'segment_id': 'second', 'token': lease.token}]
     monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)

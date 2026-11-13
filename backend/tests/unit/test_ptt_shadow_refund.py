@@ -5,14 +5,21 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('reserved_ms', [0, 30_000])
-@pytest.mark.parametrize('failure', ['connect', 'drain'])
-async def test_failed_ptt_settles_shadow_zero_after_daily_refund(monkeypatch, reserved_ms, failure):
+@pytest.fixture
+def ptt_modules():
     import routers.chat as chat
     from utils.stt.allowance_session import Operation
     from utils.stt.streaming import STTService
     from utils.stt import live_failure
+
+    return chat, Operation, STTService, live_failure
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reserved_ms', [0, 30_000])
+@pytest.mark.parametrize('failure', ['connect', 'drain'])
+async def test_failed_ptt_settles_shadow_zero_after_daily_refund(monkeypatch, ptt_modules, reserved_ms, failure):
+    chat, Operation, STTService, live_failure = ptt_modules
 
     monkeypatch.setattr(chat, 'get_stt_service_for_language', lambda *a, **kw: (STTService.modulate, 'en', 'test'))
     monkeypatch.setattr(chat, 'check_rate_limit', lambda *a: (True, 1, 0))
