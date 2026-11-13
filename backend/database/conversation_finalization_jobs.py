@@ -2358,8 +2358,21 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
             'job_id': last.id,
             'cutoff': cutoff,
         }
-    firestore.transactional(_advance_finalization_replay_cursor_txn)(
-        client.transaction(), state_ref, int(state.get('generation', 0)), next_cursor
+    # The cursor CAS advance rides the same shared bounded contention budget
+    # as this file's other sweep-cursor writers: one transient read abort used
+    # to escape as a raw SDK error, aborting the whole reconcile pass before
+    # the cursor advanced, so the next sweep rescanned the same window from
+    # the top. The budget replays the abort on a fresh transaction and keeps
+    # the sweep's page position; the attempt cap surfaces as the typed
+    # ``FirestoreContentionExhausted`` the reconcile caller already bounds.
+    #
+    # Failure-Class: FC-replay-sweep-cursor-and-backoff-run-outside-the-shared-contention-budget
+    run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: firestore.transactional(_advance_finalization_replay_cursor_txn)(
+            transaction, state_ref, int(state.get('generation', 0)), next_cursor
+        ),
+        operation_name='finalization_replay_cursor',
     )
     logging.getLogger(__name__).info(
         'event=finalization_replay_page project=%s database=%s selected=%s quiet=%s resumed=%s',
@@ -2411,7 +2424,24 @@ def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: An
         transaction.update(ref, updates)
         return True
 
-    return defer(client.transaction())
+    # The backoff write rides the shared bounded contention budget like every
+    # other custody writer in this file: one transient read abort used to
+    # escape as a raw SDK error, the reconcile callers swallowed it, and the
+    # overdue row stayed at the window front where the very next sweep
+    # re-claimed it — contention amplified itself instead of backing off.
+    # A replayable abort now replays on a fresh transaction so the backoff
+    # lands; the attempt cap surfaces as the typed
+    # ``FirestoreContentionExhausted`` the callers already catch.
+    #
+    # Failure-Class: FC-replay-sweep-cursor-and-backoff-run-outside-the-shared-contention-budget
+    def run_once(transaction: Any) -> bool:
+        return defer(transaction)
+
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        run_once,
+        operation_name='finalization_replay_defer',
+    )
 
 
 def get_stale_processing_orphan_candidates(
