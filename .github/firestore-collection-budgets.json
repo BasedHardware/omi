@@ -29,7 +29,18 @@
       "reviewed": "YYYY-MM-DD date the budget was reviewed"
     }
   },
-  "budgets": [],
+  "budgets": [
+    {
+      "collection": "conversation_erasure_jobs",
+      "owner": "backend conversation deletion (accepted-delete erasure obligations)",
+      "unit": "conversation delete accepted behind a busy account gate",
+      "reads_per_unit_budget": 25,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
+      "reviewed": "2026-11-13"
+    }
+  ],
   "dynamic": [],
   "exempt": []
 }
