@@ -414,6 +414,10 @@ def test_deltas_never_emit_exponent_notation_or_overflow_the_context(vb):
     # a 29-integer-digit value divides and rounds under the default 28-digit context otherwise
     big = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-22", "99999999999999999999999999999.999999999")])
     assert len(big) == 2 and all(re.match(NUMERIC_RE, row["usd"]) for row in big)
+    # the subtraction itself must not round at the default 28 digits: a one-day delta
+    # of 99999999999999999999999999999.999999999 stays in range
+    one_day = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-21", "99999999999999999999999999999.999999999")])
+    assert one_day[0]["usd"] == "99999999999999999999999999999.999999999"
     # a repeating share rounds to nine places
     third = vb.daily_deltas([snap("2026-10-20", "0"), snap("2026-10-23", "1")])
     assert [row["usd"] for row in third] == ["0.333333333"] * 3

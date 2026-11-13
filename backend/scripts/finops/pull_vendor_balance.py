@@ -215,6 +215,13 @@ def _day(ts: str) -> str:
     return ts[:10]
 
 
+def _difference(current: Decimal, previous: Decimal) -> Decimal:
+    """Exact difference at 60 digits (the default 28 would round a 29-digit value)."""
+    with localcontext() as ctx:
+        ctx.prec = 60
+        return current - previous
+
+
 def _share(delta: Decimal, days: int) -> Decimal:
     """One day's share of a gap-spread delta, divided at 60 digits."""
     with localcontext() as ctx:
@@ -251,7 +258,7 @@ def daily_deltas(snapshots: list[dict]) -> list[dict]:
                 }
             )
             continue
-        delta = used_cur - used_prev
+        delta = _difference(used_cur, used_prev)
         start = dt.date.fromisoformat(_day(prev["ts"])) + dt.timedelta(days=1)
         covered = [(start + dt.timedelta(days=i)).isoformat() for i in range((end_day - start).days + 1)]
         if not covered:  # two snapshots inside one UTC day: both spend to that day
