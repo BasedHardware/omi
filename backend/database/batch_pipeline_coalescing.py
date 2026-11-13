@@ -220,14 +220,47 @@ def finish(store, group, targets, now):
     store.run(commit)
 
 
-def due(client, namespace, now, *, producer_enabled):
+def due(client, namespace, now, *, producer_enabled, after=None):
     # Single-field deadline index only; scan bounded even during OFF. Done
     # rows drop this indexed field after fanout and never consume a due page.
     query = client.collection(f'{namespace}_coalesce_groups')
     if producer_enabled:
         query = query.where('scan_at', '<=', now)
-    query = query.order_by('scan_at').limit(config.DRAIN_PAGE)
-    return [doc.id for doc in query.stream()]
+    query = query.order_by('scan_at').order_by('__name__')
+    if after is not None:
+        query = query.start_after(
+            {
+                'scan_at': after['scan_at'],
+                '__name__': client.collection(f'{namespace}_coalesce_groups').document(after['id']),
+            }
+        )
+    return [{'id': doc.id, 'scan_at': doc.to_dict()['scan_at']} for doc in query.limit(config.DRAIN_PAGE).stream()]
+
+
+def scan_position(store):
+    def read(tx):
+        quota = tx.get('coalesce_quota', 'global')
+        return quota.get('scan_epoch', 0), quota.get('scan_after')
+
+    return store.run(read)
+
+
+def advance_scan(store, epoch, after):
+    """Fair scan progress only; never mutate denied custody or grant processing.
+
+    Advance even for a failed page. A stale concurrent scanner cannot move the
+    cursor backwards; a deleted boundary remains usable as a value cursor.
+    Empty pages wrap on the next tick. A dark, empty queue creates no row.
+    """
+
+    def commit(tx):
+        quota = tx.get('coalesce_quota', 'global')
+        if not quota or quota.get('scan_epoch', 0) != epoch or quota.get('scan_after') == after:
+            return
+        quota.update(scan_epoch=epoch + 1, scan_after=after)
+        tx.put('coalesce_quota', 'global', quota)
+
+    store.run(commit)
 
 
 def note_scan(store, now, *, producer_enabled):

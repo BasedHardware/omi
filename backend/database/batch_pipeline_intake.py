@@ -10,6 +10,7 @@ from config.record_audio import record_identity, require_record_audio_barrier, r
 from config.record_seal_rules import token_lease_mode
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
+from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -196,6 +197,7 @@ def admit(
             'content',
             content_key,
             {
+                **coalescing_completion.manifest(coalescing_group),
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',

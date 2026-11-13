@@ -250,3 +250,130 @@ async def test_release_endpoint_auth_owner_scope_and_rate_limit(runtime, tmp_pat
         assert snapshot.reference.get().to_dict()['release_by'] < initial_deadline
         monkeypatch.setattr(sync, 'admit_sync_job_poll', lambda _: False)
         assert client.post('/release/bp_' + args['job_id']).status_code == 429
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('off', [False, True])
+async def test_denied_full_page_cannot_starve_other_owners_after_restart(runtime, tmp_path, monkeypatch, off):
+    from database import batch_pipeline_coalescing as rows
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.batch_pipeline import intake, upload_coalescing, artifact_policy
+
+    store, artifacts, objects, uid, cid = runtime
+    monkeypatch.setattr(artifact_policy, 'artifacts_for', lambda _: artifacts)
+    denied = []
+    for index in range(8):
+        owner = f'{uid}-denied-{index // 2}'
+        user = store.client.collection('users').document(owner)
+        user.set({'language': 'en', 'data_protection_level': 'standard', 'private_cloud_sync_enabled': False})
+        user.collection('conversations').document(cid).set({'id': cid, 'language': 'en', 'source': 'omi'})
+        args, _ = upload_args(tmp_path, owner, cid, index)
+        args['intake_context']['recording_session_id'] = f'synthetic-recording-{index}'
+        rows.note_scan(store, time.time(), producer_enabled=True)
+        assert (await intake.accept_upload(**args)).status_code == 202
+        rows.release_for_open(store, owner, 'bp_' + args['job_id'], time.time())
+        denied.append(owner)
+    args, _ = upload_args(tmp_path, uid, cid, 8)
+    rows.note_scan(store, time.time(), producer_enabled=True)
+    assert (await intake.accept_upload(**args)).status_code == 202
+    rows.release_for_open(store, uid, 'bp_' + args['job_id'], time.time())
+    for owner in set(denied):
+        # Model the durable refusal while a separately authorized purge is pending.
+        store.client.collection('users').document(owner).update({'data_protection_level': 'e2ee'})
+    if off:
+        monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
+    await upload_coalescing.drain(store)
+    assert list(store.client.collection(store.namespace + '_jobs').stream()) == []
+    epoch, boundary = rows.scan_position(store)
+    assert epoch == 1 and boundary is not None
+    restarted = FirestoreStore(store.namespace, firestore_client=store.client)
+    await upload_coalescing.drain(restarted)
+    jobs = list(store.client.collection(store.namespace + '_jobs').stream())
+    assert len(jobs) == 1 and jobs[0].to_dict()['owner_id'] == uid
+    quota = store.run(lambda tx: tx.get('coalesce_quota', 'global'))
+    assert quota['groups'] == 8 and max(quota['owners'].values()) == 2
+    for snapshot in store.client.collection(store.namespace + '_coalesce_groups').stream():
+        held = snapshot.to_dict()
+        if held['owner_id'] in denied:
+            assert held['state'] == 'holding' and 'expires_at' not in held
+    # The cursor is values, not a live snapshot: erasure of its boundary is safe.
+    boundary_row = store.run(lambda tx: tx.get('coalesce_groups', boundary['id']))
+    rows.purge_group(store.client, store.namespace, boundary['id'], boundary_row['owner_id'])
+    assert rows.due(store.client, store.namespace, time.time(), producer_enabled=not off, after=boundary) == []
+    await upload_coalescing.drain(restarted)  # End-of-range wraps durably.
+    assert rows.scan_position(restarted)[1] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('revoke', [False, True])
+async def test_projection_completes_unpolled_originals_before_target_ttl(runtime, tmp_path, monkeypatch, revoke):
+    from database import batch_pipeline_coalescing as rows
+    from database.batch_pipeline_projection import ProjectionStore
+    from database.batch_pipeline_projection_protocol import normalized_binding
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.sync_ledger import sync_content_ledger_ref
+    from utils.batch_pipeline import intake
+    from utils.batch_pipeline.upload_coalescing import drain_group
+    from utils.batch_pipeline.scheduler import owner_key
+
+    store, artifacts, objects, uid, cid = runtime
+    uploads = [upload_args(tmp_path, uid, cid, index)[0] for index in (0, 40)]
+    for args in uploads:
+        rows.note_scan(store, time.time(), producer_enabled=True)
+        assert (await intake.accept_upload(**args)).status_code == 202
+    held = next(store.client.collection(store.namespace + '_coalesce_groups').stream())
+    rows.release_for_open(store, uid, 'bp_' + uploads[0]['job_id'], time.time())
+    assert await drain_group(store, artifacts, held.id)
+    jobs = list(store.client.collection(store.namespace + '_jobs').stream())
+    assert len(jobs) == 2  # Gap >30s preserves distinct decoder units.
+    binding = normalized_binding(jobs[0].to_dict()['projection_binding'])
+    projector = ProjectionStore(store)
+
+    def ready(snapshot):
+        job = snapshot.to_dict()
+        payload = {'outcome': 'expected_silence'}
+        snapshot.reference.update({'result': payload})
+        projector.ref('results', snapshot.id).set(
+            {
+                'protocol_version': 1,
+                'owner_key': owner_key(uid),
+                'segment_id': snapshot.id,
+                'capture_at': job['capture_at'],
+                'result': payload,
+                'previous_segment_id': None,
+                'projection_state': 'ready',
+                'projection': {'state': 'ready', 'conversation_id': None, 'created': False, 'speech_seconds': 0.0},
+            }
+        )
+
+    ready(jobs[0])
+    assert projector.complete(jobs[0].id, binding, time.time(), {'seconds': 0.0, 'updates': {}}) is None
+    originals = [sync_content_ledger_ref(store.client, uid, args['content_id']) for args in uploads]
+    assert all(ref.get().to_dict()['status'] == 'processing' for ref in originals)
+    ready(jobs[1])
+    if revoke:
+        store.client.collection('users').document(uid).update({'data_protection_level': 'e2ee'})
+        with pytest.raises(BatchPrivacyBlocked):
+            projector.complete(jobs[0].id, binding, time.time(), {'seconds': 0.0, 'updates': {}})
+        assert all(ref.get().to_dict()['status'] == 'processing' for ref in originals)
+        return
+    assert projector.complete(jobs[0].id, binding, time.time(), {'seconds': 0.0, 'updates': {}}) is not None
+    saved = [ref.get().to_dict() for ref in originals]
+    assert all(row['status'] == 'completed' and row['result']['total_segments'] == 1 for row in saved)
+    assert all('expires_at' in row for row in saved)
+    # No original poll preceded completion. Model target TTL deleting before
+    # original TTL (Firestore TTL deletion order is not guaranteed).
+    projector.ref('intakes', binding.job_id).delete()
+    sync_content_ledger_ref(store.client, uid, binding.content_id).delete()
+    for snapshot in jobs:
+        snapshot.reference.delete()
+        projector.ref('results', snapshot.id).delete()
+    for args, expected in zip(uploads, saved):
+        assert intake.durable_status(store, uid, 'bp_' + args['job_id'])['status'] == 'completed'
+        replay = await intake.accept_upload(**args)
+        assert replay.status_code == 202 and json.loads(replay.body)['status'] == 'completed'
+        assert (
+            sync_content_ledger_ref(store.client, uid, args['content_id']).get().to_dict()['expires_at']
+            == expected['expires_at']
+        )
+    assert list(store.client.collection(store.namespace + '_jobs').stream()) == []

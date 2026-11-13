@@ -31,7 +31,11 @@ def entries():
     return (
         DriverEntry(
             'database.batch_pipeline_coalescing.due',
-            domains={'namespace': namespaces, 'producer_enabled': [False, True]},
+            domains={
+                'namespace': namespaces,
+                'producer_enabled': [False, True],
+                'after': [None, {'scan_at': 1.0, 'id': 'synthetic-cursor'}],
+            },
             neutrals={'now': (3000000.0, 'immutable release/lease deadline operand only')},
         ),
         CoveredByEntry(

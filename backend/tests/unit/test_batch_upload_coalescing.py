@@ -159,6 +159,23 @@ def test_missing_or_stalled_drainer_does_not_accept_new_custody():
     assert rows.enqueue(s, member('first'), 'key', 11) == 'bp_first'
 
 
+def test_scan_cursor_survives_restart_and_rejects_stale_scanners():
+    s = store()
+    assert rows.scan_position(s) == (0, None)
+    boundary = {'scan_at': 70.0, 'id': 'synthetic-boundary'}
+    rows.advance_scan(s, 0, boundary)
+    restarted = store()
+    restarted.rows = deepcopy(s.rows)
+    assert rows.scan_position(restarted) == (1, boundary)
+    rows.advance_scan(restarted, 0, {'scan_at': 20.0, 'id': 'stale'})
+    assert rows.scan_position(restarted) == (1, boundary)
+    rows.advance_scan(restarted, 1, None)
+    assert rows.scan_position(restarted) == (2, None)
+    empty = MemoryStore()
+    rows.advance_scan(empty, 0, None)
+    assert empty.rows == {}
+
+
 def test_off_restart_keeps_individual_mode_even_if_enabled_again():
     s = store()
     rows.enqueue(s, member('first'), 'key', 10)

@@ -1,6 +1,9 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/batch_pipeline_coalescing_completion.py': [
+        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+    ],
     'utils/batch_pipeline/upload_coalescing.py': [
         (
             'member_status',

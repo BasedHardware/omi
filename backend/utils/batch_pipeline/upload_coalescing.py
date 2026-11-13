@@ -347,17 +347,20 @@ async def drain(store):
     from utils.batch_pipeline.artifact_policy import artifacts_for
 
     enabled = config.enabled()
-    ids = await run_blocking(
-        db_executor, lambda: rows.due(store.client, store.namespace, time.time(), producer_enabled=enabled)
+    epoch, after = await run_blocking(db_executor, rows.scan_position, store)
+    page = await run_blocking(
+        db_executor, lambda: rows.due(store.client, store.namespace, time.time(), producer_enabled=enabled, after=after)
     )
-    if not ids:
+    if page or after is not None:
+        await run_blocking(db_executor, rows.advance_scan, store, epoch, page[-1] if page else None)
+    if not page:
         await run_blocking(db_executor, rows.note_scan, store, time.time(), producer_enabled=enabled)
         return
     artifacts = await run_blocking(storage_executor, artifacts_for, store)
     failed = False
-    for group_id in ids:
+    for entry in page:
         try:
-            await drain_group(store, artifacts, group_id)
+            await drain_group(store, artifacts, entry['id'])
         except Exception as error:
             failed = True
             import logging

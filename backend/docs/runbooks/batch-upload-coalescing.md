@@ -56,6 +56,24 @@ drainer heartbeat within five seconds. Unknown quota, saturation or a stalled
 drainer declines new holds; a pending predecessor retains its ordering fence.
 The drainer is supervised with the serving loop in both normal and pump modes.
 The single-field `scan_at` index is sufficient; completed groups omit it.
+Scan order includes the document ID to break deadline ties. A versioned cursor
+in the existing global quota row advances before each bounded page, including
+pages whose privacy checks fail, and wraps after an empty range. It is scan
+progress only: it neither modifies denied holds nor authorizes processing.
+Restart and deleted cursor boundaries preserve progress; a stale concurrent
+scanner cannot overwrite a newer cursor. Default OFF with no quota creates no
+cursor row. The extra quota read and cursor checkpoint are fixed scan costs
+that the matched-workload read numerator must include.
+
+Merged admission also records its bounded original membership in the content
+ledger before any unit is runnable. The all-siblings projection completion
+transaction copies the authoritative terminal result and completion-led expiry
+to every original receipt. It reads each original intake/ledger and verifies
+its identity before any write; the existing live privacy guard still gates the
+transaction. Thus completion survives target TTL without requiring a client
+poll. Replays do not extend an original's terminal expiry. Ordinary uploads and
+OFF individual conversions use their existing completion path and add no fanout
+reads. The extra per-original completion reads/writes must also be measured.
 
 The authenticated `POST /v2/sync-local-files/{job_id}/release-hold` is a precise,
 rate-limited, idempotent early-release hint for one original public job. It does
@@ -106,8 +124,9 @@ speech spans, and a pre-agreed flat paired transcript/speaker/notes factuality
 and coverage gate on synthetic or approved evaluation audio. A packing model,
 created-unit count or fabricated inference result is not savings/quality proof.
 
-R11 order: ship compatible readers, purge and drainers dark first; verify the
-serving supervisor and indexes/retention setup, then run dev/staging qualification.
+R11 order: ship compatible projection completion writers, readers, purge and
+drainers dark first; verify the serving supervisor and indexes/retention setup,
+then run dev/staging qualification before enabling a production producer.
 Canary topology must isolate producer traffic while all eligible drainers agree
 on the switch; an OFF standby drainer otherwise intentionally drains separately.
 If that topology is unavailable, do not claim a canary is isolated. Record exact
