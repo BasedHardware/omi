@@ -262,6 +262,16 @@ def test_custody_assumptions_are_marked():
             assert entry.custody.note, f'{entry.key} must state why its custody clock is unverified'
 
 
+def test_projection_custody_uses_a_field_results_documents_carry():
+    # provider_intent is written on job documents only; results carry committed_at
+    # or a stamped held_deadline_at.
+    for entry in batch_census.entries_for('batch_projection'):
+        if entry.custody is not None:
+            assert entry.custody.clock in {'committed_at', 'held_deadline_at'}, entry.key
+    assert batch_census.BY_KEY['batch_projection:ready'].custody.clock == 'committed_at'
+    assert batch_census.BY_KEY['batch:result_ready'].custody.clock == 'provider_intent.settled_at'
+
+
 def test_unverified_clocks_are_marked():
     for entry in ENTRIES:
         if entry.clock is None:

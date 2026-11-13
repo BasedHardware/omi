@@ -126,6 +126,8 @@ _RECORD_ALARM = Alarm('omi-record-pending-dwell', 'page')
 # Result objects are assumed to live 30 days after settle; the bucket policy was
 # not readable from the planning role, so this stays unverified.
 _RESULT_CUSTODY = Custody('provider_intent.settled_at', 30 * 86400, 'unverified', 'bucket lifecycle not measured')
+# Results documents carry committed_at, not provider_intent (that field is job-only).
+_PROJECTION_CUSTODY = Custody('committed_at', 30 * 86400, 'unverified', 'bucket lifecycle not measured')
 _HELD_CUSTODY = Custody('held_deadline_at', 0, 'declared', 'stamped deadline; expiry is a re-drive, not deletion')
 _RECORD_CUSTODY = Custody('record_dead_letter_deadline_at', 0, 'declared', 'stamped 14-day barrier deadline')
 _OUTBOX_CUSTODY = Custody('created_at', 31 * 86400, 'unverified', 'Cloud Tasks retention is documented, not measured')
@@ -263,7 +265,13 @@ JOB_ENTRIES = (
     ),
     _job('leased', clock='lease_until', ceiling=50_000, alarm=_UNPUBLISHED_ALARM),
     _job('retry', ceiling=100_000, alarm=_UNPUBLISHED_ALARM),
-    _job('result_ready', custody=_RESULT_CUSTODY, ceiling=2_000_000, alarm=_UNPUBLISHED_ALARM),
+    _job(
+        'result_ready',
+        custody=_RESULT_CUSTODY,
+        ceiling=2_000_000,
+        alarm=_UNPUBLISHED_ALARM,
+        note='provider-lane rows only; record-lane rows have no provider_intent, so their horizon is null',
+    ),
     _job(
         'vendor_held',
         custody=_VENDOR_CUSTODY,
@@ -288,7 +296,12 @@ JOB_ENTRIES = (
         reasons=PRIVACY_REASONS,
     ),
     _job('partial_retired', ceiling=10_000),
-    _job('committed', custody=_RESULT_CUSTODY, ceiling=100_000),
+    _job(
+        'committed',
+        custody=_RESULT_CUSTODY,
+        ceiling=100_000,
+        note='provider-lane rows only; record-lane rows have no provider_intent, so their horizon is null',
+    ),
     _job(
         'dead',
         clock='held_deadline_at',
@@ -311,7 +324,7 @@ JOB_ENTRIES = (
 PROJECTION_ENTRIES = (
     _projection('pending', ceiling=100_000),
     _projection('persisted', ceiling=100_000),
-    _projection('ready', custody=_RESULT_CUSTODY, ceiling=2_000_000),
+    _projection('ready', custody=_PROJECTION_CUSTODY, ceiling=2_000_000),
     _projection(
         'quarantine_held',
         clock='held_deadline_at',
