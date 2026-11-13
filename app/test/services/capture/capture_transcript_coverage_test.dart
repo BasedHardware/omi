@@ -709,6 +709,24 @@ void main() {
     await expectAllKeptThenUploaded('c1', failClosedReason: 'missing_conversation_event');
   });
 
+  test('pendant: an unrelated saved conversation cannot cancel the pending recovery', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+
+    world.controller.onMessageEventReceived(
+      ConversationProcessingStartedEvent(memory: conversation('c1', origin, [(1, 100)])),
+    );
+    await settleFiles();
+    world.controller.onMessageEventReceived(
+      ConversationEvent(memory: conversation('unrelated', origin, [(0, 200)]), messages: []),
+    );
+    await world.elapse(const Duration(seconds: 31));
+    await settleFiles();
+
+    await expectAllKeptThenUploaded('c1', failClosedReason: 'missing_conversation_event');
+  });
+
   test('pendant: an account roll mid-close never stamps or mutates the successor inventory', () async {
     final origin = world.clock.now();
     final link = await connectPendant();

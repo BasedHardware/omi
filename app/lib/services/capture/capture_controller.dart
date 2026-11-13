@@ -4025,8 +4025,8 @@ class CaptureController extends ChangeNotifier
       } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
-      _autoSyncFallbackTimer?.cancel();
       if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId == event.memory.id) {
+        _autoSyncFallbackTimer?.cancel();
         final sessionStart = _pendingAutoSyncSessionStart;
         final (needsRepair, customStt) = (_pendingAutoSyncNeedsRepair, _pendingAutoSyncCustomStt);
         _pendingAutoSyncSessionStart = 0;
