@@ -34,7 +34,7 @@ commits.
   first. Replicas draw their points independently, so they can land on different rows. A process
   offers a row from this read once per run; the entry is kept for two windows, longer than the row
   stays there. That memory is per process: a restarted process can offer a row once more. A row
-  that stays pending is next offered by the main cursor, as before.
+  that stays pending is then left to the main cursor, which offers it only when it reaches it.
 - Rows read here count against the page: the main cursor gets the rest (at least half). The page
   holds no more rows than before. The tick makes one more query than before.
 - A main cursor that has not reached the newest row for 30 minutes starts again: one time in
