@@ -122,6 +122,8 @@ class OrderedMerge:
         self.catch_up_depth = catch_up_depth
         self._head_wait_retry_at = 0.0
         self._fresh_first_retry_at = 0.0
+        # Backoff for a backlog-hold probe alone: it must not switch the depth hold off.
+        self._backlog_probe_retry_at = 0.0
         # Owners whose last commit attempt found them at the projection depth
         # cap with rows pending. Maintenance re-offers them by owner: a held
         # backlog can fill the global result_ready page and hide them.
@@ -218,7 +220,7 @@ class OrderedMerge:
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held
         # backlog stays held instead of falling back to the plain order.
-        fresh_query = time.monotonic() >= self._fresh_first_retry_at
+        fresh_query = time.monotonic() >= max(self._fresh_first_retry_at, self._backlog_probe_retry_at)
         blocked: dict = {}
         bypass: dict = {}
         fresh_first: dict = {}
@@ -335,7 +337,6 @@ class OrderedMerge:
             if not fresh_first and _backlog_held(candidate):
                 # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.
                 # A recovered unit is held too: recovery does not make an old capture fresh.
-                held['catch_up'] = True
                 held['backlog'] = True
                 return None
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
@@ -409,9 +410,8 @@ class OrderedMerge:
             # A fenced catch-up head must not hide the owner's ready fresh rows;
             # any other fence keeps its strict-order behaviour.
             raise fenced
-        if entry is None and (
-            backlog_probe or (depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
-        ):
+        depth_probe = bool(depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
+        if entry is None and (backlog_probe or depth_probe):
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
@@ -419,8 +419,14 @@ class OrderedMerge:
                 pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
             except FailedPrecondition:
                 # Without the fresh query a catch-up hold would also hold fresh
-                # rows: take the plain order now and retry the query later.
-                self._fresh_first_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                # rows: take the plain order now and retry the query later. A probe made only
+                # for a backlog hold backs off on its own clock: the depth hold stays on for
+                # every owner, and the held backlog stays held.
+                retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                if depth_probe:
+                    self._fresh_first_retry_at = retry_at
+                else:
+                    self._backlog_probe_retry_at = retry_at
                 logger.warning(
                     'event=batch_merge outcome=fresh_first_unavailable source=%s count=1', self.commit_source
                 )

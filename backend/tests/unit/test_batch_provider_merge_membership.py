@@ -305,6 +305,24 @@ def test_an_unavailable_fresh_query_keeps_the_backlog_held_and_asks_once(world, 
     assert [job(store, name)['state'] for name in names] == ['result_ready'] * 3
 
 
+def test_a_backlog_only_probe_failure_leaves_the_depth_hold_on(world, monkeypatch):
+    """With membership off a held head is not catch-up, so only the backlog hold asks for the
+    probe. Its failure must not switch the depth hold off for the whole merge instance."""
+    from google.api_core.exceptions import FailedPrecondition
+
+    store, names = _legacy_backlog(world, monkeypatch, 2)
+    monkeypatch.setenv(SWITCH, 'false')
+
+    def unavailable(key, limit):
+        raise FailedPrecondition('The query requires an index.')
+
+    monkeypatch.setattr(store, 'fresh_pending', unavailable, raising=False)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=4)
+    assert merge.commit_next(OWNER, 201.0) is None
+    assert merge._catch_up_depth() == 4
+    assert [job(store, name)['state'] for name in names] == ['result_ready'] * 2
+
+
 def test_a_held_backlog_head_at_the_depth_cap_writes_no_marker(world, monkeypatch):
     """A depth marker would have maintenance re-offer an owner whose head can never commit."""
     store, names = _legacy_backlog(world, monkeypatch, 3)
