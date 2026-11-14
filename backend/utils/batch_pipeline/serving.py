@@ -81,6 +81,7 @@ class Serving:
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
+        self.allowance_hold_due = 0.0
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
@@ -361,6 +362,11 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time())
+        from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
+
+        if time.monotonic() >= self.allowance_hold_due and self._leads(True):
+            self.allowance_hold_due = time.monotonic() + 30
+            AllowanceHolds(self.store, entitlement).tick(time.time())
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
             job = self.store.run(lambda tx: tx.get('jobs', segment))

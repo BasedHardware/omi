@@ -77,6 +77,54 @@
       "basis": "planning-bound",
       "source": "SCA-2024 census ~478000 persisted/ready rows: one page-query read plus one transactional fence read per row, allowing one repeated pass/retry (~1.912M). Operator-only, capped at 200 rows/page and 10000 pages/invocation; normal serving never invokes stamping.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "historical current allowance-hold row migrated",
+      "reads_per_unit_budget": 6,
+      "reads_per_day_budget": 6000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: <=1M initial candidates; metadata discovery + transactional CAS and privacy reads, bounded 100-row pages and <=10000 pages/operator invocation; not a recurring scan.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_migrations'",
+      "collection_pattern": "batch_pipeline_*_migrations",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "migration page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one checkpoint read and one checkpoint CAS read/page; <=10000 pages/invocation with room for one replay. Dry run reads only COUNTs, never this collection.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{self.namespace}_allowance_holds'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "owner generation poll or release page of at most 100 rows",
+      "reads_per_unit_budget": 606,
+      "reads_per_day_budget": 7000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: leader-local 30s throttle, <=20 owners/tick = <=57600 owner polls/day per environment; <=6 reads/poll => <=691200/day across prod/dev. Completed owners retire; no job-row polling while generation unchanged. Initial parking adds one owner read per migrated row under the one-time migration budget. A generation-change release page adds <=600 row/privacy/owner reads; allowing one 1M-row generation burst adds <=6M/day, total planning envelope <7M. Unchanged generations do not fetch held rows.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/metrics.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "hourly leader-only allowance-held COUNT at <=1M held rows",
+      "reads_per_unit_budget": 1000,
+      "reads_per_day_budget": 48000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
+      "reviewed": "2026-11-14"
     }
   ],
   "exempt": []

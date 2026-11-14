@@ -212,6 +212,7 @@ def purge_batch_owner(
             'coalesce_groups',
             'coalesce_sources',
             'coalesce_heads',
+            'allowance_holds',
         ):
             after = None
             while True:

@@ -87,6 +87,8 @@ class Store(Protocol):
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
+    def allowance_owners(self, now: float, limit: int) -> list[str]: ...
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]: ...
 
 
 # Reads that bypass the view cache and go through the raw transaction, by kind.
@@ -266,6 +268,26 @@ class FirestoreTransaction:
 
 
 class FirestoreStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        return [
+            doc.id
+            for doc in self.client.collection(f'{self.namespace}_allowance_holds')
+            .where('active', '==', True)
+            .where('check_at', '<=', now)
+            .order_by('check_at')
+            .limit(max(1, min(limit, 100)))
+            .stream()
+        ]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        query = self.client.collection(f'{self.namespace}_jobs').where('state', '==', 'allowance_held')
+        if owner_key is not None:
+            query = query.where('owner_key', '==', owner_key)
+        query = query.order_by('capture_at').order_by('segment_id')
+        if after is not None:
+            query = query.start_after({'capture_at': after[0], 'segment_id': after[1]})
+        return [doc.id for doc in query.limit(max(1, min(limit, 100))).stream()]
+
     def __init__(self, namespace: str, *, firestore_client: Any = None):
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(

@@ -48,6 +48,7 @@ _BATCH_TABLES = (
     'artifacts',
     'pull_claims',
     'merge_holds',
+    'allowance_holds',
 )
 
 

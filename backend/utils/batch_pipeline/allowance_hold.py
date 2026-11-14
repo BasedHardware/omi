@@ -1,0 +1,219 @@
+"""Allowance parking, independent of compute retries and ordered-result discovery.
+
+The owner cursor is a discovery hint, never permission to spend. Every released
+unit still goes through the worker's normal, current admission decision.
+"""
+
+from datetime import datetime, timezone
+import hashlib
+import json
+import logging
+import uuid
+
+from config.policy.kill_switches import kill_switch
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.firestore_read_origin import read_origin
+
+STATE = 'allowance_held'
+OWNERS = 'allowance_holds'
+SWITCH = 'BATCH_ALLOWANCE_PARK_ENABLED'
+CHECK_SECONDS = 300
+CLAIM_SECONDS = 120
+
+
+def enabled() -> bool:
+    return kill_switch(SWITCH, log=False)
+
+
+def eligible(job: dict) -> bool:
+    # A previous sticky hold is NOT authority to park a decisionless refusal.
+    decision = job.get('compute_decision') or {}
+    return (
+        decision.get('outcome') == 'held'
+        and decision.get('reason') == 'allowance_exhausted'
+        and not job.get('result')
+        and (job.get('stt_route') or {}).get('stt_route') != 'provider'
+    )
+
+
+def park(tx, job: dict, now: float) -> bool:
+    """Caller has revoked/refunded a lease or CAS-read a detached retry row."""
+    if job.get('state') != 'retry' or not eligible(job) or job.get('token') or job.get('lease_until', 0) > now:
+        return False
+    key = job['owner_key']
+    owner = tx.get(OWNERS, key)
+    if not owner:
+        owner = {'owner_key': key, 'owner_id': job['owner_id'], 'check_at': now, 'revision': 0}
+    owner.update(active=True, revision=owner['revision'] + 1, check_at=min(now, owner['check_at']))
+    owner['held_count'] = owner.get('held_count', 0) + 1
+    # Keep an in-progress generation pass/cursor. New holds cannot restart it.
+    job.update(state=STATE, merge_pending=False, allowance_held_at=now)
+    if 'retry_started_at' in job:
+        job['allowance_retry_started_at'] = job.pop('retry_started_at')
+    tx.put(OWNERS, key, owner)
+    tx.put('jobs', job['segment_id'], job)
+    return True
+
+
+def restore_retry(job: dict, now: float) -> None:
+    job.update(state='retry', merge_pending=True, available_at=now, token='', lease_until=0.0)
+    if 'allowance_retry_started_at' in job:
+        job['retry_started_at'] = job.pop('allowance_retry_started_at')
+
+
+def generation(snapshot: dict, now: float) -> str:
+    """Plan identity/validity and UTC usage month, never usage counters or content."""
+    subscription = snapshot.get('subscription') or {}
+    end = subscription.get('current_period_end')
+    valid = isinstance(end, (int, float)) and end >= now
+    value = [subscription, valid, datetime.fromtimestamp(now, timezone.utc).strftime('%Y-%m')]
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+class AllowanceHolds:
+    def __init__(self, store, entitlement):
+        self.store = store
+        # Returns (generation, eligible). Resolver failures raise, leaving the
+        # generation unacknowledged, so a transport fault cannot strand a month.
+        self.entitlement = entitlement
+
+    @read_origin('job:batch_allowance_hold:tick')
+    def tick(self, now: float, *, owners: int = 20, page_size: int = 100) -> int:
+        page_size = max(1, min(page_size, 100))
+        if not enabled():
+            released = 0
+            for segment in self.store.allowance_page(None, None, page_size):
+
+                def rollback(tx):
+                    job = tx.get('jobs', segment)
+                    if job.get('state') != STATE:
+                        return False
+                    key = job['owner_key']
+                    owner = tx.get(OWNERS, key)
+                    restore_retry(job, now)
+                    if owner:
+                        owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
+                        owner['active'] = owner['held_count'] > 0
+                        tx.put(OWNERS, key, owner)
+                    tx.put('jobs', segment, job)
+                    return True
+
+                try:
+                    released += self.store.run(rollback)
+                except BatchPrivacyBlocked:
+                    self.store.quarantine_fenced(segment, now)
+            return released
+        released = 0
+        for key in self.store.allowance_owners(now, owners):
+            try:
+                released += self._owner(key, now, page_size)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_allowance_hold outcome=retry exception_type=%s', type(error).__name__
+                )
+        return released
+
+    def _owner(self, key: str, now: float, page_size: int) -> int:
+        token = uuid.uuid4().hex
+
+        def claim(tx):
+            row = tx.get(OWNERS, key)
+            if not row.get('active') or row.get('check_at', 0) > now or row.get('lease_until', 0) > now:
+                return None
+            row.update(token=token, lease_until=now + CLAIM_SECONDS, check_at=now + CLAIM_SECONDS)
+            tx.put(OWNERS, key, row)
+            return row
+
+        owner = self.store.run(claim)
+        if owner is None:
+            return 0
+        try:
+            # While draining an acknowledged generation, no repeated funded
+            # allowance RPC per page. Dispatch still reauthorizes every unit.
+            if not owner.get('draining'):
+                current, allowed = self.entitlement(owner['owner_id'], now, owner.get('generation'))
+
+                def acknowledge(tx):
+                    row = tx.get(OWNERS, key)
+                    if row.get('token') != token:
+                        return None
+                    changed = current != row.get('generation')
+                    row.update(
+                        generation=current,
+                        draining=changed and allowed,
+                        after=None,
+                        cutoff=now,
+                        release_revision=row['revision'],
+                    )
+                    tx.put(OWNERS, key, row)
+                    return row
+
+                owner = self.store.run(acknowledge)
+                if owner is None:
+                    return 0
+            segments = self.store.allowance_page(key, owner.get('after'), page_size) if owner.get('draining') else []
+            released, after = 0, owner.get('after')
+            for segment in segments:
+
+                def release(tx):
+                    row = tx.get(OWNERS, key)
+                    job = tx.get('jobs', segment)
+                    if row.get('token') != token or row.get('lease_until', 0) <= now:
+                        return None
+                    if job.get('state') != STATE or job.get('owner_key') != key:
+                        return None
+                    cursor = [job['capture_at'], job['segment_id']]
+                    # A new refusal in this generation must not be reoffered
+                    # indefinitely while a large owner's earlier page drains.
+                    if job['allowance_held_at'] > owner['cutoff']:
+                        return cursor, False
+                    from utils.batch_pipeline.scheduler import Scheduler
+
+                    Scheduler.release_allowance_in_transaction(tx, job, now)
+                    row['held_count'] = max(0, row.get('held_count', 0) - 1)
+                    tx.put(OWNERS, key, row)
+                    return cursor, True
+
+                try:
+                    outcome = self.store.run(release)
+                except BatchPrivacyBlocked:
+                    self.store.quarantine_fenced(segment, now)
+                    outcome = None
+                if outcome:
+                    after, changed = outcome
+                    released += changed
+
+            def finish(tx):
+                row = tx.get(OWNERS, key)
+                if row.get('token') != token:
+                    return
+                more = len(segments) == page_size
+                if not row.get('held_count'):
+                    row['active'] = False
+                row.update(
+                    after=after, draining=more, token='', lease_until=0.0, check_at=now if more else now + CHECK_SECONDS
+                )
+                tx.put(OWNERS, key, row)
+
+            self.store.run(finish)
+            return released
+        except Exception:
+            # Durable claim expires; no generation is fabricated on read failure.
+            raise
+
+
+def entitlement(uid: str, now: float, previous: str | None) -> tuple[str, bool]:
+    from database._client import get_data_plane_firestore_client
+
+    snapshot = get_data_plane_firestore_client().collection('users').document(uid).get(field_paths=['subscription'])
+    if not snapshot.exists:
+        raise RuntimeError('allowance owner unavailable')
+    current = generation(snapshot.to_dict(), now)
+    if current == previous:
+        return current, False
+    from utils.stt_cap_dispatch import funded_allowance
+
+    allowance = funded_allowance(uid, lane='batch')
+    if allowance.reason == 'allowance_unavailable':
+        raise RuntimeError('allowance unavailable')
+    return current, allowance.managed
