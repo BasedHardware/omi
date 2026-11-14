@@ -2585,9 +2585,13 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         return result
 
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
-    control = (
-        struct.pack('<I', 104) + json.dumps({'conversation_id': 'conversation', 'record_close_only': True}).encode()
-    )
+    controls = [
+        struct.pack('<I', 104)
+        + json.dumps(
+            dict(conversation_id='conversation', record_close_only=True, request_id='test', phase=phase, watermark=320)
+        ).encode()
+        for phase in ('prepare', 'commit')
+    ]
 
     class OpenStream(Socket):
         async def receive_bytes(self):
@@ -2597,11 +2601,13 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
                 await asyncio.wait_for(sealed.wait(), 5)
             return await super().receive_bytes()
 
-    sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + [control])
-    handler = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+    sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + controls)
+    handler = asyncio.create_task(
+        pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1, record_close_protocol=2)
+    )
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        await asyncio.wait_for(sealed.wait(), 1)
+        await asyncio.wait_for(sealed.wait(), 2)
         assert not release.is_set()
         assert projected and client.rows[path]['record_audio_closed']
         assert client.rows[path]['record_upload_sessions'] == {}

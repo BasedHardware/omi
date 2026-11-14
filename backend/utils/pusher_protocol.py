@@ -26,7 +26,9 @@ PUSHER_RECORD_CLOSE_ACK_OPCODE = 204
 
 
 def record_close_ack_frame() -> bytes:
-    return struct.pack('<I', PUSHER_RECORD_CLOSE_ACK_OPCODE) + b'{"type":"record_close_ack","version":1}'
+    from utils.pusher_record_close import capability_frame
+
+    return capability_frame()
 
 
 def audio_custody_ack_frame(receipt: Dict[str, Any]) -> bytes:

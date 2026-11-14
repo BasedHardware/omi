@@ -343,6 +343,13 @@ class LiveConversationController:
             client_kind=self.host.client_kind,
         )
         route = finalization['route']
+        if route in {'pusher', 'cloud_tasks', 'queued', 'blocked_byok'}:
+            close_recording = getattr(self.host, 'request_recording_close', None)
+            if close_recording is not None:
+                try:
+                    await close_recording(conversation_id)
+                except Exception:
+                    logger.warning('event=record_close_notify outcome=deferred')
         if route == 'pusher':
             if not self.host.request_conversation_processing:
                 return False
@@ -352,13 +359,6 @@ class LiveConversationController:
             self.on_conversation_processing_started(conversation_id)
             return True
         if route in {'cloud_tasks', 'queued', 'blocked_byok'}:
-            close_recording = getattr(self.host, 'request_recording_close', None)
-            if close_recording is not None:
-                try:
-                    await close_recording(conversation_id)
-                except Exception:
-                    # The queued finalizer remains authoritative on relay loss.
-                    logger.warning('event=record_close_notify outcome=deferred')
             self.on_conversation_processing_started(conversation_id)
             return True
         status = finalization.get('status')

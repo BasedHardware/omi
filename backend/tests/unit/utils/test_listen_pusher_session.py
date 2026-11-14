@@ -1773,34 +1773,41 @@ async def test_new_generation_at_pending_capacity_does_not_evict_another_convers
 
 
 @pytest.mark.anyio
-async def test_close_only_orders_buffered_tail_before_control_and_requires_capability(monkeypatch):
+async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monkeypatch):
     ws = FakePusherWebSocket()
     session = make_session(ws=ws)
     await session.connect()
     session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
     assert not await session.request_recording_close('conv-1')
-    assert not ws.sent  # An old pusher cannot receive a close-only request.
+    assert not ws.sent
     session.record_close_supported = True
-    assert await session.request_recording_close('conv-1')
-    assert [frame_type(f) for f in ws.sent] == [103, 101, 104]
-    assert frame_json(ws.sent[-1]) == {'conversation_id': 'conv-1', 'record_close_only': True}
-    assert not session.pending_conversation_requests
-    assert not session.pending_record_closes
+    assert not await session.request_recording_close('conv-1')
+    assert [frame_type(f) for f in ws.sent] == [104]
+    assert frame_json(ws.sent[-1])['phase'] == 'prepare'
+    close = session.pending_record_closes['conv-1']
+    close.prepared = True
+    assert not await session.request_recording_close('conv-1')
+    assert [frame_type(f) for f in ws.sent] == [104, 103, 101, 104]
+    assert frame_json(ws.sent[-1])['phase'] == 'commit'
+    assert frame_json(ws.sent[-1])['watermark'] == 4
+    assert 'conv-1' in session.pending_record_closes
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false')
     assert not await session.request_recording_close('conv-1')
-    assert len(ws.sent) == 3
+    assert len(ws.sent) == 4
 
 
 @pytest.mark.anyio
 async def test_close_only_keeps_control_pending_when_tail_send_fails():
-    ws = FakePusherWebSocket(send_errors=[None, OSError('synthetic')])
+    ws = FakePusherWebSocket(send_errors=[None, None, OSError('synthetic')])
     session = make_session(ws=ws)
     await session.connect()
     session.record_close_supported = True
     session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
     assert not await session.request_recording_close('conv-1')
+    session.pending_record_closes['conv-1'].prepared = True
+    assert not await session.request_recording_close('conv-1')
     assert 'conv-1' in session.pending_record_closes
-    assert all(frame_type(f) != 104 for f in ws.sent)
+    assert all(frame_type(f) != 104 or frame_json(f)['phase'] == 'prepare' for f in ws.sent)
     assert session.audio_runs
 
 
@@ -1820,7 +1827,7 @@ async def test_close_capability_ack_drains_pending_notification_only_for_support
     assert not await session.request_recording_close('conv-1')
     ws.on_recv = lambda: active.update(active=False)
     await session.pusher_receive()
-    assert session.record_close_supported is (type(version) is int and version == 1)
+    assert session.record_close_supported is (type(version) is int and version == 2)
     assert any(frame_type(f) == 104 for f in ws.sent) is session.record_close_supported
 
 

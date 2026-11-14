@@ -671,7 +671,9 @@ def test_partial_audio_does_not_clear_refusal_clock(records):
     assert not records.transactions[-1].updates
 
 
-async def test_close_only_flushes_and_seals_while_socket_continues_without_finalization(records, monkeypatch):
+async def test_close_only_seals_empty_record_while_socket_continues_without_finalization(records, monkeypatch):
+    monkeypatch.setenv("AUDIO_DURABLE_OUTBOX_ENABLED", "true")
+    monkeypatch.setenv("PUSHER_PROJECTION_DEBT_DURABLE_ENABLED", "false")
     closed = asyncio.Event()
     original = record_audio_db.seal_record_audio
 
@@ -684,7 +686,13 @@ async def test_close_only_flushes_and_seals_while_socket_continues_without_final
         return result
 
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', signal_seal)
-    control = struct.pack('<I', 104) + json.dumps({'conversation_id': 'record', 'record_close_only': True}).encode()
+    controls = [
+        struct.pack('<I', 104)
+        + json.dumps(
+            dict(conversation_id='record', record_close_only=True, request_id='test', phase=phase, watermark=0)
+        ).encode()
+        for phase in ('prepare', 'commit')
+    ]
 
     class StillOpen(FakeWebSocket):
         async def receive_bytes(self):
@@ -692,13 +700,16 @@ async def test_close_only_flushes_and_seals_while_socket_continues_without_final
                 await asyncio.wait_for(closed.wait(), 5)
             return await super().receive_bytes()
 
-    await _run(StillOpen([_conversation('record'), _audio(100, b'\x01\x00' * RATE), control]))
+    await pusher._websocket_util_trigger(
+        StillOpen([_conversation('record'), *controls]), 'uid-at', RATE, record_close_protocol=2
+    )
     assert records.rows[PATH]['record_audio_closed'] is True
     pusher.process_conversation_task.assert_not_called()
 
 
 @pytest.mark.parametrize('enabled', ['true', 'false'])
 async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeypatch, enabled):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', enabled)
@@ -709,5 +720,5 @@ async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeyp
         ws.sent.append(data)
 
     ws.send_bytes = send
-    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=1)
+    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=2)
     assert any(struct.unpack('<I', f[:4])[0] == PUSHER_RECORD_CLOSE_ACK_OPCODE for f in ws.sent) is (enabled == 'true')

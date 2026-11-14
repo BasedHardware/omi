@@ -47,7 +47,9 @@ from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from config.pusher_record import close_notify_enabled, close_fast_path_enabled
+from config.batch_pipeline_projection_rebuild import enabled as projection_debt_enabled
 from utils.pusher_protocol import record_close_ack_frame
+from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, PusherCloseState, result_frame
 from utils.pusher_protocol import (
     BUFFERED_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
@@ -514,7 +516,10 @@ async def _run_websocket_util_trigger(
             logger.error(f'Failed to send audio timeline ack: {e} {uid}')
             return
 
-    if record_close_protocol == 1 and close_notify_enabled():
+    close_protocol = PusherCloseState(
+        record_close_protocol == RECORD_CLOSE_VERSION and close_notify_enabled() and audio_outbox_enabled()
+    )
+    if close_protocol.negotiated:
         await websocket.send_bytes(record_close_ack_frame())
 
     # Defense-in-depth: during drain the LB should already have removed us from
@@ -652,9 +657,8 @@ async def _run_websocket_util_trigger(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
                 closing = not websocket_active or conv_id in record_close_requests
-                if close_fast_path_enabled() and await audio_projection.defer_close_refresh(
-                    conv_id, uploaded_paths, closing=closing
-                ):
+                if close_fast_path_enabled() and projection_debt_enabled():
+                    await audio_projection.defer_close_refresh(conv_id, uploaded_paths, closing=closing)
                     applied = None  # The verified PCM and encoded upload already completed.
                 else:
                     with observe_work('drain_refresh'):
@@ -797,12 +801,15 @@ async def _run_websocket_util_trigger(
             for conv_id in list(record_close_requests):
                 if conv_id == exclude:
                     continue  # The just-dequeued reference is not buffered yet.
+                if close_protocol.blocks(conv_id, websocket_active):
+                    continue  # A transport send/rollover is not a committed close boundary.
                 if websocket_active and any(window.conversation_id == conv_id for window in refused_windows):
                     continue  # Uncommitted PCM is still owned by this socket.
                 if (
                     conv_id not in pending_refs
                     and not durable_queue.has_conversation(conv_id)
                     and close_fast_path_enabled()
+                    and projection_debt_enabled()
                 ):
                     await audio_projection.defer_close_refresh(conv_id)
                 if (
@@ -1611,9 +1618,13 @@ async def _run_websocket_util_trigger(
                         record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
+            for cid in close_protocol.requests.keys() - close_protocol.committed:
+                record_barrier.hold_recording(cid)
+                record_close_requests.discard(cid)
             if (
                 tail_committed
                 and current_conversation_id in record_close_requests
+                and (not close_protocol.negotiated or current_conversation_id in close_protocol.committed)
                 and current_conversation_id not in record_barrier.failed_recordings
                 and not record_barrier.record_upload_failed
                 and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
@@ -1738,16 +1749,44 @@ async def _run_websocket_util_trigger(
                     raise ValueError('dispatch_generation must be an integer')
                 if conversation_id:
                     close_only = res.get('record_close_only') is True
-                    if close_only and not close_notify_enabled():
-                        return
+                    if close_only:
+                        request_id, phase, watermark = res.get('request_id'), res.get('phase'), res.get('watermark')
+                        if (
+                            not isinstance(request_id, str)
+                            or not 0 < len(request_id) <= 64
+                            or phase not in {'prepare', 'commit'}
+                            or type(watermark) is not int
+                            or not 0 <= watermark < 2**63
+                        ):
+                            raise ValueError('invalid close-v2 control')
+                        status, base = 'unsupported', 0
+                        if close_protocol.negotiated and close_notify_enabled() and private_cloud_sync_enabled:
+                            if phase == 'prepare':
+                                status, base = close_protocol.prepare(
+                                    conversation_id, request_id, record_close_requests
+                                )
+                                if status == 'prepared':
+                                    await record_barrier.begin_recording(conversation_id)
+                                    if conversation_id not in record_barrier.registered_sessions:
+                                        status = 'producer_unavailable'
+                            else:
+                                status = close_protocol.commit(conversation_id, request_id, watermark, accept=False)
+                                base = watermark
+                                if status == 'accepted':
+                                    if current_conversation_id == conversation_id:
+                                        await _queue_private_cloud_chunk()
+                                        _reset_private_cloud_buffer()
+                                    # The reservation must block existing rollover
+                                    # close requests until custody handoff completes.
+                                    close_protocol.commit(conversation_id, request_id, watermark)
+                                    record_close_requests.add(conversation_id)
+                        await websocket.send_bytes(result_frame(conversation_id, request_id, phase, status, base))
+                        return  # Only commit requests closure; never dispatch a finalizer.
                     if private_cloud_sync_enabled:
-                        if not close_only or current_conversation_id == conversation_id:
-                            await _queue_private_cloud_chunk()
-                            _reset_private_cloud_buffer()
+                        await _queue_private_cloud_chunk()
+                        _reset_private_cloud_buffer()
                         if len(record_close_requests) < 128:
                             record_close_requests.add(conversation_id)
-                    if close_only:
-                        return  # Audio closure only; Cloud Tasks owns finalization.
                     logger.info(f"Pusher received process_conversation request: {conversation_id} {uid}")
                     # Durable finalization already has a Firestore owner. It
                     # must survive an originating listen socket close after
@@ -1779,6 +1818,7 @@ async def _run_websocket_util_trigger(
                 # Parse: header(4) | timestamp(8 bytes double) | audio_data
                 buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                 audio_data = data[12:]
+                close_protocol.audio(current_conversation_id, len(audio_data))
                 run_gap_before = False
 
                 if audio_timeline_v2:

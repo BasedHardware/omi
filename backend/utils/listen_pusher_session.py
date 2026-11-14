@@ -35,6 +35,7 @@ from utils.pusher_protocol import (
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.pusher_record import close_notify_enabled
 from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
+from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, RESULT_OPCODE, PendingClose
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -217,7 +218,8 @@ class ListenPusherSession:
         self.audio_timeline_active = False
         self.audio_timeline_suspended = False
         self.record_close_supported = False
-        self.pending_record_closes: set[str] = set()
+        self.pending_record_closes: dict[str, PendingClose] = {}
+        self.record_close_boundaries: set[str] = set()
 
     @property
     def uid(self):
@@ -397,6 +399,12 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
+        bound_conversation = conversation_id or self.deps.get_current_conversation_id()
+        closing = self.pending_record_closes.get(bound_conversation) if bound_conversation else None
+        if bound_conversation in self.record_close_boundaries or closing is not None and closing.frozen:
+            # This call has not accepted/buffered the input. The caller retains
+            # custody, including its existing archive/WAL path, under backpressure.
+            raise AudioBackpressure('listen_record_closed', chunk)
         if (
             audio_outbox_enabled()
             and self.audio_total_size + self.audio_inflight_size + len(chunk) > self.config.max_audio_buffer_size
@@ -421,32 +429,60 @@ class ListenPusherSession:
         """Order accepted audio before a close-only request; never run a finalizer."""
         if not close_notify_enabled():
             return False
-        if len(self.pending_record_closes) < self.config.max_pending_requests:
-            self.pending_record_closes.add(conversation_id)
+        if conversation_id in self.record_close_boundaries:
+            return True
+        if conversation_id not in self.pending_record_closes:
+            if len(self.pending_record_closes) + len(self.record_close_boundaries) >= self.config.max_pending_requests:
+                logger.warning('event=record_close_notify outcome=local_capacity')
+                return False  # Never send an unretained fast close; use slow socket closure.
+            self.pending_record_closes[conversation_id] = PendingClose()
         self.pending_request_event.set()
         if not self.record_close_supported or not self.pusher_connected:
             return False  # An old pusher must never interpret this as finalization.
         socket = self.pusher_ws
         async with self.audio_flush_lock:
-            await self._audio_bytes_flush(lock_held=True)
+            close = self.pending_record_closes.get(conversation_id)
+            if close is None:
+                return conversation_id in self.record_close_boundaries
+            if close.socket is not socket:
+                close.socket, close.prepared, close.base, close.sent = socket, False, 0, 0
+            phase = 'prepare'
+            if close.prepared:
+                await self._audio_bytes_flush(lock_held=True)
+                if any(
+                    (run.conversation_id or self.deps.get_current_conversation_id()) == conversation_id
+                    for run in self.audio_runs
+                ):
+                    return False
+                # No await between checking accepted runs and freezing acceptance.
+                # The earlier prepare control can yield while new runs are accepted;
+                # the final commit cannot. Late input is refused before acceptance.
+                close.frozen = True
+                phase = 'commit'
             if (
                 not self.pusher_connected
                 or not self.record_close_supported
                 or socket is None
                 or self.pusher_ws is not socket
-                or self.audio_runs
             ):
                 return False  # Failed/withheld audio keeps its producer fence.
             try:
                 await socket.send(
                     struct.pack('<I', 104)
-                    + json.dumps({'conversation_id': conversation_id, 'record_close_only': True}).encode()
+                    + json.dumps(
+                        {
+                            'conversation_id': conversation_id,
+                            'record_close_only': True,
+                            'request_id': close.request_id,
+                            'phase': phase,
+                            'watermark': close.base + close.sent,
+                        }
+                    ).encode()
                 )
             except Exception:
                 logger.warning('event=record_close_notify outcome=send_failed')
                 return False
-            self.pending_record_closes.discard(conversation_id)
-            return True
+            return False  # Transport completion is never an acceptance ACK.
 
     async def _audio_bytes_flush(self, *, lock_held: bool = False):
         async with nullcontext() if lock_held else self.audio_flush_lock:
@@ -596,6 +632,9 @@ class ListenPusherSession:
                                 run.failed_socket = pusher_ws
                         raise
                     sent_envelopes += 1
+                    close = self.pending_record_closes.get(conversation) if conversation else None
+                    if close is not None and close.socket is pusher_ws:
+                        close.sent += len(envelope.data)
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
                     # Standalone announcement when no run carried the current
                     # conversation yet (legacy sessions with no buffered audio,
@@ -680,11 +719,38 @@ class ListenPusherSession:
                         isinstance(ack, dict)
                         and ack.get('type') == 'record_close_ack'
                         and type(ack.get('version')) is int
-                        and ack['version'] == 1
+                        and ack['version'] == RECORD_CLOSE_VERSION
                     )
                     if self.record_close_supported:
                         for cid in list(self.pending_record_closes):
                             await self.request_recording_close(cid)
+                elif header_type == RESULT_OPCODE:
+                    if self.pusher_ws is not sock:
+                        continue
+                    ack = json.loads(msg[4:].decode('utf-8'))
+                    if (
+                        not isinstance(ack, dict)
+                        or type(ack.get('version')) is not int
+                        or ack['version'] != RECORD_CLOSE_VERSION
+                    ):
+                        continue
+                    cid = ack.get('conversation_id')
+                    if not isinstance(cid, str):
+                        continue
+                    close = self.pending_record_closes.get(cid)
+                    if close is None or close.socket is not sock or close.request_id != ack.get('request_id'):
+                        continue
+                    if ack.get('phase') == 'prepare' and ack.get('status') == 'prepared':
+                        base = ack.get('watermark')
+                        if type(base) is int and 0 <= base < 2**63:
+                            close.base, close.prepared = base, True
+                    elif ack.get('phase') == 'commit' and ack.get('status') == 'accepted' and close.frozen:
+                        if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
+                            self.record_close_boundaries.add(cid)
+                            self.pending_record_closes.pop(cid, None)
+                    elif ack.get('status') == 'unknown':
+                        close.prepared = False
+                    # Capacity and watermark refusals retain the exact request.
                 elif header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
                     if self._audio_timeline_ack_check(msg):
                         await self._resume_audio_timeline(sock)
@@ -1036,7 +1102,7 @@ class ListenPusherSession:
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
             self.record_close_supported = False
             if close_notify_enabled():
-                connect_kwargs['record_close_protocol'] = 1
+                connect_kwargs['record_close_protocol'] = RECORD_CLOSE_VERSION
             if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL
             self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
