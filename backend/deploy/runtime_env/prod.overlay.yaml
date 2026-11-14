@@ -908,6 +908,10 @@ overlay:
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
+          # Projection finish backoff: backend-sync can run the same sweep through its authenticated
+          # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
+          # backend-integration (SCA-2173, review SCA-2270). Kill switch: set it false.
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1655,6 +1659,10 @@ overlay:
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
+          # Projection finish backoff on the only service that runs the finish sweep. On since the
+          # one-time stamping pass completed and the finish counters exported (2026-11-14, SCA-2173,
+          # SCA-2222). Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
