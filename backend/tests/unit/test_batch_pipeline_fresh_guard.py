@@ -1,5 +1,8 @@
 """Fresh delivery guard runs production queries and collector without customer data."""
 
+import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -9,6 +12,7 @@ from prometheus_client import CollectorRegistry
 from database.batch_pipeline_fresh_guard import fresh_committed_counts
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import fresh_guard as module
+from utils.batch_pipeline import serving
 from utils.batch_pipeline.serving import Serving
 
 
@@ -108,6 +112,7 @@ def test_empty_window_has_counts_but_no_ratio(guard):
         'committed_window_total': 0,
         'unprojected_window_total': 0,
         'guard_sample_age_seconds': 0,
+        'guard_sample_timestamp_seconds': 2000,
     }
 
 
@@ -203,6 +208,22 @@ def test_scrape_does_not_wait_for_count_rpc_and_overlapping_refresh_is_coalesced
     assert samples(registry)['unprojected_ratio'] == 0.25
 
 
+def test_window_anchor_precedes_count_rpcs_and_expires_with_counts(guard, monkeypatch):
+    sampler, registry, clock = guard
+
+    def slow_count(client, namespace, now):
+        assert now == 2000
+        clock[0] += 15
+        return 4, 1
+
+    monkeypatch.setattr(module, 'fresh_committed_counts', slow_count)
+    sampler.refresh(store(CountClient()))
+    assert samples(registry)['guard_sample_timestamp_seconds'] == 2000
+    assert samples(registry)['guard_sample_age_seconds'] == 0
+    clock[0] += 120
+    assert samples(registry) == {'guard_sample_age_seconds': 120}
+
+
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 @pytest.mark.parametrize('value', ['off', 'false', '0', 'no', ' OFF '])
 def test_registered_kill_switch_stops_queries_in_every_parser_mode(guard, monkeypatch, mode, value):
@@ -224,3 +245,82 @@ def test_registered_kill_switch_defaults_on_in_every_parser_mode(monkeypatch, mo
     else:
         monkeypatch.setenv('BATCH_PIPELINE_FRESH_GUARD_ENABLED', value)
     assert module.enabled()
+
+
+@pytest.mark.asyncio
+async def test_guard_ticks_while_maintenance_is_stalled(guard, monkeypatch):
+    sampler, registry, clock = guard
+    client = CountClient()
+    memory = MemoryStore()
+    memory.client, memory.namespace = client, 'batch_pipeline_dev'
+    entered, release = threading.Event(), threading.Event()
+
+    def stalled_cleanup(*args):
+        entered.set()
+        assert release.wait(5)
+
+    service = Serving(
+        memory,
+        cleanup=stalled_cleanup,
+        metrics=SimpleNamespace(fresh_guard=sampler, refresh=Mock()),
+        leader=SimpleNamespace(acquire=lambda: True),
+    )
+    stop = asyncio.Event()
+    ages = []
+    deadline = [None]
+
+    async def inline_db(executor, fn, *args):
+        assert executor is serving.db_executor
+        return fn(*args)
+
+    async def tick(awaitable, *, timeout):
+        awaitable.close()
+        assert timeout == 20
+        ages.append(samples(registry)['guard_sample_age_seconds'])
+        clock[0] += timeout
+        if clock[0] >= deadline[0]:
+            stop.set()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(serving, 'run_blocking', inline_db)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'asyncio', SimpleNamespace(wait_for=tick, TimeoutError=asyncio.TimeoutError))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        maintenance = pool.submit(service._maintain, recover_quarantine=False)
+        try:
+            assert entered.wait(2)
+            # Reproduces the original defect before the independent timer runs.
+            clock[0] += 180
+            assert samples(registry) == {'guard_sample_age_seconds': 180}
+            deadline[0] = clock[0] + 180
+            await serving._supervise_fresh_guard(stop)
+            assert not maintenance.done()
+            assert max(ages) == 40
+            assert len(client.calls) == 8  # initial pair, then 180, 240 and 300s
+        finally:
+            release.set()
+        maintenance.result(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_guard_supervisor_recovers_after_resolution_failure(monkeypatch):
+    stop = asyncio.Event()
+    refresh = Mock()
+    resolve = Mock(side_effect=[RuntimeError('synthetic'), SimpleNamespace(refresh_fresh_guard=refresh)])
+
+    async def inline_db(executor, fn, *args):
+        return fn(*args)
+
+    async def tick(awaitable, *, timeout):
+        awaitable.close()
+        if refresh.called:
+            stop.set()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(serving, 'run_blocking', inline_db)
+    monkeypatch.setattr(serving, 'serving_for_stage', resolve)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'asyncio', SimpleNamespace(wait_for=tick, TimeoutError=asyncio.TimeoutError))
+    await serving._supervise_fresh_guard(stop)
+    refresh.assert_called_once_with()

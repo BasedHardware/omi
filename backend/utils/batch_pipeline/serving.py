@@ -29,7 +29,7 @@ from database.batch_pipeline_staging import reap
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
-from utils.executors import run_blocking, start_background_task, sync_executor
+from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
@@ -292,14 +292,18 @@ class Serving:
             )
             self.held_pass_started = None
 
-    def _maintain(self, *, recover_quarantine: bool):
-        """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+    def refresh_fresh_guard(self):
+        """Use the maintenance lease, including outside the potentially slow pass."""
         if self.metrics:
             # Explicit reconcile bypasses the periodic lease; the guard never does.
             if self._leads(True):
                 self.metrics.fresh_guard.refresh(self.store)
             else:
                 self.metrics.fresh_guard.deactivate()
+
+    def _maintain(self, *, recover_quarantine: bool):
+        """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        self.refresh_fresh_guard()
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -408,6 +412,24 @@ def serving_for_stage(stage: str) -> Serving:
 @lru_cache(maxsize=1)
 def _metrics() -> QueueMetrics:
     return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
+
+
+async def _supervise_fresh_guard(stop):
+    # General maintenance (and its sync executor) may be occupied for minutes.
+    # Keep the same maintenance leader, but borrow a DB thread only for this
+    # bounded count pair. FreshGuard coalesces overlaps and enforces 60s spacing.
+    while not stop.is_set():
+        try:
+            service = await run_blocking(db_executor, serving_for_stage, current_stage())
+            await run_blocking(db_executor, service.refresh_fresh_guard)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_fresh_guard outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=20)
+        except asyncio.TimeoutError:
+            pass
 
 
 def start_serving_from_env():
@@ -545,7 +567,9 @@ def start_serving_from_env():
             if pump_enabled:
                 await asyncio.gather(projection_pump(), drain_upload_holds())
             else:
-                await asyncio.gather(supervise(), drain(), dispatch_recovery(), drain_upload_holds())
+                await asyncio.gather(
+                    supervise(), drain(), dispatch_recovery(), drain_upload_holds(), _supervise_fresh_guard(stop)
+                )
         finally:
             set_recurring_sweep(None)
 
