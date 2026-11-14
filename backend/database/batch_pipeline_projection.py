@@ -788,7 +788,12 @@ class ProjectionStore:
 
                 outbox = FirestoreEnrichmentOutbox(self.client)
                 notes_writes = []
-                for canonical in sorted(set(new + updated)):
+                prepared = set(session.ledger.get('record_notes_prepared_outputs') or [])
+                outputs = sorted(set(new + updated) - prepared)
+                # Up to 128 siblings also need two completion writes each.
+                # Bound output writes so a size rollover cannot exceed the
+                # Firestore commit ceiling. Ready receipts remain discoverable.
+                for canonical in outputs[:128]:
                     row = session.conversation_rows.get(canonical) or {}
                     hold = row.get('sync_processing_hold') or {}
                     eager = (
@@ -820,6 +825,11 @@ class ProjectionStore:
                         notes_wakes.append((outbox, wake.row_id, wake.wake_token))
                 for ref, row in notes_writes:
                     transaction.set(ref, row)
+                if len(outputs) > 128:
+                    transaction.update(
+                        session.ledger_ref, {'record_notes_prepared_outputs': sorted(prepared | set(outputs[:128]))}
+                    )
+                    return None, False, 0
             if not source_deleted:
                 self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
             from database.sync_ledger import complete_batch_projection_in_transaction

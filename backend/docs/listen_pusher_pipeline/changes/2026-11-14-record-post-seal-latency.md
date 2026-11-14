@@ -128,3 +128,12 @@ stop at the first uncommitted predecessor. Notes completion replaces per-unit
 outbox mutations with one per canonical output. A legacy unstamped binding's
 one-time owner upgrade adds one ledger write, no read; new admissions add none.
 Instrumentation itself adds zero periodic reads/hour and zero document writes.
+
+
+Large size-rollover output sets are prepared in groups of at most 128 outbox
+writes. A larger set checkpoints the prepared IDs on the already-read content
+ledger (one extra checkpoint write per non-final group); ready result receipts
+remain on the existing finish-discovery page. A restart continues with unprepared
+outputs, never creating another version for prepared outputs. This keeps the
+128-sibling completion and notes writes within Firestore's commit ceiling.
+Single-output captures add no checkpoint write or additional read.

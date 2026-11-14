@@ -9829,3 +9829,10 @@ observation per process/notes revision (bounded local dedupe, 8,192 entries).
 It measures backend row observation, including time until a Home list request;
 it cannot establish phone rendering or a globally unique first observation.
 The metric has no account or conversation labels and performs no database IO.
+
+Size-rollover output sets prepare at most 128 notes outbox rows per completion
+pass. A non-final pass checkpoints prepared canonical IDs on the existing
+content ledger and leaves ready receipts discoverable. Completion replay skips
+those IDs, so a restart cannot multiply notes revisions. This adds one ledger
+write only for each non-final group in a recording with over 128 distinct
+output conversations; the usual single-output path is unchanged.

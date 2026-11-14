@@ -152,6 +152,24 @@ def test_size_rollover_keeps_one_obligation_per_distinct_output_without_read_aft
     assert all(data.get('version') == 1 for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION)
 
 
+@pytest.mark.parametrize('recording', [1], indirect=True)
+def test_large_output_set_checkpoints_without_repeating_notes_after_restart(recording):
+    f = recording
+    outputs = ['capture', *(f'split-{i}' for i in range(128))]
+    for cid in outputs[1:]:
+        f.user.collection('conversations').document(cid).create({'status': 'completed'})
+    entry = f.client.rows[f.store.ref('results', 'first').path]
+    entry['projection']['size_rollover_outputs'] = [{'conversation_id': cid, 'created': False} for cid in outputs]
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
+    assert len(f.ledger.get().to_dict()['record_notes_prepared_outputs']) == 128
+    assert len([path for path in f.client.rows if path[0] == reprocess.COLLECTION]) == 128
+    assert f.store.ref('results', 'first').get().to_dict()['projection_state'] == 'ready'
+    assert f.store.complete('first', f.binding, NOW + 1, f.accounting, policy=POLICY)
+    rows = [data for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION]
+    assert len(rows) == 129 and all(row['version'] == 1 for row in rows)
+
+
 def test_two_siblings_no_notes_until_both_ready_then_one_durable_refresh(recording, monkeypatch):
     f = recording
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'synthetic-notes')
