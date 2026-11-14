@@ -2906,3 +2906,10 @@ firestore_read_lever_policy:
       lifecycle_record_pending_head:
         value: 5
         expires: '2026-11-17'
+    chart/prod/batch-pipeline-worker:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'

@@ -31,9 +31,10 @@ commits.
   commit has no other wake. With 154,000 pending rows the fleet (35 processes) passed a given row
   about once in 15 minutes, which is the delay measured for fresh results.
 - The read has no cursor. Each tick it starts at a random point in the window and reads oldest
-  first, so replicas land on different rows and a restart changes nothing. A process offers a row
-  from this read once per run; the entry is kept for two windows, longer than the row stays there.
-  A row that stays pending is next offered by the main cursor, as before.
+  first. Replicas draw their points independently, so they can land on different rows. A process
+  offers a row from this read once per run; the entry is kept for two windows, longer than the row
+  stays there. That memory is per process: a restarted process can offer a row once more. A row
+  that stays pending is then left to the main cursor, which offers it only when it reaches it.
 - Rows read here count against the page: the main cursor gets the rest (at least half). The page
   holds no more rows than before. The tick makes one more query than before.
 - A main cursor that has not reached the newest row for 30 minutes starts again: one time in
