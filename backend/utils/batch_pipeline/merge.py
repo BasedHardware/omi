@@ -249,18 +249,24 @@ class OrderedMerge:
         The bound stops a row that never commits (for a reason this code does not foresee) from
         keeping its owner on every maintenance pass for good. It is longer than any head wait,
         so a row inside its wait is never dropped. A commit, or a gap of
-        ``FRESH_REOFFER_GAP_SECONDS`` between sightings, starts the clock again."""
+        ``FRESH_REOFFER_GAP_SECONDS`` between sightings, starts the clock again. The table
+        holds ``FRESH_REOFFER_MARK_PRUNE`` owners; when it is full of owners seen within the
+        gap, a further owner is not marked."""
         if not fresh_reoffer_marker_enabled():
             return False
         stalled = self._fresh_stalled
         if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
-            # Drop owners not seen for a gap (their clock would restart anyway); if that is
-            # not enough, the one seen longest ago. Other owners keep their clocks.
-            for other, (_, seen) in list(stalled.items()):
-                if now - seen > FRESH_REOFFER_GAP_SECONDS:
+            # Drop owners not seen for a gap (their clock would restart anyway). An owner
+            # still being seen is never evicted: that would restart its clock and undo the
+            # bound. If the table is still full, this owner is not tracked and not marked.
+            for other, value in list(stalled.items()):
+                if now - value[1] > FRESH_REOFFER_GAP_SECONDS and stalled.get(other) == value:
                     stalled.pop(other, None)
             if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
-                stalled.pop(min(list(stalled.items()), key=lambda item: item[1][1])[0], None)
+                logger.warning(
+                    'event=batch_merge outcome=fresh_reoffer_table_full source=%s count=1', self.commit_source
+                )
+                return False
         since, seen = stalled.get(key, (now, now))
         if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
             since = now

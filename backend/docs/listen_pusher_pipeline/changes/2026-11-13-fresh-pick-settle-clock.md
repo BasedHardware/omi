@@ -59,11 +59,14 @@ holding a re-offer marker that reaches the depth cap gets a depth-hold marker in
 - Anything that leaves a ready fresh row on the page without a commit: the process stops keeping
   the marker once the owner has gone the head wait plus 30 minutes without a commit
   (`event=batch_merge outcome=fresh_reoffer_gave_up`); a later commit, or 10 minutes without
-  seeing the owner, starts the clock again. The clock is per process.
+  seeing the owner, starts the clock again. The clock is per process. Its table holds 4,096
+  owners and evicts only owners not seen for 10 minutes; when it is full, a further owner is
+  not tracked and not marked (`fresh_reoffer_table_full`).
 - A failed marker write is logged (`fresh_reoffer_mark_retry`) and never stops the drain.
-- Cost of a visit: the marker listing reads the owner's first pending row, then one drain (a strict
-  transaction, the probe query, and a second transaction when a row commits). Maintenance visits
-  at most 50 markers a pass.
+- Cost of a visit: the marker listing reads the owner's first pending row, then one drain of up to
+  100 commit attempts (each a strict transaction, the probe query, and a second transaction when
+  a row commits; a visit that commits nothing is one attempt). Maintenance visits at most 50
+  markers a pass.
 
 ## What it does not do
 

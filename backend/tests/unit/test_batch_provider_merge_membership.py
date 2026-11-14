@@ -375,6 +375,23 @@ def test_the_bound_is_never_shorter_than_the_head_wait(world, monkeypatch):
     assert merge._fresh_left_waiting(key, 5400.0, False, 3600.0) is False
 
 
+def test_a_full_table_does_not_evict_owners_still_waiting(world, monkeypatch):
+    """Evicting an owner that is still being seen would restart its clock and undo the bound."""
+    import utils.batch_pipeline.merge as merge_module
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', 2)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    for key in ('a', 'b', 'c'):
+        assert merge._fresh_left_waiting(key, 1000.0, False, 60.0) is True
+    assert merge._fresh_left_waiting('d', 1001.0, False, 60.0) is False  # full: not tracked
+    assert set(merge._fresh_stalled) == {'a', 'b', 'c'} and 'd' not in merge._fresh_waiting
+    assert merge._fresh_stalled['a'][0] == 1000.0  # clocks untouched
+    # Owners not seen for the gap make room.
+    assert merge._fresh_left_waiting('d', 1000.0 + 601, False, 60.0) is True
+    assert set(merge._fresh_stalled) == {'d'}
+
+
 def test_a_failing_marker_write_does_not_stop_the_drain(world, monkeypatch, caplog):
     store, _ = _legacy_backlog(world, monkeypatch, 1)
     admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
