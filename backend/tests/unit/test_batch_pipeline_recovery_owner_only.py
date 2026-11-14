@@ -165,7 +165,7 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         projector.start_followups = AsyncMock(side_effect=RuntimeError('synthetic request failure'))
         with pytest.raises(RuntimeError, match='synthetic request failure'):
             await service.reconcile_async(owner_id=BURST, recovered=ids[-1], owner_only=True)
-        assert all(log.results[sid]['projection_state'] == 'persisted' for sid in ids)
+        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
     # A new process has no callbacks, owner wakes, cursors or owed lists.
     restarted = projector_for(log)
     restarted.complete_content = Mock()
@@ -184,16 +184,15 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         initial_probes = restarted.complete_content.call_count
-        assert initial_probes == (1 if failure == 'before_assignment' else len(ids))
+        assert initial_probes == 1
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
         assert log.persist_order == ids
-        # Mocked completion leaves ready receipts discoverable. The first
-        # probe for each unit plus one ready-content probe on the next page
-        # are required; page coalescing is not a process-wide suppression.
-        assert restarted.complete_content.call_count == len(ids) + 1
+        # Already-ready silent receipts coalesce to one content probe per page;
+        # pending units still owe their individual assignment follow-ups.
+        assert restarted.complete_content.call_count == (len(ids) + 1 if failure == 'before_assignment' else 2)
     finally:
         tasks = [
             task for runner in (restarted.drains, restarted.followups) if runner for task in list(runner.tasks.values())

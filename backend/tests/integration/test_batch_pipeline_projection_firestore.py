@@ -1444,11 +1444,14 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
     assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
 
 
-def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
+@pytest.mark.parametrize('skip_silence_reads', ['false', 'true'])
+def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch, skip_silence_reads):
     from database import batch_pipeline_projection_claim as claims
+    from database.batch_pipeline_projection_session import ProjectionSession
     from unittest.mock import Mock
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', skip_silence_reads)
     # Advisory coalescing can be unavailable/expired. Durable replay must remain
     # safe without it; all Firestore transaction races below are real.
     redis = Mock()
@@ -1457,19 +1460,19 @@ def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkey
     batch = lane.seed()
     lane.finish(batch, outcome='silence')
     barrier = threading.Barrier(3)
-    check = lane.projector.store.check
+    prepare = ProjectionSession.prepare
     seen = set()
     lock = threading.Lock()
 
-    def synchronized_check(session):
-        check(session)
+    def synchronized_prepare(session, transaction, **kwargs):
+        prepare(session, transaction, **kwargs)
         with lock:
             first_check = threading.get_ident() not in seen
             seen.add(threading.get_ident())
         if first_check:
             barrier.wait(timeout=20)
 
-    monkeypatch.setattr(lane.projector.store, 'check', synchronized_check)
+    monkeypatch.setattr(ProjectionSession, 'prepare', synchronized_prepare)
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lane.projector.project, [batch.ids[0]] * 3))
     assert all(result['outcome'] == 'expected_silence' for result in results)
@@ -2015,3 +2018,37 @@ def test_assignment_hold_stamps_deadline_on_result_and_receipt(lane, monkeypatch
         assert row['held_expired_at'] == 1 and row['held_expired_reason'] == 'held_expired'
         assert 'held_deadline_at' not in row
         assert 'held_deadline_at' not in row['projection_parts']['0']
+
+
+@pytest.mark.parametrize('enabled', ['false', 'true'])
+def test_silence_read_skip_keeps_retention_and_recovers_lost_publication(lane, monkeypatch, enabled):
+    from datetime import datetime, timezone
+    from utils.batch_pipeline.retention import ARTIFACT_RETENTION
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    batch = lane.seed(('silent-a', 'silent-b'))
+    for i, sid in enumerate(batch.ids):
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid)
+        artifact.set({'segment_id': sid, 'owner_id': lane.uid, 'kind': 'audio', 'uri': batch.items[i].audio_uri})
+        lane.finish(batch, i, outcome='silence')
+    assert lane.projector.project(batch.ids[0]) is None
+    monkeypatch.setattr(lane.projector, 'publish', lambda *_: (_ for _ in ()).throw(ConnectionError('reply lost')))
+    with pytest.raises(ConnectionError, match='reply lost'):
+        lane.projector.project(batch.ids[1])
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    for sid in batch.ids:
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid).get().to_dict()
+        assert 'cleanup_after' not in artifact
+    monkeypatch.setattr(lane.projector, 'publish', lambda b, r: lane.published.append(r))
+    result = lane.projector.project(batch.ids[1])
+    assert result['outcome'] == 'expected_silence'
+    assert batch.ledger.get().to_dict()['processed_segment_ids'] == list(batch.ids)
+    assert batch.ledger.get().to_dict()['usage_committed_seconds'] == 0
+    for i, sid in enumerate(batch.ids):
+        job = lane.projector.store.ref('jobs', sid).get().to_dict()
+        entry = lane.projector.store.ref('results', sid).get().to_dict()
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid).get().to_dict()
+        assert artifact['uri'] == job['audio_uri'] == batch.items[i].audio_uri
+        assert artifact['cleanup_after'] == datetime.fromtimestamp(lane.clock(), timezone.utc) + ARTIFACT_RETENTION
+        assert entry['projection_state'] == 'completed'
+    assert not lane.loads and not lane.tasks and not active_rows(lane)
