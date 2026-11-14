@@ -52,10 +52,13 @@ from utils.stt import (
 )
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, CHAIN_EXHAUSTED_SKIPPED
 
+
 def _labeled_value(counter):
     """Read one series of a cohort-labeled counter (main's demand_cohort label)."""
     from utils.observability.demand_cohort import demand_cohort
+
     return counter.labels(demand_cohort=demand_cohort())._value.get()
+
 
 from tests.unit.test_parakeet_window_live import runtime  # noqa: F401 -- pytest fixture re-export
 
