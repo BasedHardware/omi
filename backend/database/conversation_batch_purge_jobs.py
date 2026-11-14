@@ -51,7 +51,8 @@ RUN_BUDGET_SECONDS = 1200
 # Every RPC of the run, inside or outside units, is bounded by budget + this margin (< 1500 s).
 RUN_FINALIZE_SECONDS = 120
 # A dispatched generation that never ran (lost task, old consumer, exhausted
-# retries) is redriven after this, doubling per attempt up to the cap.
+# retries) is redriven after this, doubling per attempt up to the cap. A task
+# still in its queue is re-checked after this instead of redriven.
 REDRIVE_SECONDS = 600
 MAX_REDRIVE_SECONDS = 6 * 60 * 60
 HOLD_RECHECK_SECONDS = 60 * 60
@@ -152,6 +153,12 @@ def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
 
+def lease_held(row: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Whether a run owns this obligation row right now (renewals move ``lease_until``, never ``due_at``)."""
+    lease_until = row.get('lease_until')
+    return lease_until is not None and lease_until > (now or _now())
+
+
 def claim_dispatch(
     job: str, *, now: datetime | None = None, firestore_client: Any = None, collection: str = COLLECTION
 ) -> tuple[int, int] | None:
@@ -187,15 +194,28 @@ def claim_dispatch(
 
 
 def defer(
-    job: str, seconds: float, *, now: datetime | None = None, firestore_client: Any = None, collection: str = COLLECTION
+    job: str,
+    seconds: float,
+    *,
+    now: datetime | None = None,
+    firestore_client: Any = None,
+    collection: str = COLLECTION,
+    generation: int | None = None,
 ) -> None:
-    """Make an obligation due again soon (e.g. its dispatch could not be enqueued)."""
+    """Make an obligation due after ``seconds`` (e.g. its dispatch could not be enqueued).
+
+    With ``generation``, only while that is still the obligation's generation.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection(collection).document(job)
 
     def body(transaction):
-        if ref.get(transaction=transaction).exists:
-            transaction.update(ref, {'due_at': (now or _now()) + timedelta(seconds=seconds)})
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return
+        if generation is not None and int((snapshot.to_dict() or {}).get('generation') or 0) != generation:
+            return
+        transaction.update(ref, {'due_at': (now or _now()) + timedelta(seconds=seconds)})
 
     _in_transaction(client, body)
 
@@ -551,6 +571,7 @@ __all__ = [
     'finish_run',
     'job_id',
     'job_ref',
+    'lease_held',
     'run_erasure_job',
     'run_job',
     'segment_records',

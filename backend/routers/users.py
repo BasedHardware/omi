@@ -146,7 +146,7 @@ from utils.cloud_tasks import (
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
 from database import conversation_batch_purge_jobs
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -399,7 +399,7 @@ async def run_account_deletion_wipe(
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
-# Rides the account-deletion queue and invoker identity; dispatched by the purge reconciler.
+# Rides the conversation-erasure queue with the account-deletion invoker identity; dispatched by the purge reconciler.
 # Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
 @router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
 async def run_conversation_batch_purge(
@@ -427,7 +427,7 @@ async def run_conversation_batch_purge(
     else:
         run = conversation_batch_purge_jobs.run_job
     try:
-        outcome = await run_blocking(cleanup_executor, run, job_id, generation)
+        outcome = await run_blocking(erasure_executor, run, job_id, generation)
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(
