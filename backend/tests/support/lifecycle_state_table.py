@@ -364,7 +364,20 @@ EPISODE_PHASES = ('live', 'closing', 'closed', 'composed', 'redirected')
 # Derived conversation rows are reader vocabulary, not automatic entry sites.
 # The underlying obligations below each receive the full four-clause verdict.
 STATES = (
-    tuple(
+    (
+        row(
+            'batch',
+            'allowance_held',
+            ('state',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'),
+            metric='omi_batch_allowance_held_units',
+            alert_required=False,
+            deadline_exemption='SCA-2195: allowance policy parking has no recording expiry; owner generation releases it.',
+            entry_writers=(Writer('database/batch_pipeline_allowance_hold.py', 'park'),),
+            note='Current held/allowance_exhausted only; custody retained, outside retry and pending-work sweeps.',
+        ),
+    )
+    + tuple(
         row(
             'conversation_phase',
             name,

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-policy-held-work-reenters-active-sweeps",
+  "violated_contract": "Work parked until entitlement changes must not be repeatedly dispatched, counted as late, or walked as a pending predecessor. Read cost must not grow with every parked recording on each retry tick.",
+  "canonical_prevention": "Separate current allowance holds into a durable indexed state outside active discovery, retain every recording and obligation, and acknowledge entitlement generations once per owner before bounded capture-ordered release through normal admission. Keep a reversible retry fallback and test all stores, migration replay, concurrent re-holds, mixed versions and privacy fences.",
+  "canonical_prevention_artifact": [
+    "backend/tests/integration/test_batch_allowance_holds.py",
+    "backend/tests/unit/test_batch_allowance_holds.py",
+    "backend/tests/unit/test_batch_allowance_read_budget.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/allowance_hold.py",
+    "backend/utils/batch_pipeline/scheduler.py",
+    "backend/database/batch_pipeline_allowance_hold.py"
+  ],
+  "status": "open"
+}

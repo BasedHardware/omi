@@ -103,6 +103,25 @@ class MemoryStore:
             key for (table, key), v in self.rows.items() if table == 'jobs' and v['state'] == state and v[field] <= now
         ][:limit]
 
+    def allowance_owners(self, now, limit):
+        rows = sorted(
+            (v['check_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'allowance_holds' and v.get('active') and v['check_at'] <= now
+        )
+        return [key for _, key in rows[:limit]]
+
+    def allowance_page(self, owner_key, after, limit):
+        rows = sorted(
+            (v['capture_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'jobs'
+            and v['state'] == 'allowance_held'
+            and (owner_key is None or v['owner_key'] == owner_key)
+            and (after is None or (v['capture_at'], key) > tuple(after))
+        )
+        return [key for _, key in rows[:limit]]
+
     def oldest(self, priority, *, ready_only):
         from database.batch_pipeline_store import is_allowance_policy_hold
 
@@ -341,7 +360,8 @@ def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
     assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
 
 
-def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     from prometheus_client import CollectorRegistry
     from utils.batch_pipeline.metrics import QueueMetrics
 
@@ -433,7 +453,8 @@ def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
     assert held['audio_uri']
 
 
-def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('held-shadow-probe'), 0)

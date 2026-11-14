@@ -12,6 +12,7 @@ from utils.batch_pipeline.merge import _fresh_pick
 
 TERMINAL = MERGE_POLL_TERMINAL_STATES
 NONTERMINAL = (
+    'allowance_held',  # Retained obligation; production writes merge_pending=False.
     'ready',
     'leased',
     'retry',

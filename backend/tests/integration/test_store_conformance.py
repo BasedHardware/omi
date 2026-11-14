@@ -737,6 +737,7 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy retry behavior under rollback.
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.retry_policy import quarantine_job
