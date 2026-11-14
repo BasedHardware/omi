@@ -12,6 +12,7 @@ from config.batch_pipeline import (
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
 )
+from config.policy.kill_switches import kill_switch
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -125,6 +126,7 @@ class OrderedMerge:
         self.catch_up_depth = catch_up_depth
         self._head_wait_retry_at = 0.0
         self._fresh_first_retry_at = 0.0
+        self._fresh_tx_retry_at = 0.0
         # Backoff for a backlog-hold probe alone: it must not switch the depth hold off.
         self._backlog_probe_retry_at = 0.0
         # Owners whose last commit attempt found them at the projection depth
@@ -237,6 +239,7 @@ class OrderedMerge:
             fresh: dict | None = None,
             skipped: dict | None = None,
             exact: str | None = None,
+            tx_fresh: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             bypass.clear()
@@ -254,6 +257,18 @@ class OrderedMerge:
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
                 head['backlog'] = _backlog_held(candidate)
+            if tx_fresh:
+                if not candidate or not (_catch_up(candidate) or _backlog_held(candidate)):
+                    return None
+                first = tx.fresh_first_pending(key)
+                fresh = tx.fresh_first_ready_pending(key)
+                if fresh is None:
+                    return None
+                if first is None or first['segment_id'] != fresh['segment_id']:
+                    since = _ready_since(fresh)
+                    if since is None or now - since < wait:
+                        return None
+                    skipped = {'segment_ids': [], 'state': first.get('state') if first else None, 'waited': now - since}
             if exact is not None:
                 # Recovered release: the wake's row must still be this owner's
                 # pending, ready row. It appends at the tail like any commit;
@@ -291,7 +306,7 @@ class OrderedMerge:
                 if not tx.get('merge_holds', key).get('held'):
                     tx.put('merge_holds', key, {'held': True, 'held_at': now})
             if fresh is not None:
-                # Fresh-first (David's fresh bar, 2026-10-20): the probed fresh
+                # Fresh-first (David's fresh bar, 2026-10-20): the selected fresh
                 # row must still be pending and ready behind a catch-up head;
                 # it commits ahead of that backlog, which appends later as
                 # late_capture through the unchanged body below.
@@ -415,7 +430,33 @@ class OrderedMerge:
             # any other fence keeps its strict-order behaviour.
             raise fenced
         depth_probe = bool(depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
-        if entry is None and (backlog_probe or depth_probe):
+        probe = entry is None and (backlog_probe or depth_probe)
+        if (
+            probe
+            and kill_switch('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', log=False)
+            and time.monotonic() >= self._fresh_tx_retry_at
+        ):
+            try:
+                entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                probe = False
+            except FailedPrecondition:
+                self._fresh_tx_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                logger.warning(
+                    'event=batch_merge outcome=fresh_tx_gate_unavailable source=%s count=1', self.commit_source
+                )
+                record_fallback(
+                    component='firestore_read',
+                    from_mode='fresh_tx_gate',
+                    to_mode='fresh_first',
+                    reason='unavailable',
+                    outcome='degraded',
+                    log=logger,
+                )
+            except BatchPrivacyBlocked:
+                probe = False
+                fresh_first.clear()
+                bypass.clear()
+        if probe:
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.

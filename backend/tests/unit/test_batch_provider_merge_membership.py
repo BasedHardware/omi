@@ -267,6 +267,7 @@ def test_ready_fresh_rows_without_ready_at_pass_an_unready_fresh_row_behind_a_he
 
 def test_a_full_probe_page_with_no_ready_row_is_logged(world, monkeypatch, caplog):
     """The probe sees 32 rows. A full page of unready fresh rows can hide ready ones: say so."""
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
     store, _ = _legacy_backlog(world, monkeypatch, 1)
     for n in range(32):
         admit(monkeypatch, store, [item(f'stuck{n:02d}', 40 + n)], f'content-stuck{n}', JA)
@@ -411,6 +412,7 @@ def test_a_fresh_row_passes_an_unready_backlog_head_with_the_depth_hold_off(worl
 def test_an_unavailable_fresh_query_keeps_the_backlog_held_and_asks_once(world, monkeypatch):
     from google.api_core.exceptions import FailedPrecondition
 
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
     store, names = _legacy_backlog(world, monkeypatch, 3)
     admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
     settle(store, 'new', now=200.0)
@@ -434,6 +436,7 @@ def test_a_backlog_only_probe_failure_leaves_the_depth_hold_on(world, monkeypatc
     probe. Its failure must not switch the depth hold off for the whole merge instance."""
     from google.api_core.exceptions import FailedPrecondition
 
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
     store, names = _legacy_backlog(world, monkeypatch, 2)
     monkeypatch.setenv(SWITCH, 'false')
 
