@@ -44,7 +44,7 @@ extension _ConversationHomeFetch on ConversationProvider {
         .toSet();
     bool visible(ServerConversation conversation) =>
         !activeProcessingIds.contains(conversation.id) &&
-        !_isHiddenByDelete(conversation.id) &&
+        !isHiddenByDelete(conversation.id) &&
         _matchesActiveConversationFilters(conversation);
     // The fallback starts with an empty list. Rows delivered during decode
     // (including local phone rows) win over older cached objects with that ID.

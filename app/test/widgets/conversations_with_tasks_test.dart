@@ -13,10 +13,12 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/conversations_with_tasks_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/ui.dart';
 
 class _Gateway implements AuthTokenGateway {
   AuthUserSnapshot? user = const AuthUserSnapshot(uid: 'widget-owner');
@@ -42,14 +44,21 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<void> pump(WidgetTester tester, TaskConversationFetcher fetch, {AuthService? auth, Widget? child}) async {
-    final conversations = ConversationProvider(
-      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
-      isSignedIn: () => true,
-    );
-    addTearDown(conversations.dispose);
-    await tester.pumpWidget(ChangeNotifierProvider.value(
-        value: conversations,
+  Future<void> pump(WidgetTester tester, TaskConversationFetcher fetch,
+      {AuthService? auth, Widget? child, ConversationProvider? history}) async {
+    final conversations = history ??
+        ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+          isSignedIn: () => true,
+        );
+    if (history == null) addTearDown(conversations.dispose);
+    final connectivity = ConnectivityProvider();
+    addTearDown(connectivity.dispose);
+    await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+          ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
+        ],
         child: MaterialApp(
           theme: ThemeData.dark().copyWith(platform: TargetPlatform.android),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -283,5 +292,77 @@ void main() {
     presence.invalidate();
     await tester.pump(const Duration(milliseconds: 151));
     expect(find.byKey(const ValueKey('conversation_has_tasks')), findsNothing);
+  });
+
+  testWidgets('a deleted row leaves at once, comes back on Undo and stays gone once the server confirms',
+      (tester) async {
+    final history = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(history.dispose);
+    final deleted = <String>[];
+    history.conversationDeleteFetcherOverride = (id) async {
+      deleted.add(id);
+      return true;
+    };
+    var fetches = 0;
+    // The server keeps listing a conversation until its delete lands, so every refresh returns it.
+    Future<ApiResult<TaskConversationPage>> fetch(
+        {required String query,
+        bool includeDiscarded = false,
+        String? folderId,
+        bool? starred,
+        DateTime? startDate,
+        DateTime? endDate,
+        String? cursor,
+        bool Function()? canSend}) async {
+      fetches++;
+      return ApiSuccess(TaskConversationPage(items: [_row('a'), _row('b')]));
+    }
+
+    Future<void> deleteRowA() async {
+      await tester.longPress(find.byKey(const ValueKey('task_conversation_a')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('conversation_action_delete')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Conversation?'), findsOneWidget);
+      await tester.tap(find.text('Delete').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Conversation deleted'), findsOneWidget);
+    }
+
+    Future<void> refresh() async {
+      final before = fetches;
+      await tester.tap(find.byKey(const ValueKey('tasks_filter_refresh')));
+      await tester.pumpAndSettle();
+      expect(fetches, before + 1);
+    }
+
+    await pump(tester, fetch, history: history);
+    expect(find.text('Conversation a'), findsOneWidget);
+    expect(find.text('Conversation b'), findsOneWidget);
+
+    await deleteRowA();
+    expect(find.text('Conversation a'), findsNothing, reason: 'hidden while the delete is pending, as on Home');
+    expect(find.text('Conversation b'), findsOneWidget);
+    await refresh();
+    expect(find.text('Conversation a'), findsNothing, reason: 'a page that still lists it cannot bring it back');
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Conversation a'), findsOneWidget, reason: 'Undo puts the row back');
+    expect(deleted, isEmpty);
+
+    await deleteRowA();
+    await tester.pump(OmiFeedbackTiming.undo);
+    await tester.pumpAndSettle();
+    expect(deleted, ['a']);
+    expect(find.text('Conversation a'), findsNothing);
+    await refresh();
+    expect(find.text('Conversation a'), findsNothing, reason: 'confirmed on the server: gone for good');
+    expect(find.text('Conversation b'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
