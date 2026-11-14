@@ -800,3 +800,56 @@ def test_gpu_query_cadence_does_not_stale_per_pod_busy_time_heartbeat(monkeypatc
     assert registry.get_sample_value('omi_batch_pipeline_sampler_observed_at_seconds', scope) == 151
     sampler.refresh(store, 168)
     assert registry.get_sample_value('omi_batch_pipeline_metrics_refreshed_at_seconds', scope) == 168
+
+
+def test_queue_refresh_feeds_the_vendor_held_and_provider_stage_gauges(monkeypatch):
+    from unittest.mock import Mock
+    from prometheus_client import REGISTRY
+    from utils.batch_pipeline import metrics as module
+    from database.batch_pipeline_store import FirestoreStore
+    from database import lifecycle_metrics_queries
+    from utils.observability.reasons import VendorHoldReason
+
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    registry = CollectorRegistry()
+    sampler = QueueMetrics(registry, namespace='synthetic-ns')
+    # Firestore boundary is mocked; no cloud clients or reads.
+    store = Mock(spec=FirestoreStore)
+    store.client, store.namespace = Mock(), 'synthetic'
+    store.oldest.return_value = store.oldest_retry.return_value = None
+    for name in ('record_pending', 'nojob'):
+        monkeypatch.setattr(getattr(sampler, name), 'refresh', Mock())
+    monkeypatch.setattr(sampler, 'refresh_timeliness', Mock())
+    monkeypatch.setattr(sampler, 'refresh_projection', Mock())
+    held = Mock(return_value=({**{r: 0 for r in VendorHoldReason}, VendorHoldReason.FUNDS_REFUSAL: 7}, 5400.0, False))
+    stage = Mock(return_value={'provider_pending': (300, 86400.0), 'provider_running': (2, 30.0)})
+    monkeypatch.setattr(lifecycle_metrics_queries, 'vendor_held', held)
+    monkeypatch.setattr(lifecycle_metrics_queries, 'provider_stage', stage)
+    sampler.refresh(store, 100.0)
+    sampler.refresh(store, 200.0)  # inside the 300 s interval: no second read
+    assert held.call_count == stage.call_count == 1
+    assert REGISTRY.get_sample_value('omi_batch_pipeline_vendor_held_units', {'reason': 'funds_refusal'}) == 7
+    assert REGISTRY.get_sample_value('omi_batch_pipeline_vendor_held_oldest_age_seconds') == 5400.0
+    labels = {'state': 'provider_pending', 'worker_release': 'unscoped', 'namespace': 'synthetic-ns'}
+    assert registry.get_sample_value('omi_batch_pipeline_provider_stage_units', labels) == 300
+    assert registry.get_sample_value('omi_batch_pipeline_provider_stage_oldest_age_seconds', labels) == 86400.0
+    # A stalled sampler expires instead of exporting a frozen stock.
+    clock[0] = 100.0 + 2 * module.VENDOR_HELD_REFRESH_SECONDS + 61
+    assert registry.get_sample_value('omi_batch_pipeline_provider_stage_units', labels) is None
+    # A failed read keeps the last held values and publishes no synthetic zero.
+    held.side_effect = TimeoutError('synthetic')
+    stage.return_value = {'provider_pending': (301, 86700.0), 'provider_running': (0, 0.0)}
+    sampler.refresh(store, 100.0 + module.VENDOR_HELD_REFRESH_SECONDS + 1)
+    assert REGISTRY.get_sample_value('omi_batch_pipeline_vendor_held_units', {'reason': 'funds_refusal'}) == 7
+    # ...and does not stop the provider-stage sample.
+    clock[0] = 100.0 + module.VENDOR_HELD_REFRESH_SECONDS + 1
+    assert registry.get_sample_value('omi_batch_pipeline_provider_stage_units', labels) == 301
+
+
+def test_timeliness_cohort_includes_provider_running_but_not_provider_pending():
+    from database.batch_pipeline_store import TIMELINESS_ACTIVE_STATES, TIMELINESS_UNCOMMITTED_STATES
+
+    assert 'provider_running' in TIMELINESS_ACTIVE_STATES
+    assert 'provider_pending' not in TIMELINESS_UNCOMMITTED_STATES
