@@ -15,8 +15,9 @@ one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
 SCA-2185 persists the production operator overrides across service rolls:
-finish backoff is explicitly on for backend and backfill, explicitly off for
-integration, and absent on sync and dev. Integration also pins merge catch-up
+finish backoff is explicitly on for backend and backfill, and absent on sync
+and dev. Integration targets on under the captain's post-Train 1 gate
+(SCA-2166 / SCA-2173, also proposed in PR #25307). Integration also pins merge catch-up
 depth 1, provider merge membership on, and contained donor merge off. This
 supersedes SCA-1993's next-roll backoff removal policy. Rollback uses the same
 overlay: finish backoff and provider membership accept `false`; donor merge

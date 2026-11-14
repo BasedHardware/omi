@@ -5016,9 +5016,7 @@ environments:
             BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED:
-              value: 'false'
-              category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill

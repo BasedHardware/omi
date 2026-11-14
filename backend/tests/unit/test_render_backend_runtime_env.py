@@ -1332,11 +1332,11 @@ def test_firestore_cut_switches_preserve_production_operator_settings(environmen
         env = service['env']
         # SCA-2185 supersedes SCA-1993's next-roll removal: persist the serving
         # production overrides without enabling backoff on sync or any dev host.
-        backoff = {'backend': 'true', 'backend-sync-backfill': 'true', 'backend-integration': 'false'}
+        backoff = {'backend': 'true', 'backend-sync-backfill': 'true', 'backend-integration': 'true'}
         if environment == 'prod' and name in backoff:
             assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {
                 'value': backoff[name],
-                'category': 'ops_kill',
+                'category': 'rollout' if name == 'backend-integration' else 'ops_kill',
             }
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
