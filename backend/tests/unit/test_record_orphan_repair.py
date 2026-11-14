@@ -343,13 +343,25 @@ def test_cli_refuses_before_cloud_and_errors_are_aggregate_only(monkeypatch, cap
     module.get_firestore_client.assert_not_called()
 
 
-def test_dry_run_cannot_mint_privacy_cache_tokens(source, monkeypatch):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *a: name == 'bpp_generation_memo')
+@pytest.mark.parametrize('shadow', [False, True])
+def test_dry_run_cannot_mint_privacy_cache_tokens(source, monkeypatch, shadow):
+    enabled_levers = {'bpp_owner_memo', 'bpp_token_mint'}
+    if shadow:
+        enabled_levers.add('privacy_checks_shadow')
+    monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *a: name in enabled_levers)
+    monkeypatch.setattr(
+        privacy,
+        'lever_percent',
+        lambda name, *a: 100 if shadow and name == 'privacy_checks_shadow' else 0,
+    )
     mint = Mock(side_effect=AssertionError('dry-run must never mint'))
     monkeypatch.setattr(privacy, 'schedule_token_mint', mint)
+    token_path = ('batch_pipeline_privacy', privacy.privacy_owner_key(UID))
+    assert token_path not in source[1].rows  # Exercise the missing durable-token path.
     assert plan(source)['entries'][0]['disposition'] == 'register'
     mint.assert_not_called()
     assert no_writes(source[1])
+    assert token_path not in source[1].rows
 
 
 def test_report_uses_retained_sample_spans_and_separates_stt_padding(source, monkeypatch):
