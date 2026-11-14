@@ -33,3 +33,20 @@ export async function llamaFind(question: string, images: string): Promise<strin
             question
     );
 }
+
+export async function summarizeDescriptions(images: string): Promise<string> {
+    const res = await groqRequest(
+             `
+                You are a smart AI that needs to read through description of images and provide a concise summary of the scene or events.
+
+                This are the provided images:
+                ${images}
+
+                DO NOT mention the images, scenes or descriptions in your answer, just provide the summary.
+                BE concise and specific.
+            `
+        ,
+            "Summarize what is happening in the scene."
+    );
+    return res || "";
+}
