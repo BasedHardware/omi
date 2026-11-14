@@ -433,14 +433,21 @@ async def test_secondary_failures_distinguish_quota_from_lost_access(provider, m
     monkeypatch.setattr(tools, 'google_api_request', request)
     recorded = []
     monkeypatch.setattr(tools, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+    degraded = []
     if raises:
         with pytest.raises(GoogleAPIError):
-            await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
+            await tools.get_google_calendar_events(
+                'synthetic-token', uid='omi-Q', on_degraded=lambda: degraded.append(True)
+            )
         # Quota is not a degraded read; it fails the caller instead.
         assert recorded == []
+        assert degraded == []
     else:
-        rows = await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
+        rows = await tools.get_google_calendar_events(
+            'synthetic-token', uid='omi-Q', on_degraded=lambda: degraded.append(True)
+        )
         assert [row['id'] for row in rows] == ['primary-event']
+        assert degraded == [True]
         # The read succeeds without the skipped calendar, so the degradation
         # must be observable rather than reported as a complete success.
         assert len(recorded) == 1
@@ -467,3 +474,18 @@ def test_provider_url_masks_calendar_identity():
         transport.redacted_url('https://www.googleapis.com/calendar/v3/calendars/ada%40example.com/events')
         == 'https://www.googleapis.com/calendar/v3/calendars/<redacted>/events'
     )
+
+
+@pytest.mark.asyncio
+async def test_discovery_excluding_a_saved_calendar_records_degradation(provider, monkeypatch):
+    # A saved calendar that already left CalendarList never reaches the event
+    # loop, so its omission would otherwise look like a complete read.
+    _, owner, _, _ = provider
+    selections = {prefs.account_key(owner['primary']): [owner['primary'], 'gone@group.test']}
+    recorded = []
+    monkeypatch.setattr(selection, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+    ids = await selection.read_ids('omi-Q', 'synthetic-token', selections)
+    assert ids == ['primary']
+    assert len(recorded) == 1
+    assert recorded[0]['component'] == 'calendar_read'
+    assert recorded[0]['outcome'] == 'degraded'

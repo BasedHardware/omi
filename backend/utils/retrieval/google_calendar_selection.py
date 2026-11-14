@@ -2,14 +2,18 @@
 
 import base64
 import json
+import logging
 from typing import Any
 from urllib.parse import quote
 
 from database import google_calendar_preferences as preferences
 from utils.google_calendar_identity import account_key
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.retrieval import google_calendar_catalog_cache as catalog_cache
 from utils.retrieval.google_transport import google_api_request
+
+logger = logging.getLogger(__name__)
 
 BASE = 'https://www.googleapis.com/calendar/v3'
 MAX_SELECTED = 25
@@ -103,11 +107,20 @@ async def read_ids(uid: str, access_token: str, selections: dict | None = None) 
         catalog_cache.put(key, primary, readable)
     else:
         primary, readable = cached
-    return [
-        'primary' if value == primary else value
-        for value in selected_ids(selections, primary)
-        if value == 'primary' or value in readable
-    ]
+    wanted = ['primary' if value == primary else value for value in selected_ids(selections, primary)]
+    reachable = [value for value in wanted if value == 'primary' or value in readable]
+    if len(reachable) != len(wanted):
+        # A saved calendar that already left CalendarList never reaches the
+        # event loop, so its skip would otherwise look like a complete read.
+        record_fallback(
+            component='calendar_read',
+            from_mode='selected_calendars',
+            to_mode='discoverable_selected_calendars',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+    return reachable
 
 
 def event_reference(calendar_id: str, event_id: str) -> str:

@@ -36,8 +36,10 @@ Quota exhaustion is not lost access: Google reports it as HTTP 403, so it
 propagates instead of silently dropping the calendar and presenting a partial
 read as a complete one. A calendar skipped for lost access records a degraded
 fallback (`calendar_read`), so success telemetry cannot be mistaken for a
-complete read. Provider request logs mask the calendar identifier, because a
-calendar id is frequently its owner's email address.
+complete read; the failed-finalization probe then reports uncertainty rather
+than confirmed absence, and discovery that drops an already-missing saved
+calendar records the same degradation. Provider request logs mask the calendar
+identifier, because a calendar id is frequently its owner's email address.
 
 All active server read callers supply the authenticated Omi owner: picker/event
 reads, chat read/update/delete searches, capture gaps, automatic linking/meeting

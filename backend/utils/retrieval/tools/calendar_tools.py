@@ -5,7 +5,7 @@ Tools for accessing Google Calendar events.
 import asyncio
 import traceback
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 from urllib.parse import quote
 
 import httpx
@@ -416,11 +416,19 @@ async def get_google_calendar_events(
     *,
     uid: Optional[str] = None,
     selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
 ) -> List[Dict[str, Any]]:
     try:
         async with asyncio.timeout(20):
             return await _get_selected_calendar_events(
-                access_token, time_min, time_max, max_results, search_query, uid=uid, selections=selections
+                access_token,
+                time_min,
+                time_max,
+                max_results,
+                search_query,
+                uid=uid,
+                selections=selections,
+                on_degraded=on_degraded,
             )
     except GoogleAPIError:
         if uid:
@@ -437,6 +445,7 @@ async def _get_selected_calendar_events(
     *,
     uid: Optional[str] = None,
     selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
 ) -> List[Dict[str, Any]]:
     """Read only the owner's selected calendars, globally ordered and bounded.
 
@@ -489,6 +498,8 @@ async def _get_selected_calendar_events(
                         outcome='degraded',
                         log=logger,
                     )
+                    if on_degraded is not None:
+                        on_degraded()
                     # Access can disappear after catalog enumeration. Keep other
                     # selected calendars; never substitute an unselected primary.
                     break
