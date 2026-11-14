@@ -48,4 +48,49 @@ describe("shared admin Redis accessor", () => {
     expect(await cache.getJsonCache("key")).toBeNull();
     expect(mocks.construct).not.toHaveBeenCalled();
   });
+
+  it("warns once per process when Redis is unconfigured", async () => {
+    vi.stubEnv("REDIS_HOST", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const cache = await import("@/lib/redis");
+      for (let i = 0; i < 3; i++) cache.getRedis();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("logs a repeated connection failure once until the link recovers", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const cache = await import("@/lib/redis");
+      cache.getRedis();
+      const listener = (event: string) =>
+        mocks.on.mock.calls.find((call) => call[0] === event)?.[1] as
+          | ((err?: Error) => void)
+          | undefined;
+      const onError = listener("error");
+      const enotfound = new Error("getaddrinfo ENOTFOUND light-eel.example");
+      onError?.(enotfound);
+      onError?.(enotfound);
+      onError?.(enotfound);
+      expect(error).toHaveBeenCalledTimes(1);
+
+      listener("ready")?.();
+      onError?.(enotfound);
+      expect(error).toHaveBeenCalledTimes(2);
+
+      // Alternating distinct messages must each be logged once, not just the last one.
+      listener("ready")?.();
+      const refused = new Error("connect ECONNREFUSED 10.0.0.1:6379");
+      onError?.(refused);
+      onError?.(enotfound);
+      onError?.(refused);
+      onError?.(enotfound);
+      expect(error).toHaveBeenCalledTimes(4);
+    } finally {
+      error.mockRestore();
+    }
+  });
 });
