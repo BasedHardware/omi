@@ -39,7 +39,8 @@ read aggregates only. It showed the watch could not judge most free spend:
 3. **Metric export.**
    - `omi_free_allowance_.*` was added to the explicit keep rule in `deploy/cloud_run_gmp_sync.yaml`.
    - The batch worker's private `/metrics` registry now registers the four allowance collectors, through
-     `allowance_watch.COLLECTORS`.
+     `utils/stt/allowance_metrics.py`. That module imports only `prometheus_client`, so the worker's static
+     reader closure does not gain the watch's policy imports.
 
 ## Reading the series across the change
 

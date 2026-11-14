@@ -12,31 +12,13 @@ import math
 import os
 from typing import Any
 
-from prometheus_client import Counter
+from utils.stt.allowance_metrics import DECISIONS, LEASE_DECISIONS, SECONDS, SETTLED_SECONDS  # noqa: F401
 
 logger = logging.getLogger(__name__)
 PATHS = frozenset(
     {'live_open', 'live_billing', 'prerecorded', 'batch_gpu', 'batch_provider', 'one_shot', 'ptt', 'processing', 'sync'}
 )
 PROVIDERS = frozenset({'deepgram', 'soniox', 'modulate', 'parakeet', 'llm'})
-DECISIONS = Counter(
-    'omi_free_allowance_watch_decisions',
-    'Watch-only spend-point decisions; no user identifiers',
-    ['path', 'provider', 'decision'],
-)
-SECONDS = Counter(
-    'omi_free_allowance_watch_seconds',
-    'Observed seconds by decision; requests are estimates, billing observations are separate',
-    ['path', 'provider', 'decision'],
-)
-
-LEASE_DECISIONS = Counter(
-    'omi_free_allowance_lease_decisions', 'Shared shadow reservation decisions; no serving effect', ['path', 'reason']
-)
-SETTLED_SECONDS = Counter(
-    'omi_free_allowance_settled_seconds', 'Confirmed billing seconds joined to a shadow operation', ['path']
-)
-COLLECTORS = (DECISIONS, SECONDS, LEASE_DECISIONS, SETTLED_SECONDS)
 
 
 def enabled() -> bool:

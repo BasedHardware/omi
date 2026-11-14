@@ -13,7 +13,7 @@ import pytest
 import yaml
 from prometheus_client import CollectorRegistry
 
-from utils.stt import allowance_watch
+from utils.stt import allowance_metrics as allowance_watch
 
 BACKEND = Path(__file__).resolve().parents[2]
 FAMILIES = (
