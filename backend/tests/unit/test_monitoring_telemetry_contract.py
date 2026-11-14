@@ -359,6 +359,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',
+    'prometheus.googleapis.com/omi_batch_projection_finish_reads_total/',
+    'prometheus.googleapis.com/omi_batch_projection_finish_completed_total/',
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',

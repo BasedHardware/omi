@@ -111,6 +111,18 @@ needs to qualify a sustained Cloud Run-led window in GMP and the alert datasourc
 at the configured sample cadence, including freshness and both handoff directions;
 source coverage alone does not verify a live handoff.
 
+The projection finish guard has the same export requirement. `alerts.yaml` holds
+`OmiBatchProjectionFinishReadsPerCompletion`, whose ratio needs both
+`omi_batch_projection_finish_reads_total` and
+`omi_batch_projection_finish_completed_total`. The projection sweep runs on
+backend-sync and backend-integration, so both names are kept explicitly in
+`deploy/cloud_run_gmp_sync.yaml` and in the dev/prod sync Stackdriver exporter
+prefixes (the in-cluster Prometheus sees backend-integration only through that
+bridge). `test_projection_finish_guard_metrics_are_scraped.py` derives the names
+from the producer registrations and checks both filters. A dropped counter reads
+as "no data", which is indistinguishable from a healthy zero, so the guard would
+silently stop being computable.
+
 An interval reduction across a restart can wait for the previous holder's stored TTL.
 Older binaries could create a 3660 s lease under the former hourly interval contract; that stored lease
 expires normally and is neither rewritten nor revoked by a new follower. New leases are bounded at 660 s.

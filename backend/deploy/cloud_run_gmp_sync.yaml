@@ -58,6 +58,10 @@ spec:
         # cost families stay estimates (the gateway ledger is authoritative), never
         # billed dollars. Explicit names, not a prefix catch-all, so a new family
         # needs its own consumer before it is scraped. ~250 series per instance.
+        # Projection finish guard (2026-11-12, SCA-1799): the finish-backoff lever's
+        # only movable guard is OmiBatchProjectionFinishReadsPerCompletion, whose
+        # ratio needs both counters. The projection sweep runs on backend-sync and
+        # backend-integration, so without these two names the guard reads no data.
         - action: keep
           sourceLabels:
             - __name__
