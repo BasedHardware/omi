@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -215,12 +216,14 @@ ServerConversation _rowFor(Episode episode) => ServerConversation(
     finishedAt: episode.lastActivityAt,
     structured: Structured(episode.title, '', emoji: '🚀'));
 
-Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness, {Widget? home}) async {
+Future<void> _pump(WidgetTester tester, Episode episode, Brightness brightness,
+    {Widget? home, EpisodeDetailFetcher? detail}) async {
   OmiColors.active = OmiColors.forBrightness(brightness);
   final history = ConversationProvider(isSignedIn: () => true)..conversations = [...episode.members];
-  final episodes = EpisodeProvider()
-    ..debugSetLive(null)
-    ..debugSetHomeEpisodes([episode]);
+  final episodes =
+      EpisodeProvider(detail: detail ?? (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+        ..debugSetLive(null)
+        ..debugSetHomeEpisodes([episode]);
   final connectivity = ConnectivityProvider();
   addTearDown(history.dispose);
   addTearDown(episodes.dispose);
@@ -252,6 +255,28 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     await _loadFonts();
+  });
+
+  testWidgets('opening a deferred episode displays its lede-only composed detail', (tester) async {
+    tester.view.physicalSize = const Size(393, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final waiting = _writing();
+    final done = Episode(
+        id: waiting.id,
+        live: false,
+        startedAt: waiting.startedAt,
+        lastActivityAt: waiting.lastActivityAt,
+        title: 'Release checklist',
+        lede: 'Priya will review the checklist Thursday',
+        conversationIds: waiting.conversationIds,
+        members: waiting.members);
+    await _pump(tester, waiting, Brightness.light, detail: (_) async => ApiSuccess(done));
+    await tester.pump();
+    expect(find.byKey(const Key('episode_lede')), findsOneWidget);
+    expect(find.text(done.lede), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await _capture(tester, '007-mobile-ios-episode-late-open.png');
   });
 
   for (final brightness in [Brightness.light, Brightness.dark]) {

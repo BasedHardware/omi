@@ -39,12 +39,60 @@ class PendingWorkStore extends ChangeNotifier {
 
   /// Server pending work the phone may not know about (another device, a filtered list, a lost
   /// event).
-  List<PendingWorkItem> get pending => _pending;
+  List<PendingWorkItem> get pending =>
+      homeProcessingToday ? _pending.where((item) => item.homeStep != 'failed').toList() : _pending;
+
+  /// Activity owns projected failures; catch-up/Home consumers exclude them.
+  List<PendingWorkItem> get pendingForActivity => _pending;
+
+  /// Server-driven Home placement kill switch, shared by Home and Activity.
+  bool homeProcessingToday = false;
+
+  /// Fence in-flight reads and forget the previous account on sign-out/switch.
+  void reset() {
+    _generation++;
+    homeProcessingToday = false;
+    _pending = const [];
+    _setAttention(const []);
+    _retryKeys.clear();
+    _acceptedNotes.clear();
+    _acceptedOperations.clear();
+    _retrying.clear();
+    retryErrors.clear();
+    _session++;
+    _retryAllKey = null;
+    notifyListeners();
+  }
 
   List<AttentionItem> _attention = const [];
 
   /// Unresolved work the server gave up on, newest first.
-  List<AttentionItem> get attention => _attention;
+  List<AttentionItem> get attention {
+    final byConversation = <String, AttentionItem>{};
+    for (final item in _attention) {
+      if (_acceptedNotes.containsValue(item.conversationId) || (item.notesOnly && !homeProcessingToday)) {
+        continue;
+      }
+      final key = item.conversationId ?? item.id;
+      if (!byConversation.containsKey(key) || (item.notesOnly && !byConversation[key]!.notesOnly)) {
+        byConversation[key] = item;
+      }
+    }
+    return byConversation.values.toList();
+  }
+
+  /// Successful notes retries also suppress stale projected failure rows.
+  Set<String> get attentionConversationIds => {
+        for (final item in attention)
+          if (item.conversationId != null) item.conversationId!,
+        ..._acceptedNotes.values,
+      };
+  final Map<String, String> _acceptedNotes = {};
+  final Set<String> retryErrors = {};
+  final Map<String, String?> _acceptedOperations = {};
+  final Set<String> _retrying = {};
+  int _session = 0;
+  int _attentionRevision = 0;
 
   /// Lights Home's bell next to new recaps. Server read state, so the phone and the Mac agree.
   final ValueNotifier<bool> hasUnseenAttention = ValueNotifier(false);
@@ -59,48 +107,91 @@ class PendingWorkStore extends ChangeNotifier {
   /// empty the bell or drop the card.
   Future<void> refresh() async {
     final generation = ++_generation;
-    final results = await Future.wait<Object>([_loadPending(), _loadAttention()]);
+    final attentionRevision = _attentionRevision;
+    final results = await Future.wait<Object>([_read(_loadPending), _read(_loadAttention)]);
     if (generation != _generation) return;
     final pending = results[0] as ApiResult<PendingWorkSnapshot>;
     final attention = results[1] as ApiResult<AttentionItemsPage>;
     switch (pending) {
       case ApiSuccess(:final data):
         _pending = data.enabled ? data.items : const [];
+        homeProcessingToday = data.enabled && data.homeProcessingToday;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _pending = const [];
+        homeProcessingToday = false;
       case ApiFailure():
-        break;
+        homeProcessingToday = false;
     }
-    switch (attention) {
-      case ApiSuccess(:final data):
-        _setAttention(data.enabled ? data.items : const []);
-      case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
-        _setAttention(const []);
-      case ApiFailure():
-        break;
+    if (attentionRevision == _attentionRevision) {
+      switch (attention) {
+        case ApiSuccess(:final data):
+          _setAttention(data.enabled ? data.items : const []);
+        case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
+          _setAttention(const []);
+        case ApiFailure():
+          break;
+      }
     }
     notifyListeners();
   }
 
+  Future<ApiResult<T>> _read<T>(Future<ApiResult<T>> Function() load) async {
+    try {
+      return await load();
+    } catch (_) {
+      return ApiFailure<T>(const ApiProblem(ApiProblemKind.transport));
+    }
+  }
+
   void _setAttention(List<AttentionItem> items) {
     _attention = items;
+    _acceptedNotes.removeWhere((id, conversation) =>
+        items.any((item) => item.notesOnly && item.conversationId == conversation && item.id != id));
+    _acceptedNotes.removeWhere((id, _) => items.any((i) =>
+        i.id == id &&
+        i.retryState == AttentionRetryState.failed &&
+        i.operationId != null &&
+        i.operationId == _acceptedOperations[id]));
+    _acceptedOperations.removeWhere((id, _) => !_acceptedNotes.containsKey(id));
     _retryKeys.removeWhere((id, _) => !items.any((i) => i.id == id));
-    hasUnseenAttention.value = items.any((i) => !i.seen);
+    hasUnseenAttention.value = attention.any((i) => !i.seen);
   }
 
   /// Retries one item. The server owns idempotency; the key only makes a replay recognizable.
   Future<bool> retry(AttentionItem item) async {
-    if (!item.retryable || item.retryState == AttentionRetryState.inProgress) return false;
+    if (!item.canRetry ||
+        _retrying.contains(item.id) ||
+        _acceptedNotes.containsValue(item.conversationId) ||
+        (item.notesOnly && !homeProcessingToday)) {
+      return false;
+    }
+    final session = _session;
+    _attentionRevision++;
+    _retrying.add(item.id);
+    retryErrors.remove(item.id);
     final key = _retryKeys.putIfAbsent(item.id, _newKey);
     _replace(item.id, (i) => i.copyWith(retryState: AttentionRetryState.inProgress));
-    final result = await _retry(item.id, idempotencyKey: key);
+    final result = await _read(() => _retry(item.id, idempotencyKey: key));
+    if (session != _session) return false;
+    _retrying.remove(item.id);
     switch (result) {
       case ApiSuccess(:final data):
+        // A confirmed failed attempt is terminal; the next user action starts
+        // a fresh claim. Transport failures below keep their ambiguous key.
+        if (data.state == AttentionRetryState.failed) {
+          _retryKeys.remove(item.id);
+          retryErrors.add(item.id);
+        } else if (item.notesOnly &&
+            (data.state == AttentionRetryState.inProgress || data.state == AttentionRetryState.succeeded)) {
+          _acceptedNotes[item.id] = item.conversationId ?? item.id;
+          _acceptedOperations[item.id] = data.operationId;
+        }
         _replace(item.id, (i) => i.copyWith(retryState: data.state));
-        return true;
+        return data.state != AttentionRetryState.failed;
       case ApiFailure():
         // A failed request may still have reached the server: the key is kept so the next tap
         // replays the same claim.
+        retryErrors.add(item.id);
         _replace(item.id, (i) => i.copyWith(retryState: item.retryState));
         return false;
     }
@@ -109,6 +200,11 @@ class PendingWorkStore extends ChangeNotifier {
   /// Retries every retryable item once. Reuses its key until the server answers, so a second tap
   /// while the first is in flight, or after a lost response, cannot start a second paid run.
   Future<bool> retryAll() async {
+    // Never let the global endpoint retry a kind this client does not understand.
+    if (_attention.any((item) => item.kind != 'conversation_summary_failed')) {
+      final results = await Future.wait(attention.where((item) => item.canRetry).map(retry));
+      return results.every((ok) => ok);
+    }
     final key = _retryAllKey ??= _newKey();
     final marked = [
       for (final item in _attention)
@@ -137,11 +233,11 @@ class PendingWorkStore extends ChangeNotifier {
   /// The bell was opened and these items were shown: dark on every device.
   Future<void> markSeen() async {
     final unseen = [
-      for (final i in _attention)
+      for (final i in attention)
         if (!i.seen) i.id,
     ];
     if (unseen.isEmpty) return;
-    _attention = [for (final i in _attention) i.seen ? i : i.copyWith(seen: true)];
+    _attention = [for (final i in _attention) unseen.contains(i.id) ? i.copyWith(seen: true) : i];
     hasUnseenAttention.value = false;
     notifyListeners();
     await _markSeen(unseen);

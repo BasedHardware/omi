@@ -402,7 +402,7 @@ class AssistantSettings {
     cooldownInterval = defaultCooldownInterval
     glowOverlayEnabled = defaultGlowOverlayEnabled
     analysisDelay = defaultAnalysisDelay
-    screenAnalysisEnabled = defaultScreenAnalysisEnabled
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(defaultScreenAnalysisEnabled, push: false)
     audioRecordingMode = defaultAudioRecordingMode
     transcriptionLanguage = defaultTranscriptionLanguage
     transcriptionAutoDetect = defaultTranscriptionAutoDetect

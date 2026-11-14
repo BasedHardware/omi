@@ -9217,6 +9217,24 @@ class AppLocalizationsMk extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Не може да се одреди тековната верзија на фирмверот';
 
   @override
+  String get applyCodeToCurrentPlan => 'Примени на тековната претплата';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Кодот е применет на вашата тековна претплата.',
+        'refused': 'Кодот не може да се примени. Проверете го кодот и потребната претплата.',
+        'conflict': 'Кодот е веќе искористен или претплатата веќе има попуст.',
+        'rateLimited': 'Премногу обиди. Почекајте и обидете се подоцна.',
+        'other': 'Кодот не е применет. Обидете се повторно.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Промо код';
 
   @override
@@ -13714,6 +13732,9 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Повторно создај белешки';
+
+  @override
   String get attentionSummaryFailed => 'Овој разговор не можеше да се сумира';
 
   @override
@@ -15441,6 +15462,11 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашата картичка е одбиена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте ја картичката или вратете го $plan за $price месечно';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте ја картичката за да го вратите $plan';
   }
@@ -15465,4 +15491,31 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Префрли на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Го заменува неплатеното годишно плаќање од $yearly. Се обновува месечно. Откажете во секое време.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаќањето е одбиено. Вашиот план не е променет.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Префрлањето моментално не е достапно. Наместо тоа, ажурирајте ја картичката.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сега плаќате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Денес платено $price. Се обновува месечно.';
+  }
 }

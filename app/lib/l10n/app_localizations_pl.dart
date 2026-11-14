@@ -9200,6 +9200,24 @@ class AppLocalizationsPl extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nie można określić bieżącej wersji oprogramowania układowego';
 
   @override
+  String get applyCodeToCurrentPlan => 'Zastosuj do obecnego planu';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod zastosowany do obecnego planu.',
+        'refused': 'Nie można zastosować tego kodu. Sprawdź kod i wymagany plan.',
+        'conflict': 'Kod został już użyty lub Twój plan ma już zniżkę.',
+        'rateLimited': 'Zbyt wiele prób. Poczekaj i spróbuj później.',
+        'other': 'Nie udało się zastosować kodu. Spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kod promocyjny';
 
   @override
@@ -13694,6 +13712,9 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Wygeneruj notatki ponownie';
+
+  @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';
 
   @override
@@ -15421,6 +15442,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Twoja karta została odrzucona';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Zaktualizuj kartę lub odzyskaj $plan za $price miesięcznie';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Zaktualizuj kartę, aby odzyskać $plan';
   }
@@ -15445,4 +15471,31 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Przejdź na miesięczny';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price miesięcznie';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Zastępuje nieopłaconą roczną płatność $yearly. Odnawia się co miesiąc. Anuluj w dowolnym momencie.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Płatność odrzucona. Twój plan się nie zmienił.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Zmiana jest teraz niedostępna. Zamiast tego zaktualizuj kartę.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Płacisz teraz co miesiąc';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Zapłacono dziś $price. Odnawia się co miesiąc.';
+  }
 }

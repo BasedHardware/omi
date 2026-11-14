@@ -6,7 +6,7 @@ promotion code id here is what keeps that code single-use.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 
@@ -21,18 +21,19 @@ def claim(
     uid: str,
     subscription_id: str,
     coupon_id: str,
+    attribution: Optional[Mapping[str, str]] = None,
     firestore_client: Optional[Any] = None,
 ) -> bool:
     client = firestore_client or get_firestore_client()
+    document = {
+        'uid': uid,
+        'subscription_id': subscription_id,
+        'coupon_id': coupon_id,
+        'redeemed_at': datetime.now(timezone.utc),
+        **dict(attribution or {}),
+    }
     try:
-        client.collection(COLLECTION).document(promotion_code_id).create(
-            {
-                'uid': uid,
-                'subscription_id': subscription_id,
-                'coupon_id': coupon_id,
-                'redeemed_at': datetime.now(timezone.utc),
-            }
-        )
+        client.collection(COLLECTION).document(promotion_code_id).create(document)
     except (AlreadyExists, Conflict):
         return False
     return True

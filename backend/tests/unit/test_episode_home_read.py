@@ -367,6 +367,48 @@ def test_members_read_in_recorded_order_not_arrival_order(monkeypatch):
     assert [m['id'] for m in projected['members']] == ['earlier', 'later']
 
 
+def test_member_wire_carries_gist_and_home_step(monkeypatch):
+    monkeypatch.delenv('HOME_STEP_PROJECTION', raising=False)
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes', 'gist': 'Launch plan settled; Arjan owns rollout'},
+    }
+    wire = home_read.project_episode('u', _episode('c'), members={'c': row})
+    member = wire['members'][0]
+    assert member['gist'] == 'Launch plan settled; Arjan owns rollout'
+    assert member['home_step'] == 'ready'
+
+
+def test_member_wire_omits_home_step_when_the_projection_is_off(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'false')
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes', 'gist': 'A gist'},
+    }
+    member = home_read.project_episode('u', _episode('c'), members={'c': row})['members'][0]
+    assert member['gist'] == 'A gist'
+    assert 'home_step' not in member
+
+
+def test_member_wire_keeps_legacy_notes_without_a_gist(monkeypatch):
+    monkeypatch.delenv('HOME_STEP_PROJECTION', raising=False)
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes'},
+    }
+    member = home_read.project_episode('u', _episode('c'), members={'c': row})['members'][0]
+    assert member['gist'] == ''
+
+
 def test_member_field_projection_keeps_pending_deadline_and_delivery_receipt(store, monkeypatch):
     member = {
         'status': 'completed',

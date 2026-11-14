@@ -1,6 +1,6 @@
 # Firmware (Omi CV1) — Agent Guide
 
-Component guide for `omi/firmware/`. General engineering rules: root `AGENTS.md`.
+General rules: root `AGENTS.md`.
 
 Human on-ramp: the visual guide at `docs/doc/hardware/how-the-pendant-works.mdx`, with source in `omi/hardware/consumer/explainer/`. If you change capture routing, LED states, AAD, or storage behavior, update the matching card in `pendant-guide.src.html` and rebuild.
 
@@ -17,6 +17,8 @@ New releases start at 1%; David expands by editing the release body. Versions
 
 Capture mute (`19B10015`, NVS key `muted`, feature bit 10) and its pendant-owned
 semantics are specified in [docs/gatt-map.md](docs/gatt-map.md).
+
+MCUboot build and safe SWD: [docs/cv1-bootloader.md](docs/cv1-bootloader.md).
 
 ## Formatting
 

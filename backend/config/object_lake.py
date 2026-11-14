@@ -96,3 +96,8 @@ def validate_write_settings(stage: str, enabled: object, percent: object) -> lis
     if positive:
         errors.append(f'OBJECT_LAKE_WRITE_PERCENT {reason}')
     return errors
+
+
+def put_deadline_seconds() -> float:
+    """Pointer-success budget only; deletion authority comes from session fencing."""
+    return 5.0

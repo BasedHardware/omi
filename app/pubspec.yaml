@@ -139,6 +139,7 @@ dependencies:
   quick_actions: ^1.0.0
   in_app_review: ^2.0.12
   cryptography: ^2.9.0
+  qr_flutter: ^4.1.0
 
 dependency_overrides:
   js: ^0.7.1

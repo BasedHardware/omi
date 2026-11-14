@@ -558,3 +558,20 @@ async def test_pump_held_re_offer_isolates_each_owner():
     await pump._maintain()
     assert drained.count('good-owner') == 2  # Marker page and in-memory set both reached it.
     pump.merge.release_hold.assert_called_once_with('b', force=False)
+
+
+@pytest.mark.parametrize('stamp, expected', [(True, True), (False, False), (None, False), (1, False), ('true', False)])
+def test_result_copies_only_exact_true_from_job(stamp, expected):
+    store, queue, leases = admitted({'unit': (90_000, None)})
+    if stamp is not None:
+        store.rows['jobs', 'unit']['fresh_capture'] = stamp
+    complete(queue, leases, 'unit')
+    entry = merge_for(store).commit_next('heavy', NOW)
+    assert entry['fresh_capture'] is expected
+    assert store.rows['results', 'unit']['fresh_capture'] is expected
+
+
+@pytest.fixture(autouse=True)
+def legacy_fresh_probe(monkeypatch):
+    """Keep the existing probe-path contracts running with the new gate switched off."""
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')

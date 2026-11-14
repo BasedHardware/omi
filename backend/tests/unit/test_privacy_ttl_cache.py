@@ -1,17 +1,20 @@
 """Token-certified privacy reuse: a 60s upper bound never substitutes for the revoke fence."""
 
 from datetime import datetime, timezone, timedelta
+from functools import partial
 import json
 from types import SimpleNamespace
 
 import fakeredis
+from google.api_core.exceptions import Aborted
 import pytest
 
 from database import account_deletion_marker as marker
 from database import batch_pipeline_privacy as privacy, conversation_tombstones as tombstones
+from database import batch_pipeline_store as storage
 from database import fsr_read_cache as cache, legal_holds, privacy_check_metrics as metrics
 from database import privacy_negative_cache as negative, privacy_ttl_cache as ttl_cache
-from database.batch_privacy_attempt import batch_privacy_attempt
+from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 
 UID = 'privacy-ttl-owner'
@@ -180,6 +183,29 @@ def test_external_fence_inside_a_transaction_always_reads_live(world, monkeypatc
     with legal_holds.external_write_fence(UID, firestore_client=db, transaction=transaction):
         pass
     assert len(reads) == 2
+
+
+def test_gate_owner_pass_is_never_cached_for_other_writers(world, monkeypatch):
+    """The owning request may write through its own running gate; that pass must never be reused by others."""
+    import contextvars
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'privacy_ttl60')
+
+    def fresh_writer():
+        with legal_holds.external_write_fence(UID, firestore_client=db):
+            raise AssertionError('a writer outside the owning request must stay fenced')
+
+    with legal_holds.destructive_operation_gate(UID, firestore_client=db):
+        for _ in range(2):
+            with legal_holds.external_write_fence(UID, firestore_client=db):
+                pass
+        for _ in range(3):
+            reads.clear()
+            with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                contextvars.Context().run(fresh_writer)
+            # Live marker + gate reads every time: no cached owner pass.
+            assert MARKER in reads and ('legal_hold_deletion_gates', UID) in reads
 
 
 @pytest.mark.parametrize('cache_lever', ['legal_hold_fence_cache', 'privacy_ttl60'])
@@ -586,3 +612,159 @@ def test_delayed_redis_hit_cannot_extend_the_sixty_second_bound(world, monkeypat
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
         external(db)
     assert reads == [TOKEN, MARKER]
+
+
+# --- no-attempt transactional process-cache eligibility -----------------------
+
+
+def test_no_attempt_transactional_cold_walk_then_certified_warm_reuse(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert current_attempt() is None
+    assert check(db) == 7
+    assert len(reads) == 5  # token plus the full live walk
+    assert current_attempt() is None
+    assert len(privacy.PROCESS_DECISIONS) == 1
+    reads.clear()
+    assert check(db) == 7
+    assert reads == [TOKEN]  # certified by this transaction's fresh token read
+    assert current_attempt() is None
+
+
+def test_no_attempt_revoke_before_check_rotates_token_and_blocks(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+    assert len(privacy.PROCESS_DECISIONS) == 0  # BLOCK is never cached
+
+
+def test_no_attempt_nontransactional_never_consults_process_cache(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+
+    def fail(*args, **kwargs):
+        raise AssertionError('process cache consulted for a nontransactional check')
+
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'get', fail)
+    monkeypatch.setattr(privacy, 'ttl_enabled', fail)
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=['source'])
+    assert MARKER in reads
+
+
+def test_no_attempt_snapshots_export_never_consults_or_populates_process_cache(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+
+    def fail(*args, **kwargs):
+        raise AssertionError('process cache consulted for a snapshots export')
+
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'get', fail)
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'put', fail)
+    monkeypatch.setattr(privacy, 'ttl_enabled', fail)
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+        == 7
+    )
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    assert len(privacy.PROCESS_DECISIONS) == 0
+
+
+def test_no_attempt_lever_off_stays_live_and_ineligible(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo')
+    before = metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get()
+    for _ in range(2):
+        assert check(db) == 7
+    assert len(reads) == 10  # every decision reads live
+    assert metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get() == before + 2
+    assert len(privacy.PROCESS_DECISIONS) == 0
+
+
+def test_no_attempt_expected_generation_mismatch_stays_live(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        privacy.assert_batch_write_allowed(
+            db, db.transaction(), UID, conversation_ids=['source'], expected_generation=8
+        )
+    # Token plus the live walk up to the generation check; never a cached ALLOW.
+    assert reads == [TOKEN, MARKER, ('users', UID)]
+
+
+def test_no_attempt_certificate_outage_falls_through_to_live_marker(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+
+    def get(ref, **kwargs):
+        if ref.path == TOKEN:
+            reads.append(ref.path)
+            raise RuntimeError('synthetic certificate outage')
+        return original(ref, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+
+
+def test_no_attempt_concurrent_revoke_aborts_then_retries_into_live_block(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: True)
+    monkeypatch.setattr(
+        storage,
+        'run_with_transaction_contention_retry',
+        partial(storage.run_with_transaction_contention_retry, sleep=lambda delay: None, random_value=lambda: 0.0),
+    )
+    # Cold walk populates the process cache for this owner.
+    assert store.run(lambda view: view.check_privacy(UID, ['source'], 7)) == 7
+    assert current_attempt() is None
+    transactions_before = len(db.transactions)
+    original_transaction = db.transaction
+    commits = []
+
+    def transaction(max_attempts=None):
+        tx = original_transaction(max_attempts=max_attempts)
+
+        def commit():
+            commits.append(True)
+            if len(commits) == 1:
+                # A concurrent revoke commits between this transaction's token
+                # read and its commit, so Firestore aborts the whole attempt.
+                db.rows[MARKER] = {'wipe_status': 'pending'}
+                db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+                revision[0] += timedelta(seconds=1)
+                clock.now += 1
+                raise Aborted('synthetic concurrent revoke')
+
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) - transactions_before == 2  # fresh transaction on retry
+    assert reads == [TOKEN, TOKEN, MARKER]  # warm hit aborted, retry walks live
+    assert current_attempt() is None

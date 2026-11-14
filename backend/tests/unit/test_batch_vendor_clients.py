@@ -26,6 +26,12 @@ def wav(seconds=5):
 
 @pytest.fixture(autouse=True)
 def keys(monkeypatch):
+    from utils.stt import allowance_watch
+
+    # Provider transport/outcome tests own no billing fixture. Keep the real
+    # operation/executor path, but never cold-load subscription/Stripe policy
+    # or read account state for these synthetic owners.
+    monkeypatch.setattr(allowance_watch, 'entitlement', lambda *a, **kw: ('paid_or_trial', None))
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-not-a-key')
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-not-a-key')
     monkeypatch.setenv('STT_PRERECORDED_VENDOR_FAIL_FAST', 'false')

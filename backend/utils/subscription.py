@@ -1658,7 +1658,11 @@ def resolve_conversation_processing_allowance(
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
-        if byok_active and _request_has_llm_byok_key():
+        from utils.stt.allowance_watch import observe
+
+        customer_funded = bool(byok_active and _request_has_llm_byok_key())
+        observe(uid, 'processing', 'llm', customer_funded=customer_funded)
+        if customer_funded:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)

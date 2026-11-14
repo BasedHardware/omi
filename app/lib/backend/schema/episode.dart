@@ -129,6 +129,7 @@ class Episode {
     this.members = const [],
     this.bullets = const [],
     this.lede = '',
+    this.composeDeferred = false,
     this.followUps = const [],
     this.people = const [],
     this.items = const [],
@@ -152,6 +153,7 @@ class Episode {
 
   /// A composed episode's one- or two-sentence summary above its sections; empty while live.
   final String lede;
+  final bool composeDeferred;
 
   /// A composed episode's next steps, as written by the composer.
   final List<String> followUps;
@@ -166,7 +168,7 @@ class Episode {
   final DateTime? timerStartedAt;
 
   /// Composed by the closed-episode composer: the page reads as sections rather than notes.
-  bool get composed => moments.any((m) => m.points.isNotEmpty);
+  bool get composed => moments.any((m) => m.points.isNotEmpty) || (!live && lede.trim().isNotEmpty);
 
   /// Closed but its summary hasn't landed yet: the notes are drafts, so Home keeps showing processing.
   /// Past [summaryWait] the summary is treated as failed, and Home shows the plain conversations.
@@ -178,12 +180,13 @@ class Episode {
 
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
-          if (item.visible) item
+          if (item.visible) item,
       ];
 
   Episode copyWith({
     List<EpisodeItem>? items,
     bool? live,
+    bool? composeDeferred,
     List<ServerConversation>? members,
     List<String>? conversationIds,
     DateTime? startedAt,
@@ -200,6 +203,7 @@ class Episode {
         members: members ?? this.members,
         bullets: bullets,
         lede: lede,
+        composeDeferred: composeDeferred ?? this.composeDeferred,
         followUps: followUps,
         people: people,
         items: items ?? this.items,
@@ -227,12 +231,15 @@ class Episode {
               startedAt: m.startedAt.toLocal(),
               finishedAt: m.finishedAt?.toLocal(),
               structured: Structured(m.title, '', emoji: m.emoji),
-              status: ConversationStatus.values
-                  .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
-            )
+              status: ConversationStatus.values.firstWhere(
+                (s) => s.name == m.status,
+                orElse: () => ConversationStatus.completed,
+              ),
+            ),
         ],
         bullets: e.bullets ?? const [],
         lede: e.lede,
+        composeDeferred: e.composeDeferred,
         followUps: e.followUps ?? const [],
         people: e.people ?? const [],
         items: [for (final item in e.provisionalItems ?? const []) EpisodeItem.fromGenerated(item)],

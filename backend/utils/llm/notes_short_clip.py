@@ -10,7 +10,11 @@ from config.notes_short_clip import floor_serving
 from config.refactor_modes import shadow_or_serve
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recovery import recovery_transcript_word_count
-from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, normalize_relevance_text
+from utils.conversations.relevance_rules import (
+    EXPLICIT_REMINDER_RE,
+    has_explicit_keep_instruction,
+    normalize_relevance_text,
+)
 from utils.llm.notes_language_inputs import in_profile_segments
 from utils.llm.notes_refactor_metrics import shadow, result
 from utils.llm.notes_short_clip_policy import english_word_floor, has_existing_notes
@@ -60,11 +64,15 @@ def below_short_clip_floor(*, words: int, speech_seconds: float | None, use_word
 
 
 def has_explicit_reminder(segments: Any) -> bool:
-    text = ' '.join(
+    texts = [
         str((row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '')) or '').strip()
         for row in segments or ()
+    ]
+    # Retain the existing split-reminder behavior. New calendar forms must be
+    # complete within an existing segment, not synthesized across speakers.
+    return bool(EXPLICIT_REMINDER_RE.search(normalize_relevance_text(' '.join(texts)))) or any(
+        has_explicit_keep_instruction(text) for text in texts
     )
-    return bool(EXPLICIT_REMINDER_RE.search(normalize_relevance_text(text)))
 
 
 def quiet_minimum(

@@ -9104,6 +9104,24 @@ class AppLocalizationsHe extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
 
   @override
+  String get applyCodeToCurrentPlan => 'החל על התוכנית הנוכחית';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'הקוד הוחל על התוכנית הנוכחית שלך.',
+        'refused': 'לא ניתן להחיל קוד זה. בדוק את הקוד ואת התוכנית הנדרשת.',
+        'conflict': 'הקוד כבר נוצל או שכבר יש הנחה בתוכנית שלך.',
+        'rateLimited': 'יותר מדי ניסיונות. המתן ונסה שוב מאוחר יותר.',
+        'other': 'לא ניתן היה להחיל את הקוד. נסה שוב.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'קוד קידום';
 
   @override
@@ -13556,6 +13574,9 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'יצירת הערות מחדש';
+
+  @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
 
   @override
@@ -15265,6 +15286,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'עדכנו את הכרטיס או קבלו שוב את $plan ב-$price לחודש';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
   }
@@ -15289,4 +15315,31 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'מעבר לתשלום חודשי';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price לחודש';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'מחליף את החיוב השנתי שלא שולם בסך $yearly. מתחדש מדי חודש. אפשר לבטל בכל עת.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'התשלום נדחה. התוכנית שלך לא השתנתה.';
+
+  @override
+  String get monthlySwitchUnavailable => 'המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'עברת לתשלום חודשי';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price שולמו היום. מתחדש מדי חודש.';
+  }
 }

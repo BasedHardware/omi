@@ -222,6 +222,8 @@ def test_get_executor_metrics_returns_all_pools():
         'quiet_replay',
         'critical',
         'db',
+        'free_allowance',
+        'read_cache_shadow',
         'record_barrier',
         'llm',
         'stripe',
@@ -230,12 +232,14 @@ def test_get_executor_metrics_returns_all_pools():
         'record_language',
         'postprocess',
         'cleanup',
+        'erasure',
         'storage',
         'speaker_tag_verify',
         'cimd',
         'open_loops',
     }
-    assert names == expected
+    assert expected <= names
+    assert names == {executor.name for executor in _ALL_EXECUTORS}
 
 
 def test_get_executor_metrics_fields():

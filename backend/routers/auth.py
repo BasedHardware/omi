@@ -367,6 +367,28 @@ async def auth_authorize(
             redirect_scheme=redirect_scheme,
             request=request,
         )
+        # Legacy Flutter Mac builds open this native callback without PKCE.
+        # Reject the request as before, but give browser users a safe way out.
+        # Never start a session, reflect request data, or downgrade PKCE.
+        if (
+            exc.detail == "code_challenge is required"
+            and redirect_uri == _DEFAULT_MOBILE_REDIRECT
+            and "text/html"
+            in [media_type.strip() for media_type in request.headers.get("accept", "").lower().split(",")]
+        ):
+            return templates.TemplateResponse(
+                request=request,
+                name="auth_link_expired.html",
+                context={},
+                status_code=400,
+                headers={
+                    "Cache-Control": "no-store",
+                    "Referrer-Policy": "no-referrer",
+                    "X-Content-Type-Options": "nosniff",
+                    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+                    "Vary": "Accept",
+                },
+            )
         raise
 
     # Store session for auth flow
