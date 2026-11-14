@@ -290,6 +290,11 @@ def test_pl584_a_predecessor_settled_before_fresh_commit_cannot_be_skipped(h, mo
         # The stale outside probe cannot pass a predecessor that became ready.
         assert first is None
     assert not h.store.run(lambda tx: tx.get('results', 'later'))
+    merge = OrderedMerge(h.store, head_wait_seconds=60)
+    first = first or merge.commit_next(uid, SETTLED + 61)
+    second = merge.commit_next(uid, SETTLED + 61)
+    assert [first['segment_id'], second['segment_id']] == ['earlier', 'later']
+    assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
 
 
 def test_meter_spends_one_token_with_the_result_and_preserves_fresh_chain(h, monkeypatch):
@@ -345,8 +350,3 @@ def test_meter_privacy_refusal_spends_no_token_or_result(h, monkeypatch):
     assert h.store.run(lambda tx: tx.get('backlog_release', 'gate')) == control
     assert not h.store.run(lambda tx: tx.get('results', 'old'))
     assert row(h, 'old')['state'] == 'result_ready'
-    merge = OrderedMerge(h.store, head_wait_seconds=60)
-    first = first or merge.commit_next(uid, SETTLED + 61)
-    second = merge.commit_next(uid, SETTLED + 61)
-    assert [first['segment_id'], second['segment_id']] == ['earlier', 'later']
-    assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
