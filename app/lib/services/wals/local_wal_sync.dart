@@ -58,6 +58,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 import 'capture_committed_journal.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'capture_committed_custody.dart';
 part 'on_device_prepared_upload.dart';
@@ -2229,6 +2230,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // mutated — corrupted ones already short-circuited above.
         if (!await reserveRefusalRetries(batchWals, generation, batchNowSeconds)) return resp;
         final audioBounds = syncUploadAudioBounds(batchWals);
+        final oldest = batchWals.reduce((a, b) => a.timerStart <= b.timerStart ? a : b);
+        UploadTrace.instance.prepare(
+            firstFilePath: files.first.path, oldestId: oldest.id, sealedAtSeconds: oldest.timerStart + oldest.seconds);
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
@@ -2242,6 +2246,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
 
         _observeNativeUpload(batchWals);
+        UploadTrace.instance.accepted(oldest.id);
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
           final r = result.completed!;
@@ -2283,6 +2288,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         serverUnavailableStreak = 0;
         reportUploadProgress();
       } on SyncRateLimitedException {
+        UploadTrace.instance.noteGate('rate_limited');
+        UploadTrace.instance.noteGate('rate_limited');
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
         for (final wal in batchWals) {
@@ -2536,6 +2543,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _now().millisecondsSinceEpoch ~/ 1000,
       );
       final audioBounds = syncUploadAudioBounds([walToSync]);
+      UploadTrace.instance.prepare(
+          firstFilePath: walFile.path,
+          oldestId: walToSync.id,
+          sealedAtSeconds: walToSync.timerStart + walToSync.seconds);
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
@@ -2580,6 +2591,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _notifyUpdated(generation);
       }
     } on SyncRateLimitedException {
+      UploadTrace.instance.noteGate('rate_limited');
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
