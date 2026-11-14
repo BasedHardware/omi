@@ -426,6 +426,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     legacy, _ = catch_up_log()
     projector = projector_for(legacy)
+    projector.clock = lambda: 1000.0
     for _ in range(10):
         projector.sweep()
     assert legacy.persisted(BURST) and legacy.persisted('other')
@@ -433,6 +434,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
     drained, _ = catch_up_log()
     projector = projector_for(drained)
+    projector.clock = lambda: 1000.0
     service = Serving(MemoryStore(), projector=projector)
     for _ in range(3):
         await service.reconcile_async(periodic=True)
