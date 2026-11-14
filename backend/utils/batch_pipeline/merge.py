@@ -229,6 +229,7 @@ class OrderedMerge:
         wait; only the recovered unit also passes the catch-up depth hold. The
         body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
+        started = time.monotonic()
         wait = self._head_wait()
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held
@@ -391,7 +392,10 @@ class OrderedMerge:
                 held['backlog'] = True
                 if not (tx_fresh and metered):
                     return None
-                token, reason = backlog_release.read(tx, candidate, now, self.commit_source)
+                # The gate's age and reach limits are judged when it is read, on every attempt,
+                # not when this drain began: earlier transactions and retries take time.
+                read_at = now + (time.monotonic() - started)
+                token, reason = backlog_release.read(tx, candidate, read_at, self.commit_source)
                 if reason:
                     backlog['refusal'] = reason
                     return None

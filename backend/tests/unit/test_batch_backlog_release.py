@@ -159,6 +159,23 @@ def test_only_the_heartbeat_rolls_the_budget_hour(monkeypatch):
     refused.labels.assert_called_with('rate')
 
 
+def test_gate_age_is_judged_when_it_is_read_not_when_the_drain_began(monkeypatch):
+    """A heartbeat 179 s old at drain start is stale once two seconds pass before the gate read, on every attempt."""
+    store = MemoryStore()
+    ready(store, 'a')
+    opened(store, NOW - 179)
+    ticks = iter([0.0] + [2.0] * 50)
+    clock = Mock(monotonic=lambda: next(ticks), time=lambda: NOW)
+    refused = Mock()
+    monkeypatch.setattr(gate, 'REFUSED', refused)
+    worker = OrderedMerge(store, catch_up_depth=0)
+    with monkeypatch.context() as patch:
+        patch.setattr('utils.batch_pipeline.merge.time', clock)
+        assert worker.commit_next('synthetic', NOW) is None
+    refused.labels.assert_called_with('stale')
+    assert merge(store)['segment_id'] == 'a'  # With no delay the same gate is still young enough.
+
+
 def test_window_ahead_of_the_heartbeat_is_closed(monkeypatch):
     store = MemoryStore()
     ready(store, 'a')
@@ -205,12 +222,19 @@ def test_job_without_a_capture_time_gets_no_token(capture, reach):
 @pytest.mark.parametrize('release,expected', [('false', False), ('true', True), (None, True)])
 def test_override_and_reach(release, expected, monkeypatch):
     store = MemoryStore()
-    ready(store, 'a', capture=NOW - 110)
+    ready(store, 'a', capture=NOW - 109)  # Capture ended 99 s ago: inside the reach.
     opened(store)
     store.rows['backlog_release', 'gate']['reach_seconds'] = 100
     if release is not None:
         monkeypatch.setenv(RELEASE, release)
-    assert bool(merge(store)) is expected  # End of capture is exactly at the reach boundary.
+    assert bool(merge(store)) is expected
+
+
+@pytest.mark.parametrize('ended_ago,reason', [(100, None), (100.5, 'reach')])
+def test_reach_boundary_is_inclusive(ended_ago, reason):
+    row = dict(state='open', rate_per_hour=2, reach_seconds=100, window=0, tokens_used=0, updated_at=NOW)
+    job = {'capture_at': NOW - ended_ago - 10, 'duration_seconds': 10}
+    assert gate.read(Mock(get=Mock(return_value=row)), job, NOW, 'test')[1] == reason
 
 
 def test_uncommittable_fresh_waits_while_backlog_uses_tokens(monkeypatch):
