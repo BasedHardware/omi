@@ -32,6 +32,21 @@ class TestNotificationSettingsToolsGuards:
         assert self.mod._format_hour(21) == "9:00 PM"
         assert self.mod._format_hour("21") == "9:00 PM"
         assert self.mod._format_hour(21.0) == "9:00 PM"
+        try:
+            self.mod._format_hour("invalid")
+            assert False, "Should raise ValueError on invalid hour"
+        except ValueError:
+            pass
+        try:
+            self.mod._format_hour(24)
+            assert False, "Should raise ValueError on hour >= 24"
+        except ValueError:
+            pass
+        try:
+            self.mod._format_hour(-1)
+            assert False, "Should raise ValueError on negative hour"
+        except ValueError:
+            pass
 
     def test_action_validation(self):
         cfg = {"configurable": {"user_id": "u1"}}

@@ -55,8 +55,9 @@ def _parse_hour(value: Any) -> Optional[int]:
 def _format_hour(hour: Any) -> str:
     """Convert 24-hour format to friendly 12-hour format."""
     parsed = _parse_hour(hour)
-    h = 22 if parsed is None else parsed
-    h = h % 24
+    if parsed is None or not (0 <= parsed <= 23):
+        raise ValueError(f"Invalid hour: {hour}. Must be an integer between 0 and 23.")
+    h = parsed
     if h == 0:
         return "12:00 AM (midnight)"
     elif h == 12:
