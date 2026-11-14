@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 /// The event that made another recording-transfer pass worthwhile.
 ///
@@ -321,6 +322,7 @@ class RecordingTransferCoordinator {
     // backlog inside a sync-only scope. Other eligible background recovery is
     // limited to recent conversation-bound phone WALs. All are bounded in _run.
     if (!_foreground && !_isBackgroundEligible(trigger)) {
+      UploadTrace.instance.noteGate('background');
       final active = _inFlight;
       if (active != null) return active;
       return Future.value();
@@ -333,6 +335,7 @@ class RecordingTransferCoordinator {
 
     final active = _inFlight;
     if (active != null) {
+      UploadTrace.instance.noteGate('in_flight');
       _pendingWake = _preferWake(_pendingWake, trigger);
       return active;
     }
@@ -502,6 +505,7 @@ class RecordingTransferCoordinator {
       if (expired()) return;
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
+      if (!mayUpload) UploadTrace.instance.noteGate('auto_upload_off');
       if (!mayUpload) {
         if (reconcileFailed) _scheduleRetry('reconcile pass failed');
         return;
