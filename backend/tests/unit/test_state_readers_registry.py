@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from scripts.state_readers_registry import (
+    BACKEND,
     REGISTRY,
     coverage_errors,
     runtime_roster,
@@ -105,3 +106,31 @@ def test_invalid_reader_or_containment_is_rejected(registry_data, roster, change
 
 def test_runtime_roster_includes_independent_gpu_deployment(roster):
     assert {'helm/batch-pipeline-worker', 'gke/backend-listen', 'cloud_run/backend-integration'} <= roster
+
+
+def test_independent_repair_cronjob_owns_the_maintenance_cursor(registry_data):
+    """The repair CronJob is the only RepairCursor consumer, and it is not Cloud Run.
+
+    ``record_seal_repair_cursor.RepairCursor`` is reached only through
+    ``record_seal_cluster_repair.run()``, which only
+    ``scripts/record_seal_repair_job.py`` launches. That entrypoint ships in the
+    independently released ``helm/batch-pipeline-worker`` chart, so the registry
+    must name the Helm deployment as reader and writer and give it the CronJob's
+    own ``RECORD_SEAL_REPAIR_ENABLED`` binding. Naming the Cloud Run service
+    instead would claim containment that disabling Cloud Run does not provide.
+    """
+    for state in ('batch_pipeline_prod_maintenance.cursor', 'batch_pipeline_prod_maintenance.version'):
+        entry = registry_data['states'][state]
+        assert entry['writers'] == ['helm/batch-pipeline-worker'], state
+        assert entry['readers'].get('helm/batch-pipeline-worker'), state
+        assert entry['kill_switch'] == {
+            'flag': 'RECORD_SEAL_REPAIR_ENABLED',
+            'service': 'helm/batch-pipeline-worker',
+        }, state
+
+
+def test_repair_cronjob_template_still_binds_the_registered_kill_switch():
+    """Keep the registry assertion above anchored to the chart it describes."""
+    template = (BACKEND / 'charts/batch-pipeline-worker/templates/record-seal-repair.yaml').read_text()
+    assert 'scripts/record_seal_repair_job.py' in template
+    assert 'RECORD_SEAL_REPAIR_ENABLED' in template

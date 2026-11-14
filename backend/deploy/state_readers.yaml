@@ -40,14 +40,24 @@ custody:
       flag: BATCH_PIPELINE_SERVING_ENABLED
       service: cloud_run/backend-integration
     containment: Stops this host's serving supervisor after rollout; apply on each serving reader that must stop.
+  # The encrypted maintenance frontier is constructed only by RepairCursor, which
+  # only record_seal_cluster_repair.run() reaches, and only the record-seal-repair
+  # CronJob (scripts/record_seal_repair_job.py) launches that path. The CronJob
+  # ships in the independently released helm/batch-pipeline-worker chart, so the
+  # Cloud Run service is neither a reader nor a writer here and disabling it does
+  # not contain this consumer.
   cursor: &cursor
-    writers: [cloud_run/backend-integration]
+    writers: [helm/batch-pipeline-worker]
     readers:
-      cloud_run/backend-integration: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      helm/batch-pipeline-worker: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
     kill_switch:
       flag: RECORD_SEAL_REPAIR_ENABLED
-      service: cloud_run/backend-integration
-    containment: Gates the automatic repair tick on this host; explicit operator repair is separately authorized.
+      service: helm/batch-pipeline-worker
+    containment: >-
+      recordSealRepair.runtimeEnabled sets RECORD_SEAL_REPAIR_ENABLED on the repair
+      CronJob pod itself; the Cloud Run service's own binding gates only its partial
+      and projection repair paths, not this cursor. Suspend the CronJob
+      (recordSealRepair.suspend) or stop its active Job for immediate cessation.
 states:
   "{namespace}_artifacts.cleanup_after": *serving
   "{namespace}_artifacts.segment_id": *serving
