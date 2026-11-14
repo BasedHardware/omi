@@ -8,6 +8,8 @@ assignment transaction does, even when a walk skips the pre-check.
 
 import asyncio
 import itertools
+import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -25,6 +27,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_assignment_contention_retry import sdk_assignment  # noqa: F401 (fixture)
 from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.batch_pipeline import projection, projection_drain, projection_followup, projection_prefetch
+from utils.batch_pipeline import projection_drain_diagnostics as diagnostic
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.serving import Serving
@@ -117,6 +120,218 @@ async def settle(projector):
         await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
         await asyncio.sleep(0)
     raise AssertionError('owner drain did not settle')
+
+
+@pytest.mark.asyncio
+async def test_admission_diagnostics_on_off_preserve_real_admissions_rows_and_order(monkeypatch, claims, caplog):
+    """Real chain walk; a fresh commit lands after exhaustion but before finished()."""
+    caplog.set_level('INFO', logger=diagnostic.__name__)
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 1)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREFETCH', '0')
+    observations = []
+    costs = []
+    for enabled in ('0', '1'):
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', enabled)
+        log = ResultLog()
+        expected = chain(log, 'heavy', 'h', 3) + chain(log, 'light', 'l', 1)
+        projector = projector_for(log)
+        projector.store.read = Mock(wraps=projector.store.read)
+        log.projection_successor = Mock(wraps=log.projection_successor)
+        drains = projector.drains = projection_drain.OwnerDrains(projector)
+        admissions = []
+        real_admit, real_run = drains.admit_and_run, drains.run
+        fresh = False
+        repeated = False
+        empty_replay = False
+
+        async def admit(owner, *, continuation=False):
+            admissions.append((owner, continuation))
+            return await real_admit(owner, continuation=continuation)
+
+        async def bounded_run(owner, **kwargs):
+            nonlocal fresh, repeated, empty_replay
+            more = await real_run(owner, turn_seconds=0)  # one real row per turn, deterministic
+            if owner == 'heavy' and not repeated:
+                repeated = True
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.start_drains()  # continuation and again must coalesce
+            if owner == 'light' and not fresh and not more:
+                fresh = True
+                chain(log, owner, 'fresh', 1)
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.request_drain(owner, reason='predecessor_replay')
+                projector.start_drains()
+            elif owner == 'light' and fresh and not more and not empty_replay:
+                empty_replay = True
+                projector.request_drain(owner, reason='targeted_wake')
+                projector.start_drains()
+            return more
+
+        drains.admit_and_run, drains.run = admit, bounded_run
+        projector.request_drain('heavy', reason='discovery_after_assignment')
+        projector.request_drain('heavy', reason='predecessor_replay')
+        projector.request_drain('light', reason='discovery_after_assignment')
+        started = time.perf_counter()
+        projector.start_drains()
+        await settle(projector)
+        costs.append(time.perf_counter() - started)
+        assert set(log.persist_order) == set(expected + ['fresh-0'])
+        assert not claims.overlaps and not log.blocked_checks
+        observations.append(
+            (admissions, log.persist_order[:], projector.store.read.call_count, log.projection_successor.call_count)
+        )
+        if enabled == '0':
+            assert drains.diagnostics is None and projector.drain_request_counts is None
+            assert not [r for r in caplog.records if 'action=admission_diagnostics' in r.getMessage()]
+        else:
+            stats = drains.diagnostics
+            assert not stats.active and not stats.pending
+            assert sum(cell['n'] for cell in stats.cells.values()) == len(admissions)
+            assert sum(cell['rows'] for cell in stats.cells.values()) == len(expected) + 1
+            # The fresh wake survived exhaustion and reached its own turn, after the old one.
+            assert any(key[0] == 'again' and key[1] == 12 and key[2] for key in stats.cells)
+            assert stats.cells[('again', 8, 0, 'end', True)]['n'] == 1
+            assert any(key[0] == 'continuation' and key[1] == 14 for key in stats.cells)
+            assert stats.counts['handoff_coalesced'] == 2
+            assert all('claim_acquire' in cell['timing_ms'] for cell in stats.cells.values())
+            stats.flush()
+            records = [r.getMessage() for r in caplog.records if 'action=admission_diagnostics' in r.getMessage()]
+            assert len(records) == 1
+            assert all(owner not in records[0] for owner in ('heavy', 'light', 'fresh-0'))
+        drains.close()
+    assert observations[0] == observations[1]
+    print(f'diagnostic parity: off={costs[0]:.6f}s on={costs[1]:.6f}s; identical admissions/rows/order/read counts')
+
+
+def test_admission_origins_at_actual_discovery_replay_and_targeted_sites(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    projector.sweep(limit=1)
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['discovery_after_assignment']
+    projector.drain_requests.clear()
+    projector.project_owner(BURST, limit=1)
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['targeted_wake']
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    monkeypatch.setattr(projector.assignment_discovery, 'next', lambda **kwargs: [ids[-1]])
+    projector.sweep()
+    assert projector.drain_requests[BURST] == diagnostic.ORIGINS['predecessor_replay']
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_claim_and_retry_admissions(monkeypatch, claims, drain_timers):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 1)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    claims.busy.add(owner_key(BURST))
+    drains.request({BURST: diagnostic.ORIGINS['targeted_wake']})
+    await settle(projector)
+    stats = drains.diagnostics
+    assert stats.cells[('external', 8, 0, 'claim_held', False)]['n'] == 1
+    assert not projector.store.store.persist_order
+    drains.request([BURST] * 3)
+    assert stats.counts['deferred'] == 3
+    claims.busy.clear()
+    _, retry, _ = drain_timers.pop()
+    retry()
+    await settle(projector)
+    assert log.persist_order == ids
+    assert stats.cells[('retry', 24, 1, 'end', True)]['n'] == 1
+    assert not stats.active and not stats.pending
+    drains.close()
+
+
+def test_diagnostic_bounds_stop_safety_flush_interval_and_shutdown(monkeypatch):
+    monkeypatch.setattr(diagnostic, 'MAX_OWNERS', 1)
+    monkeypatch.setattr(diagnostic, 'MAX_CELLS', 1)
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, 'monotonic', lambda: clock[0])
+    sink = Mock()
+    monkeypatch.setattr(diagnostic.logger, 'info', sink)
+    stats = diagnostic.Diagnostics()
+    stats.request('secret-owner', 2, 'queued')
+    stats.request('overflow-owner', 8, 'queued')
+    assert len(stats.pending) == 1 and stats.counts['owner_overflow'] == 1
+    turn = stats.begin('secret-owner')
+    turn.stop = 'unsafe-owner-task-content'
+    turn.elapsed('prefetch_wait', 0.002)
+    stats.finish('secret-owner')
+    stats.begin('overflow-owner')
+    stats.finish('overflow-owner', 'claim_held')
+    assert len(stats.cells) == 1 and stats.counts['cell_overflow'] == 1
+    sink.assert_not_called()
+    clock[0] = 60
+    stats.begin('later')
+    stats.finish('later', 'end')
+    sink.assert_called_once()
+    payload = json.loads(sink.call_args.args[1])
+    assert payload['cells'][0]['stop'] == 'other'
+    assert payload['cells'][0]['timing_buckets']['prefetch_wait'] == [0, 1, 0, 0, 0, 0]
+    assert 'secret-owner' not in sink.call_args.args[1]
+    stats.begin('cancel')
+    stats.finish('cancel', cancelled=True)
+    stats.close()
+    assert sink.call_count == 1  # shutdown neither awaits nor writes to a sink
+    assert not stats.cells and not stats.pending and not stats.active
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_privacy_early_exit_and_prefetch_timings(monkeypatch, drain_timers):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
+    projector, drains, step, snapshot, read, _ = privacy_version_drain(monkeypatch)
+    drains.request([BURST])
+    await settle(projector)
+    drains.request([BURST])
+    await settle(projector)
+    assert drains.diagnostics.cells[('external', 1, 0, 'privacy_unchanged', False)]['n'] == 1
+    assert read.call_count == 1 and step.call_count == 1
+    drains.close()
+    log = ResultLog()
+    ids = chain(log, BURST, 'prefetch', 3)
+    projector = projector_for(log)
+    projector.request_drain(BURST, reason='targeted_wake')
+    projector.start_drains()
+    await settle(projector)
+    assert log.persist_order == ids
+    cells = projector.drains.diagnostics.cells.values()
+    assert any('prefetch_wait' in cell['timing_ms'] for cell in cells)
+    projector.drains.close()
+
+
+def test_diagnostic_sink_failure_does_not_interrupt_or_retry_per_turn(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, 'monotonic', lambda: clock[0])
+    sink = Mock(side_effect=RuntimeError('sink unavailable'))
+    monkeypatch.setattr(diagnostic.logger, 'info', sink)
+    stats = diagnostic.Diagnostics()
+    clock[0] = 60
+    for _ in range(3):
+        stats.begin('owner')
+        stats.finish('owner', 'end')
+    assert sink.call_count == 1 and stats.counts['completed'] == 3
+    assert stats.counts['sink_failures'] == 1
+    clock[0] = 120
+    stats.begin('owner')
+    stats.finish('owner', cancelled=True, flush=False)
+    assert sink.call_count == 1
+    stats.close()
+
+
+@pytest.mark.parametrize('value, expected', [(None, True), ('0', False), ('off', False), ('false', False), ('1', True)])
+def test_admission_diagnostics_switch(monkeypatch, value, expected):
+    from config.batch_pipeline import owner_drain_admission_diagnostics_enabled
+
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', value)
+    assert owner_drain_admission_diagnostics_enabled() is expected
 
 
 def owner_rows(log, owner):
@@ -1359,17 +1574,17 @@ async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatc
     drains.request([BURST])
     await settle(projector)
     checked, release = asyncio.Event(), asyncio.Event()
-    real_run_blocking = projection_drain.run_blocking
+    real_blocking = drains.blocking
 
-    async def pause_check(executor, fn, *args, **kwargs):
+    async def pause_check(fn, *args, **kwargs):
         if fn == drains.privacy_head_unchanged:
             result = fn(*args, **kwargs)
             checked.set()
             await release.wait()
             return result
-        return await real_run_blocking(executor, fn, *args, **kwargs)
+        return await real_blocking(fn, *args, **kwargs)
 
-    monkeypatch.setattr(projection_drain, 'run_blocking', pause_check)
+    monkeypatch.setattr(drains, 'blocking', pause_check)
     drains.request([BURST])
     await checked.wait()
     drain_timers[0][1]()

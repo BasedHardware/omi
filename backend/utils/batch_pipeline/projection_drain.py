@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from config.batch_pipeline import (
     max_owner_drains,
+    owner_drain_admission_diagnostics_enabled,
     owner_drain_first_turn_seconds,
     projection_drain_claim_aware_enabled,
     projection_drain_live_target_backoff_enabled,
@@ -53,6 +54,7 @@ from utils.batch_pipeline.metrics import (
     record_privacy_stop,
 )
 from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline import projection_drain_diagnostics as diagnostics
 from utils.executors import run_blocking, start_background_task, sync_executor
 
 if TYPE_CHECKING:
@@ -104,11 +106,24 @@ class OwnerDrains:
         self.stopped_heads: dict[str, tuple[str, object] | None] = {}
         self.privacy_heads: dict[str, tuple[str, object] | None] = {}
         self.closed = False
+        self.diagnostics = diagnostics.Diagnostics() if owner_drain_admission_diagnostics_enabled() else None
 
     def request(self, owners) -> None:
         if self.closed:
             return
         for owner in owners:
+            if self.diagnostics is not None:
+                mask = owners.get(owner) if isinstance(owners, dict) else None
+                disposition = (
+                    'deferred'
+                    if owner in self.delayed and owner not in self.privacy_heads
+                    else (
+                        'active'
+                        if owner in self.tasks
+                        else 'coalesced' if owner in self.queue or owner in self.backlog else 'queued'
+                    )
+                )
+                self.diagnostics.request(owner, mask or diagnostics.ORIGINS['unknown'], disposition)
             if owner in self.delayed and owner not in self.privacy_heads:
                 continue
             if owner in self.tasks:
@@ -153,16 +168,36 @@ class OwnerDrains:
             self.projector.draining.add(owner)
             continuation = owner in self.continuations
             self.continuations.discard(owner)
+            if self.diagnostics is not None:
+                self.diagnostics.begin(owner)
             task = start_background_task(
-                self.admit_and_run(owner, continuation=continuation), name='batch_projection_owner_drain'
+                self.observed_admission(owner, continuation=continuation), name='batch_projection_owner_drain'
             )
             self.tasks[owner] = task
             task.add_done_callback(lambda done, owner=owner: self.finished(owner, done))
 
+    async def observed_admission(self, owner: str, *, continuation: bool = False) -> bool:
+        if self.diagnostics is None:
+            return await self.admit_and_run(owner, continuation=continuation)
+        token = diagnostics.CURRENT_TURN.set(self.diagnostics.active.get(owner))
+        try:
+            return await self.admit_and_run(owner, continuation=continuation)
+        finally:
+            diagnostics.CURRENT_TURN.reset(token)
+
+    async def blocking(self, fn, *args, **kwargs):
+        if diagnostics.CURRENT_TURN.get() is None:
+            return await run_blocking(sync_executor, fn, *args, **kwargs)
+        return await run_blocking(sync_executor, diagnostics.worker_call, time.monotonic(), fn, *args, **kwargs)
+
+    @staticmethod
+    def claim_check(namespace, key):
+        return diagnostics.observe('claim_check', projection_claim_held, namespace, key)
+
     async def admit_and_run(self, owner: str, *, continuation: bool = False) -> bool:
         if owner in self.privacy_heads:
             if projection_drain_privacy_backoff_enabled():
-                unchanged, changed = await run_blocking(sync_executor, self.privacy_head_unchanged, owner)
+                unchanged, changed = await self.blocking(self.privacy_head_unchanged, owner)
                 if unchanged and owner in self.privacy_heads:
                     self.stops[owner] = 'privacy_unchanged'
                     PROJECTION_DRAIN_PRIVACY_BACKOFFS.inc()
@@ -177,9 +212,7 @@ class OwnerDrains:
         if (
             not continuation
             and projection_drain_claim_aware_enabled()
-            and await run_blocking(
-                sync_executor, projection_claim_held, self.projector.store.store.namespace, owner_key(owner)
-            )
+            and await self.blocking(self.claim_check, self.projector.store.store.namespace, owner_key(owner))
         ):
             PROJECTION_DRAIN_CLAIM_HELD.inc()
             self.stops[owner] = 'claim_held'
@@ -218,7 +251,7 @@ class OwnerDrains:
             # Return overflow intent to the next serving pass; no extra timers,
             # immediate busy loop, or delay for productive FIFO continuations.
             if wake:
-                self.projector.request_drain(owner)
+                self.projector.request_drain(owner, reason='internal_retry')
             return False
 
         handle = None
@@ -231,10 +264,18 @@ class OwnerDrains:
             self.privacy_heads.pop(owner, None)
             self.delayed.pop(owner, None)
             if wake and owner not in self.tasks:
-                self.request([owner])
+                if self.diagnostics is not None:
+                    self.diagnostics.queue(owner, 'retry', diagnostics.ORIGINS['internal_retry'])
+                self.request(
+                    {owner: diagnostics.ORIGINS['internal_retry']} if self.diagnostics is not None else [owner]
+                )
+            elif self.diagnostics is not None and owner not in self.tasks:
+                self.diagnostics.pending.pop(owner, None)
 
         handle = asyncio.get_running_loop().call_later(random.uniform(5.0, 15.0) if delay is None else delay, retry)
         self.delayed[owner] = handle
+        if self.diagnostics is not None:
+            self.diagnostics.requeue(owner, 'retry')
         return True
 
     def close(self) -> None:
@@ -254,6 +295,8 @@ class OwnerDrains:
         self.delayed.clear()
         for task in self.tasks.values():
             task.cancel()
+        if self.diagnostics is not None:
+            self.diagnostics.close()
 
     def finished(self, owner: str, task: asyncio.Task) -> None:
         self.tasks.pop(owner, None)
@@ -261,6 +304,8 @@ class OwnerDrains:
         self.yielding.discard(owner)
         self.projector.draining.discard(owner)
         if task.cancelled():
+            if self.diagnostics is not None:
+                self.diagnostics.finish(owner, cancelled=True, flush=False)
             # Global background-task shutdown: do not start another turn.
             self.close()
             return
@@ -272,6 +317,8 @@ class OwnerDrains:
             self.live_target_attempts.pop(owner, None)
         more = task.exception() is None and task.result() is True
         if more:
+            if self.diagnostics is not None:
+                self.diagnostics.requeue(owner, 'continuation')
             self.continuations.add(owner)
             # Productive turns always continue at a FIFO tail: the backlog's, when it has its own.
             (self.backlog if self.classes() else self.queue).append(owner)
@@ -279,6 +326,8 @@ class OwnerDrains:
             if owner not in self.privacy_heads:
                 # The TTL fired after the check returned but before this callback.
                 self.queue.append(owner)
+                if self.diagnostics is not None:
+                    self.diagnostics.requeue(owner, 'retry')
         elif stop and is_privacy_stop(stop) and projection_drain_privacy_backoff_enabled():
             # run records privacy stops here only for zero-progress turns.
             if self.defer(owner, delay=projection_drain_privacy_backoff_seconds()):
@@ -298,6 +347,10 @@ class OwnerDrains:
                 self.defer(owner)
             else:
                 self.queue.append(owner)
+        if self.diagnostics is not None:
+            self.diagnostics.finish(owner, stop, failed=task.exception() is not None)
+            if owner not in self.queue and owner not in self.backlog and owner not in self.delayed:
+                self.diagnostics.pending.pop(owner, None)
         self.again.discard(owner)
         self.launch()
 
@@ -322,6 +375,9 @@ class OwnerDrains:
     async def run(self, owner: str, *, turn_seconds: float = DRAIN_TURN_SECONDS) -> bool:
         """One turn; True when the chain had more rows when the turn ended."""
         started = time.monotonic()
+        turn = diagnostics.CURRENT_TURN.get()
+        if turn is not None:
+            turn.executed = True
         deadline = started + turn_seconds
         advanced = steps = 0
         more = False
@@ -339,10 +395,12 @@ class OwnerDrains:
                     break
                 # Every turn takes at least one full step.
                 budget = min(DRAIN_STEP_SECONDS, remaining) if remaining > 0 else DRAIN_STEP_SECONDS
-                walk = await run_blocking(sync_executor, self.projector.drain_step, owner, budget, prefetch=prefetch)
+                walk = await self.blocking(self.projector.drain_step, owner, budget, prefetch=prefetch)
                 steps += 1
                 advanced += len(walk.advanced)
                 stop = walk.stop or 'end'
+                if turn is not None:
+                    turn.advanced, turn.steps, turn.stop = advanced, steps, stop
                 if projection_drain_claim_aware_enabled() and stop == 'claim_busy':
                     self.stops[owner] = stop
                 if walk.followups:
@@ -380,4 +438,7 @@ class OwnerDrains:
             stop,
             int((time.monotonic() - started) * 1000),
         )
+        turn = diagnostics.CURRENT_TURN.get()
+        if turn is not None:
+            turn.advanced, turn.steps, turn.stop, turn.executed = advanced, steps, stop, True
         return more

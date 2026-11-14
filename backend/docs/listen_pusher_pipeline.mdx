@@ -9672,6 +9672,12 @@ Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.
 The advisory claim and transactional ordering fences remain unchanged.
 
+`BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS` defaults to `1` (on).
+`0`, `off`, `false`, or `no`, after trimming/lowercasing, disables it. Read at
+projector/drain construction; an env-only revision is the rollback boundary.
+It adds only process-memory admission aggregates and summary logs, with no
+storage probes or scheduling changes. [Schema, bounds and readback](listen_pusher_pipeline/changes/2026-11-14-owner-drain-admission-diagnostics.md).
+
 
 ### Durable playback projection rebuild debt
 
