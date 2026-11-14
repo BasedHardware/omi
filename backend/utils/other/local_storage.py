@@ -131,6 +131,18 @@ class LocalBlob:
             raise PreconditionFailed('local storage create-only object exists') from error
         self.patch()
 
+    def upload_from_file(self, file_obj, *, rewind=False, size=None, content_type=None, **kwargs):
+        """Offline SDK file seam; preserve create-only/generation semantics.
+
+        This is a local fixture transport, not resumable GCS terminal proof.
+        """
+        if rewind:
+            file_obj.seek(0)
+        body = file_obj.read() if size is None else file_obj.read(size)
+        if size is not None and len(body) != size:
+            raise ValueError('local upload size differs from its source')
+        self.upload_from_string(body, content_type=content_type, **kwargs)
+
     def _set_properties(self, properties):
         self.metadata = properties.get('metadata')
         self.content_type = properties.get('contentType')

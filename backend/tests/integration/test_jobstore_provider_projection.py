@@ -12,7 +12,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def lane(context, monkeypatch, request):
+def lane(context, monkeypatch, request, tmp_path):
     from config.policy import BatchUnitPolicy
     from database import _client, conversations, llm_usage
     from database.batch_pipeline_intake import admit
@@ -85,6 +85,17 @@ def lane(context, monkeypatch, request):
         provider_reason='unsupported_language',
         provider_service='modulate',
     )
+    if getattr(request, 'param', None) == 'runner':
+        from dataclasses import replace
+        from utils.batch_pipeline.artifact_policy import create_artifact_store
+        from utils.other.local_storage import LocalStorageClient
+
+        storage = LocalStorageClient(tmp_path)
+        monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic')
+        original_artifacts = create_artifact_store(store, storage, 'synthetic', b'x' * 32)
+        # Original audio stays on its existing upload policy. This fixture
+        # stages real encrypted input; it does not qualify that cohort's C4.
+        items = [replace(item, audio_uri=original_artifacts.stage_audio(item, b'synthetic audio')) for item in items]
     plan = {sid: dict(fresh=True, owner_turn=i, custody_deadline=20000) for i, sid in enumerate(binding.segment_ids)}
     assert (
         admit(
@@ -96,12 +107,20 @@ def lane(context, monkeypatch, request):
             policy=policy,
             handoff=handoff,
             provider_plan=plan,
-            intake={'owner_id': uid, 'segment_ids': list(binding.segment_ids), 'repair_lineage': 'synthetic-original'},
+            intake={
+                'owner_id': uid,
+                'segment_ids': list(binding.segment_ids),
+                'repair_lineage': 'synthetic-original',
+                **({'usage_period': '2026-11'} if getattr(request, 'param', None) == 'runner' else {}),
+            },
         )['outcome']
         == 'batch'
     )
     adapter = ProviderHandoff(handoff)
     adapter.deliver('recording')
+    ledger = sync_content_ledger_ref(client, uid, 'content')
+    if getattr(request, 'param', None) == 'runner':
+        return SimpleNamespace(**locals())
     for unit in adapter.units.claim(2, now=201, lease_seconds=30, backlog_share=0):
         assert adapter.units.settle(
             unit['unit_id'],
@@ -140,7 +159,6 @@ def lane(context, monkeypatch, request):
         publish=lambda b, r: published.append(r),
         clock=lambda: 10000.0,
     )
-    ledger = sync_content_ledger_ref(client, uid, 'content')
     return SimpleNamespace(**locals())
 
 

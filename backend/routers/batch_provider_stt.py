@@ -65,6 +65,18 @@ async def _run_sync(fn, *args, **kwargs):
     return await run_blocking(sync_executor, fn, *args, **kwargs)
 
 
+async def run_typed_provider_async(runner=None):
+    """Explicit scheduled typed dequeue, default off; never a legacy wake replay.
+
+    The typed authority/runner is supplied by the host composition. No env flip
+    constructs a document mirror or changes the Cloud Tasks unit contract.
+    Returned recording IDs belong to the customer-role projection dispatcher.
+    """
+    if runner is None:
+        return []
+    return await runner.run_once(_run_sync)
+
+
 async def _drain_owner(owner_id: str) -> None:
     service = await _run_sync(serving_for_stage, current_stage())
     await service.drain_settled_async(owner_id)

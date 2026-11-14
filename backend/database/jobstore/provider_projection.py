@@ -82,6 +82,10 @@ class ProviderProjection(ProjectionStore):
                 owner_key=self.packet['owner_key'],
                 capture_at=source['capture_at'],
                 protocol_version=1,
+                # OrderedMerge uses this same discriminator for every provider
+                # result. transcribe_async emits the validated provider/recovery
+                # payload shape even for ordinary first-attempt STT.
+                recovery_version=1,
                 result=unit['result'],
                 previous_segment_id=previous,
                 committed_at=unit['settled_at'],
@@ -105,6 +109,21 @@ class ProviderProjection(ProjectionStore):
             yield
         finally:
             g2_coordinator.reset(token)
+
+    def project_recording(self, artifacts, *, clock, **options):
+        """Actual ordered customer handoff, receipt and grouped SQL ack.
+
+        This composition belongs to the customer role. The paid worker only
+        returns a terminal recording; it never imports customer assignment.
+        Publication/assignment errors retain the existing receipt and SQL task.
+        """
+        from utils.batch_pipeline.projection import Projector
+
+        self.prepare()
+        projector = Projector(self.store, artifacts.load_result, projection_store=self, clock=clock, **options)
+        for identity in self.binding.segment_ids:
+            projector.project(identity)
+        return self.ack(now=clock())
 
     def custody_manifest(self):
         """Exact new retained-copy census; this is not a purge certificate."""

@@ -118,10 +118,16 @@ class Units:
         )
         return True
 
-    def claim(self, count, *, now, lease_seconds, backlog_share):
+    def claim(self, count, *, now, lease_seconds, backlog_share, ordinary_provider_only=False):
         if not 0 <= backlog_share <= count <= 100 or lease_seconds <= 0:
             raise ValueError('bounded count/share and positive lease required')
         claimed = []
+        cohort = (
+            " AND source->'stt_route'->>'provider_reason'='unsupported_language'"
+            " AND source->'stt_route'->>'provider_service'='modulate'"
+            if ordinary_provider_only
+            else ''
+        )
         with self.pool.connection() as conn, conn.transaction():
             candidates = []
             for cls, limit in ((0, count - backlog_share), (1, backlog_share)):
@@ -130,7 +136,7 @@ class Units:
                 rows = conn.execute(
                     "SELECT * FROM units WHERE namespace=%s AND stage='provider_stt' AND class=%s "
                     "AND state='pending' AND hold_reason IS NULL AND (due_at IS NULL OR due_at<=%s) "
-                    'AND lease_until<=%s ORDER BY owner_turn,capture_at,unit_id LIMIT %s',
+                    'AND lease_until<=%s' + cohort + ' ORDER BY owner_turn,capture_at,unit_id LIMIT %s',
                     (self.namespace, cls, now, now, limit),
                 )
                 candidates.extend(dict(zip((column.name for column in rows.description), row)) for row in rows)

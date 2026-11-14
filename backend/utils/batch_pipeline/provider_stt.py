@@ -684,6 +684,7 @@ class _Call:
     failure: dict | None  # inspection failed: no vendor call, settle terminal
     failover_to: tuple[str, ...]
     allowance_period: str | None = None
+    fence_ticket: Any = None
 
 
 def _default_allowed(owner_id: str, seconds: float, service: str) -> tuple[bool, str]:
@@ -856,7 +857,8 @@ class ProviderSttStage:
         )
         scope_token = current.set(scope)
         try:
-            return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service)
+            kwargs = {'fence_ticket': plan.fence_ticket} if plan.fence_ticket is not None else {}
+            return self.stt(plan.item, plan.route.language, plan.inspected, service=plan.service, **kwargs)
         except BatchPrivacyBlocked:
             raise
         except RecoveryFailure as error:
@@ -881,7 +883,8 @@ class ProviderSttStage:
         )
         scope_token = current.set(scope)
         try:
-            return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service)
+            kwargs = {'fence_ticket': plan.fence_ticket} if plan.fence_ticket is not None else {}
+            return await self.stt_async(plan.item, plan.route.language, plan.inspected, service=plan.service, **kwargs)
         except BatchPrivacyBlocked:
             raise
         except RecoveryFailure as error:
@@ -966,7 +969,7 @@ class ProviderSttStage:
             service = self._healthy(segment_id, job, open_services, refused)
             if isinstance(service, UnitOutcome):
                 return service
-        token = uuid4().hex
+        token = self._attempt_token()
         try:
             started = self.protocol.start(
                 segment_id,
@@ -1071,6 +1074,9 @@ class ProviderSttStage:
         return UnitOutcome('done', 'processed' if settled else 'superseded', provider_reason=route.provider_reason)
 
     # -- helpers ----------------------------------------------------------------------------------
+
+    def _attempt_token(self) -> str:
+        return uuid4().hex
 
     def _candidates(self, route: SttRoute) -> list[str]:
         """The admitted vendor first, then the table's other vendors when failover is on."""

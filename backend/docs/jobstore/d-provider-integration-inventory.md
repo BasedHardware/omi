@@ -310,3 +310,18 @@ The required generic outbox available_at/max-coalescing contract conflicts with
 the specialized enrichment first-summary cap and earlier-task retention. Three
 failures remain open; this continuation does not change the policy or its tests.
 Exact37e focused staging crash failure also remains open, not rerun away.
+
+
+2026-11-14 ordinary claimed provider source joins the actual production paid
+phases, typed session publication/terminal, restartable original customer reader
+and recording projection/receipt/grouped ack. See d-provider-runner.md for the
+exact path, refusal matrix and remaining host/scheduler/cohort gates. The
+router entrypoint and runner both default off; legacy Cloud Tasks, FS privacy,
+FIFO/DRR/head-wait and funding/health/allowance policy remain unchanged. The
+joined test exposed the missing private recovery_version discriminator, now
+matching OrderedMerge's actual provider result entry. No new TTL/copy/policy.
+Unknown paid outcomes retain their attempt; published/committed originals can
+resolve lost replies without a paid resend. First P1 and readiness remain
+false; no activation, new review or savings claimed. Final evidence records
+exact-head results, including existing outbox/staging failures and every
+intermediate fixture/transport failure, without widening deadlines/assertions.
