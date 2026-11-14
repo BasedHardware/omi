@@ -20,7 +20,7 @@ SWITCH = 'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED'
 BUDGET = 'BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK'
 
 
-def stock(sim=False, count=150):
+def stock(sim=False, count=60):
     customer = CustomerData()
     store = SimStore(customer) if sim else MemoryStore()
     owners = sorted(['synthetic-a', 'synthetic-b', 'synthetic-c'], key=owner_key)
@@ -79,7 +79,7 @@ async def test_quiet_owner_commits_within_one_pass_without_markers(monkeypatch, 
         await tick(service)
     assert (store.rows['jobs', 's2']['state'] == 'committed') == enabled
     assert not any(t == 'merge_holds' for t, _ in store.rows)
-    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 301 - enabled
+    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 121 - enabled
 
 
 async def tick(service):
@@ -240,3 +240,47 @@ def test_missing_owner_count_and_empty_ceiling(caplog):
         assert discovery.finish(page)
     assert 'missing_owner_id=3' in caplog.text
     assert 'owners=0 more=0 wrapped=1' in caplog.text
+
+
+def test_a_cursor_read_that_spends_the_tick_defers_the_ceiling_query(monkeypatch, caplog):
+    """The pass start (one descending query) must not run after the tick budget is gone."""
+    from types import SimpleNamespace
+
+    store, owners = stock(count=1)
+    clock = [0]
+    monkeypatch.setattr(ready_discovery, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=time.time))
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '1')
+    service = Serving(store)
+    service.drain_owner = Mock()
+    seeks = []
+    original, run = store.ready_owners, store.run
+    store.ready_owners = lambda *args, **kwargs: seeks.append(kwargs) or original(*args, **kwargs)
+
+    def slow_read(body):
+        result = run(body)
+        clock[0] += 1  # every store transaction, the cursor read included, uses a whole budget
+        return result
+
+    monkeypatch.setattr(store, 'run', slow_read)
+    with caplog.at_level(logging.INFO):
+        service._maintain(recover_quarantine=False)
+    assert not seeks and not service.drain_owner.called
+    state = store.rows['merge_discovery', 'cursor']
+    assert not state.get('ceiling_owner_key') and not state.get('after_owner_key')
+    assert 'owners=0 more=1 wrapped=0' in caplog.text and 'budget_spent=1' in caplog.text
+    # The next tick, inside its budget, starts the pass.
+    monkeypatch.setattr(store, 'run', run)
+    service._maintain(recover_quarantine=False)
+    assert seeks and seeks[0].get('descending') is True
+    service.drain_owner.assert_called()
+
+
+@pytest.mark.parametrize('permanent', [True, False])
+def test_a_permanent_api_error_is_logged_as_an_error_not_an_outage(permanent, caplog):
+    from google.api_core.exceptions import PermissionDenied, ServiceUnavailable
+
+    discovery = ready_discovery.ReadyDiscovery(Mock(), 'serving')
+    with caplog.at_level(logging.WARNING):
+        discovery.retry(PermissionDenied('no') if permanent else ServiceUnavailable('later'))
+    assert ('outcome=error' in caplog.text) == permanent
+    assert ('outcome=retry' in caplog.text) != permanent

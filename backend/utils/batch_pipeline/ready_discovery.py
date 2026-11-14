@@ -3,7 +3,14 @@
 import logging
 import time
 
-from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
+from google.api_core.exceptions import (
+    Aborted,
+    Cancelled,
+    ClientError,
+    FailedPrecondition,
+    GoogleAPICallError,
+    ResourceExhausted,
+)
 from config.batch_pipeline import (
     ready_discovery_cursor_enabled,
     ready_discovery_owners_per_tick,
@@ -18,6 +25,10 @@ except ImportError:  # The driver is optional outside Postgres processes.
 
 logger = logging.getLogger(__name__)
 
+# Client-class statuses that pass by themselves; any other 4xx (permission, bad argument, not
+# found) is a fault to fix, not an outage.
+_TRANSIENT_CLIENT = (FailedPrecondition, Aborted, ResourceExhausted, Cancelled)
+
 
 class ReadyDiscovery:
     def __init__(self, store, source):
@@ -27,7 +38,8 @@ class ReadyDiscovery:
     def retry(self, error):
         if isinstance(error, FailedPrecondition):
             self.retry_at = time.monotonic() + 300
-        unavailable = isinstance(error, GoogleAPICallError) or isinstance(error, OperationalError)
+        permanent = isinstance(error, ClientError) and not isinstance(error, _TRANSIENT_CLIENT)
+        unavailable = (isinstance(error, GoogleAPICallError) and not permanent) or isinstance(error, OperationalError)
         logger.log(
             logging.WARNING if unavailable else logging.ERROR,
             'event=batch_merge action=ready_cursor outcome=%s exception_type=%s count=1',
@@ -53,6 +65,11 @@ class ReadyDiscovery:
         try:
             state = self.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
             state['owners_per_tick'] = ready_discovery_owners_per_tick(state.get('owners_per_tick', 20))
+            if not state.get('ceiling_owner_key') and time.monotonic() >= deadline:
+                # The cursor read spent the tick: start the pass (its ceiling query) next tick.
+                return dict(
+                    state=state, deadline=deadline, owners=0, missing=0, spent=1, wrapped=0, failed=False, deferred=True
+                )
             if not state.get('ceiling_owner_key'):
                 ceiling = self.store.ready_owners(None, 1, descending=True)
                 state.update(
@@ -67,6 +84,8 @@ class ReadyDiscovery:
 
     def owners(self, page):
         state = page['state']
+        if page.get('deferred'):
+            return
         try:
             for _ in range(state['owners_per_tick']):
                 if not state['ceiling_owner_key'] or state.get('after_owner_key') == state['ceiling_owner_key']:
