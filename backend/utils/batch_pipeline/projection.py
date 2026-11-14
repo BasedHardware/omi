@@ -1697,7 +1697,9 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
-        The dark finish backoff owns page selection and deferral; see
+        Finish discovery excludes classified async receipts, probing one
+        unfiltered row to keep follow-up discovery scheduled. The finish
+        backoff owns page selection and synchronous deferral; see
         utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1717,6 +1719,10 @@ class Projector:
                 if policy.async_projection:
                     self.has_async_followups = True
                     defer = False
+                    from config.batch_pipeline import projection_finish_async_skip_enabled
+
+                    if projection_finish_async_skip_enabled():
+                        self.store.retire_async_finish(segment_id)
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1

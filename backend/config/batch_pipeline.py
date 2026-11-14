@@ -1095,3 +1095,8 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def projection_finish_async_skip_enabled() -> bool:
+    """Ship-on: async receipts belong only to the independent follow-up drain."""
+    return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')

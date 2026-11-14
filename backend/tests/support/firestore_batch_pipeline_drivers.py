@@ -313,6 +313,7 @@ def entries():
                     ('pending', 'persisted', 'ready', 'quarantine_held'),
                 ],
                 'due_before': [None, 3000000.0],
+                'exclude_async': [False, True],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),
@@ -338,12 +339,12 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit, keyset cursor, drain states and the optional finish clock unchanged',
+            reason='store adapter forwards namespace, limit, cursor, drain states, finish clock and async exclusion unchanged',
             expect_observed=False,
             # Re-reviewed 2026-11-11: the adapter gained the optional `due_before` finish clock and
             # forwards it unchanged; the cursor is now typed `tuple | None`. No query, read or bound
             # changed, and the forwarded shape is still the recorded `projection_page` driver.
-            body_digest='93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
+            body_digest='00d9834b2575536d3f8ee2d3017529dddeb3770d7d63e72c5f731e9a272c28aa',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',

@@ -576,6 +576,7 @@ class PostgresStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
     ) -> tuple[list[str], Any]:
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
@@ -589,6 +590,8 @@ class PostgresStore:
             fields += f', {due}'
             clauses.append(f'{due} <= %s')
             params.append(float(due_before))
+            if exclude_async:
+                clauses.append(f'{due} >= 0')
         if after is not None:
             if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
                 clauses.append(f'{columns[0]} >= %s')

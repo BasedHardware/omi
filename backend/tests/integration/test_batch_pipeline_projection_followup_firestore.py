@@ -285,3 +285,47 @@ async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, m
     assert all(
         lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed' for sid in batch.ids
     )
+
+
+@pytest.mark.asyncio
+async def test_excluded_async_finish_rows_still_schedule_and_complete(lane, monkeypatch):
+    import asyncio
+    from unittest.mock import Mock
+    from database import batch_pipeline_projection_claim as claims
+    from database.batch_pipeline_projection_finish_backfill import backfill_ref, BACKFILL_VERSION
+    from utils.batch_pipeline.serving import Serving
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    import fakeredis
+
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
+    batch = lane.seed()
+    lane.finish(batch)
+    sid = batch.ids[0]
+    lane.projector.persist(sid)
+    row = lane.projector.store.ref('results', sid).get().to_dict()
+    assert row['projection_finish_due_at'] == -1.0
+    backfill_ref(lane.client, lane.store.namespace).set({'version': BACKFILL_VERSION, 'complete': True})
+    read = lane.projector.store.read
+    lane.projector.store.read = Mock(wraps=read)
+    counts = lane.projector.sweep()
+    assert counts == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+    lane.projector.store.read.assert_not_called()
+    assert lane.projector.has_async_followups
+    # Exercise the serving dispatch gate, real discovery, fenced receipt reads,
+    # enrichment, accounting, client publish and durable completion.
+    service = Serving(MemoryStore(), projector=lane.projector)
+    service.reconcile = lambda **_: []
+    try:
+        await service.reconcile_async()
+        runner = lane.projector.followups
+        assert runner is not None
+        await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 10)
+        assert batch.ledger.get().to_dict()['status'] == 'completed'
+        assert lane.projector.store.ref('results', sid).get().to_dict()['projection_state'] == 'completed'
+        assert len(lane.published) == 1
+    finally:
+        if lane.projector.followups:
+            await asyncio.gather(*list(lane.projector.followups.tasks.values()), return_exceptions=True)

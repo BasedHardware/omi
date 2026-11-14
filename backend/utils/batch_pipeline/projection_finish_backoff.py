@@ -8,7 +8,8 @@ not invalidate the pass. Negative marker reads are throttled to once a minute.
 
 import time
 
-from config.batch_pipeline import projection_finish_backoff_enabled
+from config.batch_pipeline import projection_finish_backoff_enabled, projection_finish_async_skip_enabled
+from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 
 
 class FinishBackoff:
@@ -20,12 +21,22 @@ class FinishBackoff:
 
     def page(self, size: int) -> list[str]:
         discovery = self.projector.finish_discovery
-        if not projection_finish_backoff_enabled():
+        backoff = projection_finish_backoff_enabled()
+        skip_async = projection_finish_async_skip_enabled()
+        if not backoff and not skip_async:
             return discovery.next(limit=size)
         if not self.complete and self.monotonic() >= self.check_after:
             self.check_after = self.monotonic() + 60.0
             self.complete = discovery.store.projection_finish_backfill_complete()
-        return discovery.next(limit=size, due_before=self.projector.clock() if self.complete else None)
+        if not self.complete:
+            return discovery.next(limit=size)
+        if skip_async:
+            # Independent of due clocks and of this cursor. Even a page of only
+            # excluded async receipts must keep the durable outbox scheduled.
+            rows, _ = discovery.store.projection_page(limit=1, states=PROJECTION_FINISH_STATES)
+            self.projector.has_async_followups |= bool(rows)
+        ceiling = self.projector.clock() if backoff else float('inf')
+        return discovery.next(limit=size, due_before=ceiling, exclude_async=skip_async)
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
         """Defer only after a no-change walk using the clock-filtered page.

@@ -48,6 +48,7 @@ def isolated(monkeypatch):
     monkeypatch.setattr(projection_followup, 'projection_claim', claim)
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'false')
     for name in (*SWITCHES, 'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', LEVER):
         monkeypatch.delenv(name, raising=False)
 
@@ -436,3 +437,99 @@ def test_defer_failure_keeps_existing_clock_due(monkeypatch):
     log.defer_finish = real
     assert projector.sweep(limit=10)['waiting'] == 1
     assert log.results[ids[0]][PROJECTION_FINISH_DUE_FIELD] == 1060.0
+
+
+@pytest.mark.parametrize('backoff', ['true', 'false'])
+@pytest.mark.parametrize('rows', [1, 200])
+def test_async_only_finish_page_has_constant_reads_and_keeps_drain_awake(monkeypatch, backoff, rows):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv(LEVER, backoff)
+    log = ResultLog()
+    for n in range(rows):
+        sid = f'async-{n}'
+        log.commit(f'owner-{n}', sid, sid, [sid], state='persisted')
+        log.results[sid][PROJECTION_FINISH_DUE_FIELD] = -1.0
+    projector = silent_projector(log)
+    recorder = Recording(log)
+    projector.store = recorder
+    projector.finish_discovery.store = recorder
+    for _ in range(3):
+        recorder.calls.clear()
+        counts = projector.sweep(limit=200)
+        assert counts == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+        assert projector.has_async_followups
+        assert not [c for c in recorder.calls if c[0] in {'read', 'defer_finish', 'retire_async_finish'}]
+        probes = [
+            dict(c[2])
+            for c in recorder.calls
+            if c[0] == 'projection_page' and dict(c[2]).get('states') == ('persisted', 'ready')
+        ]
+        assert len(probes) == 2
+        assert probes[0]['limit'] == 1
+        assert probes[1]['exclude_async'] is True
+
+
+def test_legacy_async_rows_are_classified_once_and_rollback_sees_them(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log()
+    for sid in ids:
+        log.jobs[sid]['policy_parts']['projection'] = {**log.policy, 'async_projection': True}
+    projector = silent_projector(log)
+    log.read = Mock(wraps=log.read)
+    projector.sweep()
+    assert log.read.call_count == len(ids)
+    assert all(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == -1.0 for sid in ids)
+    log.read.reset_mock()
+    projector.sweep()
+    log.read.assert_not_called()
+    assert projector.has_async_followups
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'false')
+    projector.sweep()
+    assert log.read.call_count == len(ids)
+    assert projector.has_async_followups
+
+
+def test_mixed_finish_page_keeps_sync_behavior(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    log, ids = finish_log()
+    async_sid = ids[0]
+    log.jobs[async_sid]['policy_parts']['projection'] = {**log.policy, 'async_projection': True}
+    log.results[async_sid][PROJECTION_FINISH_DUE_FIELD] = -1.0
+    projector = silent_projector(log)
+    counts = projector.sweep()
+    assert counts == {'completed': 0, 'waiting': 1, 'blocked': 0, 'error': 0}
+    assert [c.args[0] for c in projector._finish.call_args_list] == ids[1:]
+    assert projector.has_async_followups
+
+
+@pytest.mark.parametrize(
+    'state,async_policy,retired',
+    [
+        ('persisted', True, True),
+        ('ready', True, True),
+        ('pending', True, False),
+        ('completed', True, False),
+        ('ready', False, False),
+        ('ready', None, False),
+    ],
+)
+def test_async_retirement_fences_pinned_policy_and_state(state, async_policy, retired):
+    job = {} if async_policy is None else {'policy_parts': {'projection': {'async_projection': async_policy}}}
+    client = StrictFirestore(
+        {
+            ('batch_pipeline_dev_jobs', 'row'): job,
+            ('batch_pipeline_dev_results', 'row'): {'projection_state': state, PROJECTION_FINISH_DUE_FIELD: 12.0},
+        }
+    )
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_pipeline_dev'))
+    assert store.retire_async_finish('row') is retired
+    row = client.rows[('batch_pipeline_dev_results', 'row')]
+    assert row['projection_state'] == state
+    assert row[PROJECTION_FINISH_DUE_FIELD] == (-1.0 if retired else 12.0)
+
+
+def test_new_async_state_writes_exclude_without_backfill_or_policy_reads():
+    for state in ('persisted', 'ready'):
+        assert projection_finish_state_fields(state, 12.0, async_projection=True)[PROJECTION_FINISH_DUE_FIELD] == -1.0
+        assert projection_finish_state_fields(state, 12.0)[PROJECTION_FINISH_DUE_FIELD] == 12.0

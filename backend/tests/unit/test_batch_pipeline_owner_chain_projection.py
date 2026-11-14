@@ -117,7 +117,9 @@ class ResultLog:
         }
 
     # --- FirestoreStore facade --------------------------------------------
-    def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready'), due_before=None):
+    def projection_page(
+        self, limit=100, *, after=None, states=('pending', 'persisted', 'ready'), due_before=None, exclude_async=False
+    ):
         def key(sid):
             row = self.results[sid]
             if due_before is None:
@@ -129,6 +131,7 @@ class ResultLog:
                 key(sid)
                 for sid, row in self.results.items()
                 if row['projection_state'] in states
+                and (not exclude_async or row.get('projection_finish_due_at', -1) >= 0)
                 # Firestore range filters exclude a document missing the field;
                 # a missing clock is not due.
                 and (
@@ -221,6 +224,17 @@ class ResultLog:
         self.results[sid].pop('projection_finish_backoff_step', None)
         self.results[sid].update(projection_finish_entry_fields('ready', now))
         return receipt
+
+    def projection_finish_backfill_complete(self):
+        return False
+
+    def retire_async_finish(self, sid):
+        if self.jobs[sid]['policy_parts']['projection']['async_projection'] and self.results[sid][
+            'projection_state'
+        ] in {'persisted', 'ready'}:
+            self.results[sid]['projection_finish_due_at'] = -1.0
+            return True
+        return False
 
     def defer_finish(self, sid, state, now):
         """Mirrors ProjectionStore.defer_finish: fence on the row's own state."""

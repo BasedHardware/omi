@@ -40,7 +40,7 @@ class ProjectionDiscovery:
         # ordering (and therefore the cursor) to the row's next-attempt clock.
         self.due_mode = False
 
-    def next(self, limit: int = 100, due_before: float | None = None) -> list[str]:
+    def next(self, limit: int = 100, due_before: float | None = None, *, exclude_async: bool = False) -> list[str]:
         due_mode = due_before is not None
         if due_mode != self.due_mode:
             # A cursor from one ordering is meaningless in the other.
@@ -48,6 +48,8 @@ class ProjectionDiscovery:
         scope: dict[str, object] = {} if self.states is None else {'states': self.states}
         if due_mode:
             scope['due_before'] = due_before
+        if exclude_async:
+            scope['exclude_async'] = True
         if not projection_pagination_enabled():
             self.after = None
             self.seeded = True
@@ -62,7 +64,7 @@ class ProjectionDiscovery:
             if head is not None:
                 oldest = float(head[0])
                 # A timestamp-only cursor includes every tie at the lower bound.
-                ceiling = float(due_before) if due_mode else time.time()
+                ceiling = min(float(due_before), time.time()) if due_mode else time.time()
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
         recent_on = self.recent and not due_mode and projection_recent_discovery_seconds() > 0

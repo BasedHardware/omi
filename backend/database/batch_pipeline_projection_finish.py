@@ -19,18 +19,24 @@ from google.cloud import firestore
 
 PROJECTION_FINISH_DUE_FIELD = 'projection_finish_due_at'
 PROJECTION_FINISH_STEP_FIELD = 'projection_finish_backoff_step'
+# Below every real due clock. Legacy queries still see it on rollback.
+PROJECTION_FINISH_ASYNC_CLOCK = -1.0
 # The page that this clock bounds. Assignment keeps its own pending-only page.
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 
-def projection_finish_state_fields(state: str | None, now: float) -> dict:
+def projection_finish_state_fields(state: str | None, now: float, *, async_projection: bool = False) -> dict:
     """Patch fields for a state move: due now in a finish state, retired otherwise.
 
-    A row that enters a finish state must carry a clock at once: the filtered
-    page cannot see a row without one, so deferring that write would strand it.
+    Every finish state carries a clock. Async policy uses an excluded negative
+    hint; the independent follow-up outbox still discovers the receipt. The
+    default keeps callers without a pinned policy due for classification.
     """
     if state in PROJECTION_FINISH_STATES:
-        return {PROJECTION_FINISH_DUE_FIELD: now, PROJECTION_FINISH_STEP_FIELD: 0}
+        return {
+            PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK if async_projection else now,
+            PROJECTION_FINISH_STEP_FIELD: 0,
+        }
     return {
         PROJECTION_FINISH_DUE_FIELD: firestore.DELETE_FIELD,
         PROJECTION_FINISH_STEP_FIELD: firestore.DELETE_FIELD,
