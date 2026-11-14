@@ -540,6 +540,7 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1299,6 +1300,7 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
@@ -1651,6 +1653,10 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH: {value: '1', category: reliability}
+          BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: ops_kill}
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED: {value: 'off', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.

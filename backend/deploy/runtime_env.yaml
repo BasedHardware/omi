@@ -3683,6 +3683,9 @@ environments:
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -4602,6 +4605,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5004,6 +5010,15 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH:
+              value: '1'
+              category: reliability
+            BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill

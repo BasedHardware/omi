@@ -14,6 +14,15 @@ Keep it out of deployment defaults and use the
 one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
+SCA-2185 persists the production operator overrides across service rolls:
+finish backoff is explicitly on for backend and backfill, explicitly off for
+integration, and absent on sync and dev. Integration also pins merge catch-up
+depth 1, provider merge membership on, and contained donor merge off. This
+supersedes SCA-1993's next-roll backoff removal policy. Rollback uses the same
+overlay: finish backoff and provider membership accept `false`; donor merge
+remains `off`. The separately reviewed Train 1 Firestore lever literals remain
+authoritative; a pre-Train 1 serving read must not overwrite them with reset values.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
