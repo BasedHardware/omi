@@ -4,7 +4,10 @@ This branch is **incomplete**. It is not an enforcement, migration, cutover,
 reverse certificate, staging-sizing receipt, serving acceptance or savings claim.
 Source delivery books $0. Continue all fixes on `sca-1697-d-g2-dark`; no second D writer.
 
-Base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (current origin/main at checkout).
+Original base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (origin/main at checkout).
+Current main `e2c4d62a05ba9f8e45ef0473234902b2d7e48487` was merged without
+history rewriting to resolve overlapping collection-budget registrations; both
+the existing fresh-guard budget and D projection budget are retained.
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
 The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4,
@@ -22,7 +25,9 @@ The ordinary provider admission/terminal continuation is inventoried in
 typed Units and seals full-recording completion atomically. An explicitly
 injected recording view now invokes the real customer assignment/usage/ledger
 transactions with a same-transaction receipt and grouped PG acknowledgement.
-Production runners, retained-copy cleanup/purge and paid dispatch remain gates. This
+The actual paid POST seam also accepts the explicit original-attempt FenceTicket.
+Production runners, retained-copy cleanup/purge, object publication and full paid
+cohort/funding qualification remain gates. This
 reduces the first P1's admission/completion gap without closing that P1.
 
 ## Implemented surface
@@ -95,15 +100,17 @@ reduces the first P1's admission/completion gap without closing that P1.
 
 1. All FS queue writer entry points must install the explicit authority binding.
    The handoff protocol and ordinary GPU FS intent adapter now execute locally,
-   but the production Scheduler/typed admission, terminal-result sealing and
-   grouped existing ProjectionStore adapters are not wired. Callback tests are
-   not evidence that the complete production customer projection is qualified.
-   Native/partial/provider/coalesced admissions explicitly refuse the generic
-   adapter. Terminal custody cleanup needs the accepted per-record retention
+   but production Scheduler/runtime selection and remaining cohort adapters are
+   not installed. Ordinary typed provider admission, terminal sealing, customer
+   ProjectionStore and original-attempt POST adapters execute locally through
+   concrete production seams. Native/partial/coalesced/recovery adapters still
+   refuse; callback tests cannot qualify those cohorts. Terminal custody cleanup needs the accepted per-record retention
    manifest; no new indefinite terminal lifetime is authorized. Unknown
    shared/control/GPU owner bindings fail closed in the registered PG namespace.
-2. Production provider/vector/push/outbox/GCS FenceTicket adapters, H-25 dispatch
-   lint and the real C4 sticky terminal-session adapter remain unwired. The
+2. The ordinary original-vendor provider POST seam binds a real FenceTicket;
+   production runner/funding/failover qualification, vector/push/outbox/GCS
+   adapters, H-25 dispatch lint and the real C4 terminal-session adapter remain
+   unwired. The
    registry test's synthetic sink is not evidence that a real sink rejects bytes.
 3. Mode-independent account/conversation purge across retained copies, journal
    and cold FS, purge-generation chunk binding, destructive-unit lost-COMMIT

@@ -19,8 +19,8 @@ from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 MISSING = [
-    'all-writer FS mutation fence and cross-store admission intent/completion projection/ack integration',
-    'production provider/outbox/vector/push FenceTicket dispatch wiring and H-25',
+    'all-writer runtime FS mutation binding and native/partial/coalesced/recovery cross-store cohort integration',
+    'production runner/funding/failover qualification and outbox/vector/push FenceTicket wiring/H-25',
     'real C4 GCS terminal-session adapter (local registry custody test is not a sink proof)',
     'mode-independent retained-copy purge and remote destructive-unit lost-COMMIT/takeover proof',
     'conditional Firestore reverse sink adapter, final parity certificate and certified reverse-open edge',
