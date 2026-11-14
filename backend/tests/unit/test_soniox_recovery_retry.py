@@ -14,6 +14,9 @@ from utils.stt import soniox_batch as module
 def configured(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
+    # These tests exercise provider retries; billing observation has its own
+    # contract suite and must not initialize serving clients here.
+    monkeypatch.setenv('STT_FREE_ALLOWANCE_WATCH_ENABLED', 'false')
 
 
 def provider(stage, failures, status=503):

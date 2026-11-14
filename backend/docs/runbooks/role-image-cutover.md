@@ -20,7 +20,9 @@ images. Nothing deploys them until a deploy opts a service in.
 `service_images` is a `gcp_backend.yml` dispatch input (and a
 `deploy-backend-stack` input). **Blank, the default, deploys exactly what ships
 today**: every Cloud Run service and listen runs `gcr.io/<project>/backend:<sha7>`,
-the gateway `llm-gateway:<sha7>`. Merging B2 changed no deploy.
+the gateway `llm-gateway:<sha7>`. With an explicit `services` selector, only the
+selected Cloud Run services deploy; `service_images` cannot name an unselected
+service. See [per-service deploy and rollback](backend-service-deploy.md).
 
 To opt in, pass space- or comma-separated `service=<ref>` pairs, using the
 digests the build-only run of the **same** `release_sha` printed:
@@ -41,7 +43,10 @@ carrying that role's `OMI_ROLE`. The release-vector verifier then expects each
 moved service at its digest (`--service-image`) and every other service at the
 fat image, and records the per-service refs in its evidence.
 
-Rollback: redeploy with `service_images` blank (or omit the service). The fat
+Rollback to the fat image: redeploy with `service_images` blank (or omit the
+image override), retaining the same `services` selection. For an immediate
+traffic rollback, restore that service's prior revision as described in the
+[per-service runbook](backend-service-deploy.md). The fat
 image of the same SHA is still built and pushed by every deploy.
 
 ## B3 cutover order (lead-owned deploys)

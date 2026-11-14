@@ -174,6 +174,8 @@ def observe_unbound(uid: str | None, path: str, provider: Any, seconds: float = 
 
 def observe_request(path: str, provider: str, seconds: float = 0) -> None:
     """For synchronous provider clients; authentication context crosses executors."""
+    if not enabled():
+        return
     try:
         from utils.byok import get_byok_uid
         from utils.stt_cap_dispatch import customer_funded

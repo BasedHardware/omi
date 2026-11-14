@@ -1,6 +1,7 @@
 """Watch rollout cannot change admission; strict reads never synthesize zero."""
 
 from datetime import datetime, timezone
+import builtins
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -100,6 +101,26 @@ def test_observation_kill_switch_avoids_io(policy, monkeypatch):
     monkeypatch.setenv('STT_FREE_ALLOWANCE_WATCH_ENABLED', 'false')
     assert watch.observe('u', 'live_open', 'soniox') is None
     users.get_user_valid_subscription.assert_not_called()
+
+
+@pytest.mark.parametrize('value', ['false', '0', 'off', 'no'])
+def test_disabled_sync_watch_avoids_identity_and_billing_imports(monkeypatch, value):
+    monkeypatch.setenv('STT_FREE_ALLOWANCE_WATCH_ENABLED', value)
+    imported = []
+    original_import = builtins.__import__
+
+    def record_import(name, *args, **kwargs):
+        if name in {'utils.byok', 'utils.stt_cap_dispatch', 'utils.stt.allowance_session'}:
+            imported.append(name)
+            raise AssertionError('disabled observer must not load serving dependencies')
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', record_import)
+    warning = Mock()
+    monkeypatch.setattr(watch.logger, 'warning', warning)
+    assert watch.observe_request('prerecorded', 'soniox', 5) is None
+    assert imported == []
+    warning.assert_not_called()
 
 
 @pytest.fixture
