@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from config.episodes import home_transcription_deadline_seconds, home_transcription_presentation_gate_enabled
 from database import conversations
 from routers import conversations as routes
+from utils.batch_pipeline.live_projection import replace_record
 from utils.conversations import home_step, transcribing_hold
 from utils.episodes import home_membership
 from utils.developer_item_reads import read_conversation_item
@@ -231,13 +232,30 @@ def test_mcp_rest_detail_uses_same_title(monkeypatch):
 
 
 def test_stamped_capture_remains_completed_for_batch_replacement():
-    from tests.unit.test_batch_pipeline_live import recording, incoming
-    from utils.batch_pipeline.live_projection import replace_record
-
-    raw = recording(transcript_segments=[], structured={'title': ''})
-    raw.update(home_transcription_pending_at=NOW, home_transcription_deadline_at=NOW + timedelta(hours=2))
+    # This presentation test needs a stamped row, not the batch suite's import graph.
+    raw = capture(
+        started_at=datetime.fromtimestamp(100, timezone.utc),
+        finished_at=datetime.fromtimestamp(102, timezone.utc),
+        data_protection_level='standard',
+    )
+    incoming = {
+        'started_at': raw['started_at'],
+        'transcript_segments': [
+            {
+                'id': 'new',
+                'text': 'Synthetic speech.',
+                'start': 0,
+                'end': 2,
+                'speaker_id': 0,
+                'speaker': 'SPEAKER_00',
+                'speaker_id_scope': 'final:batch:unit',
+                'is_user': False,
+                'speaker_match_source': 'batch_pyannote',
+            }
+        ],
+    }
     assert transcribing_hold.project(raw)['status'] == 'processing'
-    result, _ = replace_record(raw, incoming(), {'start': 100, 'end': 102})
+    result, _ = replace_record(raw, incoming, {'start': 100, 'end': 102})
     assert result['status'] == 'completed'
     assert result['transcript_segments'][0]['text'] == 'Synthetic speech.'
     assert transcribing_hold.project(result) is result
