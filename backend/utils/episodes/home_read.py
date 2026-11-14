@@ -14,12 +14,14 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations.transcribing_hold import transcription_presentation
+from utils.conversations import transcribing_hold
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
+    home_step_projection_enabled,
+    home_transcription_queue_hold_enabled,
     HOME_IDLE_CLOSES_PER_READ,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
@@ -454,6 +456,7 @@ def project_episode(
         episode.get('duplicate_conversation_ids') or []
     )
     retained: list[dict[str, Any]] = []
+    transcription_states: list[str] = []
     hidden = 0
     now = datetime.now(timezone.utc)
     zone = user_zone_provider(uid)
@@ -494,11 +497,14 @@ def project_episode(
         finished = row.get('finished_at')
         deadline = utc(row.get('episode_transcription_deadline_at'))
         if deadline is not None and not row.get('record_projection_revision'):
+            deadline = transcribing_hold.deadline(row, prefix='episode_transcription')
             overdue = now >= deadline
-            failed = (
-                row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
+            title, status = transcribing_hold.transcription_presentation(
+                deadline, failed=transcribing_hold.failed(row), now=now
             )
-            title, status = transcription_presentation(deadline, failed=bool(failed), now=now)
+            transcription_states.append(status)
+            if home_transcription_queue_hold_enabled() and home_step_projection_enabled():
+                step = home_step_projection.FAILED if status == 'failed' else home_step_projection.TRANSCRIBING
             # Audio bounds remain truthful even when finalization never filled its clocks.
             for key, value in (
                 ('start', row.get('server_batch_audio_start')),
@@ -549,4 +555,8 @@ def project_episode(
             if not item.get('conversation_id') or item.get('conversation_id') in ids
         ],
     )
+    if home_transcription_queue_hold_enabled() and len(transcription_states) == len(retained):
+        # An episode made entirely of pending captures shares their presentation,
+        # including its page title, without persisting an outage-era failure title.
+        wire['title'] = 'Transcribing…' if 'processing' in transcription_states else "Couldn't transcribe"
     return wire

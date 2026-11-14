@@ -45,6 +45,8 @@ HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV = 'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'
+DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS = 86400
 HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
 HOME_EMPTY_OUTPUT_NOISE_ENV = 'HOME_EMPTY_OUTPUT_NOISE'
 HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
@@ -144,6 +146,20 @@ def home_processing_max_age_seconds() -> int | None:
 def home_transcription_presentation_gate_enabled() -> bool:
     """Default-on batch transcription presentation; off restores stored status/title."""
     return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_queue_hold_enabled() -> bool:
+    """Keep queued captures transcribing up to the read-time bound; off restores stamped deadlines."""
+    return modes_default_on(HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV)
+
+
+def home_transcription_max_age_seconds() -> int:
+    """24h from capture end; invalid/nonpositive values cannot remove the lost-capture bound."""
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_MAX_AGE_SECONDS', str(DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS)))
+    except ValueError:
+        return DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+    return seconds if seconds > 0 else DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
 
 
 def home_transcription_deadline_seconds() -> int:

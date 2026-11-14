@@ -44,6 +44,16 @@ def _catalog(monkeypatch):
     monkeypatch.setattr(ms, '_plan_definitions', lambda: DEFINITIONS)
 
 
+@pytest.fixture(scope='module', autouse=True)
+def _switch_dependencies():
+    # switch() lazily imports billing recovery, which imports the subscription
+    # stack. Load that shared dependency in setup so the first operation's CPU
+    # budget measures switching, just like every later switching test.
+    from utils.billing_recovery import payment_issue_from_stripe
+
+    return payment_issue_from_stripe
+
+
 def _sub(price_id=NEO_YEARLY, **over):
     sub = {
         'id': 'sub_1',
