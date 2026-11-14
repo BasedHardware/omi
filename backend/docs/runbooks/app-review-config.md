@@ -42,35 +42,53 @@ submission (with at most five minutes of future clock skew); replaying an old
 receipt cannot create a fresh lease. Repeated receipts for an active lease do
 not extend its expiry.
 
-## Activation order after merge
+## Activation prerequisites and order
 
-Keep this order as a hard precondition: the Codemagic token must not be added
-until the scheduler is enabled and a successful sweep tick has completed.
+The scheduler remains `lifecycle: planned` and GCP `PAUSED` through source
+repair, review, merge, and deployment. Merging either PR does not authorize
+activation. Before any separately authorized activation, the stacked parent
+PR #25123 must land before child PR #25131, and the child's final repaired code
+must be merged and deployed. Confirm that deployed child code preserves all of
+these behaviors: held Android releases are written as drafts; a fresh receipt
+renews an expired lease; reconciliation repairs a missing receipt on first
+sight without reviving an expired tombstone; unavailable and rejected
+submission tokens reach the real paging rule; and the rollout brake proves
+Cloud Scheduler is `PAUSED` with no active writer runs. Use the child
+regressions and deployment receipts for this check. Do not use a successful
+parent-only check as evidence for these child gates.
 
-1. Create the App Store Connect and Play credentials above and grant the scoped
-   Secret Manager bindings. Deploy the backend revision containing the
-   submission and sweep routes. Confirm `/v2/app-review-config/sweep` is mounted
-   on `backend-sync`.
-2. Verify the Play role against a staging app before production activation: use
-   the same service-account role to create a temporary edit, read its
-   production track, and delete the edit without committing it. If any step is
-   denied, determine the narrowest app-scoped role that passes this probe; do
-   not activate Play polling based on an assumed view-only permission.
-3. In a reviewed scheduler-manifest change, remove `lifecycle: planned` and set
-   `state: ENABLED` on `app-review-config-sweep-hourly`. The job runs at minute
-   17, away from the rollout-watch and daily-train edit windows. Apply it using
-   the existing `gcp_scheduler_reconcile.yml` workflow with typed
-   `APPLY_PROD_SCHEDULER` confirmation. Confirm a successful route response and
-   an advancing `last_sweep_timestamp` before continuing. With missing store
-   credentials the sweep still enforces TTL, but it reports a credential alert.
-4. Only after that successful tick, create the submission-token secret and add
-   its value to the pre-created Codemagic group. Verify the group remains
+After those release gates pass, and only under separate activation
+authorization, use this order. The submission and sweep routes run on
+`backend-sync` under `backend-runtime`; do not grant the `backend-listen`
+identity access for them.
+
+1. Create the App Store Connect and Play secrets above and grant only the
+   scoped Secret Manager bindings to `backend-runtime`. Deploy the final
+   stacked backend revision and confirm both routes are mounted on
+   `backend-sync`.
+2. Verify the Play role against a staging app: create a temporary edit, read
+   its production track, and delete the edit without committing it. If a step
+   is denied, establish the narrowest app-scoped role that passes before
+   enabling store polling.
+3. Verify the deployed metric scrape and alert path, including
+   `submission_token_unavailable` and `submission_token_rejected`, and retain
+   the successful child brake-quiescence receipt.
+4. In a separately reviewed scheduler-manifest change, remove
+   `lifecycle: planned` and set `state: ENABLED` on
+   `app-review-config-sweep-hourly`. The job runs at minute 17, away from the
+   rollout-watch and daily-train edit windows. Apply it with the existing
+   `gcp_scheduler_reconcile.yml` workflow and typed
+   `APPLY_PROD_SCHEDULER` confirmation. Confirm a successful route response
+   and advancing `last_sweep_timestamp`. With missing store credentials, the
+   sweep still enforces TTL and reports a credential alert.
+5. After the first successful sweep tick, create the submission-token secret
+   and add its value to the pre-created Codemagic group. Verify the group is
    attached only to `mobile-store-promote` and `mobile-daily-train`. The hook
-   endpoint can be pointed at staging with `APP_REVIEW_CONFIG_ENDPOINT` or
-   `--endpoint` during validation.
-5. Enable the `App Review Config - sweep silent` Grafana rule after the first
-   successful tick. The paging rule fires only for unavailable credentials or
-   store API errors; routine reconciliation repairs and live clears do not page.
+   can target staging with `APP_REVIEW_CONFIG_ENDPOINT` or `--endpoint`.
+6. Enable the `App Review Config - sweep silent` Grafana rule after the first
+   successful tick. Confirm that the paging rule covers credential, store API,
+   and submission-token failures; routine reconciliation repairs and live
+   clears do not page.
 
 ## Monitoring and TTL-only fallback
 

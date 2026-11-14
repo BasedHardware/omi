@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import google.auth
+from google.oauth2.service_account import Credentials
 import jwt
 import requests
 from google.auth.transport.requests import AuthorizedSession
@@ -436,8 +437,6 @@ def _play_production_codes() -> set[str]:
     session: Any = None
     try:
         raw = json.loads(load_secret(SECRET_NAMES['play']))
-        from google.oauth2.service_account import Credentials
-
         credentials = Credentials.from_service_account_info(
             raw, scopes=['https://www.googleapis.com/auth/androidpublisher']
         )

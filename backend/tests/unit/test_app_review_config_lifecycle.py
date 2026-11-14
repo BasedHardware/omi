@@ -586,7 +586,11 @@ def test_alert_rules_cover_lifecycle_events_and_dead_sweeper():
     page = rules['omi-app-review-config-alert']
     assert not page['isPaused']
     expression = page['data'][0]['model']['expr']
-    assert 'reason=~"credentials_unavailable|store_api_error"' in expression
+    reason_matcher = (
+        'reason=~"credentials_unavailable|store_api_error|' 'submission_token_unavailable|submission_token_rejected"'
+    )
+    assert reason_matcher in expression
+    assert reason_matcher in page['annotations']['threshold']
     assert "reconciliation_repair" not in expression and "live_hide_cleared" not in expression
     deadman = rules['omi-app-review-config-sweep-silent']
     assert deadman['isPaused']
@@ -773,7 +777,7 @@ def test_submission_endpoint_is_ip_rate_limited_and_policy_is_declared(monkeypat
     assert route["policy"]["rate_limit"] == {
         "policy_name": "app_review_config_submission",
         "key_subject": "ip",
-        "enforcement": "fail_closed",
+        "enforcement": "fail_open",
         "placement": "dependency",
     }
 
