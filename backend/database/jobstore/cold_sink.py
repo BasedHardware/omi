@@ -59,7 +59,7 @@ class ColdSink:
         return self.handoff.ref('cold_recording_erasure', identity)
 
     def _context(self, row):
-        seq, epoch, family, identity, operation, owner, body = row
+        seq, epoch, family, identity, operation, owner, _body = row
         if epoch != self.handoff.ticket.value or operation not in {'put', 'delete'}:
             raise AuthorityRefused('cold source epoch/operation refused')
         with self.handoff.pool.connection(timeout=2) as conn, conn.transaction():
