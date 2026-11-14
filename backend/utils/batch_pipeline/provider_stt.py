@@ -1067,7 +1067,7 @@ class ProviderSttStage:
         if settled:
             vendor_metrics.attempt(plan.service, outcome, 0.0 if silence else duration)
             vendor_metrics.overflow_attempt(route, plan.service, 0.0 if silence else duration)
-            if plan.skip_vendor and plan.inspected and plan.inspected[2]:
+            if silence and plan.skip_vendor and plan.inspected and plan.inspected[2]:
                 vendor_metrics.short_speech_skip(plan.service, duration)
             if not silence:
                 self._record_attempt(plan.service, outcome, latency)
@@ -1194,6 +1194,10 @@ class ProviderSttStage:
                 vendor_metrics.late_result(intent['service'], 'reconciled')
                 # A billed result saved before a failed settle is still overflow spend.
                 vendor_metrics.overflow_attempt(route, intent['service'], 0.0 if silence else item.duration_seconds)
+                if intent.get('vendor_skipped') and (intent.get('measured_vad_speech_seconds') or 0) > 0:
+                    # A short-speech skip whose silence result was saved before its settle failed:
+                    # count the unbilled audio once, as the direct and abandoned-intent paths do.
+                    vendor_metrics.short_speech_skip(intent['service'], item.duration_seconds)
             return UnitOutcome('done', 'processed' if settled else 'superseded')
         if self.clock() - intent['started_at'] > ABANDON_SECONDS and _vendor_skipped(intent):
             return self._settle_skipped_silence(segment_id, intent, item, route)

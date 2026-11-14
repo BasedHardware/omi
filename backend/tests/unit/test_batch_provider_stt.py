@@ -1526,6 +1526,25 @@ def test_an_abandoned_short_speech_intent_counts_the_skipped_audio(world, monkey
     assert _sample(name, {'provider': 'modulate'}) - before == pytest.approx(5.0)
 
 
+def test_a_reconciled_saved_short_speech_skip_counts_the_skipped_audio(world, monkeypatch):
+    # The silence result was saved but its settle never ran, so redelivery reconciles the saved
+    # object: that path must count the unbilled audio too, exactly once.
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    name = 'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'
+    before = _sample(name, {'provider': 'modulate'})
+    artifacts.fail_persist = True
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1').outcome == 'retry'
+    assert vendor.calls == 0 and _sample(name, {'provider': 'modulate'}) == before
+    artifacts.fail_persist = False
+    token = job(store, 'p1')['provider_intent']['token']
+    artifacts.results[f'gs://synthetic/results/p1/{token}.enc'] = provider_stt.silence_payload(5.0)
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH, now=310.0).run('p1').reason == 'processed'
+    assert vendor.calls == 0
+    assert _sample(name, {'provider': 'modulate'}) - before == pytest.approx(5.0)
+
+
 def test_a_burst_of_abandoned_silent_intents_never_opens_a_healthy_vendors_breaker(world, monkeypatch):
     # lead2 ccadcc: five or more silent units whose silence saves failed, reconciled within five
     # minutes, used to record five ABANDONED vendor failures and could open Modulate's breaker.
