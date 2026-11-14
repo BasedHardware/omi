@@ -127,9 +127,19 @@ def observe_admitted(uid: str, conversation: dict, *, now=None) -> bool:
         return False
     try:
         from database import pipeline_ledger
+        from database._client import get_firestore_client
 
+        client = get_firestore_client()
+        owner_ref = client.collection('users').document(uid)
+        source_ref = owner_ref.collection('conversations').document(capture_id)
         return pipeline_ledger.advance(
-            uid, capture_id, pipeline_ledger.CAPTURING, now=time.time() if now is None else now
+            uid,
+            capture_id,
+            pipeline_ledger.CAPTURING,
+            now=time.time() if now is None else now,
+            source_ref=source_ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
         )
     except Exception as error:  # The real admission is already authoritative.
         logger.warning('event=batch_live_ledger outcome=error stage=capturing exception_type=%s', type(error).__name__)
