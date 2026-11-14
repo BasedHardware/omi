@@ -177,8 +177,12 @@ class PostgresTransaction:
     def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
         state = "AND state = 'result_ready' " if ready else ''
         row = self.conn.execute(
-            "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-            f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1",
+            sql()
+            .SQL(
+                "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                "AND doc->'fresh_capture' = 'true'::jsonb {}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1"
+            )
+            .format(sql().SQL(state)),
             (self.store.namespace, owner_key),
         ).fetchone()
         return self._locked_query_row(*row) if row else None
@@ -259,7 +263,7 @@ class PostgresStore:
                 try:
                     with conn.transaction():
                         conn.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
-                        conn.execute(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
+                        conn.execute(sql().SQL('SET LOCAL lock_timeout = {}').format(sql().Literal(LOCK_TIMEOUT)))
                         view = PostgresTransaction(self, conn)
                         result = body(view)
                         view.flush()
@@ -345,8 +349,12 @@ class PostgresStore:
             params += (list(MERGE_POLL_TERMINAL_STATES),)
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                sql()
+                .SQL(
+                    "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                    "AND doc->'fresh_capture' = 'true'::jsonb {}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s"
+                )
+                .format(sql().SQL(state)),
                 (*params, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -393,14 +401,20 @@ class PostgresStore:
         """The owner's result committed directly after ``previous``; two matches fail closed (a hint)."""
         # Firestore equality on None matches an explicit null only, never a missing field.
         previous_match = (
-            "doc->'previous_segment_id' = 'null'::jsonb"
+            sql().SQL("doc->'previous_segment_id' = 'null'::jsonb")
             if previous is None
-            else ("doc->>'previous_segment_id' = %(previous)s AND jsonb_typeof(doc->'previous_segment_id') = 'string'")
+            else sql().SQL(
+                "doc->>'previous_segment_id' = %(previous)s AND jsonb_typeof(doc->'previous_segment_id') = 'string'"
+            )
         )
         with self._read_conn() as conn:
             rows = conn.execute(
-                f"SELECT key FROM results WHERE namespace = %(ns)s AND doc->>'owner_key' = %(owner)s "
-                f'AND {previous_match} ORDER BY key COLLATE "C" LIMIT 2',
+                sql()
+                .SQL(
+                    "SELECT key FROM results WHERE namespace = %(ns)s AND doc->>'owner_key' = %(owner)s "
+                    'AND {} ORDER BY key COLLATE "C" LIMIT 2'
+                )
+                .format(previous_match),
                 {'ns': self.namespace, 'owner': owner_key, 'previous': previous},
             ).fetchall()
         return rows[0][0] if len(rows) == 1 else None
@@ -551,26 +565,39 @@ class PostgresStore:
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
         size = max(1, min(limit, 200))
-        columns = ['committed_at', 'key COLLATE "C"']
-        fields, clauses = 'key, committed_at', ['committed_at IS NOT NULL']
+        psycopg_sql = sql()
+        columns = [psycopg_sql.Identifier('committed_at'), psycopg_sql.SQL('key COLLATE "C"')]
+        fields = [psycopg_sql.Identifier('key'), psycopg_sql.Identifier('committed_at')]
+        clauses = [psycopg_sql.SQL('committed_at IS NOT NULL')]
         params: list[Any] = [self.namespace, list(states)]
         if due_before is not None:
-            due = "(doc->>'projection_finish_due_at')::float8"
+            due = psycopg_sql.SQL("(doc->>'projection_finish_due_at')::float8")
             columns.insert(0, due)
-            fields += f', {due}'
-            clauses.append(f'{due} <= %s')
+            fields.append(due)
+            clauses.append(psycopg_sql.SQL('{} <= %s').format(due))
             params.append(float(due_before))
         if after is not None:
             if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
-                clauses.append(f'{columns[0]} >= %s')
+                clauses.append(psycopg_sql.SQL('{} >= %s').format(columns[0]))
                 params.append(after[0])
             else:
-                clauses.append(f'({", ".join(columns)}) > ({", ".join(["%s"] * len(columns))})')
+                clauses.append(
+                    psycopg_sql.SQL('({}) > ({})').format(
+                        psycopg_sql.SQL(', ').join(columns),
+                        psycopg_sql.SQL(', ').join([psycopg_sql.Placeholder()] * len(columns)),
+                    )
+                )
                 params.extend(after)
         with self._read_conn() as conn:
             rows = conn.execute(
-                f'SELECT {fields} FROM results WHERE namespace = %s AND projection_state = ANY(%s) '
-                f'AND {" AND ".join(clauses)} ORDER BY {", ".join(columns)} LIMIT %s',
+                psycopg_sql.SQL(
+                    'SELECT {} FROM results WHERE namespace = %s AND projection_state = ANY(%s) '
+                    'AND {} ORDER BY {} LIMIT %s'
+                ).format(
+                    psycopg_sql.SQL(', ').join(fields),
+                    psycopg_sql.SQL(' AND ').join(clauses),
+                    psycopg_sql.SQL(', ').join(columns),
+                ),
                 (*params, size),
             ).fetchall()
         cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
@@ -587,18 +614,16 @@ class PostgresStore:
             raise RuntimeError(f'{table} documents live in Firestore; Postgres holds them only in harness mode (A4)')
 
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
-        suffix = ' FOR UPDATE' if lock else ''
         if table in _TYPED:
-            psycopg_sql = sql()
-            query = psycopg_sql.SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s{}').format(
-                psycopg_sql.Identifier(table), psycopg_sql.SQL(suffix)
-            )
+            query = sql().SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s').format(sql().Identifier(table))
+            if lock:
+                query = query + sql().SQL(' FOR UPDATE')
             row = conn.execute(query, (self.namespace, key))
         else:
-            row = conn.execute(
-                f'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s{suffix}',
-                (self.namespace, table, key),
-            )
+            query = sql().SQL('SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s')
+            if lock:
+                query = query + sql().SQL(' FOR UPDATE')
+            row = conn.execute(query, (self.namespace, table, key))
         found = row.fetchone()
         return found[0] if found else {}
 
@@ -615,8 +640,12 @@ class PostgresStore:
             state = 'AND state <> ALL(%s) '
             params += (list(MERGE_POLL_TERMINAL_STATES),)
         return conn.execute(
-            f'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {state}'
-            'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
+            sql()
+            .SQL(
+                'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {}'
+                'ORDER BY capture_at, key COLLATE "C" LIMIT 1'
+            )
+            .format(sql().SQL(state)),
             params,
         ).fetchone()
 
