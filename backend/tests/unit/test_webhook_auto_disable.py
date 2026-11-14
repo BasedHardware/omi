@@ -263,6 +263,7 @@ class TestDevWebhookAutoDisable:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr("utils.webhooks.get_user_webhook_signing_db", MagicMock(return_value=None))
         monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
         monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
@@ -2112,6 +2113,7 @@ class TestDevWebhookIntegrationPaths:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr("utils.webhooks.get_user_webhook_signing_db", MagicMock(return_value=None))
         monkeypatch.setattr(socket, "getaddrinfo", lambda *_: [(2, 1, 6, "", ("8.8.8.8", 0))])
         monkeypatch.setattr(webhooks_module, "enqueue_dev_webhook_dlq", MagicMock())
 
