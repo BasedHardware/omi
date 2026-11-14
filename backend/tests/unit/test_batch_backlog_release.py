@@ -1,0 +1,248 @@
+"""Synthetic transactional meter and small multi-owner simulator regression."""
+
+from copy import deepcopy
+from unittest.mock import Mock
+
+import pytest
+from google.api_core.exceptions import Aborted, ServiceUnavailable
+
+from testing.pipeline_sim.store import CustomerData, SimStore
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction
+from utils.batch_pipeline import backlog_release as gate
+from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.scheduler import owner_key
+
+NOW = 100_000.0
+METER = 'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED'
+RELEASE = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
+
+
+@pytest.fixture(autouse=True)
+def switches(monkeypatch):
+    for name in (METER, RELEASE):
+        monkeypatch.delenv(name, raising=False)
+
+
+def put(store, table, key, row):
+    store.run(lambda tx: tx.put(table, key, row))
+
+
+def ready(store, name, *, owner='synthetic', fresh=False, capture=1000):
+    row = dict(
+        segment_id=name,
+        owner_id=owner,
+        owner_key=owner_key(owner),
+        capture_at=capture,
+        duration_seconds=10,
+        protocol_version=1,
+        merge_pending=True,
+        state='result_ready',
+        ready_at=NOW,
+        fresh_capture=fresh,
+        stt_route={'stt_route': 'provider'},
+        result={},
+    )
+    put(store, 'jobs', name, row)
+
+
+def opened(store, now=NOW):
+    row = dict(state='open', rate_per_hour=2, reach_seconds=0, window=int(now // 3600), tokens_used=0, updated_at=now)
+    put(store, 'backlog_release', 'gate', row)
+
+
+def merge(store, now=NOW, owner='synthetic', depth=0):
+    return OrderedMerge(store, catch_up_depth=depth).commit_next(owner, now)
+
+
+def tokens(store):
+    return store.run(lambda tx: tx.get('backlog_release', 'gate'))['tokens_used']
+
+
+def test_rate_fresh_is_free_and_rollover(monkeypatch):
+    store = MemoryStore()
+    for name in ('a', 'b', 'c'):
+        ready(store, name)
+    opened(store)
+    for name in ('a', 'b'):
+        assert merge(store)['segment_id'] == name
+        assert store.rows['results', name]['backlog_release'] is True
+    refused = Mock()
+    monkeypatch.setattr(gate, 'REFUSED', refused)
+    assert merge(store) is None and tokens(store) == 2
+    refused.labels.assert_called_with('rate')
+    ready(store, 'f', fresh=True)
+    get = MemoryTransaction.get
+
+    def no_gate(tx, table, key):
+        assert table != 'backlog_release'
+        return get(tx, table, key)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(MemoryTransaction, 'get', no_gate)
+        assert 'backlog_release' not in merge(store)
+    assert tokens(store) == 2
+    rollover = (int(NOW // 3600) + 1) * 3600.0
+    row = store.rows['backlog_release', 'gate']
+    put(store, 'backlog_release', 'gate', {**row, 'updated_at': rollover})
+    assert merge(store, rollover)['segment_id'] == 'c' and tokens(store) == 1
+
+
+@pytest.mark.parametrize(
+    'fields,reason',
+    [
+        (None, 'missing'),
+        ({'updated_at': NOW - 181}, 'stale'),
+        ({'updated_at': NOW - 180}, 'stale'),
+        ({'state': 'closed'}, 'closed'),
+        ({'rate_per_hour': 0}, 'rate'),
+        ({'reach_seconds': 100}, 'reach'),
+        ({'rate_per_hour': '2'}, 'closed'),
+    ],
+)
+def test_refusals_and_deploy_safety(fields, reason, monkeypatch):
+    store = MemoryStore()
+    ready(store, 'a')
+    if fields is not None:
+        opened(store)
+        store.rows['backlog_release', 'gate'].update(fields)
+    before = deepcopy(store.rows)
+    refused = Mock()
+    monkeypatch.setattr(gate, 'REFUSED', refused)
+    assert merge(store) is None and store.rows == before
+    refused.labels.assert_called_with(reason)
+    assert not any(table == 'merge_holds' for table, _ in store.rows)
+
+
+@pytest.mark.parametrize('release,expected', [('false', False), ('true', True), (None, True)])
+def test_override_and_reach(release, expected, monkeypatch):
+    store = MemoryStore()
+    ready(store, 'a', capture=NOW - 110)
+    opened(store)
+    store.rows['backlog_release', 'gate']['reach_seconds'] = 100
+    if release is not None:
+        monkeypatch.setenv(RELEASE, release)
+    assert bool(merge(store)) is expected  # End of capture is exactly at the reach boundary.
+
+
+def test_uncommittable_fresh_waits_while_backlog_uses_tokens(monkeypatch):
+    store = MemoryStore()
+    for name in ('a', 'f0', 'f1'):
+        ready(store, name, fresh=name != 'a', capture=1000 if name == 'a' else 90000)
+    store.rows['jobs', 'f0']['state'] = 'leased'
+    opened(store)
+    ordered = OrderedMerge(store, catch_up_depth=0, head_wait_seconds=60)
+    assert ordered.commit_next('synthetic', NOW)['segment_id'] == 'a' and tokens(store) == 1
+    monkeypatch.setattr(gate, 'read', Mock(side_effect=AssertionError('fresh must not touch gate')))
+    assert ordered.commit_next('synthetic', NOW + 60)['segment_id'] == 'f1'
+
+
+def test_depth_still_holds_without_a_marker():
+    store = MemoryStore()
+    ready(store, 'a')
+    ready(store, 'b')
+    opened(store)
+    assert merge(store, depth=1)
+    assert merge(store, depth=1) is None and tokens(store) == 1
+    assert not any(table == 'merge_holds' for table, _ in store.rows)
+
+
+@pytest.mark.parametrize('error_type', [ServiceUnavailable, Aborted])
+def test_read_error_fallback_and_fresh(error_type, monkeypatch, caplog):
+    store = MemoryStore()
+    ready(store, 'a')
+    get = MemoryTransaction.get
+
+    def fail(tx, table, key):
+        if table == 'backlog_release':
+            raise error_type('synthetic failure')
+        return get(tx, table, key)
+
+    monkeypatch.setattr(MemoryTransaction, 'get', fail)
+    fallback = Mock()
+    monkeypatch.setattr(gate, 'record_fallback', fallback)
+    if error_type is Aborted:
+        with pytest.raises(Aborted):
+            merge(store)
+        fallback.assert_not_called()
+    else:
+        assert merge(store) is None
+        fallback.assert_called_once()
+        assert (
+            'outcome=backlog_gate_unavailable source=ordered_merge exception_type=ServiceUnavailable count=1'
+            in caplog.text
+        )
+    ready(store, 'f', fresh=True)
+    assert merge(store)['segment_id'] == 'f'
+
+
+@pytest.mark.parametrize('retry', [False, True])
+def test_atomic_abort_and_retry(retry, monkeypatch):
+    customer = CustomerData()
+    customer.add_user('synthetic')
+    store = SimStore(customer)
+    ready(store, 'a')
+    opened(store)
+    run, injected = store.run, []
+
+    def wrapped(body):
+        def abort_once(tx):
+            result = body(tx)
+            if result and not injected:
+                injected.append(True)
+                raise Aborted('after computing token and buffering writes')
+            return result
+
+        try:
+            return run(abort_once)
+        except Aborted:
+            assert tokens_original() == 0
+            if not retry:
+                raise
+            return run(abort_once)
+
+    tokens_original = lambda: run(lambda tx: tx.get('backlog_release', 'gate'))['tokens_used']
+    monkeypatch.setattr(store, 'run', wrapped)
+    if retry:
+        assert merge(store)['backlog_release'] is True and tokens_original() == 1
+    else:
+        with pytest.raises(Aborted):
+            merge(store)
+        assert tokens_original() == 0 and ('results', 'a') not in store.rows
+
+
+@pytest.mark.parametrize('metered', [True, False])
+def test_simulated_flood_preserves_fresh_priority_and_hourly_cap(metered, monkeypatch):
+    monkeypatch.setenv(METER, str(metered).lower())
+    monkeypatch.setenv(RELEASE, 'true')
+    customer = CustomerData()
+    owners = [f'synthetic-{i}' for i in range(6)]
+    for owner in owners:
+        customer.add_user(owner)
+    store = SimStore(customer)
+    for owner in owners:
+        for n in range(8):
+            ready(store, f'{owner}-old-{n}', owner=owner, capture=n)
+    for hour in range(2):
+        now = NOW + 3600 * hour
+        opened(store, now)
+        released = 0
+        for turn in range(2):
+            for owner in owners:
+                fresh = f'{owner}-fresh-{hour}-{turn}'
+                ready(store, fresh, owner=owner, fresh=True, capture=now)
+                first = merge(store, now, owner, depth=1)
+                if not metered and first['segment_id'] != fresh:
+                    released += 1
+                    first = merge(store, now, owner, depth=1)
+                assert first['segment_id'] == fresh and 'backlog_release' not in first
+                key = owner_key(owner)
+                state = store.run(lambda tx: tx.get('owners', key))
+                put(store, 'owners', key, {**state, 'projection_watermark': fresh})
+                backlog = merge(store, now, owner, depth=1)
+                released += bool(backlog)
+                state = store.run(lambda tx: tx.get('owners', key))
+                put(
+                    store, 'owners', key, {**state, 'projection_watermark': backlog['segment_id'] if backlog else fresh}
+                )
+        assert released == (2 if metered else 24)
+        assert tokens(store) == (2 if metered else 0)

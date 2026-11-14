@@ -1,0 +1,17 @@
+# Metered provider backlog release
+
+Provider backlog release previously allowed every ready held row through when its legacy release switch was true, subject to the existing catch-up depth.
+The default-on `BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED` now requires an uncached gate read and hourly token increment inside the fresh-selection commit transaction. Fresh commits never read this document or spend tokens; provider backlog keeps capture order within its owner and still obeys catch-up depth. Missing, closed, stale (age at least 180 seconds), exhausted, out-of-reach or unreadable gates refuse backlog without a hold marker. Read failures record fallback telemetry; transaction contention propagates to the store retry. The result carries `backlog_release: true` only for a metered commit, and observed commits and bounded refusal reasons have count metrics. These process counters can undercount a lost reply or process exit; token accounting is durable.
+
+No gate is created by this change, so deployment with both switches unset releases nothing. An operator can open `{ns}_backlog_release/gate` (for example `batch_pipeline_prod_backlog_release/gate`) with these fields: `state: "open"`, `rate_per_hour: 2`, `reach_seconds: 86400`, `window: floor(now / 3600)`, `tokens_used: 0`, `updated_at: now` (epoch seconds, float). The operator must keep `updated_at` younger than 180 seconds without resetting current-hour tokens; merge token writes preserve that heartbeat. Reach uses the admission lag's capture end, `capture_at + duration_seconds`; zero or omitted reach is unlimited. A new epoch hour resets usage when the next row commits. Close with `state: "closed"`, rate zero, or the legacy release switch explicitly `false`.
+
+| Meter | Legacy provider release | Effect |
+| --- | --- | --- |
+| on/unset | unset/true | Gate document decides; absent means closed |
+| on/unset | false | Closed regardless of document |
+| false | true | Legacy unmetered behavior, including catch-up depth |
+| false | unset/false | Legacy backlog hold |
+
+This adds one transactional document read per backlog attempt and one write per released row, without cross-call caching or an index. With a ready held head and no fresh rows, the two transactions perform nine baseline document reads for a release, or seven for a gate refusal, plus up to two projection-watermark reads when depth is enabled. Those counts include minimum billing for empty fresh queries, exclude contention retries and commit-time privacy-fence reads, and exclude discovery's cursor and owner-query costs. A release writes result, job, owner and gate (four documents); a refusal writes none. An explicit false override skips the document read. A closed owner visit keeps the existing strict transaction and fresh gate queries, adding only the one document read. Collection budgets are planning bounds per environment, not measurements or enforced attempt limits.
+
+This does not add a controller, cache, operator script, newest-first ordering, projection policy or production configuration. Before opening a gate, the rollout owner must verify the commit-gate revision on every committing service. The off switch is `BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED=false`; disabling the meter returns enforcement to the legacy release switch.

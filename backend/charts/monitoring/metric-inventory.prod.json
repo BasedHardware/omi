@@ -2305,6 +2305,8 @@
     "workqueue_work_duration_seconds_sum"
   ],
   "declared_metrics": [
+    "omi_batch_pipeline_backlog_committed_total",
+    "omi_batch_pipeline_backlog_refused_total",
     "listen_finalization_byok_session_abandoned_last_24h",
     "listen_finalization_byok_session_abandoned_total",
     "listen_finalization_oldest_dead_letter_age_seconds",

@@ -39,6 +39,34 @@
       "basis": "planning-bound",
       "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "collection": "batch_pipeline_prod_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 86400, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope <=1 attempt/s/environment including settle wakes. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "collection": "batch_pipeline_prod_merge_discovery", "owner": "SCA-2015",
+      "unit": "maintenance cursor tick",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 4320, "basis": "planning-bound",
+      "source": "One cursor document read at 20s/tick/environment; ceiling/ready-owner queries and owner drains are separate existing query costs. See ready_discovery.py. Namespaced pattern: {ns}_merge_discovery via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "collection": "batch_pipeline_dev_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 86400, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope <=1 attempt/s/environment including settle wakes. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "collection": "batch_pipeline_dev_merge_discovery", "owner": "SCA-2015",
+      "unit": "maintenance cursor tick",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 4320, "basis": "planning-bound",
+      "source": "One cursor document read at 20s/tick/environment; ceiling/ready-owner queries and owner drains are separate existing query costs. See ready_discovery.py. Namespaced pattern: {ns}_merge_discovery via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
     }
   ],
   "dynamic": [
