@@ -74,8 +74,9 @@ class _Counter:
 
     ``queued`` counts operations staged into a batch; ``committed`` counts
     operations whose batch commit returned successfully. They are only equal
-    when every batch committed. ``failed_ops`` are queued operations that never
-    reached the service because their batch commit raised.
+    when every commit was acknowledged. ``failed_ops`` are queued operations
+    whose commit was not acknowledged; a transport error can leave the server
+    outcome unknown, so a post-run scan is still required.
     """
 
     def __init__(self) -> None:
@@ -312,11 +313,11 @@ def main() -> int:
         print('REFUSED: --project must name a Firestore project.', file=sys.stderr)
         return 2
 
-    if not fa._apps:
-        fa.initialize_app()
-    # Pin the client to the operator's selection instead of inheriting whatever
-    # project the ambient credentials happen to resolve to.
-    db: Any = fs.client(project=project)
+    # Firebase Admin binds Firestore's project through the App options; its
+    # firestore.client() API does not accept a project keyword. A named app also
+    # avoids inheriting an already-initialized default app's ambient project.
+    app = fa.initialize_app(options={'projectId': project}, name='agent-vm-retirement-sweep')
+    db: Any = fs.client(app=app)
     actual_project = _client_project(db)
     if actual_project != project:
         return _refuse_project_mismatch(project, actual_project)

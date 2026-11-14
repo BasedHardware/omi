@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 from typing import Any
+from unittest.mock import create_autospec
 
 import pytest
 
@@ -120,13 +121,12 @@ class _Collection:
 class _FakeFs:
     DELETE_FIELD = object()
 
-    def __init__(self, db: _Db, *, client_project: str | None = None) -> None:
+    def __init__(self, db: _Db) -> None:
         self.db = db
-        self.client_project = db.project if client_project is None else client_project
         self.requested_projects: list[str] = []
 
-    def client(self, *, project: str) -> _Db:
-        self.requested_projects.append(project)
+    def client(self, app=None) -> _Db:
+        self.requested_projects.append(app['projectId'])
         return self.db
 
 
@@ -134,8 +134,9 @@ class _FakeFirebaseAdmin:
     def __init__(self) -> None:
         self._apps: list[object] = []
 
-    def initialize_app(self) -> None:
-        self._apps.append(object())
+    def initialize_app(self, credential=None, options=None, name='[DEFAULT]') -> dict[str, str]:
+        self._apps.append(options)
+        return options
 
 
 def _users(*specs: tuple[str, dict[str, Any]]) -> dict[str, list[_Snapshot]]:
@@ -225,3 +226,17 @@ def test_marker_target_uses_the_same_project_and_commit_accounting(monkeypatch, 
     out = capsys.readouterr().out
     assert 'APPLIED project=based-hardware target=markers scanned=2 matched=1' in out
     assert 'queued=1 committed=0 failed_ops=1 failed_batches=1' in out
+
+
+def test_project_binding_uses_the_installed_firebase_admin_sdk_signatures(monkeypatch):
+    app = object()
+    db = _Db(PROJECT)
+    initialize_app = create_autospec(sweep.fa.initialize_app, return_value=app)
+    client = create_autospec(sweep.fs.client, return_value=db)
+    monkeypatch.setattr(sweep.fa, 'initialize_app', initialize_app)
+    monkeypatch.setattr(sweep.fs, 'client', client)
+    monkeypatch.setattr(sys, 'argv', ['sweep_agent_vm_firestore.py', '--project', PROJECT, '--target', 'users'])
+
+    assert sweep.main() == 0
+    initialize_app.assert_called_once_with(options={'projectId': PROJECT}, name='agent-vm-retirement-sweep')
+    client.assert_called_once_with(app=app)
