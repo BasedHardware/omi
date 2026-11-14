@@ -17,6 +17,7 @@ class MobileStandardBatch {
     required this.visibility,
     required this.ownerUid,
     required this.now,
+    this.onSpeech,
   });
 
   final MobileBatchBuffer buffer;
@@ -25,6 +26,11 @@ class MobileStandardBatch {
   final ValueListenable<ListenClientStateSnapshot> visibility;
   final String Function() ownerUid;
   final DateTime Function() now;
+
+  /// Told of every frame the VAD scores as speech, with its capture time and
+  /// recording. Feeds the end-of-recording clock, which the chunk seal below
+  /// never clears.
+  void Function(String? recordingSessionId, DateTime at)? onSpeech;
   MobileBatchVad? _vad;
   bool _serverAllowed = false;
   String? _authorizedUid;
@@ -169,7 +175,10 @@ class MobileStandardBatch {
         try {
           final probability = await vad.probability(payload);
           vadAudioSamples += samples;
-          if (probability >= 0.35) _lastSpeech = clock;
+          if (probability >= 0.35) {
+            _lastSpeech = clock;
+            onSpeech?.call(recordingSessionId, clock);
+          }
           if (_lastSpeech != null && clock.difference(_lastSpeech!) >= const Duration(seconds: 2)) {
             buffer.seal();
             _lastSpeech = null;

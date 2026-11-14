@@ -168,8 +168,11 @@ def load_validator():
 
 
 def write_yaml(path: Path, payload: dict) -> None:
+    # Same safe schema as ``yaml.safe_dump``; the C dumper avoids ~0.16 s of Python
+    # serialization per call for the ~280 KB runtime manifest, which several tests
+    # here rewrite before validating.
     with path.open('w', encoding='utf-8') as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
+        yaml.dump(payload, handle, Dumper=getattr(yaml, 'CSafeDumper', yaml.SafeDumper), sort_keys=False)
 
 
 def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
