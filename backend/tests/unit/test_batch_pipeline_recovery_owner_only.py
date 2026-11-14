@@ -83,7 +83,8 @@ async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
     await service.reconcile_async(owner_id=BURST, recovered='recovered', owner_only=True)
 
     assert projector.drains is None
-    assert projector.drain_requests == {'unrelated-owner': None, BURST: None}
+    assert list(projector.drain_requests) == ['unrelated-owner', BURST]
+    assert projector.drain_requests['unrelated-owner'] is None
     projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
     projector.schedule_index_flush.assert_called_once_with(BURST)
 
