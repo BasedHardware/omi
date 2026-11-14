@@ -84,26 +84,40 @@ def get_action_items_text(
         except ValueError as e:
             return f"Error: Invalid due_end_date format: {e}"
 
-    # Fetch
+    # Fetch and scan past locked/soft-deleted rows until the visible page is full or DB is exhausted
+    action_items: List[Dict[str, Any]] = []
+    scan_offset = max(offset, 0)
+    last_page_ids: Optional[tuple] = None
     try:
-        action_items = action_items_db.get_action_items(
-            uid=uid,
-            conversation_id=conversation_id,
-            completed=completed,
-            start_date=start_dt,
-            end_date=end_dt,
-            due_start_date=due_start_dt,
-            due_end_date=due_end_dt,
-            limit=limit,
-            offset=offset,
-        )
+        for _ in range(10):
+            raw_page = action_items_db.get_action_items(
+                uid=uid,
+                conversation_id=conversation_id,
+                completed=completed,
+                start_date=start_dt,
+                end_date=end_dt,
+                due_start_date=due_start_dt,
+                due_end_date=due_end_dt,
+                limit=limit,
+                offset=scan_offset,
+            )
+            if not raw_page:
+                break
+            page_ids = tuple(item.get('id') for item in raw_page)
+            if page_ids == last_page_ids:
+                break
+            last_page_ids = page_ids
+            action_items.extend(
+                item for item in raw_page if not item.get('is_locked', False) and not item.get('deleted', False)
+            )
+            if len(action_items) >= limit or len(raw_page) < limit:
+                break
+            scan_offset += len(raw_page)
     except Exception as e:
-        logger.error(f"get_action_items_text error: {e}")
-        return f"Error retrieving action items: {e}"
+        logger.error(f"get_action_items_text error: {e}", exc_info=True)
+        return "Error retrieving action items. Please try again."
 
-    # Filter locked items (paid plan required)
-    if action_items:
-        action_items = [item for item in action_items if not item.get('is_locked', False)]
+    action_items = action_items[:limit]
 
     if not action_items:
         date_info = ""
@@ -288,7 +302,12 @@ def update_action_item_text(
         return "No changes specified."
 
     try:
-        action_items_db.update_action_item(uid, action_item_id, update_data)
+        from database import chat_edits
+
+        write_state = {
+            'before': chat_edits.encode({key: existing[key] for key in chat_edits.FIELDS['task'] if key in existing})
+        }
+        action_items_db.update_action_item(uid, action_item_id, update_data, expected_chat_state=write_state)
 
         # Re-fetch the authoritative post-write state so reminder reconciliation can't act on a stale
         # pre-update value (matches the update_action_item_tool path).

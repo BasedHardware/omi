@@ -264,8 +264,11 @@ def get_action_items_tool(
         except ValueError:
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date}"
 
-    # Get action items
+    # Get action items, scanning past locked/soft-deleted rows until the visible page is full or DB is exhausted
     action_items: List[Dict[str, Any]] = []
+    raw_page_count = 0
+    scan_offset = max(offset, 0)
+    last_page_ids: Optional[tuple] = None
     try:
         logger.info(f"🔍 Calling action_items_db.get_action_items with:")
         logger.info(f"   uid: {uid}")
@@ -278,24 +281,42 @@ def get_action_items_tool(
         logger.info(f"   limit: {limit}")
         logger.info(f"   offset: {offset}")
 
-        action_items = action_items_db.get_action_items(
-            uid=uid,
-            conversation_id=conversation_id,
-            completed=completed,
-            start_date=start_dt,
-            end_date=end_dt,
-            due_start_date=due_start_dt,
-            due_end_date=due_end_dt,
-            limit=limit,
-            offset=offset,
-        )
+        for _ in range(10):
+            raw_page = action_items_db.get_action_items(
+                uid=uid,
+                conversation_id=conversation_id,
+                completed=completed,
+                start_date=start_dt,
+                end_date=end_dt,
+                due_start_date=due_start_dt,
+                due_end_date=due_end_dt,
+                limit=limit,
+                offset=scan_offset,
+            )
+            raw_page_count = len(raw_page) if raw_page else 0
+            if not raw_page:
+                break
+            page_ids = tuple(item.get('id') for item in raw_page)
+            if page_ids == last_page_ids:
+                break
+            last_page_ids = page_ids
+            action_items.extend(
+                item for item in raw_page if not item.get('is_locked', False) and not item.get('deleted', False)
+            )
+            if len(action_items) >= limit or raw_page_count < limit:
+                break
+            scan_offset += raw_page_count
 
-        logger.info(f"🔍 Database call completed - received {len(action_items) if action_items else 0} items")
+        logger.info(f"🔍 Database call completed - received {len(action_items)} visible items")
     except Exception as e:
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
-    action_items_count = len(action_items) if action_items else 0
+    overflow_visible = len(action_items) > limit
+    if overflow_visible:
+        action_items = action_items[:limit]
+
+    action_items_count = len(action_items)
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
     if not action_items:
@@ -328,7 +349,7 @@ def get_action_items_tool(
     # Bound how much goes back to the chat model so a broad request cannot overflow its context
     # (issue #4927). A full page (len == limit) may mean more rows exist beyond it, so flag the
     # result as truncated in that case too, not only when the per-call row cap trims it.
-    more_in_db = len(action_items) >= limit
+    more_in_db = overflow_visible or raw_page_count >= limit
     action_items, capped_for_llm = _cap_action_items_for_llm(action_items)
     results_truncated = capped_for_llm or more_in_db
 
@@ -661,6 +682,8 @@ def update_action_item_tool(
     existing_item = action_items_db.get_action_item(uid, action_item_id)
     if not existing_item or existing_item.get('deleted', False):
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
+    if existing_item.get('is_locked', False):
+        return "Error: A paid plan is required to modify this action item."
 
     # Prepare update data
     update_data: Dict[str, Any] = {}
