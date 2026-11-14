@@ -591,3 +591,171 @@ def test_sync_only_finish_page_never_wakes_followup_candidate_discovery(monkeypa
     service.reconcile = lambda **_: []
     asyncio.run(service.reconcile_async())
     projector.start_followups.assert_not_awaited()
+
+
+def legacy_async_log(rows=20):
+    log, ids = finish_log(persisted=rows)
+    for sid in ids:
+        log.jobs[sid]['policy_parts']['projection'] = {**log.policy, 'async_projection': True}
+    return log, ids
+
+
+@pytest.mark.parametrize('limit', [0, 1, 4, 16])
+@pytest.mark.parametrize('backoff', ['true', 'false'])
+def test_classification_budget_counts_only_successful_updates(monkeypatch, limit, backoff):
+    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', str(limit))
+    monkeypatch.setenv(LEVER, backoff)
+    log, ids = legacy_async_log()
+    projector = silent_projector(log)
+    log.retire_async_finish = Mock(wraps=log.retire_async_finish)
+    successes = PROJECTION_FINISH_CLASSIFIED._value.get()
+    failures = PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get()
+    counts = projector.sweep(limit=100)
+    assert log.retire_async_finish.call_count == limit
+    assert sum(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == -1.0 for sid in ids) == limit
+    assert PROJECTION_FINISH_CLASSIFIED._value.get() - successes == limit
+    assert PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get() == failures
+    assert counts['error'] == 0
+    assert projector.has_async_followups  # Including paused classification.
+
+
+def test_repeated_pages_do_not_refill_budget_until_after_last_attempt(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    log, _ids = legacy_async_log()
+    projector = silent_projector(log)
+    now = [100.0]
+    projector.finish_backoff.monotonic = lambda: now[0]
+    retire = log.retire_async_finish
+
+    def delayed(sid):
+        now[0] += 1.0  # Include time spent inside each transaction in the cooldown.
+        return retire(sid)
+
+    log.retire_async_finish = Mock(side_effect=delayed)
+    projector.sweep(limit=100)
+    assert log.retire_async_finish.call_count == 4
+    assert projector.finish_backoff.classify_after == 124.0
+    for tick in [104.0, 110.0, 123.99]:
+        now[0] = tick
+        projector.sweep(limit=100)
+        assert log.retire_async_finish.call_count == 4
+        assert projector.has_async_followups
+    now[0] = 124.0
+    projector.sweep(limit=100)
+    assert log.retire_async_finish.call_count == 8
+
+
+@pytest.mark.parametrize('kind', ['abort', 'contention', 'failure'])
+def test_classification_failures_are_counted_without_sweep_errors_or_deferral(monkeypatch, caplog, kind):
+    from google.api_core.exceptions import Aborted
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = legacy_async_log(rows=6)
+    projector = silent_projector(log)
+    now = [100.0]
+    projector.finish_backoff.monotonic = lambda: now[0]
+    real = log.retire_async_finish
+    error = {
+        'abort': Aborted('synthetic'),
+        'contention': FirestoreContentionExhausted('synthetic'),
+        'failure': RuntimeError('synthetic'),
+    }[kind]
+    log.retire_async_finish = Mock(side_effect=error)
+    log.defer_finish = Mock(side_effect=AssertionError('async classification must not defer'))
+    successes = PROJECTION_FINISH_CLASSIFIED._value.get()
+    failures = PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get()
+    counts = projector.sweep(limit=100)
+    assert counts == {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+    assert 'outcome=error' not in caplog.text
+    assert 'defer_error' not in caplog.text
+    assert log.retire_async_finish.call_count == 4  # Failures consume budget too.
+    assert PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get() - failures == 4
+    assert PROJECTION_FINISH_CLASSIFIED._value.get() == successes
+    assert all(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == 1.0 for sid in ids)
+    log.defer_finish.assert_not_called()
+    assert projector.has_async_followups
+    # Cooldown expires and the unchanged row can classify on a later page.
+    now[0] = 121.0
+    log.retire_async_finish.side_effect = real
+    projector.sweep(limit=100)
+    assert PROJECTION_FINISH_CLASSIFIED._value.get() - successes == 4
+    assert projector.has_async_followups
+
+
+def test_classification_fence_noop_is_neither_success_nor_failure(monkeypatch):
+    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    log, _ids = legacy_async_log(rows=2)
+    projector = silent_projector(log)
+    log.retire_async_finish = Mock(return_value=False)
+    successes = PROJECTION_FINISH_CLASSIFIED._value.get()
+    failures = PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get()
+    projector.sweep()
+    assert log.retire_async_finish.call_count == 2
+    assert PROJECTION_FINISH_CLASSIFIED._value.get() == successes
+    assert PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get() == failures
+
+
+@pytest.mark.parametrize('value,expected', [(None, 4), ('0', 0), ('16', 16), ('-1', 4), ('17', 4), ('bad', 4)])
+def test_classification_page_limit_setting(monkeypatch, value, expected):
+    from config.batch_pipeline import projection_finish_classify_page_limit
+
+    if value is None:
+        monkeypatch.delenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', value)
+    assert projection_finish_classify_page_limit() == expected
+
+
+def test_overlapping_pages_keep_individual_caps_and_share_process_budget(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    log, _ids = legacy_async_log()
+    projector = silent_projector(log)
+    projector.finish_discovery.next = Mock(return_value=[])
+    budget = projector.finish_backoff
+    now = [100.0]
+    budget.monotonic = lambda: now[0]
+    old_spent, new_started, old_done = threading.Event(), threading.Event(), threading.Event()
+    log.retire_async_finish = Mock(return_value=True)
+
+    def old_page():
+        budget.page(100)
+        for n in range(4):
+            budget.observed_async(f'old-{n}', {PROJECTION_FINISH_DUE_FIELD: 1.0})
+        old_spent.set()
+        assert new_started.wait(5)
+        # A later page's refill must not restore this page's exhausted cap.
+        budget.observed_async('old-extra', {PROJECTION_FINISH_DUE_FIELD: 1.0})
+        old_done.set()
+
+    def new_page():
+        assert old_spent.wait(5)
+        # Still in the cooldown: no additional per-process work is admitted.
+        budget.page(100)
+        budget.observed_async('too-soon', {PROJECTION_FINISH_DUE_FIELD: 1.0})
+        now[0] = 121.0
+        budget.page(100)
+        budget.observed_async('new-0', {PROJECTION_FINISH_DUE_FIELD: 1.0})
+        new_started.set()
+        assert old_done.wait(5)
+        for n in range(1, 4):
+            budget.observed_async(f'new-{n}', {PROJECTION_FINISH_DUE_FIELD: 1.0})
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        old, new = pool.submit(old_page), pool.submit(new_page)
+        old.result(timeout=10)
+        new.result(timeout=10)
+    assert [call.args[0] for call in log.retire_async_finish.call_args_list] == [
+        *[f'old-{n}' for n in range(4)],
+        *[f'new-{n}' for n in range(4)],
+    ]

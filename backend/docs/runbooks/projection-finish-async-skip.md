@@ -12,14 +12,17 @@ Historical async receipts are read and classified once: a transaction rereads
 both pinned policy and result state before changing only the clock. It never
 changes payload, receipt, privacy, custody, ordering, usage or client state.
 Recovery writers that cannot classify a receipt continue to stamp it due now;
-that receipt is safely classified on its next finish pass.
+that receipt remains eligible for bounded classification on later finish passes.
 
 After the existing version-1 finish-clock backfill marker is complete, the finish
 page adds `projection_finish_due_at >= 0` to its existing clock query. With
 finish backoff off, the upper bound is positive infinity (all sync clocks);
 with it on, the upper bound stays the current time. Before the marker, the
 legacy unfiltered page stays active so unstamped sync obligations remain visible.
-There is no new maintenance pass or production action in this PR.
+Moving to the clock ordering even when backoff is off is intentional. It
+relies on the stamping marker: the cost lead reported it complete with zero
+missing clocks at 12:46Z on November 14. Before that marker, ordering stays
+legacy. There is no new maintenance pass or production action in this PR.
 
 Each finish sweep also probes persisted/ready receipts with a clock at or below
 `-1`, using `limit=1` and the same existing index. A result keeps
@@ -38,6 +41,39 @@ query, so rollback requires no data repair. Older binaries also see them as due.
 Mixed fleets may write an ordinary clock again on a state change; newer sweep
 readers reclassify it safely. No new clock delays transcript assignment or async
 follow-up execution.
+
+## Bounded classification and progress
+
+`BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **4 attempts per page**;
+0 pauses classification, 1-16 are accepted, and malformed/out-of-range values
+keep 4. Pages on different executor threads have separate caps but share a
+locked process budget. That budget refills only 20 seconds after its last
+attempt finishes; in-flight transactions prevent a refill. There is no sleep,
+new queue or delay imposed on transcript/follow-up delivery by the limiter.
+Failures consume budget, increment a dedicated counter, and leave the row
+eligible without incrementing the sweep's generic error count or deferring it.
+A state/policy race returning false is neither a success nor a failure.
+
+At the reported approximately 42 processes, four per process permits at most
+**168 classification writes in a synchronized one-second burst**, and at most
+**8.4 writes/s averaged over the cooldown**. These are incremental
+classification bounds, leaving headroom for ordinary writes under the 500
+writes/s index limit; they are not a fleet-wide cap on all result writers.
+The nominal 518k-row pass is at least **17.1 hours** at that maximum successful
+rate (18 hours at 40 processes). Overlap, failures, slower sweep cadence and
+other work make it longer; new async session writes avoid migration entirely.
+Expect gradual read reduction during that window rather than an immediate cut.
+Fleet growth or raising this setting requires recalculating `processes × limit`
+and retaining headroom for ordinary writes. The default should not be increased
+to meet a train deadline.
+
+Read `omi_batch_projection_finish_classified_total` for acknowledged successful
+clock updates and `omi_batch_projection_finish_classification_failures_total`
+for exceptions, including contention. Both have no labels and survive the
+sync GMP keep rule; both scrape tests pin their sample names. A lost commit
+reply can undercount successful writes and increment failures, so compare these
+with remaining work and the Firestore/caller counters rather than treating
+process-local counters as a complete durable census.
 
 ## Index and delivery risk
 
@@ -75,8 +111,9 @@ unchanged follow-up reads from eliminated finish reads.
 
 For the approximately 518k historical rows, a nominal single classification
 pass adds about 1.036M transaction document reads and 518k clock-only writes,
-in addition to one final legacy page/read pass. Concurrent discoveries,
+in addition to ordinary discovery/reads while rows await classification. Concurrent discoveries,
 transaction retries and later state transitions can add reads or reclassification;
 an already-classified row is never rewritten merely because another replica
-discovers it. New async session writes need no classification read or extra write. Completion and reclassification races are transactionally
+discovers it. Unclassified rows remain on ordinary pages until admitted by the
+budget; follow-up delivery does not wait for classification. New async session writes need no classification read or extra write. Completion and reclassification races are transactionally
 fenced; a failed classification remains eligible and retries.
