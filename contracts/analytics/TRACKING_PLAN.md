@@ -217,6 +217,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionPaymentIssueShown | Subscription Payment Issue Shown | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueUpdateTapped | Subscription Payment Issue Update Tapped | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssuePortalOpened | Subscription Payment Issue Portal Opened | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyShown | Subscription Payment Issue Monthly Shown | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyTapped | Subscription Payment Issue Monthly Tapped | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlySwitched | Subscription Payment Issue Monthly Switched | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyFailed | Subscription Payment Issue Monthly Failed | reason | active | subscription-payment-recovery |
 
 ## App Review Opportunity decisions
 

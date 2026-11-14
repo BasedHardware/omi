@@ -101,7 +101,7 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
-from utils import yearly_switch
+from utils import monthly_switch, yearly_switch
 import os
 import logging
 
@@ -1771,6 +1771,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         return {"status": "success", "message": "Account deletion is in progress."}
                     await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+                if metadata.get(monthly_switch.SUPERSEDED_INVOICE_KEY):  # a failed void of the yearly invoice: retry
+                    try:
+                        await run_blocking(stripe_executor, monthly_switch.void_superseded, subscription)
+                    except Exception as error:
+                        raise HTTPException(503, f"Monthly switch void retry: {type(error).__name__}") from None
             except HTTPException:
                 raise
             except Exception as e:

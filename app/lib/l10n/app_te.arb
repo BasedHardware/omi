@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "మరో 3 స్నేహితులు కొన్నప్పుడు",
     "referralClaimShort": "పొందండి",
     "paymentDeclinedTitle": "మీ కార్డ్ తిరస్కరించబడింది",
+    "paymentDeclinedMonthlyMessage": "కార్డును అప్‌డేట్ చేయండి, లేదా {plan}ను నెలకు {price}తో తిరిగి పొందండి",
     "paymentDeclinedMessage": "{plan} తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి",
     "hasLinkedTasksLabel": "లింక్ చేసిన పనులు ఉన్నాయి",
     "hasTasksFilter": "పనులు ఉన్నాయి",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "నెలవారీకి మారండి",
+    "monthlySwitchPlanValue": "{plan}, నెలకు {price}",
+    "monthlySwitchNote": "చెల్లించని {yearly} వార్షిక ఛార్జీకి బదులుగా. ప్రతి నెలా పునరుద్ధరించబడుతుంది. ఎప్పుడైనా రద్దు చేయండి.",
+    "monthlySwitchDeclined": "చెల్లింపు తిరస్కరించబడింది. మీ ప్లాన్ మారలేదు.",
+    "monthlySwitchUnavailable": "ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.",
+    "monthlySwitchDoneTitle": "మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు",
+    "monthlySwitchDoneBody": "ఈరోజు {price} చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది."
 }

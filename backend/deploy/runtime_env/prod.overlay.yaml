@@ -216,6 +216,9 @@ overlay:
         ACCOUNT_DELETION_TASKS_QUEUE:
           value: account-deletion
           category: reliability
+        CONVERSATION_ERASURE_TASKS_QUEUE:
+          value: conversation-erasure
+          category: reliability
         ACCOUNT_DELETION_HANDLER_URL:
           config_map:
             name: prod-omi-backend-config
@@ -764,6 +767,9 @@ overlay:
           ACCOUNT_DELETION_TASKS_QUEUE:
             value: account-deletion
             category: reliability
+          CONVERSATION_ERASURE_TASKS_QUEUE:
+            value: conversation-erasure
+            category: reliability
           ACCOUNT_DELETION_HANDLER_URL:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
@@ -1121,6 +1127,9 @@ overlay:
           ACCOUNT_DELETION_TASKS_QUEUE:
             value: account-deletion
             category: reliability
+          CONVERSATION_ERASURE_TASKS_QUEUE:
+            value: conversation-erasure
+            category: reliability
           ACCOUNT_DELETION_HANDLER_URL:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
@@ -1468,6 +1477,9 @@ overlay:
           ACCOUNT_DELETION_TASKS_QUEUE:
             value: account-deletion
             category: reliability
+          CONVERSATION_ERASURE_TASKS_QUEUE:
+            value: conversation-erasure
+            category: reliability
           ACCOUNT_DELETION_HANDLER_URL:
             env_var: ACCOUNT_DELETION_HANDLER_URL
             category: reliability
@@ -1805,6 +1817,9 @@ overlay:
             category: reliability
           ACCOUNT_DELETION_TASKS_QUEUE:
             value: account-deletion
+            category: reliability
+          CONVERSATION_ERASURE_TASKS_QUEUE:
+            value: conversation-erasure
             category: reliability
           ACCOUNT_DELETION_HANDLER_URL:
             env_var: ACCOUNT_DELETION_HANDLER_URL
