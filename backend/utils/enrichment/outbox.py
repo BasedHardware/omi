@@ -38,6 +38,14 @@ from config.summary_guarantee import (
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
+from config.outbox_custody import (  # noqa: F401 - re-exported for callers of this module
+    LIVE_DEFER_SECONDS,
+    STUCK_DEFER_GRACE_SECONDS,
+    STUCK_DEFER_POLL_SECONDS,
+    STUCK_DEFER_REASONS,
+    custody_defer_until,
+    custody_deferred_since,
+)
 from utils.sync import processing_hold
 
 from database._client import get_firestore_client
@@ -54,46 +62,12 @@ FIRST_SUMMARY_LEASE_SECONDS = 120
 FIRST_SUMMARY_HEARTBEAT_SECONDS = 30
 REPAIR_SECONDS = 1800
 WAKE_CHECK_SECONDS = 300
-LIVE_DEFER_SECONDS = 120
-# Custody deferrals whose cause can outlive the obligation: a merge redirect that
-# never resolves, a missing row, or a live target/bridge that never settles. On
-# 2026-11-01 about 1.7k such rows, most of them days old, were re-polled every
-# 30-120s: ~80% of backend-sync's /v2/sync-jobs/run deliveries. Once one reason
-# has deferred a row past the grace (``deferred_since``), it polls hourly;
-# custody, sweep repair and the eventual resume are unchanged.
-STUCK_DEFER_REASONS = frozenset(
-    {'redirect_unresolved', 'conversation_missing', 'open_live_target', 'pending_live_bridge'}
-)
-STUCK_DEFER_GRACE_SECONDS = 6 * 3600
-STUCK_DEFER_POLL_SECONDS = 3600
 # Both bindings stay valid so rows created before the C3 switch drain on their stored handler.
 HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
-
-
-def custody_deferred_since(row: Row, reason: str, now: float) -> float:
-    """Start of the row's current, uninterrupted deferral for ``reason``.
-
-    A different reason, or a completed callback, starts a new episode. It can
-    never predate the obligation's own acceptance, so a reopened dormant row
-    does not inherit an old episode.
-    """
-    since = row.get('deferred_since') if row.get('deferred_reason') == reason else None
-    if not isinstance(since, (int, float)):
-        return now
-    first = row.get('first_pending_at')
-    return max(since, first) if isinstance(first, (int, float)) else since
-
-
-def custody_defer_until(context: Row, deferred_since: float, now: float) -> float:
-    """Next wake for a callback custody deferral; long-stuck causes poll hourly."""
-    due = context.get('defer_until', now + LIVE_DEFER_SECONDS)
-    if context.get('defer_reason') in STUCK_DEFER_REASONS and now - deferred_since >= STUCK_DEFER_GRACE_SECONDS:
-        return max(due, now + STUCK_DEFER_POLL_SECONDS)
-    return due
 
 
 def _is_document_size_limit(error: BaseException) -> bool:

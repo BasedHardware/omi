@@ -8,6 +8,7 @@ from google.api_core.exceptions import PermissionDenied
 import pytest
 
 from tests.unit.test_sync_reprocess_coalesce import state, pipeline, sweep_query  # noqa: F401
+from config import outbox_custody
 from utils.sync import reprocess
 
 
@@ -203,10 +204,10 @@ def test_stuck_redirect_deliveries_per_day_drop_from_719_to_198(admitted, pipeli
         return times
 
     grace = reprocess.STUCK_DEFER_GRACE_SECONDS
-    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', float('inf'))  # the pre-change cadence
+    monkeypatch.setattr(outbox_custody, 'STUCK_DEFER_GRACE_SECONDS', float('inf'))  # the pre-change cadence
     before = deliveries_over_a_day()
     rows[key], tasks[:] = deepcopy(initial[0]), initial[1]
-    monkeypatch.setattr(reprocess, 'STUCK_DEFER_GRACE_SECONDS', grace)
+    monkeypatch.setattr(outbox_custody, 'STUCK_DEFER_GRACE_SECONDS', grace)
     after = deliveries_over_a_day()
     assert (len(before), len(after)) == (719, 198)
     # Unchanged inside the grace; afterwards the worst added wait is one poll interval.

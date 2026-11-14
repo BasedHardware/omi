@@ -27,6 +27,7 @@ import json
 import uuid
 from typing import Any, Callable, Literal, LiteralString, Mapping
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.jobstore.connection import sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction, jsonb
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
@@ -40,14 +41,6 @@ _COLUMNS = 'id, owner_id, payload, policy_id, available_at, attempts, wake_token
 
 def _token() -> str:
     return uuid.uuid4().hex
-
-
-def _enrichment_outbox():
-    # Same call-time import as database/outbox_firestore.py: the custody episode rule and its constants stay
-    # owned by utils.enrichment.outbox, so both store backends read one definition.
-    from utils.enrichment import outbox
-
-    return outbox
 
 
 class PostgresOutbox:
@@ -283,7 +276,6 @@ class PostgresOutbox:
         PL-342: same reason-bound episode as ``database/outbox_firestore.py``. A cause that has deferred the
         row past the grace polls hourly; a new cause starts a new episode at ``now``.
         """
-        outbox = _enrichment_outbox()
         wake_token = _token()
         with self.store.pool.connection() as conn, conn.transaction():
             row = conn.execute(
@@ -294,12 +286,12 @@ class PostgresOutbox:
             if row is None:
                 return None
             deferred_reason, deferred_since, created_at = row
-            since = outbox.custody_deferred_since(
+            since = custody_deferred_since(
                 {'deferred_reason': deferred_reason, 'deferred_since': deferred_since, 'first_pending_at': created_at},
                 reason,
                 now,
             )
-            due = outbox.custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
+            due = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
             conn.execute(
                 'UPDATE outbox SET available_at = %s, wake_token = %s, wake_pending = true, lease_token = NULL, '
                 'lease_until = 0, done_reason = %s, deferred_reason = %s, deferred_since = %s WHERE id = %s',

@@ -12,19 +12,12 @@ from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Callable, Iterator, Mapping
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
 
 
 def _token() -> str:
     return uuid.uuid4().hex
-
-
-def _enrichment_outbox():
-    # Same call-time import as database/outbox_firestore.py: the episode rule and its constants stay owned
-    # by utils.enrichment.outbox (tests monkeypatch them there).
-    from utils.enrichment import outbox
-
-    return outbox
 
 
 class SimOutbox:
@@ -170,14 +163,13 @@ class SimOutbox:
             return None
         # PL-342: same reason-bound custody episode as the Firestore outbox. The row's acceptance is its
         # creation (a closed row never reopens; a new obligation is a new row), so no old age is inherited.
-        outbox = _enrichment_outbox()
-        since = outbox.custody_deferred_since(
+        since = custody_deferred_since(
             {'deferred_reason': row['deferred_reason'], 'deferred_since': row['deferred_since'],
              'first_pending_at': row['created_at']},
             reason,
             now,
         )  # fmt: skip
-        available_at = outbox.custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
+        available_at = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
         row.update(
             deferred_reason=reason,
             deferred_since=since,
