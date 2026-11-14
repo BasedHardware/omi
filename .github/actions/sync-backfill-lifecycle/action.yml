@@ -362,7 +362,7 @@ runs:
           --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
           --check --jobs sync-backfill-uid-sequencer
 
-    - name: Provision and verify sync and pipeline ledger TTL
+    - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
       shell: bash
       env:
