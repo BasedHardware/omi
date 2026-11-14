@@ -115,6 +115,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_SEAL_WAKE_ENABLED
+    value: "true"
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}

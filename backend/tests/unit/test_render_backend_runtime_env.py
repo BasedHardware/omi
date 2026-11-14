@@ -1481,6 +1481,9 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
     }
     if chart == 'pusher':
         expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_SEAL_WAKE_ENABLED'] = 'true'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] = 'true'
     contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
     for key, value in expected.items():
         entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]

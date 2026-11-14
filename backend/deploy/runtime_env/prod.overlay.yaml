@@ -45,6 +45,7 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
@@ -276,6 +277,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
