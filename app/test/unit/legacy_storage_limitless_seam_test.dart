@@ -27,12 +27,19 @@ class _ManualTimer implements Timer {
   _ManualTimer(this.delay, this.callback);
   final Duration delay;
   final void Function() callback;
+  Duration elapsed = Duration.zero;
   @override
   bool isActive = true;
   @override
   int tick = 0;
   @override
   void cancel() => isActive = false;
+  void elapse(Duration duration) {
+    if (!isActive) return;
+    elapsed += duration;
+    if (elapsed >= delay) fire();
+  }
+
   void fire() {
     if (!isActive) return;
     isActive = false;
@@ -306,7 +313,7 @@ void main() {
     });
   }
 
-  test('StorageSync: DATA renews the 15s idle deadline; ACKs do not; incomplete audio is retained', () async {
+  test('StorageSync: DATA renews the 60s idle deadline; ACKs do not; incomplete audio is retained', () async {
     final card = _SubscribedStorageDevice(script: [
       _dataPacket([40])
     ]);
@@ -320,7 +327,7 @@ void main() {
     });
     final failure = expectLater(sync.syncWal(wal: wal), throwsException);
     await card.firstPacketHandled.future;
-    expect(timers.map((timer) => timer.delay), [const Duration(seconds: 5), const Duration(seconds: 15)]);
+    expect(timers.map((timer) => timer.delay), [const Duration(seconds: 5), const Duration(seconds: 60)]);
     expect(timers.first.isActive, isFalse);
     card.controller.add(_dataPacket([40]));
     await Future<void>.delayed(Duration.zero);
@@ -340,6 +347,37 @@ void main() {
     expect(wal.status, WalStatus.miss);
     expect(wal.storageOffset, 0);
     expect(wal.deviceDownloadFraction, isNull);
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    await card.controller.close();
+    await sync.stop();
+  });
+
+  test('StorageSync: healthy DATA after a 45s flash/BLE gap completes without an early idle abort', () async {
+    final card = _SubscribedStorageDevice(script: [
+      _dataPacket([40])
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 2 * 440);
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final transfer = sync.syncAll();
+    await card.firstPacketHandled.future;
+    for (final timer in timers.toList()) {
+      timer.elapse(const Duration(seconds: 45));
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(card.stops, 0);
+    expect(sync.isSyncing, isTrue);
+    card.controller.add(_dataPacket([40]));
+    card.controller.add([100]);
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(local.added.single.totalFrames, 2);
+    expect(card.deletes, [1]);
     expect(timers.every((timer) => !timer.isActive), isTrue);
     await card.controller.close();
     await sync.stop();

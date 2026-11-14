@@ -44,7 +44,14 @@ class StorageSyncImpl implements StorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   final Timer Function(Duration, void Function()) _transferTimer;
+  // Only restores any-packet first-data detection and disables audio idle.
+  // Incomplete transfers still throw; custody and cleanup are never rolled back.
   static const _audioLivenessOff = bool.fromEnvironment('OMI_STORAGE_AUDIO_LIVENESS_OFF');
+  // LittleFS 3.0.17–.19 can spend 500ms queueing + 15s reading, then retry
+  // BLE -ENOMEM without a time bound. There is no progress heartbeat. Use a
+  // conservative 60s DATA gap, not the ring protocol's 15s value.
+  // Firmware evidence: app/docs/offline-storage-liveness.md.
+  static const _audioIdleTimeout = Duration(seconds: 60);
 
   StorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
       : _transferTimer = transferTimer ?? ((delay, callback) => Timer(delay, callback));
@@ -598,10 +605,10 @@ class StorageSyncImpl implements StorageSync {
       timeoutTimer?.cancel();
       if (_audioLivenessOff) return;
       audioIdleTimer?.cancel();
-      audioIdleTimer = _transferTimer(const Duration(seconds: 15), () {
+      audioIdleTimer = _transferTimer(_audioIdleTimeout, () {
         if (completer.isCompleted) return;
         hasError = true;
-        Logger.debug('StorageSync: No audio data for file ${wal.fileNum} within 15s');
+        Logger.debug('StorageSync: No audio data for file ${wal.fileNum} within ${_audioIdleTimeout.inSeconds}s');
         completer.complete(false);
       });
     }
