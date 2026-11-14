@@ -2,13 +2,13 @@
 
 import logging
 import math
-import os
 from dataclasses import dataclass
 from typing import TypeGuard, cast
 
 from google.api_core.exceptions import Aborted
 from prometheus_client import Counter
 
+from config.batch_pipeline import provider_backlog_release_closed
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class Gate:
 
 def read(tx, job: dict, now: float, source: str) -> tuple[dict | None, str | None]:
     """Return the token write, or a bounded refusal. Never refresh the operator heartbeat."""
-    if os.getenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', '').strip().lower() == 'false':
+    if provider_backlog_release_closed():
         return None, 'closed'
     try:
         row = tx.get('backlog_release', 'gate')
