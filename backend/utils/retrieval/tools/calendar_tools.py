@@ -456,7 +456,7 @@ async def _get_selected_calendar_events(
     now = datetime.now(timezone.utc)
     time_min = (time_min or now).astimezone(timezone.utc)
     time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
-    calendars = await read_ids(uid, access_token, selections) if uid else ['primary']
+    calendars = await read_ids(uid, access_token, selections, on_degraded) if uid else ['primary']
     collected: List[Dict[str, Any]] = []
     for calendar_id in calendars:
         params: Dict[str, Any] = {

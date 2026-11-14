@@ -483,9 +483,11 @@ async def test_discovery_excluding_a_saved_calendar_records_degradation(provider
     _, owner, _, _ = provider
     selections = {prefs.account_key(owner['primary']): [owner['primary'], 'gone@group.test']}
     recorded = []
+    degraded = []
     monkeypatch.setattr(selection, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
-    ids = await selection.read_ids('omi-Q', 'synthetic-token', selections)
+    ids = await selection.read_ids('omi-Q', 'synthetic-token', selections, lambda: degraded.append(True))
     assert ids == ['primary']
     assert len(recorded) == 1
     assert recorded[0]['component'] == 'calendar_read'
     assert recorded[0]['outcome'] == 'degraded'
+    assert degraded == [True]

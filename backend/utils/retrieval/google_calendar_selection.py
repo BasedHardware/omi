@@ -3,7 +3,7 @@
 import base64
 import json
 import logging
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote
 
 from database import google_calendar_preferences as preferences
@@ -88,7 +88,12 @@ async def catalog(uid: str, access_token: str) -> dict[str, Any]:
     return {'account_id': primary, 'calendars': rows, 'selected_ids': ids, 'write_calendar_id': 'primary'}
 
 
-async def read_ids(uid: str, access_token: str, selections: dict | None = None) -> list[str]:
+async def read_ids(
+    uid: str,
+    access_token: str,
+    selections: dict | None = None,
+    on_degraded: Callable[[], None] | None = None,
+) -> list[str]:
     if selections is None:
         # Async callers resolve preferences here. A caller that already runs on a
         # DB worker passes the preferences it read directly: submitting to the
@@ -120,6 +125,8 @@ async def read_ids(uid: str, access_token: str, selections: dict | None = None) 
             outcome='degraded',
             log=logger,
         )
+        if on_degraded is not None:
+            on_degraded()
     return reachable
 
 
