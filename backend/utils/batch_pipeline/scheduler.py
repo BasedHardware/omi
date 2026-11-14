@@ -10,8 +10,9 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_transaction_labels import require_operation_label, store_operation
+from database.batch_pipeline_transaction_labels import store_operation
 from database.firestore_transaction_retry import FirestoreContentionExhausted
+from utils.batch_pipeline.teardown_custody import contention_operation_field
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
     SCHEDULER_SHARDS,
@@ -67,27 +68,6 @@ HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
-
-
-def contention_operation_field(error: BaseException) -> str:
-    """The losing store label stamped on a contention exhaustion, log-ready.
-
-    ``FirestoreStore.run`` stamps the label that burned the budget onto the
-    raised chain's ``operation`` (the same ride-along contract as
-    ``retry_after``), so the pull lane's own report names the exact shard
-    operation that lost instead of an anonymous chain. Anything the label
-    validator refuses — a foreign exception, a missing or hostile attribute
-    shape — reports nothing rather than interpolating unvalidated text into
-    a log line. Never raises.
-    """
-    label = getattr(error, "operation", None)
-    if not isinstance(label, str):
-        return ""
-    try:
-        require_operation_label(label)
-    except Exception:
-        return ""
-    return f" operation={label}"
 
 
 def pull_contention_storm_after(error: BaseException | None) -> float:

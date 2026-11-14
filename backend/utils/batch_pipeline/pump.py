@@ -9,6 +9,7 @@ import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from typing import Any
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
@@ -35,6 +36,7 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.contracts import Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
+from utils.batch_pipeline.teardown_custody import TEARDOWN_SITES, replay_teardown_refund
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
 from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
@@ -797,21 +799,14 @@ class Pump:
                         # token may still be ours, and defer is fenced by
                         # owns_lease, so another owner's job is never touched.
                         for lease in leases:
-                            try:
-                                await self._run_blocking(
-                                    'publication',
-                                    db_executor,
-                                    self.scheduler.defer,
-                                    lease.item.segment_id,
-                                    lease.token,
-                                    time.time(),
-                                    1,
-                                )
-                            except Exception as error:
-                                logger.error(
-                                    'event=batch_flight outcome=lease_recovery exception_type=%s',
-                                    type(error).__name__,
-                                )
+                            await self._run_blocking(
+                                'publication',
+                                db_executor,
+                                replay_teardown_refund,
+                                partial(self.scheduler.defer, lease.item.segment_id, lease.token, time.time(), 1),
+                                site=TEARDOWN_SITES['stop_refund'],
+                                logger=logger,
+                            )
                         return 0
                     skipped = set(lost)
                     if prepared is not None:
@@ -864,21 +859,16 @@ class Pump:
                 # The whole GPU flight is uncertain. Return every owned lease
                 # without charging an attempt; preserve its ordered position.
                 for lease in leases:
-                    try:
-                        await self._run_blocking(
-                            'publication',
-                            db_executor,
-                            self.scheduler.defer,
-                            lease.item.segment_id,
-                            lease.token,
-                            time.time(),
-                        )
-                    except Exception as error:
-                        # A revoked owner / ambiguous DB response must not stop
-                        # us refunding siblings. Lease recovery remains durable.
-                        logger.error(
-                            'event=batch_gpu_restart outcome=lease_recovery exception_type=%s', type(error).__name__
-                        )
+                    # A revoked owner / ambiguous DB response must not stop
+                    # us refunding siblings. Lease recovery remains durable.
+                    await self._run_blocking(
+                        'publication',
+                        db_executor,
+                        replay_teardown_refund,
+                        partial(self.scheduler.defer, lease.item.segment_id, lease.token, time.time()),
+                        site=TEARDOWN_SITES['gpu_restart_refund'],
+                        logger=logger,
+                    )
                 raise
             except Exception as error:
                 logger.error('event=batch_chain outcome=retry exception_type=%s', type(error).__name__)
@@ -893,20 +883,14 @@ class Pump:
             # Never interpret its intentionally absent result as a GPU failure.
             for lease in leases:
                 if lease.item.segment_id in skipped:
-                    try:
-                        await self._run_blocking(
-                            'publication',
-                            db_executor,
-                            self.scheduler.defer,
-                            lease.item.segment_id,
-                            lease.token,
-                            time.time(),
-                            1,
-                        )
-                    except Exception as error:
-                        logger.error(
-                            'event=batch_flight outcome=lease_recovery exception_type=%s', type(error).__name__
-                        )
+                    await self._run_blocking(
+                        'publication',
+                        db_executor,
+                        replay_teardown_refund,
+                        partial(self.scheduler.defer, lease.item.segment_id, lease.token, time.time(), 1),
+                        site=TEARDOWN_SITES['skipped_refund'],
+                        logger=logger,
+                    )
             active = [v for v in leases if v.item.segment_id not in skipped]
             await self._publish_flight(active, result_map, lost)
             return len(active)
@@ -936,13 +920,15 @@ class Pump:
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:
-            try:
-                await self._run_blocking(
-                    'publication', db_executor, self.scheduler.release, lease.item.segment_id, lease.token, time.time()
-                )
-            except Exception as error:
-                # Ambiguous release leaves lease expiry as the durable fallback.
-                logger.error('event=batch_flight outcome=lease_release exception_type=%s', type(error).__name__)
+            # Ambiguous release leaves lease expiry as the durable fallback.
+            await self._run_blocking(
+                'publication',
+                db_executor,
+                replay_teardown_refund,
+                partial(self.scheduler.release, lease.item.segment_id, lease.token, time.time()),
+                site=TEARDOWN_SITES['release'],
+                logger=logger,
+            )
 
     @contextlib.asynccontextmanager
     async def _owner_serial(self, owner_id: str):
