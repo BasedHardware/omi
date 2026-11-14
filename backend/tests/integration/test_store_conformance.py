@@ -71,6 +71,48 @@ def need(harness, *names):
         pytest.skip(f'not applicable to the {harness.name} backend')
 
 
+def test_shared_ready_cursor_rejects_stale_progress_and_reaches_fresh_owner(h, monkeypatch):
+    from utils.batch_pipeline.ready_discovery import ReadyDiscovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', '2')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '60')
+    put_all(
+        h,
+        [
+            (
+                'jobs',
+                key,
+                job(
+                    h,
+                    key,
+                    owner_key=key,
+                    state='result_ready',
+                    merge_pending=True,
+                    fresh_capture=key == 'z',
+                    stt_route={'stt_route': 'provider'},
+                ),
+            )
+            for key in ('b', 'd', 'f', 'h', 'z')
+        ],
+    )
+    serving, pump = ReadyDiscovery(h.store, 'serving'), ReadyDiscovery(h.store, 'pump')
+    stale = serving.page()
+    for expected in (['b', 'd'], ['f', 'h']):
+        page = pump.page()
+        assert [key for key, _ in pump.owners(page)] == expected
+        assert pump.finish(page)
+    progress = h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    assert progress['after_owner_key'] == 'h' and progress['revision'] == 2
+    assert [key for key, _ in serving.owners(stale)] == ['b', 'd']
+    assert serving.finish(stale)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    page = pump.page()
+    assert [key for key, _ in pump.owners(page)] == ['z']
+    assert pump.finish(page)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))['revision'] == 3
+
+
 # -- document semantics ------------------------------------------------------------------------------
 def test_missing_document_reads_as_empty_dict(h):
     assert h.store.run(lambda tx: tx.get('jobs', 'nope')) == {}
@@ -1262,3 +1304,20 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
     assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
     assert firsts and reads and writes and firsts[-1] is reads[-1] is writes[-1]
     probe.assert_not_called()
+
+
+def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
+    rows = [('jobs', f's{i}', job(h, f's{i}', state='result_ready', merge_pending=True)) for i in range(5)]
+    rows += [
+        ('jobs', 'p', job(h, 'p', owner='p', state='result_ready', merge_pending=True)),
+        ('jobs', 'unready', job(h, 'unready', owner_key='z1', merge_pending=True)),
+        ('jobs', 'done', job(h, 'done', owner_key='z2', state='result_ready')),
+    ]
+    put_all(h, rows)
+    expected = [(owner_key(h.uid(o)), h.uid(o)) for o in ('o', 'p')]
+    assert h.store.ready_owners(None, 1) == expected[:1]
+    assert h.store.ready_owners(expected[0][0], 1) == expected[1:]
+    assert h.store.ready_owners(expected[1][0], 1) == []
+
+    assert h.store.ready_owners(None, 1, descending=True) == expected[-1:]
+    assert h.store.ready_owners(None, 2, ceiling_owner_key=expected[0][0]) == expected[:1]
