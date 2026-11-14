@@ -343,8 +343,8 @@ class Units:
         )
         if recording['projection_task_id'] is None:
             task = conn.execute(
-                'INSERT INTO outbox(namespace,kind,dedupe_key,owner_id,payload,available_at,created_at) '
-                "VALUES (%s,'project_conversation',%s,%s,%s,%s,%s) RETURNING id",
+                'INSERT INTO outbox(namespace,kind,dedupe_key,owner_id,payload,available_at,created_at,logical_generation) '
+                "VALUES (%s,'project_conversation',%s,%s,%s,%s,%s,%s) RETURNING id",
                 (
                     self.namespace,
                     job['recording_id'],
@@ -352,6 +352,7 @@ class Units:
                     jsonb({'recording_id': job['recording_id']}),
                     due,
                     now,
+                    job['admission']['admission_id'],
                 ),
             ).fetchone()[0]
             conn.execute(

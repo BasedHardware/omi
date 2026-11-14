@@ -33,11 +33,11 @@
     {
       "collection": "jobstore_handoffs",
       "owner": "pgfoundation / SCA-1959 dark D custody",
-      "unit": "one explicit handoff/projection transaction attempt with at most 128 siblings",
+      "unit": "one explicit handoff/projection attempt (<=128 siblings), cold source page (<=100 rows), or recording cold erase attempt",
       "reads_per_unit_budget": 1000,
       "reads_per_day_budget": 1,
       "basis": "planning-bound",
-      "source": "SCA-1959 dark source planning bound: generic handoff cycle remains 9 reads with one attempt per phase. Typed projection adds a private view: guard reads 2n sibling docs plus authority/root/cursor; completion repeats the guard for the actual session and reads the sibling receipts/accounting, bounded by 7n+20 <=916 reads per attempt for n<=128. Retries/redeliveries are separately counted. Privacy/customer ledger/outbox reads belong to their respective families. tests/integration/test_jobstore_provider_projection.py counts actual direct reads for the two-sibling real projection path. No production selector: expected 0/day, existing 1/day sentinel only. Measured fleet/conflict/recovery/writer volume and a replacement reviewed daily budget remain required before activation; source delivery books no savings.",
+      "source": "SCA-1959 dark source planning bound: generic handoff cycle remains 9 reads with one attempt per phase. Typed projection adds a private view: guard reads 2n sibling docs plus authority/root/cursor; completion repeats the guard for the actual session and reads the sibling receipts/accounting, bounded by 7n+20 <=916 reads per attempt for n<=128. Retries/redeliveries are separately counted. Privacy/customer ledger/outbox reads belong to their respective families. tests/integration/test_jobstore_provider_projection.py counts actual direct reads for the two-sibling real projection path. No production selector: expected 0/day, existing 1/day sentinel only. Measured fleet/conflict/recovery/writer volume and a replacement reviewed daily budget remain required before activation; source delivery books no savings. Ordinary typed cold source adds 5 direct family reads per row/attempt (<=500/page); recording cold erasure reads authority/barrier plus <=399 original cold keys (<=401/attempt). test_jobstore_cold_sink.py counts the actual two-sibling direct-read paths (5 for one copied row; 9 for recording erasure). These planning counts reuse the existing 1000 bound and 0 expected production/1 sentinel per day; they are not a new funded budget or fleet qualification. All retry attempts/redeliveries count separately.",
       "reviewed": "2026-11-13"
     },
     {

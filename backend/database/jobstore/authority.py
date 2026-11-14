@@ -113,7 +113,8 @@ def replay_page(pool, namespace, apply, *, limit=100):
         conn.execute("SET LOCAL lock_timeout='2s'")
         conn.execute("SET LOCAL statement_timeout='5s'")
         state = conn.execute(
-            'SELECT copier_stopped,applied_seq,committed_seq FROM queue_authority ' 'WHERE namespace=%s FOR SHARE',
+            'SELECT copier_stopped,applied_seq,committed_seq,epoch FROM queue_authority '
+            'WHERE namespace=%s FOR SHARE',
             (namespace,),
         ).fetchone()
         if state is None or state[0]:
@@ -124,7 +125,7 @@ def replay_page(pool, namespace, apply, *, limit=100):
             (namespace, state[1], state[2], max(1, min(limit, 100))),
         ).fetchall()
     # No PG transaction, guard or pool slot survives across sink I/O. A stopped
-    # page cannot advance the checkpoint. The missing sink adapter must also
+    # page cannot advance the checkpoint. Each concrete sink adapter must also
     # check destination authority in its own committing FS transaction, so a
     # late page can never write into a restored FS-authoritative generation.
     expected = state[1] + 1
@@ -143,7 +144,7 @@ def replay_page(pool, namespace, apply, *, limit=100):
             conn.execute("SET LOCAL statement_timeout='5s'")
             conn.execute(
                 'UPDATE queue_authority SET applied_seq=%s WHERE namespace=%s AND applied_seq=%s '
-                'AND NOT copier_stopped',
-                (rows[-1][0], namespace, state[1]),
+                'AND NOT copier_stopped AND epoch=%s',
+                (rows[-1][0], namespace, state[1], state[3]),
             )
     return len(rows)

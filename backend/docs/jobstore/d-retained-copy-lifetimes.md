@@ -140,3 +140,56 @@ cold-copy proof. Final per-record retirement, original lifetime scheduling,
 owner paging, terminal-session and residue scheduling remain unfinished.
 Readiness remains false and the first-review P1 remains open; no new review,
 activation or savings are requested.
+
+## Conditional cold copies and durable erasure suppression
+
+Migrations 0017/0018 and `cold_sink.ColdSink` bind the actual journal page
+reader to actual Firestore transactions for ordinary typed units, recordings,
+custody, handoffs and the grouped recording outbox. The outbox's immutable
+logical generation is its original paid admission ID. Legacy numeric IDs and
+missing generations are refused, not guessed or backfilled. Unsupported shared
+budgets/document cohorts also refuse without advancing the checkpoint. Runtime
+selection, final parity and cold-to-serving conversion remain absent.
+This adapter accepts current-epoch original handoffs only; an older original
+handoff cannot be adopted into a later queue epoch. Cross-epoch cohort transfer
+still requires its own qualified adapter.
+
+Every cold write first commits an immutable original per-record PG census under
+L_x. This protects the last PG custodian even before a privacy purge creates its
+separate census. The manifest includes all deterministic cold paths and the
+per-record erasure barrier, with the exact original custody deadlines and no new
+TTL. The source journal version/payload is checked against its actual PG row.
+Cold documents preserve original bodies and compare `(epoch, seq)` inside their
+actual COMMIT. Same-version differences refuse; older copies cannot overwrite
+newer ones. A fresh actual A1/walk/A2 admission and writing-transaction F token,
+privacy walk and namespace authority checks preserve the original paid P/PC
+generation/targets. A restored admission cannot adopt the old original.
+
+`cold_purge.erase_recording` is bound ahead of private/original erasure in the
+actual account/conversation adapter. It inventories the actual owner journal,
+refuses unknown cohorts or more than 1000 source rows before deletion, and
+checks the original retained-copy manifest. One bounded Firestore transaction
+checks hold/unit token, queue epoch and real deletion intent (exact F generation
+for account purge), deletes the original cold keys, and commits a durable
+per-record suppression barrier through the original source sequence. Covered
+delayed puts are definitively acknowledged without recreating data. Neither a
+missing destination nor a shadow-mode selector proves erasure. All SQL slots
+and owner guards end before this FS I/O. The page checkpoint also CASes its
+observed source epoch, so a completed old page cannot advance a newer epoch.
+
+Real child-process exits cover before/after cold-copy and cold-erasure COMMIT.
+The emulator retains killed-client read leases: copy redelivery is bounded to
+64 deliveries at the unchanged 1.5-second page budget; erasure uses at most 12
+deliveries with unchanged unit/SDK deadlines. These are synthetic redelivery
+tests, not a new production retry policy or fleet qualification.
+
+The cold census and suppression barrier remain original retained copies. No
+journal row, committed prefix, original intake repair context, PG attempt/effect
+identity, operation barrier or final per-record custodian is retired. Original
+intake/staging/late-session references and C4 still lack definitive proofs.
+Destructive PG journal/final cleanup needs its own prepared/committed/cancelled
+barriers and complete remote proof before it can execute. Neither successful
+cold-copy acknowledgement nor this phase receipt is a final erasure/reverse
+certificate. Owner paging, account orchestration, other cohorts, runtime
+injection and lifetime/residue scheduling remain gates. Source readiness is
+false and no savings are booked.

@@ -153,3 +153,27 @@ per-record retirement, real reverse sink/certificates, runtime account recovery,
 scheduling/paging and full matrix/fleet/budget qualification remain missing.
 The first P1 stays open, readiness stays false, and no new review round, merge,
 activation or savings are requested.
+
+### Ordinary typed conditional cold sink continuation
+
+Migrations 0017/0018 bind a concrete conditional Firestore cold destination to
+the actual journal reader. The grouped outbox uses immutable original admission
+generation instead of numeric PG identity. Original source rows/bodies are
+verified; cold transactions compare epoch/sequence and recheck actual privacy,
+token and queue authority. Original per-record PG custody is persisted before
+the first cold write, with exact deadlines and no new TTL.
+
+The actual erasure entrypoint now performs mode-independent cold deletion and
+commits a per-record durable suppression barrier. Delayed covered source pages
+cannot recreate erased data. Lost replies/process exits preserve replay and
+original PG custody. Source checkpoints additionally CAS the observed epoch.
+Unsupported cohorts/generations, shared budget rows and oversized owner journal
+censuses refuse. No runtime factory selects this source.
+
+See `d-retained-copy-lifetimes.md` for retained cold census/barrier lifetimes
+and real COMMIT crash coverage. Journal rows/prefixes and final PG custodians
+are still retained: intake/staging/late object proofs, real C4, full reverse
+conversion/parity, destructive PG final barriers, all cohorts, runtime
+orchestration/paging/scheduling and full matrix/fleet/budget qualification remain
+open. This is not a final reverse/erasure certificate. Readiness remains false,
+the first P1 remains open, and no new review, activation or savings are claimed.

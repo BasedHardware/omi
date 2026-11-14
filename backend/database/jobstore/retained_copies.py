@@ -10,9 +10,9 @@ No factory selects it, no clock grants authority, and no new TTL is assigned.
 from google.cloud import firestore
 
 from database.jobstore.authority import AuthorityRefused, fingerprint
-from database.jobstore.fs_fence import handoff_ref
 from database.jobstore.postgres_store import jsonb
-from database.jobstore.provider_handoff import validate_provider_payload
+from database.jobstore.retained_manifest import original_manifest
+from database.jobstore.cold_purge import erase_recording
 from database.privacy_fence.protocol import conversation_key, lock, owner_key, row_dict
 
 
@@ -49,32 +49,7 @@ class RetainedCopies:
         return p
 
     def _manifest(self, row):
-        intent = row['intent']
-        binding = validate_provider_payload(intent['payload'])
-        ns, identity = row['namespace'], row['identity']
-        if binding.job_id != identity or owner_key(binding.owner_id) != row['owner_key']:
-            raise AuthorityRefused('original recording ownership/census mismatch')
-        paths = [
-            handoff_ref(self.handoff.client, ns, 'provider_projection_' + table, identity + '/' + sid).path
-            for sid in binding.segment_ids
-            for table in ('jobs', 'results')
-        ] + [handoff_ref(self.handoff.client, ns, 'provider_projection_owners', identity + '/' + row['owner_key']).path]
-        return dict(
-            unit_ids=list(binding.segment_ids),
-            private_paths=paths,
-            original_deadlines={
-                sid: intent['payload']['jobs'][sid]['typed_provider']['custody_deadline'] for sid in binding.segment_ids
-            },
-            original_paths=[
-                handoff_ref(self.handoff.client, ns, kind, identity).path
-                for kind in ('intent', 'completion', 'receipt')
-            ]
-            + [self.handoff.client.collection(ns + '_intakes').document(identity).path],
-            # These are outstanding obligations, never asserted absence or a
-            # fabricated object/session certificate. Their original references
-            # and attempt histories remain in PG until every outcome is known.
-            outstanding=['original_objects', 'original_metadata', 'paid_attempts', 'journal', 'cold_copies'],
-        )
+        return original_manifest(self.handoff, row)
 
     def inventory(self, uid, conversation=None):
         """Persist at most ten original recording censuses before deleting any copy.
@@ -184,6 +159,9 @@ class RetainedCopies:
         while the new durable census still has unresolved remote copy families.
         """
         for identity, manifest in self.inventory(uid, conversation):
+            erase_recording(
+                self, uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
+            )
             self.retire_private(
                 uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
             )
