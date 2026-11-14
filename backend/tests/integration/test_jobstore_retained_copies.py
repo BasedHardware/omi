@@ -5,6 +5,7 @@ metadata, journal finalization and the remote destructive-unit adapter remain
 unqualified; neither a callback nor a manifest is an erasure certificate.
 """
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -369,12 +370,22 @@ def test_stale_queue_epoch_refuses_before_remote_delete(retained):
     )
 
 
-def test_account_binding_refuses_before_f_advance_without_purging_p(retained):
+def test_account_binding_refuses_before_f_advance_without_purging_p(retained, monkeypatch):
     from database.batch_pipeline_purge import purge_batch_owner
 
     r = retained
     privacy = r.handoff.client.collection('batch_pipeline_privacy').document(owner_key(r.uid))
     before = privacy.get().to_dict()
+    from database import batch_pipeline_purge
+
+    advanced = []
+    original = batch_pipeline_purge.advance_privacy_generation
+
+    def observe(*a, **k):
+        advanced.append(True)
+        return original(*a, **k)
+
+    monkeypatch.setattr(batch_pipeline_purge, 'advance_privacy_generation', observe)
     with unit(r) as authority:
         with pytest.raises(AuthorityRefused, match='purging or erased P'):
             purge_batch_owner(
@@ -384,5 +395,52 @@ def test_account_binding_refuses_before_f_advance_without_purging_p(retained):
                 retained_copies=r.purge,
                 destructive_authority=authority,
             )
-    assert privacy.get().to_dict() == before
+    after = privacy.get().to_dict()
+    assert not advanced
+    # Gate acquisition/release can benignly rotate memo_token. P/F purge state
+    # must not change, and the actual generation-advance function never ran.
+    assert {key: after.get(key) for key in ('generation', 'blocked', 'purging')} == {
+        key: before.get(key) for key in ('generation', 'blocked', 'purging')
+    }
     assert private_left(r) == 5
+
+
+def test_real_redirect_admission_target_is_in_conversation_erasure_census(context, monkeypatch):
+    from database.batch_pipeline_conversation_purge import purge_conversation
+    from database.batch_pipeline_purge import retained_provider_copies
+    from database.jobstore.provider_projection import ProviderProjection
+    from testing.store_fixtures import ClientCustomerData
+    from tests.integration.test_jobstore_provider_handoff import upload, terminal
+
+    handoff, uid = context
+    target = 'redirect-target'
+    ClientCustomerData(handoff.client).add_conversation(uid, target)
+    handoff.client.document(f'users/{uid}/conversations/c').update({'deleted': True, 'sync_merged_into': target})
+    provider, binding, _, _ = upload(context, monkeypatch, count=1)
+    admission = provider.deliver(binding.job_id)
+    target_key = conversation_key(owner_key(uid), target)
+    assert target_key in {t['conversation_key'] for t in admission['privacy_targets']}
+    with handoff.pool.connection() as conn:
+        assert target not in handoff._required_row(conn, binding.job_id)['intent']['conversation_ids']
+    (claimed,) = provider.units.claim(1, now=201, lease_seconds=30, backlog_share=0)
+    assert terminal(provider, claimed)
+    view = ProviderProjection(handoff, binding.job_id)
+    view.prepare()
+    handoff.client.document(f'users/{uid}/deleted_conversations/{target}').set({'id': target})
+    handoff.fence.close(owner_key(uid), conversation=target_key, state='deleted', local=True)
+    copies = retained_provider_copies(handoff)
+    manifest = copies.inventory(uid, target)[0][1]
+    assert len(manifest['private_paths']) == 3
+
+    @contextmanager
+    def destructive_unit():
+        with legal_holds.bounded_destructive_unit(
+            uid, kind='conversation_batch_purge', firestore_client=handoff.client
+        ) as authority:
+            yield authority
+
+    progress = SimpleNamespace(position={}, expired=lambda: False, unit=destructive_unit)
+    with pytest.raises(RetainedCopiesPending):
+        purge_conversation(uid, target, progress, firestore_client=handoff.client, retained_copies=copies)
+    assert not any(handoff.client.document(path).get().exists for path in manifest['private_paths'])
+    assert handoff.ref('intent', binding.job_id).get().exists

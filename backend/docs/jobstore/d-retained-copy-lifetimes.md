@@ -43,7 +43,9 @@ of the old mode-dependent purge.
 | New PG census itself | Original recording's unresolved erasure obligation | Immutable per-record paths/deadlines, no independent TTL; final cleanup requires remaining proofs and is not implemented |
 
 The adapter enumerates at most ten original recordings per owner invocation and
-refuses an oversized page before deletion. Production paging, unsupported
+refuses an oversized page before deletion. Conversation matching includes the
+original immutable paid admission targets discovered through real redirect
+walks, even when the canonical target is absent from the original intent list. Production paging, unsupported
 cohorts/shared-state census and final per-record cleanup are gates. Every
 private transaction has at most 257 deletes for 128 siblings, below the existing
 400-write erasure bound. Each attempt reads its actual hold, gate token, queue

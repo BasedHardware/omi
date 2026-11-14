@@ -95,8 +95,11 @@ class RetainedCopies:
             selected = []
             for (identity,) in rows:
                 row = self.handoff._required_row(conn, identity)
-                if conversation is not None and conversation not in row['intent']['conversation_ids']:
-                    continue
+                if conversation is not None:
+                    target = conversation_key(owner, conversation)
+                    paid_targets = {t['conversation_key'] for t in row['admission']['privacy_targets']}
+                    if conversation not in row['intent']['conversation_ids'] and target not in paid_targets:
+                        continue
                 manifest = self._manifest(row)
                 digest = fingerprint(dict(intent=row['intent'], admission=row['admission']))
                 old = row_dict(
