@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 from config.batch_pipeline import (
     owner_drain_enabled,
     projection_index_deferred_enabled,
-    projection_finish_async_skip_enabled,
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
     projection_prefetch_depth,
@@ -30,7 +29,6 @@ from config.batch_pipeline import (
     serving_sweep_page_rows,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
-from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK, PROJECTION_FINISH_DUE_FIELD
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
@@ -1699,9 +1697,7 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
-        Finish discovery excludes classified async receipts, probing one
-        unfiltered row to keep follow-up discovery scheduled. The finish
-        backoff owns page selection and synchronous deferral; see
+        FinishBackoff owns async discovery hints and synchronous deferral; see
         utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1719,13 +1715,8 @@ class Projector:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
-                    self.has_async_followups = True
+                    self.finish_backoff.observed_async(segment_id, entry)
                     defer = False
-                    if (
-                        projection_finish_async_skip_enabled()
-                        and entry.get(PROJECTION_FINISH_DUE_FIELD) != PROJECTION_FINISH_ASYNC_CLOCK
-                    ):
-                        self.store.retire_async_finish(segment_id)
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1

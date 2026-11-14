@@ -10,6 +10,7 @@ import time
 
 from config.batch_pipeline import projection_finish_backoff_enabled, projection_finish_async_skip_enabled
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
+from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK, PROJECTION_FINISH_DUE_FIELD
 
 
 class FinishBackoff:
@@ -37,6 +38,14 @@ class FinishBackoff:
             self.projector.has_async_followups |= bool(rows)
         ceiling = self.projector.clock() if backoff else float('inf')
         return discovery.next(limit=size, due_before=ceiling, exclude_async=skip_async)
+
+    def observed_async(self, segment_id: str, entry: dict) -> None:
+        self.projector.has_async_followups = True
+        if (
+            projection_finish_async_skip_enabled()
+            and entry.get(PROJECTION_FINISH_DUE_FIELD) != PROJECTION_FINISH_ASYNC_CLOCK
+        ):
+            self.projector.store.retire_async_finish(segment_id)
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
         """Defer only after a no-change walk using the clock-filtered page.
