@@ -4,7 +4,7 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
 import re
@@ -79,7 +79,7 @@ class ProjectionStore:
 
         return ProviderProjection(handoff, identity)
 
-    def writer_scope(self):
+    def writer_scope(self) -> AbstractContextManager[None]:
         """Cover the caller through SDK COMMIT; transition stores keep their scope."""
         return nullcontext()
 
