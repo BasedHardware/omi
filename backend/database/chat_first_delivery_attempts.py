@@ -62,8 +62,9 @@ def _resolve_client(firestore_client: Any = None) -> Any:
         return firestore_client
     from database._client import db, get_firestore_client
 
-    if db is not None:
-        return db
+    client: Any = db
+    if client is not None:
+        return client
     return get_firestore_client()
 
 
