@@ -1,0 +1,332 @@
+# Durable batch-state custody, seeded after SCA-1894 (2026-11-13).
+# Collection templates expand {namespace} to batch_pipeline_dev/prod (or the
+# configured staging namespace). No document IDs, settings or live versions.
+# Readers are a conservative deployment envelope: each can execute shared
+# pipeline code, even when its local admission gate is off. Never remove the
+# independently released GPU worker because Cloud Run admission is disabled.
+# Minimum versions are source commits, NOT claims about currently served images.
+# A semantics change must update every affected reader's required commit in the
+# PR (an introducing ancestor or immutable release), and name its rollout order.
+# Literal coverage is field-name based; computed/nested fields, queue names and
+# object layouts still need explicit review. YAML anchors share custody metadata,
+# not state entries. Add one collection.field, queue, prefix or flag per entry.
+schema_version: 1
+custody:
+  pipeline: &pipeline
+    writers: &pipeline_writers
+      - cloud_run/backend
+      - cloud_run/backend-sync
+      - cloud_run/backend-sync-backfill
+      - cloud_run/backend-integration
+      - gke/backend-listen
+      - desktop_backend
+      - helm/batch-pipeline-worker
+    readers: &pipeline_readers
+      cloud_run/backend: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      cloud_run/backend-sync: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      cloud_run/backend-sync-backfill: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      cloud_run/backend-integration: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      gke/backend-listen: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      desktop_backend: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+      helm/batch-pipeline-worker: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+    kill_switch:
+      flag: BATCH_PIPELINE_WORKER_ENABLED
+      service: helm/batch-pipeline-worker
+    containment: Stops GPU worker startup/pulls after rollout; API maintenance needs its own serving switch.
+  serving: &serving
+    writers: *pipeline_writers
+    readers: *pipeline_readers
+    kill_switch:
+      flag: BATCH_PIPELINE_SERVING_ENABLED
+      service: cloud_run/backend-integration
+    containment: Stops this host's serving supervisor after rollout; apply on each serving reader that must stop.
+  # The encrypted maintenance frontier is constructed only by RepairCursor, which
+  # only record_seal_cluster_repair.run() reaches, and only the record-seal-repair
+  # CronJob (scripts/record_seal_repair_job.py) launches that path. The CronJob
+  # ships in the independently released helm/batch-pipeline-worker chart, so the
+  # Cloud Run service is neither a reader nor a writer here and disabling it does
+  # not contain this consumer.
+  cursor: &cursor
+    writers: [helm/batch-pipeline-worker]
+    readers:
+      helm/batch-pipeline-worker: "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+    kill_switch:
+      flag: RECORD_SEAL_REPAIR_ENABLED
+      service: helm/batch-pipeline-worker
+    containment: >-
+      recordSealRepair.runtimeEnabled sets RECORD_SEAL_REPAIR_ENABLED on the repair
+      CronJob pod itself; the Cloud Run service's own binding gates only its partial
+      and projection repair paths, not this cursor. Suspend the CronJob
+      (recordSealRepair.suspend) or stop its active Job for immediate cessation.
+states:
+  "{namespace}_artifacts.cleanup_after": *serving
+  "{namespace}_artifacts.segment_id": *serving
+  "{namespace}_coalesce_groups.bytes": *pipeline
+  "{namespace}_coalesce_groups.expires_at": *pipeline
+  "{namespace}_coalesce_groups.files": *pipeline
+  "{namespace}_coalesce_groups.first_accept_at": *pipeline
+  "{namespace}_coalesce_groups.id": *pipeline
+  "{namespace}_coalesce_groups.key": *pipeline
+  "{namespace}_coalesce_groups.lease_until": *pipeline
+  "{namespace}_coalesce_groups.members": *pipeline
+  "{namespace}_coalesce_groups.mode": *pipeline
+  "{namespace}_coalesce_groups.release_by": *pipeline
+  "{namespace}_coalesce_groups.scan_at": *pipeline
+  "{namespace}_coalesce_groups.seconds": *pipeline
+  "{namespace}_coalesce_groups.state": *pipeline
+  "{namespace}_coalesce_groups.token": *pipeline
+  "{namespace}_coalesce_heads.bytes": *pipeline
+  "{namespace}_coalesce_heads.expires_at": *pipeline
+  "{namespace}_coalesce_heads.files": *pipeline
+  "{namespace}_coalesce_heads.first_accept_at": *pipeline
+  "{namespace}_coalesce_heads.group_id": *pipeline
+  "{namespace}_coalesce_heads.id": *pipeline
+  "{namespace}_coalesce_heads.key": *pipeline
+  "{namespace}_coalesce_heads.members": *pipeline
+  "{namespace}_coalesce_heads.release_by": *pipeline
+  "{namespace}_coalesce_heads.scan_at": *pipeline
+  "{namespace}_coalesce_heads.seconds": *pipeline
+  "{namespace}_coalesce_heads.state": *pipeline
+  "{namespace}_coalesce_quota.groups": *pipeline
+  "{namespace}_coalesce_quota.last_scan_at": *pipeline
+  "{namespace}_coalesce_quota.owners": *pipeline
+  "{namespace}_coalesce_quota.scan_after": *pipeline
+  "{namespace}_coalesce_quota.scan_epoch": *pipeline
+  "{namespace}_coalesce_sources.expires_at": *pipeline
+  "{namespace}_coalesce_sources.group_id": *pipeline
+  "users/{owner}/{sync_content_ledger}.artifact_missing_units": *serving
+  "users/{owner}/{sync_content_ledger}.artifact_reupload": *serving
+  "users/{owner}/{sync_content_ledger}.batch_pipeline": *serving
+  "users/{owner}/{sync_content_ledger}.created_at": *serving
+  "users/{owner}/{sync_content_ledger}.dispatch_protocol": *serving
+  "users/{owner}/{sync_content_ledger}.expires_at": *serving
+  "users/{owner}/{sync_content_ledger}.job_id": *serving
+  "users/{owner}/{sync_content_ledger}.lane": *serving
+  "users/{owner}/{sync_content_ledger}.owner_id": *serving
+  "users/{owner}/{sync_content_ledger}.record_content_id": *serving
+  "users/{owner}/{sync_content_ledger}.result": *serving
+  "users/{owner}/{sync_content_ledger}.status": *serving
+  "users/{owner}/{sync_content_ledger}.updated_at": *serving
+  "users/{owner}/conversations.record_lane_owner": *serving
+  "{namespace}_gpus.lease_until": *pipeline
+  "{namespace}_gpus.released_token": *pipeline
+  "{namespace}_gpus.segment_id": *pipeline
+  "{namespace}_gpus.token": *pipeline
+  "{namespace}_intakes.accepted_at": *serving
+  "{namespace}_intakes.coalesce_group": *serving
+  "{namespace}_intakes.coalesce_target": *serving
+  "{namespace}_intakes.content_id": *serving
+  "{namespace}_intakes.conversation_ids": *serving
+  "{namespace}_intakes.expires_at": *serving
+  "{namespace}_intakes.owner_id": *serving
+  "{namespace}_intakes.segment_ids": *serving
+  "{namespace}_intakes.total_files": *serving
+  "{namespace}_jobs.admission_refusals": *pipeline
+  "{namespace}_control.after_id": *serving
+  "{namespace}_jobs.artifact_disposition": *pipeline
+  "{namespace}_jobs.attempt": *pipeline
+  "{namespace}_jobs.audio_uri": *pipeline
+  "{namespace}_jobs.available_at": *pipeline
+  "{namespace}_jobs.capture_at": *pipeline
+  "{namespace}_artifacts.cleanup_error": *serving
+  "{namespace}_artifacts.cleanup_flagged_at": *serving
+  "{namespace}_artifacts.cleanup_hold": *serving
+  "{namespace}_jobs.compute_admission_token": *pipeline
+  "{namespace}_jobs.compute_decision": *pipeline
+  "{namespace}_jobs.conversation_id": *pipeline
+  "{namespace}_jobs.dead_letter_reason": *pipeline
+  "{namespace}_jobs.duration_seconds": *pipeline
+  "{namespace}_jobs.enqueued_at": *pipeline
+  "{namespace}_jobs.erasure_requested": *pipeline
+  "{namespace}_jobs.failure": *pipeline
+  "{namespace}_jobs.fresh_capture": *pipeline
+  "{namespace}_jobs.held_deadline_at": *pipeline
+  "{namespace}_jobs.held_expired_at": *pipeline
+  "{namespace}_jobs.held_requeued_at": *pipeline
+  "{namespace}_jobs.input_expiring_at": *pipeline
+  "{namespace}_jobs.input_expiring_leg": *pipeline
+  "{namespace}_jobs.kind": *pipeline
+  "{namespace}_jobs.language_receipt_enabled": *pipeline
+  "{namespace}_jobs.last_policy_hold": *pipeline
+  "{namespace}_jobs.late_capture": *pipeline
+  "{namespace}_jobs.lease_until": *pipeline
+  "{namespace}_jobs.measured_held_vad_speech_seconds": *pipeline
+  "{namespace}_jobs.merge_pending": *pipeline
+  "{namespace}_jobs.next": *pipeline
+  "{namespace}_jobs.owner_id": *pipeline
+  "{namespace}_jobs.owner_key": *pipeline
+  "{namespace}_jobs.partial_run": *pipeline
+  "{namespace}_jobs.policy": *pipeline
+  "{namespace}_jobs.policy_part_sources": *pipeline
+  "{namespace}_jobs.policy_parts": *pipeline
+  "{namespace}_jobs.policy_source": *pipeline
+  "{namespace}_jobs.priority": *pipeline
+  "{namespace}_jobs.privacy_blocked_at": *pipeline
+  "{namespace}_jobs.privacy_generation": *pipeline
+  "{namespace}_jobs.privacy_quarantine_version": *pipeline
+  "{namespace}_jobs.projection_binding": *pipeline
+  "{namespace}_jobs.protocol_version": *pipeline
+  "{namespace}_jobs.provider_intent": *pipeline
+  "{namespace}_jobs.quarantine_reason": *pipeline
+  "{namespace}_jobs.quarantined_at": *pipeline
+  "{namespace}_jobs.ready_at": *pipeline
+  "users/{owner}/conversations.record_audio_closed": *serving
+  "{namespace}_jobs.record_content_id": *pipeline
+  "{namespace}_jobs.record_dead_letter_at": *pipeline
+  "{namespace}_jobs.record_dead_letter_deadline_at": *pipeline
+  "{namespace}_jobs.record_input_upload_revision": *pipeline
+  "{namespace}_jobs.record_snapshot": *pipeline
+  "users/{owner}/conversations.record_upload_failed": *serving
+  "users/{owner}/conversations.record_upload_sessions": *serving
+  "{namespace}_jobs.recovery": *pipeline
+  "{namespace}_jobs.recovery_state": *pipeline
+  "{namespace}_jobs.recovery_wake": *pipeline
+  "{namespace}_jobs.release": *pipeline
+  "{namespace}_jobs.requires_compute_admission": *pipeline
+  "{namespace}_jobs.result": *pipeline
+  "{namespace}_jobs.retry_started_at": *pipeline
+  "{namespace}_jobs.rings": *pipeline
+  "{namespace}_jobs.segment_id": *pipeline
+  "{namespace}_jobs.shared_gpu_key": *pipeline
+  "{namespace}_jobs.silence_disposition": *pipeline
+  "{namespace}_jobs.speech_redrive": *pipeline
+  "{namespace}_jobs.state": *pipeline
+  "{namespace}_jobs.stt_route": *pipeline
+  "{namespace}_jobs.superseded_at": *pipeline
+  "{namespace}_jobs.terminal_disposition": *pipeline
+  "{namespace}_jobs.timing_store": *pipeline
+  "{namespace}_jobs.token": *pipeline
+  "{namespace}_jobs.unit_kind": *pipeline
+  "{namespace}_jobs.uri": *pipeline
+  "{namespace}_jobs.worker_empty_evidence": *pipeline
+  "{namespace}_jobs.worker_failure": *pipeline
+  "{namespace}_jobs.write_pending_until": *pipeline
+  "{namespace}_leases.expires_at": *pipeline
+  "{namespace}_leases.holder": *pipeline
+  "{namespace}_leases.renewed_at": *pipeline
+  "{namespace}_leases.role": *pipeline
+  "{namespace}_leases.token": *pipeline
+  "batch_pipeline_prod_maintenance.cursor": *cursor
+  "batch_pipeline_prod_maintenance.version": *cursor
+  "{namespace}_merge_holds.held": *pipeline
+  "{namespace}_merge_holds.held_at": *pipeline
+  "{namespace}_owners.log_sequence": *pipeline
+  "{namespace}_owners.log_tail": *pipeline
+  "{namespace}_owners.revision": *pipeline
+  "{namespace}_owners.watermark": *pipeline
+  "batch_pipeline_privacy.blocked": *serving
+  "batch_pipeline_privacy.generation": *serving
+  "batch_pipeline_privacy.purging": *serving
+  "{namespace}_pull_claims.expires_at": *pipeline
+  "{namespace}_pull_claims.token": *pipeline
+  "{namespace}_queues.continuing": *pipeline
+  "{namespace}_queues.deficit": *pipeline
+  "{namespace}_queues.head": *pipeline
+  "{namespace}_queues.tail": *pipeline
+  "{namespace}_results.allowance_billed_seconds": *serving
+  "{namespace}_results.allowance_billing_started_at": *serving
+  "{namespace}_results.capture_at": *serving
+  "{namespace}_results.client_result": *serving
+  "{namespace}_results.client_status": *serving
+  "{namespace}_results.committed_at": *serving
+  "{namespace}_results.conversation_id": *serving
+  "{namespace}_results.fresh_first": *serving
+  "{namespace}_results.ghost_settled_cohort": *serving
+  "{namespace}_results.head_wait_bypass": *serving
+  "{namespace}_results.held_deadline_at": *serving
+  "{namespace}_results.held_expired_at": *serving
+  "{namespace}_results.held_expired_reason": *serving
+  "{namespace}_results.held_expired_release_attempts": *serving
+  "{namespace}_results.late_capture": *serving
+  "{namespace}_results.lineage_quarantine_version": *serving
+  "{namespace}_results.log_sequence": *serving
+  "{namespace}_results.owner_id": *serving
+  "{namespace}_results.owner_key": *serving
+  "{namespace}_results.previous_segment_id": *serving
+  "{namespace}_results.privacy_generation": *serving
+  "{namespace}_results.projection": *serving
+  "{namespace}_results.projection_block_type": *serving
+  "{namespace}_results.projection_blocked_since": *serving
+  "{namespace}_results.projection_part_count": *serving
+  "{namespace}_results.projection_parts": *serving
+  "{namespace}_results.projection_privacy_checkpoint": *serving
+  "{namespace}_results.projection_privacy_refusal": *serving
+  "{namespace}_results.projection_redriven_at": *serving
+  "{namespace}_results.projection_release_attempts": *serving
+  "{namespace}_results.projection_release_version": *serving
+  "{namespace}_results.projection_state": *serving
+  "{namespace}_results.projection_watermark": *serving
+  "{namespace}_results.protocol_version": *serving
+  "{namespace}_results.recovered_release": *serving
+  "{namespace}_results.recovery_version": *serving
+  "{namespace}_results.result": *serving
+  "{namespace}_results.segment_id": *serving
+  "{namespace}_results.sync_silent_redrive_revision": *serving
+  "{namespace}_results.usage_committed_at": *serving
+  "{namespace}_results.usage_committed_seconds": *serving
+  "{namespace}_results.usage_step_times": *serving
+  "{namespace}_results.usage_steps": *serving
+  "{namespace}_shadow_jobs.class": *pipeline
+  "{namespace}_shadow_jobs.created_at": *pipeline
+  "{namespace}_shadow_jobs.expires_at": *pipeline
+  "{namespace}_shadow_jobs.item": *pipeline
+  "{namespace}_shadow_jobs.language": *pipeline
+  "{namespace}_shadow_jobs.outcome": *pipeline
+  "{namespace}_shadow_jobs.owner_key": *pipeline
+  "{namespace}_shadow_jobs.paid": *pipeline
+  "{namespace}_shadow_jobs.paid_providers": *pipeline
+  "{namespace}_shadow_jobs.projection_attempted_at": *pipeline
+  "{namespace}_shadow_jobs.projection_context": *pipeline
+  "{namespace}_shadow_jobs.recovery_policy": *pipeline
+  "{namespace}_shadow_jobs.recovery_started_at": *pipeline
+  "{namespace}_shadow_jobs.settled_at": *pipeline
+  "{namespace}_shadow_jobs.shadow": *pipeline
+  "{namespace}_shadow_jobs.speech_loss_seconds": *pipeline
+  "{namespace}_shadow_jobs.speech_seconds": *pipeline
+  "{namespace}_shadow_jobs.started_at": *pipeline
+  "{namespace}_shadow_jobs.state": *pipeline
+  "{namespace}_shadow_jobs.vad": *pipeline
+  "{namespace}_shadow_jobs.worker_empty_evidence": *pipeline
+  "{namespace}_shadow_jobs.worker_failure": *pipeline
+  "{namespace}_shadow_slots.segment": *pipeline
+  "{namespace}_shadow_slots.state": *pipeline
+  "{namespace}_shadow_slots.until": *pipeline
+  "{namespace}_shadow_slots.worker": *pipeline
+  "{namespace}_shadow_spend.expires_at": *pipeline
+  "{namespace}_shadow_spend.units": *pipeline
+  "cloud_tasks/BATCH_PIPELINE_RECOVERY_TASKS_QUEUE": *serving
+  "cloud_tasks/SYNC_TASKS_QUEUE (recovery fallback)": *serving
+  "gcs/batch-pipeline/{namespace}/owners/{owner_hash}/audio/": *pipeline
+  "gcs/batch-pipeline/{namespace}/owners/{owner_hash}/results/": *pipeline
+  "flag/BATCH_PIPELINE_ENABLED": *serving
+  "flag/BATCH_PIPELINE_SERVING_ENABLED": *serving
+  "flag/BATCH_PIPELINE_WORKER_ENABLED": *pipeline
+  "{namespace}_control.rings": *pipeline
+  "{namespace}_control.p0_active": *pipeline
+  "{namespace}_control.p0_service": *pipeline
+  "{namespace}_control.p0_batch_available_at": *pipeline
+  "{namespace}_control.p0_live_available_at": *pipeline
+  "{namespace}_control.p0_frontier_hint": *pipeline
+  "{namespace}_control.p1_active": *pipeline
+  "{namespace}_control.p1_service": *pipeline
+  "{namespace}_control.p1_batch_available_at": *pipeline
+  "{namespace}_control.p1_live_available_at": *pipeline
+  "{namespace}_control.p1_frontier_hint": *pipeline
+  "{namespace}_control.p2_active": *pipeline
+  "{namespace}_control.p2_service": *pipeline
+  "{namespace}_control.p2_batch_available_at": *pipeline
+  "{namespace}_control.p2_live_available_at": *pipeline
+  "{namespace}_control.p2_frontier_hint": *pipeline
+  "{namespace}_artifacts.owner_id": *serving
+  "{namespace}_artifacts.owner_key": *serving
+  "{namespace}_artifacts.conversation_ids": *serving
+  "{namespace}_artifacts.capture_at": *serving
+  "{namespace}_artifacts.duration_seconds": *serving
+  "{namespace}_artifacts.privacy_generation": *serving
+  "{namespace}_artifacts.kind": *serving
+  "{namespace}_artifacts.uri": *serving
+  "{namespace}_artifacts.write_pending_until": *serving
+  "{namespace}_artifacts.erasure_requested": *serving
+  "{namespace}_artifacts.shadow": *serving
+  "{namespace}_artifacts.expires_at": *serving
+  "{namespace}_owners.projection_watermark": *pipeline
