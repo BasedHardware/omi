@@ -56,7 +56,12 @@ def _expect_recovery(monkeypatch, label, strikes):
 def _expect_exhaustion(monkeypatch, label):
     fault = _fault(label)
     run = run_lane(monkeypatch, exhaust_script(fault))
-    assert run['results'] == []
+    if label == 'invalid_argument':
+        # The deterministic refusal books the typed custody handoff.
+        assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+        assert run['results'][0].reason == 'persist_payload_invalid'
+    else:
+        assert run['results'] == []
     assert run['meta']['failures'] == [('a', fault.__name__)]
 
 

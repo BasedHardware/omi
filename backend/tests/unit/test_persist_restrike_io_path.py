@@ -84,9 +84,11 @@ def test_io_path_recovers_after_2_strikes_with_the_documented_schedule(monkeypat
     assert run['sleeps'].delays == [0.25, 0.5]
 
 
-def test_io_path_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_io_path_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), io_concurrency=2)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_io_path_keeps_the_gpu_chain_at_one_pass(monkeypatch):

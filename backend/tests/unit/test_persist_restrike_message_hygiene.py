@@ -67,7 +67,7 @@ def _lane_env(monkeypatch):
 def test_message_00_uid_abc123_capture_token_never_reaches_the_fault_line(monkeypatch):
     secret = 'uid-abc123-capture-token'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []
@@ -96,7 +96,7 @@ def test_message_00_uid_abc123_capture_token_never_reaches_the_wait_line(monkeyp
 def test_message_01_segment_9f8e8d_payload_s_never_reaches_the_fault_line(monkeypatch):
     secret = 'segment-9f8e8d-payload-shape'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []
@@ -125,7 +125,7 @@ def test_message_01_segment_9f8e8d_payload_s_never_reaches_the_wait_line(monkeyp
 def test_message_02_owner_key_material_leak_never_reaches_the_fault_line(monkeypatch):
     secret = 'owner-key-material-leak'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []
@@ -154,7 +154,7 @@ def test_message_02_owner_key_material_leak_never_reaches_the_wait_line(monkeypa
 def test_message_03_gs___bucket_private_path_never_reaches_the_fault_line(monkeypatch):
     secret = 'gs://bucket/private/path/object.enc#123'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []
@@ -183,7 +183,7 @@ def test_message_03_gs___bucket_private_path_never_reaches_the_wait_line(monkeyp
 def test_message_04___words_____secret____never_reaches_the_fault_line(monkeypatch):
     secret = '{"words": ["secret"]}'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []
@@ -212,7 +212,7 @@ def test_message_04___words_____secret____never_reaches_the_wait_line(monkeypatc
 def test_message_05_Bearer_eyJhbGciOi_payloa_never_reaches_the_fault_line(monkeypatch):
     secret = 'Bearer eyJhbGciOi.payload.sig'
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument(secret)], default=InvalidArgument(secret)))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
     import logging
 
     captured = []

@@ -155,6 +155,20 @@ VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS = frozenset(
         WorkerValidationReason.DECODED_DURATION_MISMATCH.value,
     }
 )
+# The persist tail's deterministic refusal is the persist sibling of the
+# fetch_decode trio: the storage/register API refused the unit's request
+# payload (a 400-class ``InvalidArgument`` that is not the expired-chain
+# contention shape), identical input reproduces it on every attempt, and
+# the worker ends the chain at its first occurrence with custody retained
+# for the fenced recovery lane. The pair is stage-scoped like the trio:
+# the persist refusal raises nowhere else, so the same token at another
+# stage keeps its fault classification, and a foreign reason at the
+# persist stage (the transport/contention families, ``unknown``) stays a
+# real fault — a storage outage is not a designed handoff.
+#
+# Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
+VALIDATION_DISPOSITION_PERSIST_STAGE = WorkerValidationStage.PERSIST.value
+VALIDATION_DISPOSITION_PERSIST_REASONS = frozenset({WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value})
 VALIDATION_DISPOSITION_FLAGGED_REASONS = frozenset(
     {
         WorkerValidationReason.VAD_NONFINITE.value,
@@ -174,9 +188,10 @@ def validation_disposition_failure(failure: object, *, disposition_enabled: bool
     Accepts exactly the closed shapes the scheduler stores on a job: the
     two-key ``{'stage', 'reason'}`` dicts the store validators admit. The
     unconditional trio answers only at the fetch_decode stage the typed
-    classes raise nowhere else; the flagged verdicts answer at any closed
-    worker stage, mirroring the boundary's stage-agnostic flag-gated arm,
-    and only while ``disposition_enabled`` carries the same switch the
+    classes raise nowhere else; the persist refusal answers only at the
+    persist stage its API raises at; the flagged verdicts answer at any
+    closed worker stage, mirroring the boundary's stage-agnostic flag-gated
+    arm, and only while ``disposition_enabled`` carries the same switch the
     durable path read. Anything anonymous (empty diagnosis, extra fields,
     foreign reason, off-vocabulary stage, non-string tokens, non-dict
     input) is not the disposition and keeps its fault classification. Never
@@ -189,6 +204,8 @@ def validation_disposition_failure(failure: object, *, disposition_enabled: bool
     if not isinstance(stage, str) or not isinstance(reason, str):
         return False
     if stage == VALIDATION_DISPOSITION_UNCONDITIONAL_STAGE and reason in VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS:
+        return True
+    if stage == VALIDATION_DISPOSITION_PERSIST_STAGE and reason in VALIDATION_DISPOSITION_PERSIST_REASONS:
         return True
     return (
         disposition_enabled and stage in WORKER_VALIDATION_STAGES and reason in VALIDATION_DISPOSITION_FLAGGED_REASONS

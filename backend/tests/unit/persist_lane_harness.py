@@ -218,6 +218,44 @@ def run_lane(monkeypatch, script, gate='true', safety_net='false', **over):
     )
 
 
+def smoke_freeze(monkeypatch, *, fault, gate='true', shape='two_second'):
+    """Drive one persist-fault scenario through the real worker; freeze the booking.
+
+    The grid emitter calls this at emit time to record the literal every
+    emitted cell compares against; each cell replays the identical drive on
+    the live tree. ``fault`` is the exception instance (or a zero-arg
+    factory of fresh instances) the persist stub raises on every call.
+    """
+
+    pin_full_gpu_stages(monkeypatch)
+    monkeypatch.setenv(GATE, gate)
+    sleeps = SleepRecorder()
+    monkeypatch.setattr(bp.time, 'sleep', sleeps)
+    units = {
+        'two_second': item(),
+        'thirty_second': item('a', 30),
+        'short_capture': item('a', 1),
+    }
+    unit = units[shape]
+    if callable(fault):
+        persist = ScriptedPersist([fault()] * 3, default=fault())
+    else:
+        persist = ScriptedPersist([fault] * 3, default=fault)
+    worker, meta = build_worker(persist)
+    results = worker.process_batch([unit])
+    first = results[0] if results else None
+    return {
+        'results': [type(r).__name__ for r in results],
+        'stage': getattr(first, 'stage', None),
+        'reason': getattr(first, 'reason', None),
+        'worker_failure': dict(first.worker_failure) if getattr(first, 'worker_failure', None) else None,
+        'calls': len(persist.calls),
+        'sleeps': list(sleeps.delays),
+        'gpu_passes': len(meta['decoded']),
+        'failures': [name for _, name in meta['failures']],
+    }
+
+
 def run_two_units(monkeypatch, script, gate='true', **over):
     """Run two units through one worker with one scripted persist (script plays across both)."""
     pin_full_gpu_stages(monkeypatch)

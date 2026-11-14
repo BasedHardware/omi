@@ -69,7 +69,7 @@ from utils.batch_pipeline.errors import (
     error_site_field,
     validation_disposition_failure,
 )
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import GoogleAPIError, InvalidArgument
 from utils.batch_pipeline.word_validation import (
     BatchValidationError,
     ValidationReason,
@@ -311,6 +311,34 @@ def persist_loss_is_restrikeable(error: BaseException) -> bool:
     Failure-Class: FC-persist-socket-transport-loss-discards-completed-gpu-results
     """
     return isinstance(error, (GoogleAPIError, TimeoutError))
+
+
+def persist_loss_is_deterministic(error: BaseException) -> bool:
+    """True for a persist refusal identical input reproduces on every attempt.
+
+    ``InvalidArgument`` is the storage upload and artifact register APIs'
+    400 class: the request itself was refused, and the pinned bytes, payload
+    values and identity fields that produced it are exactly what every
+    replay sends. A fresh persist call therefore reproduces the refusal —
+    the re-strike lane's schedule burns against it — and the job ladder's
+    remaining attempts each re-run the full GPU pipeline only to raise the
+    same fault at the same boundary before quarantining blind. One
+    documented shape joins the contention arm instead: a retired Firestore
+    chain reports itself as ``InvalidArgument`` ("transaction has expired");
+    that shape is atomic, storm-shaped and replayable, so
+    ``persist_loss_is_contention`` keeps it and the storm-windowed
+    re-strike schedule stays authoritative. The verdict reads the exception
+    type through the shared contention classifier — never an exception
+    message — so the split cannot drift with wording. The boundary books
+    the deterministic refusal as the typed ``persist_payload_invalid``
+    custody handoff instead of a retryable worker fault; the lane's own
+    budget, kill switch and uncertain-outcome semantics are unchanged.
+
+    Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
+    """
+    if not isinstance(error, InvalidArgument):
+        return False
+    return not persist_loss_is_contention(error)
 
 
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
@@ -624,8 +652,12 @@ class PipelineWorker:
         replay lands after the armed window instead of colliding inside it — the
         same alignment the pump publication lane applies. Every
         non-strikeable fault, an exhausted strike budget, or the gate
-        off raises the first fault untouched — the legacy ``fail`` path and
-        its evidence run exactly as before.
+        off raises the first fault untouched; the booking boundary then
+        classifies it — a deterministic refusal (the 400-class
+        ``InvalidArgument`` that is not the expired-chain contention shape)
+        ends the chain as the typed ``persist_payload_invalid`` custody
+        handoff, and every other fault keeps the legacy retryable booking
+        and its evidence.
 
         Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results
         """
@@ -960,6 +992,22 @@ class PipelineWorker:
                     reason = WorkerValidationReason.RETAINED_AUDIO_INVALID.value
                 elif decoded_duration_mismatch:
                     reason = WorkerValidationReason.DECODED_DURATION_MISMATCH.value
+                # A persist-tail refusal the storage/register API raised for
+                # this unit's request payload is deterministic on identical
+                # bytes: a retry re-sends the same payload and fails the same
+                # way, so it must end the chain instead of walking the bounded
+                # retry ladder on input that cannot change. The verdict reads
+                # the type through the shared contention classifier — the
+                # expired-chain ``InvalidArgument`` shape stays contention —
+                # and the boundary books the typed custody handoff below, the
+                # same terminal route the decode trio rides.
+                #
+                # Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
+                persist_payload_invalid = (
+                    stage == WorkerValidationStage.PERSIST.value and persist_loss_is_deterministic(exc)
+                )
+                if persist_payload_invalid:
+                    reason = WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -994,6 +1042,7 @@ class PipelineWorker:
                     staged_audio_invalid
                     or retained_audio_invalid
                     or decoded_duration_mismatch
+                    or persist_payload_invalid
                     or (
                         isinstance(exc, BatchValidationError)
                         and (reason == 'unsupported_language' or worker_validation_disposition_enabled())

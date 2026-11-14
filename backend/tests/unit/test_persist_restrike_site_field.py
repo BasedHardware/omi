@@ -61,18 +61,26 @@ def _fault_line(monkeypatch, caplog, script):
     return errors[0].getMessage() if errors else ''
 
 
+def _demoted_line(monkeypatch, caplog, script):
+    pin_full_gpu_stages(monkeypatch)
+    monkeypatch.setenv(GATE, 'true')
+    monkeypatch.setattr(bp.time, 'sleep', SleepRecorder())
+    persist = script if isinstance(script, ScriptedPersist) else ScriptedPersist(script)
+    worker, meta = build_worker(persist)
+    caplog.set_level(logging.INFO, logger=WORKER_LOGGER)
+    worker.process_batch([item()])
+    demoted = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    return demoted[0].getMessage() if demoted else ''
+
+
 def test_persist_fault_line_carries_the_site_suffix(monkeypatch, caplog):
-    line = _fault_line(
-        monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst'))
-    )
-    assert 'event=batch_worker_failed error_class=InvalidArgument stage=persist' in line
+    line = _fault_line(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
+    assert 'event=batch_worker_failed error_class=TimeoutError stage=persist' in line
     assert ' site=persist_lane_harness.py:' in line
 
 
 def test_persist_fault_line_site_is_file_colon_line_only(monkeypatch, caplog):
-    line = _fault_line(
-        monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst'))
-    )
+    line = _fault_line(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
     site = line.rsplit(' site=', 1)[1]
     assert re.fullmatch(r'[A-Za-z0-9_./-]+\.py:[0-9]+', site)
 
@@ -84,17 +92,24 @@ def test_persist_fault_line_never_carries_the_exception_message(monkeypatch, cap
 
 
 def test_fault_line_prefix_stays_sensor_compatible(monkeypatch, caplog):
-    line = _fault_line(
-        monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst'))
-    )
-    assert line.startswith('event=batch_worker_failed error_class=InvalidArgument stage=persist segment_id=')
+    line = _fault_line(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
+    assert line.startswith('event=batch_worker_failed error_class=TimeoutError stage=persist segment_id=')
 
 
-def test_fault_line_reason_stays_unclassified_for_persist(monkeypatch, caplog):
-    line = _fault_line(
-        monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst'))
-    )
+def test_fault_line_reason_stays_unclassified_for_generic_persist_faults(monkeypatch, caplog):
+    line = _fault_line(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
     assert 'reason=unclassified' in line
+
+
+def test_deterministic_refusal_demotes_to_the_designed_line_without_site(monkeypatch, caplog):
+    line = _demoted_line(
+        monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst'))
+    )
+    assert (
+        'event=batch_validation_disposition outcome=recovery_handoff error_class=InvalidArgument stage=persist' in line
+    )
+    assert 'reason=persist_payload_invalid' in line
+    assert ' site=' not in line
 
 
 def test_demoted_info_lines_keep_their_exact_shape_without_site(monkeypatch, caplog):
@@ -106,7 +121,7 @@ def test_demoted_info_lines_keep_their_exact_shape_without_site(monkeypatch, cap
     caplog.set_level(logging.INFO, logger=WORKER_LOGGER)
     worker.process_batch([replace(item(), shadow=True)])
     shadow_lines = [r.getMessage() for r in caplog.records if 'event=batch_shadow_worker_failure' in r.getMessage()]
-    assert shadow_lines == ['event=batch_shadow_worker_failure stage=persist reason=unclassified']
+    assert shadow_lines == ['event=batch_shadow_worker_failure stage=persist reason=persist_payload_invalid']
 
 
 def test_recovered_lane_logs_no_worker_failed_line(monkeypatch, caplog):

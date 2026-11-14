@@ -89,8 +89,8 @@ def test_lane_exhaustion_costs_three_calls_vs_legacy_one(monkeypatch):
     assert lane['sleeps'].delays == [0.25, 0.5]
 
 
-def test_evidence_contract_persist_names_its_stage_after_exhaustion(monkeypatch):
-    run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
+def test_evidence_contract_generic_persist_faults_name_their_stage_after_exhaustion(monkeypatch):
+    run = run_lane(monkeypatch, exhaust_script(TimeoutError), safety_net='true')
     assert isinstance(run['results'][0], FailedWork)
     assert run['results'][0].worker_failure == {'stage': 'persist', 'reason': 'unknown'}
 
@@ -100,9 +100,15 @@ def test_evidence_contract_recovered_units_carry_no_failed_work(monkeypatch):
     assert isinstance(run['results'][0], WorkResult)
 
 
-def test_persist_faults_never_produce_validation_failure_work(monkeypatch):
-    run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
+def test_generic_persist_faults_never_produce_validation_failure_work(monkeypatch):
+    run = run_lane(monkeypatch, exhaust_script(TimeoutError), safety_net='true')
     assert not [r for r in run['results'] if type(r).__name__ == 'ValidationFailureWork']
+
+
+def test_deterministic_persist_refusal_books_the_validation_failure_work(monkeypatch):
+    run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
 
 
 def test_recovery_work_is_never_booked_for_persist_faults(monkeypatch):

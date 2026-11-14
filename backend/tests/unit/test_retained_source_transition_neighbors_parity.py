@@ -327,10 +327,11 @@ def test_reason_token_frozenset_includes_the_named_member():
     assert 'outside_admitted_source' in WORKER_VALIDATION_REASON_TOKENS
 
 
-def test_the_token_count_grew_by_exactly_one():
-    # 13 historical tokens (including the evidence-only unknown) plus the
-    # named token: the vocabulary grew by exactly one member.
-    assert len(WORKER_VALIDATION_REASON_TOKENS) == 14
+def test_the_token_count_grew_by_exactly_two():
+    # 13 historical tokens (including the evidence-only unknown) plus
+    # outside_admitted_source and persist_payload_invalid: the vocabulary
+    # grew by exactly two named members.
+    assert len(WORKER_VALIDATION_REASON_TOKENS) == 15
 
 
 # --- Docs deep parity ----------------------------------------------------------------------

@@ -69,8 +69,8 @@ def test_committed_line_present_after_invalid_argument_recovery(monkeypatch, cap
 
 def test_invalid_argument_faults_immediately_when_the_gate_is_off(monkeypatch):
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument('burst')], default='OK'), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
-    assert run['sleeps'].delays == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1 and run['sleeps'].delays == []
 
 
 def test_silent_unit_invalid_argument_strike_keeps_silence_outcome(monkeypatch):
@@ -347,7 +347,8 @@ def test_silent_unit_unknown_strike_keeps_silence_outcome(monkeypatch):
 
 def test_shape_two_second_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item(), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_two_second_exhaustion_counts_facet(monkeypatch):
@@ -364,7 +365,8 @@ def test_shape_two_second_timing_spans_exact(monkeypatch):
 
 def test_shape_thirty_second_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 30), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_thirty_second_exhaustion_counts_facet(monkeypatch):
@@ -381,7 +383,8 @@ def test_shape_thirty_second_timing_spans_exact(monkeypatch):
 
 def test_shape_short_capture_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 1), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_short_capture_exhaustion_counts_facet(monkeypatch):
@@ -398,7 +401,8 @@ def test_shape_short_capture_timing_spans_exact(monkeypatch):
 
 def test_shape_shadow_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=replace(item(), shadow=True), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_shadow_exhaustion_counts_facet(monkeypatch):
@@ -415,7 +419,8 @@ def test_shape_shadow_timing_spans_exact(monkeypatch):
 
 def test_shape_receipt_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=replace(item(), language_receipt_enabled=True), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_receipt_exhaustion_counts_facet(monkeypatch):
@@ -437,7 +442,8 @@ def test_shape_capture_span_gate_off_faults_immediately(monkeypatch):
         unit=replace(item(), unit_kind='capture_span', conversation_id='conv-1'),
         gate='false',
     )
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_shape_capture_span_exhaustion_counts_facet(monkeypatch):

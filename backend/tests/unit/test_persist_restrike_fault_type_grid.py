@@ -2,7 +2,8 @@
 """Every Google transport fault class recovers through the lane under the documented schedule.
 
 One cell per class strikes once and pins the recovered URI plus the 0.25s first wait; one
-cell per class exhausts at the cap and pins the legacy booking; one cell per class pins
+cell per class exhausts at the cap and pins the booking after the budget (the typed custody
+handoff for the deterministic refusal, the legacy fault for every other class); one cell per class pins
 the restrike_wait log naming that exception type. Together they prove the classifier
 verdicts translate into lane behavior class by class.
 
@@ -66,10 +67,12 @@ def test_invalid_argument_strike_recovers_with_the_documented_first_wait(monkeyp
     assert run['sleeps'].delays == [0.25]
 
 
-def test_invalid_argument_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_invalid_argument_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     fault = InvalidArgument('burst')
     run = run_lane(monkeypatch, ScriptedPersist([fault] * 3, default=fault))
-    assert run['results'] == [] and run['meta']['failures'] == [('a', type(fault).__name__)]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', type(fault).__name__)]
 
 
 def test_invalid_argument_strike_logs_its_exception_type(monkeypatch, caplog):

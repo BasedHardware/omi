@@ -171,8 +171,9 @@ def test_gate_docstring_names_the_schedule():
 
 def test_gate_off_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, script_for(2), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
-    assert run['sleeps'].delays == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].reason == 'persist_payload_invalid'
+    assert len(run['persist'].calls) == 1 and run['sleeps'].delays == []
 
 
 def test_gate_off_still_books_the_legacy_fault(monkeypatch):

@@ -69,7 +69,8 @@ def test_cap_minus_one_strikes_recover(monkeypatch):
 
 def test_cap_strikes_exactly_exhaust(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script())
-    assert run['results'] == [] and run['sleeps'].delays == [0.25, 0.5]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['sleeps'].delays == [0.25, 0.5]
 
 
 def test_strike_delays_never_exceed_the_cap(monkeypatch):

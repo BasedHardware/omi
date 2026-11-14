@@ -108,15 +108,16 @@ def test_exhaustion_safety_on_books_the_persist_stage_evidence_token(monkeypatch
     assert carried and all(c == {'stage': 'persist', 'reason': 'unknown'} for c in carried if c)
 
 
-def test_exhaustion_safety_on_books_a_failed_work_with_stage_evidence(monkeypatch):
+def test_exhaustion_safety_on_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), safety_net='true')
-    assert len(run['results']) == 1 and isinstance(run['results'][0], FailedWork)
-    assert run['results'][0].worker_failure == {'stage': 'persist', 'reason': 'unknown'}
+    assert len(run['results']) == 1 and type(run['results'][0]).__name__ == 'ValidationFailureWork'
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
 
 
-def test_exhaustion_safety_off_returns_no_entry(monkeypatch):
+def test_exhaustion_safety_off_still_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), safety_net='false')
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
 
 
 def test_recovered_unit_is_never_a_failed_work_under_safety_on(monkeypatch):

@@ -120,7 +120,7 @@ def test_hop_the_scheduler_module_owns_the_terminal_record():
     assert hasattr(scheduler_module, 'validate_worker_failure')
 
 
-def test_hop_the_token_is_the_only_addition_to_the_reason_vocabulary():
+def test_hop_the_token_rides_the_reason_vocabulary_growth():
     # The vocabulary grew by one; every other member keeps its value.
     legacy = {
         'unknown',
@@ -138,5 +138,8 @@ def test_hop_the_token_is_the_only_addition_to_the_reason_vocabulary():
         'unsupported_language',
     }
     current = {reason.value for reason in WorkerValidationReason}
-    assert current - legacy == {TOKEN}
+    # outside_admitted_source joined for the retained-source contract;
+    # persist_payload_invalid joined for the deterministic persist
+    # refusal's typed custody handoff.
+    assert current - legacy == {TOKEN, 'persist_payload_invalid'}
     assert legacy - current == set()

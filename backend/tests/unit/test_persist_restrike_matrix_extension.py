@@ -224,7 +224,8 @@ def test_type_invalid_argument_io_path_exhaust_sleeps_the_documented_prefix(monk
     run = run_lane(
         monkeypatch, ScriptedPersist([InvalidArgument('burst')] * 3, default=InvalidArgument('burst')), io_concurrency=2
     )
-    assert run['results'] == [] and run['sleeps'].delays == [0.25, 0.5]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['sleeps'].delays == [0.25, 0.5]
 
 
 def test_type_invalid_argument_io_path_opens_two_persist_spans(monkeypatch):
@@ -824,7 +825,7 @@ def test_shape_two_second_strikes_2_gpu_once_facet(monkeypatch):
 
 def test_shape_two_second_exhaust_results_facet(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item())
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_two_second_exhaust_failures_facet(monkeypatch):
@@ -868,7 +869,7 @@ def test_shape_thirty_second_strikes_2_gpu_once_facet(monkeypatch):
 
 def test_shape_thirty_second_exhaust_results_facet(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 30))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_thirty_second_exhaust_failures_facet(monkeypatch):
@@ -912,7 +913,7 @@ def test_shape_short_capture_strikes_2_gpu_once_facet(monkeypatch):
 
 def test_shape_short_capture_exhaust_results_facet(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 1))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_short_capture_exhaust_failures_facet(monkeypatch):
@@ -956,7 +957,7 @@ def test_shape_shadow_strikes_2_gpu_once_facet(monkeypatch):
 
 def test_shape_shadow_exhaust_results_facet(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=replace(item(), shadow=True))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_shadow_exhaust_failures_facet(monkeypatch):
@@ -1000,7 +1001,7 @@ def test_shape_receipt_strikes_2_gpu_once_facet(monkeypatch):
 
 def test_shape_receipt_exhaust_results_facet(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=replace(item(), language_receipt_enabled=True))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_receipt_exhaust_failures_facet(monkeypatch):
@@ -1046,7 +1047,7 @@ def test_shape_capture_span_exhaust_results_facet(monkeypatch):
     run = run_lane(
         monkeypatch, exhaust_script(), unit=replace(item(), unit_kind='capture_span', conversation_id='conv-1')
     )
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_shape_capture_span_exhaust_failures_facet(monkeypatch):

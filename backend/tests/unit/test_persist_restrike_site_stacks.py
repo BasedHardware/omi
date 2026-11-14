@@ -120,12 +120,12 @@ def test_site_field_for_a_permission_fault(monkeypatch, caplog):
 
 
 def test_site_field_appears_exactly_once(monkeypatch, caplog):
-    line = _line_for(monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst')))
+    line = _line_for(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
     assert line.count(' site=') == 1
 
 
 def test_site_field_ends_the_line(monkeypatch, caplog):
-    line = _line_for(monkeypatch, caplog, ScriptedPersist([InvalidArgument('burst')], default=InvalidArgument('burst')))
+    line = _line_for(monkeypatch, caplog, ScriptedPersist([TimeoutError('burst')], default=TimeoutError('burst')))
     assert re.search(r'site=[A-Za-z0-9_./-]+\.py:[0-9]+$', line)
 
 

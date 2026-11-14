@@ -48,11 +48,15 @@ def test_invalid_argument_clean_first_call_logs_no_committed_line(monkeypatch, c
     assert not [r for r in caplog.records if 'outcome=restrike_committed' in r.getMessage()]
 
 
-def test_invalid_argument_exhaustion_fault_line_carries_the_harness_site(monkeypatch, caplog):
+def test_invalid_argument_exhaustion_demotes_to_the_designed_line_without_site(monkeypatch, caplog):
     caplog.set_level(logging.INFO, logger=WORKER_LOGGER)
     run = run_lane(monkeypatch, ScriptedPersist([InvalidArgument('burst')] * 3, default=InvalidArgument('burst')))
-    errors = [r.getMessage() for r in caplog.records if 'event=batch_worker_failed' in r.getMessage()]
-    assert errors and ' site=persist_lane_harness.py:' in errors[0]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    demoted = [r.getMessage() for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert demoted and 'error_class=InvalidArgument stage=persist' in demoted[0]
+    assert 'reason=persist_payload_invalid' in demoted[0]
+    assert ' site=' not in demoted[0]
+    assert not [r for r in caplog.records if 'event=batch_worker_failed' in r.getMessage()]
 
 
 def test_bad_request_clean_first_call_logs_no_committed_line(monkeypatch, caplog):
@@ -262,22 +266,25 @@ def test_capture_span_unit_two_strike_recovery_uri(monkeypatch):
 
 def test_thirty_second_unit_exhaustion_books_once(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 30))
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_short_capture_unit_exhaustion_books_once(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=item('a', 1))
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
 
 
 def test_gate_off_silent_unit_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), vad=lambda samples: [], gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_gate_off_shadow_unit_faults_immediately(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), unit=replace(item(), shadow=True), gate='false')
-    assert run['results'] == [] and len(run['persist'].calls) == 1
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert len(run['persist'].calls) == 1
 
 
 def test_every_lane_file_carries_the_failure_class_trailer():

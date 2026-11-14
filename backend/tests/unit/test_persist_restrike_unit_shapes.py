@@ -63,10 +63,12 @@ def test_two_second_unit_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_two_second_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_two_second_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = item()
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_thirty_second_unit_recovers_through_the_lane(monkeypatch):
@@ -76,10 +78,12 @@ def test_thirty_second_unit_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_thirty_second_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_thirty_second_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = item('a', 30)
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_short_capture_recovers_through_the_lane(monkeypatch):
@@ -89,10 +93,12 @@ def test_short_capture_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_short_capture_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_short_capture_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = item('a', 1)
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_shadow_unit_recovers_through_the_lane(monkeypatch):
@@ -102,10 +108,12 @@ def test_shadow_unit_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_shadow_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_shadow_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = replace(item(), shadow=True)
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_receipt_unit_recovers_through_the_lane(monkeypatch):
@@ -115,10 +123,12 @@ def test_receipt_unit_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_receipt_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_receipt_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = replace(item(), language_receipt_enabled=True)
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_capture_unit_recovers_through_the_lane(monkeypatch):
@@ -128,10 +138,12 @@ def test_capture_unit_recovers_through_the_lane(monkeypatch):
     assert run['sleeps'].delays == [0.25]
 
 
-def test_capture_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_capture_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     unit = replace(item(), unit_kind='capture_span', conversation_id='conv-1')
     run = run_lane(monkeypatch, exhaust_script(), unit=unit)
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_silent_unit_recovers_through_the_lane(monkeypatch):
@@ -139,9 +151,11 @@ def test_silent_unit_recovers_through_the_lane(monkeypatch):
     assert run['results'][0].outcome == 'silence'
 
 
-def test_silent_unit_exhaustion_books_the_legacy_fault(monkeypatch):
+def test_silent_unit_exhaustion_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), vad=lambda samples: [])
-    assert run['results'] == [] and run['meta']['failures'] == [('a', 'InvalidArgument')]
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
+    assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
 def test_silent_unit_payload_keeps_empty_words_across_strikes(monkeypatch):

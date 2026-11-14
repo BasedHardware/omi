@@ -595,6 +595,17 @@ class WorkerValidationReason(StrEnum):
     # fetch_decode evidence, the per-attempt failure record and the terminal
     # quarantine never collapse it into 'unknown'/'unclassified' again.
     OUTSIDE_ADMITTED_SOURCE = 'outside_admitted_source'
+    # A persist-tail refusal the storage or artifact-register API raised for
+    # the unit's own request payload: a 400-class ``InvalidArgument`` that is
+    # not the expired-chain contention shape. Identical input reproduces the
+    # refusal on every attempt, so the boundary ends the chain with this
+    # typed token and retains custody for the fenced recovery lane instead
+    # of walking the GPU ladder on bytes that cannot change. The persist
+    # transport and contention families keep their verdicts; only the
+    # deterministic refusal joins the closed vocabulary.
+    #
+    # Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
+    PERSIST_PAYLOAD_INVALID = 'persist_payload_invalid'
 
 
 class RecoveryFailureStage(StrEnum):

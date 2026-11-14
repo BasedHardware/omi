@@ -377,10 +377,11 @@ def test_recovery_2_strikes_io_opens_a_persist_span_per_strike(monkeypatch):
     assert timings.spans.count('persist') == 3
 
 
-def test_exhaustion_at_the_cap_serial_returns_no_result_entry(monkeypatch):
+def test_exhaustion_at_the_cap_serial_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script())
 
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
 
 
 def test_exhaustion_at_the_cap_serial_books_the_legacy_worker_fault(monkeypatch):
@@ -420,10 +421,11 @@ def test_exhaustion_at_the_cap_serial_opens_a_persist_span_per_strike(monkeypatc
     assert timings.spans.count('persist') == 3
 
 
-def test_exhaustion_at_the_cap_io_returns_no_result_entry(monkeypatch):
+def test_exhaustion_at_the_cap_io_books_the_typed_custody_handoff(monkeypatch):
     run = run_lane(monkeypatch, exhaust_script(), io_concurrency=2)
 
-    assert run['results'] == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].stage == 'persist' and run['results'][0].reason == 'persist_payload_invalid'
 
 
 def test_exhaustion_at_the_cap_io_books_the_legacy_worker_fault(monkeypatch):
@@ -496,8 +498,9 @@ def test_nongoogle_fault_fails_on_the_first_call(monkeypatch):
 def test_gate_off_faults_on_the_first_call(monkeypatch):
     run = run_lane(monkeypatch, script_for(3), gate='false')
 
-    assert run['results'] == [] and len(run['persist'].calls) == 1
-    assert run['sleeps'].delays == []
+    assert [type(r).__name__ for r in run['results']] == ['ValidationFailureWork']
+    assert run['results'][0].reason == 'persist_payload_invalid'
+    assert len(run['persist'].calls) == 1 and run['sleeps'].delays == []
 
 
 def test_unset_gate_recovers(monkeypatch):
@@ -529,7 +532,10 @@ def test_two_units_recover_independently(monkeypatch):
 def test_one_exhausted_unit_does_not_poison_its_sibling(monkeypatch):
     routes = PerSegmentPersist({'a': exhaust_script(), 'b': ScriptedPersist([])})
     run = run_two_units(monkeypatch, routes)
-    assert [r.segment_id for r in run['results']] == ['b']
+    assert [(r.segment_id, type(r).__name__) for r in run['results']] == [
+        ('a', 'ValidationFailureWork'),
+        ('b', 'WorkResult'),
+    ]
     assert run['meta']['failures'] == [('a', 'InvalidArgument')]
 
 
