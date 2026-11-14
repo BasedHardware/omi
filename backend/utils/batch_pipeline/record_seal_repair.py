@@ -357,7 +357,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             if (
                 plan.get('wake_admission')
                 and repair_config.fresh_enabled()
-                and type(enqueued) in (int, float)
+                and isinstance(enqueued, (int, float))  # a bool reads as age ~now, outside the window
                 and math.isfinite(enqueued)
                 and 0 <= time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS
                 and intake_wake_allowed(current_job, time.time())

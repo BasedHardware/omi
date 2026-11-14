@@ -111,7 +111,6 @@ def _wire(pipeline, monkeypatch, tmp_path, *, lineage_rows, frame_values=range(1
     pipeline._record_sync_job_outcome_async = AsyncMock(side_effect=lambda outcome, **kw: outcomes.append(outcome))
     monkeypatch.setattr(coverage_mod, 'get_timestamp_from_path', _ts)
     monkeypatch.setattr(coverage_mod, 'get_wav_duration', _duration)
-    monkeypatch.setattr(coverage_mod, 'parse_sync_filename_timestamp', _ts)
 
     lineage_module = sys.modules[pipeline.plan_segment_targets.__module__]
     lineage_calls = []
@@ -463,7 +462,6 @@ def _wire_real(
     )
     monkeypatch.setattr(coverage_mod, 'get_timestamp_from_path', _ts)
     monkeypatch.setattr(coverage_mod, 'get_wav_duration', _duration)
-    monkeypatch.setattr(coverage_mod, 'parse_sync_filename_timestamp', _ts)
     monkeypatch.setattr(recording_lineage, 'load_lineage', lambda *a, **k: (list(lineage_rows), None, False))
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda path, **k: [{'start': 0, 'end': _duration(path)}])
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')

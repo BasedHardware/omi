@@ -3974,6 +3974,11 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     expected = {'value': 'true', 'category': 'ops_kill'}
     assert config['gke']['pusher']['env']['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] == expected
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='quality_push_switch_renderer')
+    for host, key in [
+        (config['gke']['pusher'], 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+    ]:
+        assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])

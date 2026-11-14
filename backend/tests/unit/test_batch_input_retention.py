@@ -349,20 +349,23 @@ def test_staging_age_scan_fails_sample_instead_of_publishing_false_zero():
         )
 
 
-def test_existing_record_conversation_failure_presentation_at_day29(monkeypatch):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+@pytest.mark.parametrize('clock', [None, 'created_at', 'home_transcription_pending_at'])
+def test_existing_record_conversation_failure_presentation_at_day29(monkeypatch, queue_hold, clock):
     from utils.conversations import home_step
 
     monkeypatch.setattr(home_step, 'home_step_projection_enabled', lambda: True)
-    assert (
-        home_step.classify(
-            {
-                'status': 'completed',
-                'record_lane_owner': 'batch_sync_v1',
-                'finished_at': datetime.now(timezone.utc) - timedelta(days=29),
-            }
-        )
-        == 'failed'
-    )
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
+    arrived = datetime.now(timezone.utc) - timedelta(days=29)
+    server_clock = {clock: arrived} if clock else {}
+    assert home_step.classify(
+        {
+            'status': 'completed',
+            'record_lane_owner': 'batch_sync_v1',
+            'finished_at': datetime.now(timezone.utc) - timedelta(days=29),
+            **server_clock,
+        }
+    ) == ('transcribing' if queue_hold == 'true' and clock is None else 'failed')
 
 
 def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapshot(setup):

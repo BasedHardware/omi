@@ -319,6 +319,30 @@ async def test_record_claim_invalidates_retry_marker_before_archive_work(monkeyp
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('previous_marker', [False, True])
+async def test_fresh_repair_rollback_restores_unstamped_retry_rows(monkeypatch, previous_marker):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {'owner_id': 'synthetic', 'state': 'record_pending', 'available_at': 0}
+    if previous_marker:
+        store.rows['jobs', 'synthetic']['record_intake_retry_at'] = 900
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'false')
+
+    async def admission(*args):
+        return None
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic'] == {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 1060,
+    }
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('blocked_rows', [1, 2])
 async def test_full_privacy_fenced_page_keeps_idle_wait_without_writing_fenced_rows(monkeypatch, blocked_rows):
     from utils.batch_pipeline import live

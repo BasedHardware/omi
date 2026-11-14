@@ -427,9 +427,12 @@ def test_member_field_projection_keeps_pending_deadline_and_delivery_receipt(sto
 
 
 @pytest.mark.parametrize(
-    'outcome', ['pending', 'old_stamp', 'dead_letter', 'upload_failed', 'terminal_failed', 'deadline', 'projected']
+    'outcome',
+    ['pending', 'old_stamp', 'dead_letter', 'upload_failed', 'terminal_failed', 'deadline', 'max_age', 'projected'],
 )
-def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import episodes as router
@@ -440,12 +443,19 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
     root.collection('episodes').document('batch').update({'conversation_ids': ['capture']})
     member = {
         'status': 'completed',
+        'record_lane_owner': 'batch_sync_v1',
         'finished_at': datetime.now(timezone.utc) - timedelta(hours=25 if outcome == 'deadline' else 3),
         'episode_transcription_deadline_at': datetime.now(timezone.utc)
         + timedelta(hours=-1 if outcome in {'deadline', 'old_stamp'} else 1),
         'server_batch_audio_start': START.timestamp(),
         'server_batch_audio_end': (START + timedelta(minutes=2)).timestamp(),
     }
+    if outcome == 'max_age':
+        member['episode_transcription_pending_at'] = datetime.now(timezone.utc) - timedelta(hours=25)
+        member['episode_transcription_deadline_at'] = member['episode_transcription_pending_at'] + timedelta(hours=2)
+    member['home_transcription_deadline_at'] = member['episode_transcription_deadline_at']
+    if 'episode_transcription_pending_at' in member:
+        member['home_transcription_pending_at'] = member['episode_transcription_pending_at']
     if outcome == 'dead_letter':
         member['finalization_status'] = 'dead_letter'
     elif outcome == 'upload_failed':
@@ -475,11 +485,16 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
         'terminal_failed': ("Couldn't transcribe", 'failed'),
         'dead_letter': ("Couldn't transcribe", 'failed'),
         'deadline': ("Couldn't transcribe", 'failed'),
+        'max_age': ("Couldn't transcribe", 'failed'),
         'projected': ('Recovered transcript', 'completed'),
     }
+    if queue_hold == 'true':
+        expected['deadline'] = ('Transcribing…', 'processing')
+    else:
+        expected['old_stamp'] = ("Couldn't transcribe", 'failed')
     assert (wire['title'], wire['status']) == expected[outcome]
     if outcome != 'projected':
-        assert response.json()['episodes'][0]['title'] == wire['title']
+        assert response.json()['episodes'][0]['title'] == (wire['title'] if queue_hold == 'true' else '')
         assert wire['home_step'] == ('failed' if wire['status'] == 'failed' else 'transcribing')
 
 

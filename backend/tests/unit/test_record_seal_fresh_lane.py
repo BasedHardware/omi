@@ -93,8 +93,8 @@ def test_reserved_budget_new_arrivals_and_refusals_cannot_starve_either_lane():
 
     launched, events, checkpoints, report = schedule(fresh)
     assert [path for _, path, _ in launched[:4]] == ['new-1-0', 'new-1-1', 'new-1-2', 'old-0']
-    assert next(at for at, path, _ in launched if path == 'new-2-0') < 16.1
-    assert sum(path.startswith('old') for _, path, _ in launched) == 2
+    assert next(at for at, path, _ in launched if path == 'new-2-0') < 36.1  # at most one bounded loan
+    assert sum(path.startswith('old') for _, path, _ in launched) >= 2
     assert all(path.startswith('old') for path in checkpoints)
     assert {e['lane'] for e in events if e['event'] == 'record_seal_repair_row'} == {'fresh', 'backlog'}
     assert report['dispositions']['upload_pending'] >= 10
@@ -111,8 +111,8 @@ def test_discovery_failure_keeps_backlog_and_hard_deadline(error):
         raise error
 
     launched, events, _, report = schedule(fresh, seconds=2)
-    assert [path for _, path, _ in launched] == ['old-0']
-    assert report['dispositions']['budget_exhausted'] == 1
+    assert [path for _, path, _ in launched] == ['old-0', 'old-1', 'old-2', 'old-3']
+    assert report['dispositions']['budget_exhausted'] == 4
     assert events[0] == {'event': 'record_seal_repair_fresh', 'outcome': 'error'}
     assert 'private' not in str(events)
 
@@ -154,7 +154,7 @@ def test_fresh_children_have_a_shorter_deadline_than_backlog():
     assert launches == [('fresh', 90), ('old', 100)]
 
 
-def test_initial_frontier_reserves_only_slots_the_legacy_sweep_can_start(monkeypatch):
+def test_initial_frontier_preserves_both_discovery_legs_and_bounds_fresh_share(monkeypatch):
     from database import _client
     from utils.batch_pipeline import record_seal_sweeper
     from tests.unit.test_record_seal_cluster_repair import CursorClient
@@ -185,5 +185,41 @@ def test_initial_frontier_reserves_only_slots_the_legacy_sweep_can_start(monkeyp
     monkeypatch.setattr(cluster, 'discover', conversations)
     monkeypatch.setattr(cluster, 'coordinate', coordinate)
     assert cluster.run()['outcome'] == 'ok'
-    assert observed == {'job_rows': 1, 'advance_rows': 2, 'fresh_slots': 6}
+    assert observed == {'job_rows': 4, 'advance_rows': 8, 'fresh_slots': 4}
     assert client.writes == 0  # preview remains read-only
+
+
+@pytest.mark.parametrize('fresh_present', [False, True])
+def test_checkpointed_urgent_and_ordinary_bootstrap_precedes_borrowed_fresh_capacity(fresh_present):
+    now, launches, attempts, children = [0.0], [], [], []
+    rows = [(f'urgent-{i}', 100000) for i in range(3)] + [('ordinary-job', 10000)]
+    rows += [(f'ordinary-conversation-{i}', 10000) for i in range(8)]
+
+    def launch(path, seconds, mode):
+        launches.append((now[0], path, seconds))
+        child = FakeProcess(now, now[0] + 1 if path == 'fresh' else float('inf'))
+        children.append(child)
+        return child
+
+    cluster.coordinate(
+        rows,
+        workers=8,
+        row_seconds=270,
+        run_seconds=300,
+        mode='apply',
+        fresh=lambda seen: [('fresh', 60)] if fresh_present and 'fresh' not in seen else [],
+        fresh_workers=4,
+        bootstrap_rows=8,
+        launch=launch,
+        attempted=attempts.append,
+        clock=lambda: now[0],
+        pause=lambda t: now.__setitem__(0, now[0] + t),
+    )
+    assert [p for _, p, _ in launches[:8]] == [p for p, _ in rows[:8]]
+    assert attempts[:8] == [p for p, _ in rows[:8]]  # no checkpointed row skipped for fresh work
+    assert [s for _, _, s in launches[:8]] == [270] * 4 + [90] * 4
+    if fresh_present:
+        at = next(at for at, p, _ in launches if p == 'fresh')
+        assert 90 <= at < 90.2
+        assert launches[8][1] == 'fresh'  # first returned ordinary loan goes to fresh
+    assert all(child.reaped and child.stdout.closed for child in children)
