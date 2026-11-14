@@ -593,3 +593,32 @@ and owner guards during SDK reads/COMMIT, source/token/epoch refusal and delayed
 puts after real erasure. Existing six failing scenarios pass in the targeted
 combined run. Final exact-head qualification is recorded separately; these
 local results do not establish remote C4, reverse parity or production readiness.
+
+
+2026-11-14 R14 emulator-gate continuation: exact37e emulator CI failed six
+provider-merge race assertions because merged main selects its transactional
+fresh gate before the legacy fresh_pending probe. The existing legacy race tests
+now explicitly select their legacy branch; their privacy refusal/predecessor
+assertions are unchanged. Separate real-backend cases select the transactional
+gate, race privacy/predecessor settlement after the strict transaction, forbid
+legacy probe fallback, and assert the two transactional fresh reads share the
+actual transaction that writes the result. This verifies both paths without a
+production flag change or relaxing FIFO/head-wait/privacy semantics.
+
+Runtime inventory remains explicit: routers.batch_provider_stt.run_delivery_async
+uses ProviderSttConsumer -> provider_stt._service_stage -> FS/shadow Store;
+serving_for_stage likewise constructs legacy Projector/QuarantineRecovery and
+maintenance. The actual worker Pump._maintain still gates recovery/result_ready
+page100 and held-marker page50 at hardcoded5s; completion-directed owner drains
+run independently. The R14 worker-cadence source option needs a registered bounded
+control with recovery/lost-wake qualification; no production cadence was changed.
+Merely replacing these factories with generic PostgresStore would bypass the
+typed original admission/effect/result/custody protocol and is not serving.
+The next runner must explicitly join original WorkItem/route/funding, claim,
+FenceTicket, ArtifactStore publication, typed terminal seal and actual grouped
+customer projection/receipt/ack; unsupported cohorts retain their existing lane.
+
+The required generic outbox available_at/max-coalescing contract conflicts with
+the specialized enrichment first-summary cap and earlier-task retention. Three
+failures remain open; this continuation does not change the policy or its tests.
+Exact37e focused staging crash failure also remains open, not rerun away.
