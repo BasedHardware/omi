@@ -22,7 +22,10 @@ from utils.pusher_record_close import result_frame
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('rollover', [False, True])
-async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(inline_session, monkeypatch, rollover):
+@pytest.mark.parametrize('explicit_binding', [False, True])
+async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
+    inline_session, monkeypatch, rollover, explicit_binding
+):
     client, path, _, _ = inline_session
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     client.rows[path]['status'] = 'completed'
@@ -104,12 +107,13 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(inlin
     )
     await session.connect()
     receiver = asyncio.create_task(session.pusher_receive())
-    session.audio_bytes_send(b'\x01\x00' * 2, 100, conversation_id='conversation')
+    binding_kw = {'conversation_id': 'conversation'} if explicit_binding else {}
+    session.audio_bytes_send(b'\x01\x00' * 2, 100, **binding_kw)
     await session.request_recording_close('conversation')  # Starts waiting for capability.
     try:
         await asyncio.wait_for(preparing.wait(), 5)
         # The close-control send is suspended; this run IS accepted by listen.
-        session.audio_bytes_send(b'\x02\x00' * 2, 101, conversation_id='conversation')
+        session.audio_bytes_send(b'\x02\x00' * 2, 101, **binding_kw)
         assert session.audio_total_size == 8
         assert not client.rows[path].get('record_audio_closed')
         assert client.rows[job]['available_at'] == available
@@ -262,3 +266,20 @@ async def test_yielding_final_commit_refuses_new_input_before_acceptance():
     finally:
         release.set()
         await sending
+
+
+@pytest.mark.asyncio
+async def test_nondurable_relay_never_negotiates_fast_close(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+    offered = []
+
+    async def connect(uid, rate, **kwargs):
+        offered.append(kwargs)
+        return FakePusherWebSocket()
+
+    session = make_session(deps_overrides={'connect_to_pusher': connect})
+    await session.connect()
+    assert 'record_close_protocol' not in offered[0]
+    session.record_close_supported = True  # Even a spurious/stale capability is insufficient.
+    assert not await session.request_recording_close('conv-1')
+    assert not session.pending_record_closes

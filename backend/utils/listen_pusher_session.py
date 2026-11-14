@@ -421,13 +421,13 @@ class ListenPusherSession:
         while self.audio_total_size + len(chunk) > self.config.max_audio_buffer_size and self.audio_runs:
             old = self.audio_runs.popleft()
             self.audio_total_size -= len(old.data)
-        self.audio_runs.append(AudioRun(conversation_id=conversation_id, start_wall=chunk_start_wall, data=chunk))
+        self.audio_runs.append(AudioRun(conversation_id=bound_conversation, start_wall=chunk_start_wall, data=chunk))
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
     async def request_recording_close(self, conversation_id: str) -> bool:
         """Order accepted audio before a close-only request; never run a finalizer."""
-        if not close_notify_enabled():
+        if not close_notify_enabled() or not audio_outbox_enabled():
             return False
         if conversation_id in self.record_close_boundaries:
             return True
@@ -716,7 +716,9 @@ class ListenPusherSession:
                         continue  # An old socket cannot qualify its replacement.
                     ack = json.loads(msg[4:].decode('utf-8'))
                     self.record_close_supported = (
-                        isinstance(ack, dict)
+                        close_notify_enabled()
+                        and audio_outbox_enabled()
+                        and isinstance(ack, dict)
                         and ack.get('type') == 'record_close_ack'
                         and type(ack.get('version')) is int
                         and ack['version'] == RECORD_CLOSE_VERSION
@@ -1101,7 +1103,7 @@ class ListenPusherSession:
             }
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
             self.record_close_supported = False
-            if close_notify_enabled():
+            if close_notify_enabled() and audio_outbox_enabled():
                 connect_kwargs['record_close_protocol'] = RECORD_CLOSE_VERSION
             if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL
