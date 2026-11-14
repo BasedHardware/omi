@@ -125,6 +125,44 @@ def decode_capture(raw: bytes, metadata: dict[str, str], output_rate: int = 1600
     return bytes(result)
 
 
+def decode_capture_frames(raw: bytes, metadata: dict[str, str], frames: list[dict], output_rate: int = 16000) -> bytes:
+    """Decode exactly the frames the writer recorded, in capture order.
+
+    A pack without a declared frame schema can still carry a custody manifest
+    whose frames name each packet's byte range and sample count. Decoding the
+    container as one continuous stream would silently close the writer's gaps;
+    this walks the recorded frames instead, so every sample keeps its capture
+    position and a retained zero-sample frame contributes no audio.
+    """
+    rate = int(metadata['sample_rate'])
+    channels = int(metadata['channels'])
+    if metadata['format'] != WAL_FORMAT:
+        raise ValueError('frame decode requires the omi-wal container')
+    decoder = _get_opuslib().Decoder(rate, channels)
+    pcm = bytearray()
+    for frame in frames:
+        offset, size = int(frame['byte_offset']), int(frame['bytes'])
+        chunk = raw[offset : offset + size]
+        if size < 4 or len(chunk) != size:
+            raise ValueError('capture frame exceeds its container')
+        length = struct.unpack_from('<I', chunk, 0)[0]
+        packet = chunk[4:]
+        if length != len(packet) or hashlib.sha256(packet).hexdigest() != frame['sha256']:
+            raise ValueError('capture frame differs from its manifest')
+        samples = int(frame['samples'])
+        if samples == 0:
+            continue
+        decoded = decoder.decode(packet, rate * 120 // 1000)
+        if len(decoded) != samples * 2:
+            raise ValueError('capture frame decoded to a different sample count')
+        pcm.extend(decoded)
+    audio = AudioSegment(bytes(pcm), frame_rate=rate, channels=channels, sample_width=2)
+    result = audio.set_frame_rate(output_rate).set_channels(1).set_sample_width(2).raw_data
+    if result is None:
+        raise ValueError('capture decoder produced no PCM')
+    return bytes(result)
+
+
 @dataclass
 class CapturePack:
     codec: str

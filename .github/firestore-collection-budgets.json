@@ -125,6 +125,18 @@
       "basis": "planning-bound",
       "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_purge.py",
+      "expression": "f'{namespace}_{ALLOWANCE_OWNERS}'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "parked job erased by an authorized conversation/account purge",
+      "reads_per_unit_budget": 8,
+      "reads_per_day_budget": 8000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one hold-counter read in the existing job-erasure transaction plus its shadow refresh. Reserve eight incremental reads/job for two attempts and counter refresh overhead; one 1M-job purge/day plans 8M reads. Other job/queue/control/privacy reads retain their existing family budgets. No recurring scan; only allowance_held jobs read this counter. More retries, repeated bulk purges or over 1M/day require remeasurement before accepting this planning envelope.",
+      "reviewed": "2026-11-14"
     }
   ],
   "exempt": []

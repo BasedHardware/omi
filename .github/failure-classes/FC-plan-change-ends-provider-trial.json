@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-plan-change-ends-provider-trial",
+  "violated_contract": "Changing the price of a subscription that Stripe reports as trialing must keep the trial and bill nothing until the trial ends; the first charge must be the price the user chose. A SubscriptionSchedule built from the subscription has a first phase with no trial, so it ends the trial at once and bills the full current price (#23298: same-plan monthly/annual switches billed $269.91 or $29.99 on day one).",
+  "canonical_prevention": "Decide trial handling from Stripe's own status (the stored subscription status never says trialing) and swap the item price in place with proration_behavior none, the existing trial_end, payment_behavior error_if_incomplete and an idempotency key that a later switch back cannot replay. Store the result only after the shared incomplete/pending_update check. Pin both directions, the refusal and the replay key with behavioral tests over the real router.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_payment_trial_interval_change.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/payment.py"
+  ],
+  "status": "open"
+}

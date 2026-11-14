@@ -82,7 +82,7 @@ parks them. Old stores/readers ignore the new state and see
 A new worker with an old backend retains the held recording until the backend
 controller is upgraded. Do not revert all controllers while parked stock
 exists. The new table is mirrored and included in owner purge; Postgres doc
-mode adds the indexes in migration 0007.
+mode adds the indexes in migration 0008; the merged owner cursor owns 0007.
 
 Dry-run (ro-prod; all output is counts, no document scan or checkpoint write):
 

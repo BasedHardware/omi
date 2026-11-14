@@ -36,7 +36,8 @@ class Query:
         return self
 
     def limit(self, cap):
-        assert 0 < cap <= 20001
+        # Aggregation caps may be large (billed per 1,000 index entries); stream() bounds document reads.
+        assert 0 < cap <= 1_000_000
         return replace(self, cap=cap)
 
     def document(self, key):
@@ -301,3 +302,56 @@ def test_record_pending_head_lever_cohorts_per_replica(monkeypatch):
     monkeypatch.delenv('HOSTNAME')
     monkeypatch.delenv('K_REVISION', raising=False)
     assert queries._replica_key('batch_pipeline_prod') == 'batch_pipeline_prod'
+
+
+def test_vendor_held_counts_each_reason_and_the_oldest_age():
+    from utils.observability.reasons import VendorHoldReason
+
+    now = COHORT_START + 50_000
+    client = Client(
+        batch_pipeline_prod_jobs=entries(
+            [
+                {'state': 'vendor_held', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 9000},
+                {'state': 'vendor_held', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 100},
+                {'state': 'vendor_held', 'vendor_hold.reason': 'cap_reached', 'enqueued_at': now - 50},
+                # A row with no recognised reason still counts, as unknown.
+                {'state': 'vendor_held', 'enqueued_at': now - 10},
+                {'state': 'provider_pending', 'vendor_hold.reason': 'funds_refusal', 'enqueued_at': now - 99_000},
+            ]
+        )
+    )
+    counts, age, truncated = queries.vendor_held(client, 'batch_pipeline_prod', now)
+    assert counts[VendorHoldReason.FUNDS_REFUSAL] == 2
+    assert counts[VendorHoldReason.CAP_REACHED] == 1
+    assert counts[VendorHoldReason.UNKNOWN] == 1
+    assert counts[VendorHoldReason.NO_HEALTHY_VENDOR] == 0
+    assert set(counts) == set(VendorHoldReason)
+    assert age == 9000 and truncated is False
+    # One document read (the head); everything else is an aggregation.
+    assert len(client.reads) == 1
+
+
+def test_vendor_held_empty_stock_reads_zero_without_reason_counts():
+    client = Client(batch_pipeline_prod_jobs=entries([{'state': 'ready', 'enqueued_at': 1.0}]))
+    counts, age, truncated = queries.vendor_held(client, 'batch_pipeline_prod', COHORT_START + 10)
+    assert set(counts.values()) == {0} and age == 0.0 and truncated is False
+
+
+def test_provider_stage_stock_includes_old_rows_and_both_states():
+    now = COHORT_START + 50_000
+    client = Client(
+        batch_pipeline_prod_jobs=entries(
+            [
+                # All epochs: a week-old pending row is exactly the stock the timeliness alarm leaves out.
+                {'state': 'provider_pending', 'enqueued_at': now - 7 * 86400},
+                {'state': 'provider_pending', 'enqueued_at': now - 60},
+                {'state': 'provider_running', 'enqueued_at': now - 30},
+                {'state': 'vendor_held', 'enqueued_at': now - 9 * 86400},
+            ]
+        )
+    )
+    assert queries.provider_stage(client, 'batch_pipeline_prod', now) == {
+        'provider_pending': (2, 7 * 86400),
+        'provider_running': (1, 30),
+    }
+    assert len(client.reads) == 2

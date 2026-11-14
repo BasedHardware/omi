@@ -29,6 +29,7 @@ from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINE
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
+from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
 
 PROJECTION_FINISH_READS = Counter(
@@ -93,6 +94,9 @@ def record_privacy_stop(stop: str) -> None:
     ).inc()
 
 
+# Per tick: eight count aggregations (one read per 1,000 index entries, minimum one each) and three head reads.
+VENDOR_HELD_REFRESH_SECONDS = 300.0
+
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
@@ -144,6 +148,8 @@ class QueueMetrics:
         self.oldest_leader = oldest_leader
         self.oldest_min_refresh_seconds = oldest_min_refresh_seconds
         self._oldest_due = 0.0
+        self._held_due = 0.0
+        self._provider_observed = None
         self._oldest_lock = threading.Lock()
         self._oldest_observed = None
         self._capacity_observed = None
@@ -312,6 +318,20 @@ class QueueMetrics:
             registry=registry,
             fresh=lambda: self._sample_fresh(self._oldest_observed),
         )
+        self.provider_stage_units = _FreshQueueGauge(
+            'omi_batch_pipeline_provider_stage_units',
+            'Provider-STT stage stock by state (provider_pending, provider_running); capped at 1e6',
+            ['state', 'worker_release', 'namespace'],
+            registry=registry,
+            fresh=lambda: self._provider_fresh(),
+        )
+        self.provider_stage_oldest_age = _FreshQueueGauge(
+            'omi_batch_pipeline_provider_stage_oldest_age_seconds',
+            'Oldest provider-STT stage row age by state, all epochs; no paging rule reads it',
+            ['state', 'worker_release', 'namespace'],
+            registry=registry,
+            fresh=lambda: self._provider_fresh(),
+        )
         self.ready_units = _FreshQueueGauge(
             'omi_batch_pipeline_admissible_ready_units',
             'Ready admitted units excluding held, parked, unmarked legacy and unevaluated refusals',
@@ -428,6 +448,12 @@ class QueueMetrics:
             self.capacity_refreshed_at,
         ):
             gauge.clear()
+        # The held gauges live in the vendor-route module: a former leader must not keep exporting
+        # its last stock. Zero is a floor under max(), never a fleet claim.
+        vendor_metrics.HELD_UNITS.clear()
+        vendor_metrics.HELD_OLDEST_AGE.set(0)
+        self._held_due = 0.0
+        self._provider_observed = None
         self._oldest_observed = self._capacity_observed = None
 
     def _refresh(self, store: Store, now: float) -> None:
@@ -491,6 +517,49 @@ class QueueMetrics:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
             self._capacity_observed = observed
+        self._refresh_vendor_held(store, now)
+
+    def _refresh_vendor_held(self, store: Store, now: float) -> None:
+        """Feed ``vendor_route_metrics.held_units``, which had no producer: the gauges read 0 over a real stock.
+
+        Runs on the queue sampler's (leader-elected) path, at most every VENDOR_HELD_REFRESH_SECONDS.
+        A failed read keeps the last values; it never publishes a synthetic zero.
+        """
+        if not isinstance(store, FirestoreStore) or now < self._held_due:
+            return
+        self._held_due = now + VENDOR_HELD_REFRESH_SECONDS
+        from database.lifecycle_metrics_queries import vendor_held
+
+        try:
+            counts, age, truncated = vendor_held(store.client, store.namespace, now)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_vendor_held_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+        else:
+            vendor_metrics.held_units(counts, age)
+            if truncated:
+                # Counts at the cap are lower bounds; the frozen held collectors carry no truncation label.
+                logging.getLogger(__name__).warning('event=batch_vendor_held_sample outcome=truncated')
+        # Independent of the held sample: provider_pending has no other stock signal.
+        from database.lifecycle_metrics_queries import provider_stage
+
+        try:
+            stage = provider_stage(store.client, store.namespace, now)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_provider_stage_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return
+        for state, (count, oldest_age) in stage.items():
+            self.provider_stage_units.labels(state, *self.scope).set(count)
+            self.provider_stage_oldest_age.labels(state, *self.scope).set(oldest_age)
+        self._provider_observed = time.monotonic()
+
+    def _provider_fresh(self) -> bool:
+        # Two missed ticks expire the sample; a follower that lost the lease stops exporting it.
+        observed = self._provider_observed
+        return observed is not None and time.monotonic() - observed < 2 * VENDOR_HELD_REFRESH_SECONDS + 60
 
     def _timeliness_sample_visible(self) -> bool:
         # A stalled replica must not combine its old breach with another

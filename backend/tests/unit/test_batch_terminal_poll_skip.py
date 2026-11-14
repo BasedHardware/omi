@@ -48,10 +48,11 @@ class Query:
         query.filters = [*self.filters, (field, op, value)]
         return query
 
-    def order_by(self, field):
+    def order_by(self, field, direction='ASCENDING'):
         self.calls.append(('order_by', field))
         query = copy(self)
         query.orders = [*self.orders, field]
+        query.descending = direction == 'DESCENDING'
         return query
 
     def limit(self, count):
@@ -67,9 +68,20 @@ class Query:
             rows = [
                 r
                 for r in rows
-                if field in r and (r[field] == value if op == '==' else r[field] is not None and r[field] not in value)
+                if field in r
+                and (
+                    r[field] == value
+                    if op == '=='
+                    else (
+                        r[field] > value
+                        if op == '>'
+                        else r[field] <= value if op == '<=' else r[field] is not None and r[field] not in value
+                    )
+                )
             ]
-        rows = sorted(rows, key=lambda row: tuple(row[field] for field in self.orders))
+        rows = sorted(
+            rows, key=lambda row: tuple(row[field] for field in self.orders), reverse=getattr(self, 'descending', False)
+        )
         for row in rows[: self.count]:
             self.reads.append(row['segment_id'])
             yield SimpleNamespace(to_dict=lambda row=row: deepcopy(row))

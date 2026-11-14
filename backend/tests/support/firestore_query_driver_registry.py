@@ -212,6 +212,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
+    'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
     # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
     'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
