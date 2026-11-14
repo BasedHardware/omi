@@ -23,6 +23,7 @@ from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
 from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
+from config.record_latency import record_seal_wake_preserved_enabled
 from config.record_drain import (
     record_drain_batch,
     record_drain_concurrency,
@@ -675,6 +676,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             # Our own lease ends now; a later deferral written during
             # admission (or another replica's newer lease) is kept.
             current = latest.get('available_at', 0)
+            if record_seal_wake_preserved_enabled() and current != lease and current <= now:
+                # A seal committed a due-now wake after our barrier read.
+                # Its wake wins over this stale attempt's 60/900/3600s defer.
+                return False, expired
             latest['available_at'] = max(0 if current == lease else current, now + delay)
             tx.put('jobs', segment, latest)
             return False, expired

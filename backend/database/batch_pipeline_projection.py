@@ -13,6 +13,7 @@ from typing import Any
 from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
+from config.record_latency import recent_native_record, record_notes_eager_enabled
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -397,13 +398,15 @@ class ProjectionStore:
             # receipt commit together, fenced against account deletion.
             completed = receipt.get('size_rollover_enriched', [])
             output_id = next(cid for cid in output_ids if cid not in completed)
+            eager = record_notes_eager_enabled() and recent_native_record(session.job, now)
             result = outbox.enqueue(
                 reprocess.key(binding.owner_id, output_id),
                 binding.owner_id,
                 {'conversation_id': output_id, 'language': language},
-                now + settle_seconds(),
+                now if eager else now + settle_seconds(),
                 tx=_ClientTransaction(self.client, transaction),
                 now=now,
+                coalesce='min' if eager else 'max',
                 new_dispatch=self._backfill_dispatch if backfill else None,
                 snapshot_summary=True,
             )

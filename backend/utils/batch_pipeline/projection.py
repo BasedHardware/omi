@@ -28,6 +28,7 @@ from config.batch_pipeline import (
     sweep_owner_chain_enabled,
     serving_sweep_page_rows,
 )
+from config.record_latency import recent_native_record
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -119,6 +120,8 @@ class Walk(NamedTuple):
     stop: str = ''
     # Scheduling hint only: the privacy-blocked head and its observed row version.
     blocked_head: tuple[str, object] | None = None
+    # Already-read recent single-unit records can finish without another scan.
+    eager_followups: tuple[str, ...] = ()
 
 
 def error_type(error: BaseException) -> str:
@@ -1368,6 +1371,7 @@ class Projector:
         groups: dict[str, dict[str, None]] = {}
         first = None
         advanced: list[str] = []
+        eager_followups: list[str] = []
         more = False
         blocked_head = snapshot = None
 
@@ -1526,12 +1530,14 @@ class Projector:
                 if not privacy_held and not owe(segment_id, binding):
                     stop = 'owe_error'
                     break
+                if not privacy_held and len(binding.segment_ids) == 1 and recent_native_record(job, self.clock()):
+                    eager_followups.append(segment_id)
         else:
             more = True
             stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more, stop, blocked_head)
+        return Walk(followups, advanced, more, stop, blocked_head, tuple(eager_followups))
 
     def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""

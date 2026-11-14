@@ -9780,3 +9780,23 @@ or action, join speakers, or override privacy/manual-selection contracts.
 Explicit `false` (also off/0/no) restores the previous reminder-only exemption.
 Affected fleet users and extra model dollars/day are unknown; this reverses
 compute savings for protected cases. Existing general floor behavior remains.
+
+## Recent record post-seal scheduling
+
+`RECORD_FRESH_MERGE_ENABLED`, `RECORD_NOTES_EAGER_ENABLED`,
+`RECORD_FOLLOWUP_WAKE_ENABLED`, and `RECORD_SEAL_WAKE_PRESERVED_ENABLED`
+default on. Explicit `false`, `off`, `0`, or `no` disables each independently.
+Native record admission persists `record_finished_at` from the already-read
+conversation when its end is no more than 1,800 seconds old and is not in the
+future. The fresh-merge switch uses that recording end for every sibling's
+`fresh_capture` class, retaining the existing fresh-first ordering protocol.
+Recent, fresh, non-partial native records enqueue enrichment at projection's
+current time with `min` coalescing; older, unstamped, partial and upload work
+retain the settle window. Consumer processing holds and all privacy, custody,
+revision, lease and sibling fences still apply. Successfully projected recent
+single-unit records wake the existing follow-up slots immediately. A concurrent
+seal due-now wake survives an earlier intake attempt's stale barrier refusal.
+No polling cadence or queue capacity changes. Disabling a switch restores its
+previous scheduling behavior; already-stamped admission metadata is retained.
+
+[Measurement, costs and verification](listen_pusher_pipeline/changes/2026-11-14-record-post-seal-latency.md).
