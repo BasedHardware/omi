@@ -163,7 +163,9 @@ async def test_gateway_process_with_unparseable_received_at_still_runs_claimed()
         "attachments": None,
     }
 
+    store.claim_next.return_value = ("inbox/path/2", payload)
+
     with patch.object(gw, "_process_claimed", AsyncMock(return_value="turn-complete")) as mock_claimed:
-        res = await gw._process("inbox/path/2", payload)
+        res = await gw._process("inbox/path/2")
         assert res == "turn-complete"
         mock_claimed.assert_called_once_with("inbox/path/2", payload)

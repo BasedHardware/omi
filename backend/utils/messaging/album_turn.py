@@ -23,12 +23,9 @@ def inbox_message(payload):
     if clock is None:
         raise ValueError('received_at must be a valid timestamp')
     payload['received_at'] = clock
-    payload['media'] = tuple(
-        a if isinstance(a, Artifact) else Artifact(**a) for a in (payload.get('media') or ())
-    )
+    payload['media'] = tuple(a if isinstance(a, Artifact) else Artifact(**a) for a in (payload.get('media') or ()))
     payload['attachments'] = tuple(
-        a if isinstance(a, InboundAttachment) else InboundAttachment(**a)
-        for a in (payload.get('attachments') or ())
+        a if isinstance(a, InboundAttachment) else InboundAttachment(**a) for a in (payload.get('attachments') or ())
     )
     return ChannelMessage(**payload)
 
