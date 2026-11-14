@@ -56,6 +56,14 @@ on:
         options:
           - all
           - cloud-run-only
+      build_scope:
+        description: 'build-only artifact scope; backend-only publishes backend-api only; admission unchanged'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - backend-only
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -165,10 +173,11 @@ jobs:
           TARGETS: ${{ inputs.deploy_targets }}
           GATEWAY: ${{ inputs.deploy_gateway }}
           SERVICE_IMAGES: ${{ inputs.service_images }}
+          BUILD_SCOPE: ${{ inputs.build_scope }}
         run: |
           python3 backend/scripts/backend_deploy_services.py \
             --services "$SERVICES" --mode "$WORKFLOW_MODE" --targets "$TARGETS" \
-            --gateway "$GATEWAY" --service-images "$SERVICE_IMAGES"
+            --gateway "$GATEWAY" --service-images "$SERVICE_IMAGES" --build-scope "$BUILD_SCOPE"
       - name: Reject unsupported production deployment boundary before side effects
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -462,6 +471,7 @@ jobs:
       always() && !cancelled() &&
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'build-only' &&
+      github.event.inputs.build_scope != 'backend-only' &&
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
@@ -689,12 +699,17 @@ jobs:
       - name: Build role images from backend/Dockerfile.roles and backend/edge/Dockerfile
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          BUILD_SCOPE: ${{ inputs.build_scope }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$ADMITTED_SHA"
-          # --baseline also builds today's backend/Dockerfile so the report compares sizes.
+          # The narrow route never builds the shared listen-consumable image or baseline.
+          build_args=(--baseline)
+          if [[ "$BUILD_SCOPE" == 'backend-only' ]]; then
+            build_args=(--build-scope backend-only)
+          fi
           python3 .deploy-control/backend/scripts/role_images.py build \
-            --sha "$ADMITTED_SHA" --registry "gcr.io/${PROJECT_ID}" --baseline --context . --manifest "$MANIFEST"
+            --sha "$ADMITTED_SHA" --registry "gcr.io/${PROJECT_ID}" "${build_args[@]}" --context . --manifest "$MANIFEST"
 
       - name: Smoke role images before publish
         # runtime_image_contracts.py smoke --dockerfile backend/Dockerfile.roles --target <t>

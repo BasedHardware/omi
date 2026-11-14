@@ -108,6 +108,15 @@ def resolve(
 
     fat = f"gcr.io/{project}/{base_service}"
     outputs: dict[str, str] = {}
+    # The narrow backend consumer needs no shared listen-consumable image.
+    # Preserve existing build behavior for every other deployment combination.
+    backend_only = (
+        tuple(services) == ('backend',)
+        and set(pairs) == {'backend'}
+        and deploy_targets == 'cloud-run-only'
+        and not deploy_gateway
+    )
+    outputs['build_runtime_image'] = str(not backend_only).lower()
     for service in CLOUD_RUN_SERVICES:
         outputs[service.replace("-", "_")] = pairs.get(service, f"{fat}:{short_sha}")
     listen = pairs.get("backend-listen")

@@ -63,6 +63,10 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
 MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_DEPLOY_JOB_CONDITION.replace(
     "github.event.inputs.mode == 'deploy' &&", "github.event.inputs.mode == 'build-only' &&"
 ).replace("always() &&", "always() && !cancelled() &&", 1)
+MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_BUILD_ONLY_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'build-only' &&",
+    "github.event.inputs.mode == 'build-only' &&\ngithub.event.inputs.build_scope != 'backend-only' &&",
+)
 MANUAL_BUILD_ONLY_HEAD_CHECK = '"$head_sha" != "$ADMITTED_SHA"'
 MANUAL_BUILD_ONLY_SMOKE = "runtime_image_contracts.py smoke"
 MANUAL_BUILD_ONLY_PUSH = 'docker push "$IMAGE"'

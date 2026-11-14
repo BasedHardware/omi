@@ -128,6 +128,15 @@ def build(args: argparse.Namespace, run: Runner = _run) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
         raise RoleImageError("--sha must be a full 40-character commit SHA")
     entries = role_image_entries(load_registry())
+    build_scope = getattr(args, 'build_scope', 'all')
+    if build_scope == 'backend-only':
+        if args.images or args.baseline:
+            raise RoleImageError('backend-only cannot be combined with --images or --baseline')
+        entries = [entry for entry in entries if entry['name'] == 'backend-api']
+        if len(entries) != 1 or entries[0]['role'] != 'api' or entries[0]['kind'] != 'python':
+            raise RoleImageError('backend-api registry contract is missing or invalid')
+    elif build_scope != 'all':
+        raise RoleImageError('unsupported build scope')
     if args.images:
         wanted = set(args.images.split(","))
         unknown = wanted - {entry["name"] for entry in entries} - {BASELINE["name"]}
@@ -136,7 +145,7 @@ def build(args: argparse.Namespace, run: Runner = _run) -> dict[str, Any]:
         entries = [entry for entry in entries if entry["name"] in wanted]
     if args.baseline:
         entries.append({**BASELINE, "kind": "baseline", "role": "-", "target": None, "context": "."})
-    manifest = {"sha": args.sha, "registry": args.registry, "base": args.base, "images": []}
+    manifest = {"sha": args.sha, "registry": args.registry, "base": args.base, "images": [], "build_scope": build_scope}
     for entry in entries:
         tag = image_tag(entry["name"], args.sha, args.registry if entry["kind"] != "baseline" else None)
         started = time.monotonic()
@@ -315,6 +324,11 @@ def _remote_digest(ref: str, run: Runner) -> str | None:
 def publish(manifest: dict[str, Any], run: Runner = _run) -> None:
     if not manifest.get("registry"):
         raise RoleImageError("publish needs a manifest built with --registry")
+    scope = manifest.get('build_scope', 'all')
+    if scope not in ('all', 'backend-only') or (
+        scope == 'backend-only' and [entry['name'] for entry in manifest['images']] != ['backend-api']
+    ):
+        raise RoleImageError('manifest images do not match build scope')
     for entry in manifest["images"]:
         if entry["kind"] == "baseline":
             continue
@@ -423,6 +437,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     build_parser.add_argument("--registry", help="gcr.io/<project>: tag <registry>/<image>:<short sha> for publish")
     build_parser.add_argument("--base", help="PYTHON_BASE_IMAGE override (PRs: public python:3.11-slim)")
     build_parser.add_argument("--images", help="comma-separated subset of role image names")
+    build_parser.add_argument('--build-scope', choices=('all', 'backend-only'), default='all')
     build_parser.add_argument("--baseline", action="store_true", help="also build and measure backend/Dockerfile")
     build_parser.add_argument("--context", default=".", help="repository root of the source being built")
     for name in ("build", "verify", "measure", "publish", "summary"):

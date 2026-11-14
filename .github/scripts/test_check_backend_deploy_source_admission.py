@@ -595,12 +595,12 @@ class WorkflowContractTests(unittest.TestCase):
 
         for old, new in (
             (
-                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
-                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+                "      github.event.inputs.build_scope != 'backend-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+                "      github.event.inputs.build_scope != 'backend-only' &&\n      needs.validate-production-boundary.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
             ),
             (
-                "      github.event.inputs.mode == 'build-only' &&\n      needs.validate-production-boundary.result == 'success' &&",
-                "      github.event.inputs.mode == 'build-only' || true &&\n      needs.validate-production-boundary.result == 'success' &&",
+                "      github.event.inputs.mode == 'build-only' &&\n      github.event.inputs.build_scope != 'backend-only' &&",
+                "      github.event.inputs.mode == 'build-only' || true &&\n      github.event.inputs.build_scope != 'backend-only' &&",
             ),
         ):
             root = self.fixture_root()
@@ -622,6 +622,11 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_build_only_keeps_admitted_smoked_and_uncancelled_publication(self) -> None:
         cases = (
+            (
+                "      github.event.inputs.build_scope != 'backend-only' &&\n",
+                '',
+                "build-only must use exactly the admitted, audited main-ref build condition",
+            ),
             (
                 "    if: >-\n      always() && !cancelled() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",
                 "    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'build-only' &&",

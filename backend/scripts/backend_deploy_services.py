@@ -29,9 +29,15 @@ def parse_services(raw: str) -> tuple[str, ...]:
 
 
 def validate_scope(
-    raw: str, *, mode: str, profile: str, targets: str, gateway: str, service_images: str = ''
+    raw: str, *, mode: str, profile: str, targets: str, gateway: str, service_images: str = '', build_scope: str = 'all'
 ) -> tuple[str, ...]:
     services = parse_services(raw)
+    if build_scope not in ('all', 'backend-only'):
+        raise ValueError('unsupported build_scope')
+    if build_scope == 'backend-only' and (
+        mode != 'build-only' or profile != 'manual' or targets != 'cloud-run-only' or gateway != 'false'
+    ):
+        raise ValueError('backend-only build_scope requires manual build-only, cloud-run-only, gateway=false')
     if mode not in ('deploy', 'build-only', 'repair-traffic-only'):
         raise ValueError('unsupported workflow mode')
     if profile not in ('manual', 'auto-dev'):
@@ -60,6 +66,7 @@ def main() -> None:
     parser.add_argument('--targets', default='cloud-run-only')
     parser.add_argument('--gateway', default='false')
     parser.add_argument('--service-images', default='')
+    parser.add_argument('--build-scope', default='all')
     parser.add_argument('--github-output', type=Path)
     parser.add_argument('--github-env', type=Path)
     args = parser.parse_args()
@@ -71,6 +78,7 @@ def main() -> None:
             targets=args.targets,
             gateway=args.gateway,
             service_images=args.service_images,
+            build_scope=args.build_scope,
         )
     except ValueError as error:
         parser.error(str(error))
