@@ -53,6 +53,30 @@
       "basis": "planning-bound",
       "source": "SCA-2012: two count aggregations per 60s per prod/dev leader; each costs max(1, ceil(index entries/1000)); 100,000 total and <=100,000 pending => 200/sample, 288,000/day/environment. Not a throughput cap; revisit budget if cohorts exceed this planning envelope. Normally empty/small windows cost 2/sample. Existing lease check adds <=1 metadata read per maintenance call outside this count budget.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_delivered_share.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline delivered-share signal (SCA-2117)",
+      "unit": "one maintenance-leader sample of the admitted-unit cohort",
+      "reads_per_unit_budget": 5000,
+      "reads_per_day_budget": 1440000,
+      "basis": "planning-bound",
+      "source": "One bounded metadata page per 300s per prod/dev leader, ordered by enqueued_at and capped at PAGE_LIMIT=5000 document reads: 5,000 x 288 = 1,440,000/day/environment. Normal cohort is ~2,800 units at the 2026-11 peak (~800k/day); a saturated page is reported by omi_batch_pipeline_delivered_share_truncated. Metadata only: no transcript, audio, user id or email. Revisit if admission volume triples or the cohort grows.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/scripts/batch_pipeline_delivered_share_report.py",
+      "expression": "f'{namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline delivered-share backfill report (operator-run)",
+      "unit": "one retained result read per unstamped job in a backfill window",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 500000,
+      "basis": "planning-bound",
+      "source": "Operator-run only, never scheduled. The same bounded job page is read per 15-minute window; rows without the acknowledge stamp get one get_all read each, so a full-day backfill is one result read per admitted unit (~400k at the 2026-11 peak). No transcript field is selected or printed; only projection_state, projection.persisted_at and projection_parts persisted_at.",
+      "reviewed": "2026-11-14"
     }
   ],
   "exempt": []
