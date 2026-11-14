@@ -5793,6 +5793,7 @@ public enum OmiAPI {
     public let category: CategoryEnum?
     public let emoji: String?
     public let events: [Event]?
+    public let gist: String?
     public let insights: [Insight]?
     public let meetingType: String?
     public let noteClaims: [NoteClaim]?
@@ -5807,6 +5808,7 @@ public enum OmiAPI {
       case category
       case emoji
       case events
+      case gist
       case insights
       case meetingType = "meeting_type"
       case noteClaims = "note_claims"
@@ -5823,6 +5825,7 @@ public enum OmiAPI {
       category = try c.decodeIfPresent(CategoryEnum.self, forKey: .category)
       emoji = try c.decodeIfPresent(String.self, forKey: .emoji)
       events = try c.decodeIfPresent([Event].self, forKey: .events)
+      gist = try c.decodeIfPresent(String.self, forKey: .gist)
       insights = try c.decodeIfPresent([Insight].self, forKey: .insights)
       meetingType = try c.decodeIfPresent(String.self, forKey: .meetingType)
       noteClaims = try c.decodeIfPresent([NoteClaim].self, forKey: .noteClaims)
@@ -5833,11 +5836,12 @@ public enum OmiAPI {
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, salience: String? = nil, sections: [Section]? = nil, title: String? = nil) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, gist: String? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, salience: String? = nil, sections: [Section]? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
       self.events = events
+      self.gist = gist
       self.insights = insights
       self.meetingType = meetingType
       self.noteClaims = noteClaims
@@ -20699,6 +20703,30 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func releaseSyncUploadHoldV2SyncLocalFilesJobIdReleaseHoldPost(client: OmiApiClient, jobId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v2/sync-local-files/\(jobId)/release-hold"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func getCampaignV2UsersMeReferralCampaignGet(client: OmiApiClient, authorization: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/users/me/referral/campaign"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -21460,5 +21488,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 545 Swift client methods generated.
+  // Total: 546 Swift client methods generated.
 }

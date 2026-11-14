@@ -10,7 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Literal, Optional
@@ -117,6 +117,7 @@ from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
+from utils.conversations.deletion_batch_purge import accepts_conversation_deletes, deferred_batch_purges
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
     clamp_conversation_search_pagination,
@@ -136,6 +137,7 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.other import object_lake
 from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
@@ -1444,16 +1446,36 @@ def delete_conversation(
 ):
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
-    # Acquire before recording delete intent. A busy account returns a retryable
-    # 409 without leaving a tombstone on a still-live conversation. Nested
-    # memory retraction reuses this exact gate and token.
+    # Acquire before recording delete intent, so a delete that can neither run nor be
+    # accepted leaves no tombstone on a still-live conversation. Nested memory
+    # retraction reuses this exact gate and token. Where the obligation runner is
+    # dispatched, a same-account delete holding the gate is not waited for: this
+    # delete is accepted (hidden + durably owed) and erased in order by the runner.
+    accepting = cascade and accepts_conversation_deletes()
     gate = (
-        destructive_operation_gate(uid, kind='explicit_memory_deletion', firestore_client=db_client)
+        destructive_operation_gate(
+            uid,
+            kind='explicit_memory_deletion',
+            firestore_client=db_client,
+            wait_seconds=0.0 if accepting else CONVERSATION_DELETE_GATE_WAIT_SECONDS,
+            # A contended acquisition accepts at once rather than backing off inside the SDK.
+            max_attempts=1 if accepting else None,
+        )
         if cascade
         else nullcontext()
     )
     try:
-        with gate:
+        if accepting and _same_account_delete_running(uid, db_client):
+            # Lock-free: no transaction on the gate the holder must release.
+            return _accept_conversation_delete(uid, conversation_id, http_request)
+        with ExitStack() as held:
+            try:
+                held.enter_context(gate)
+            except Exception as error:
+                if not accepting or not _gate_busy_with_same_account_delete(error, uid, db_client):
+                    raise
+                return _accept_conversation_delete(uid, conversation_id, http_request)
+            held.enter_context(deferred_batch_purges(uid))
             return _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
@@ -1467,8 +1489,87 @@ def delete_conversation(
         raise account_gate_busy_http_exception() from error
 
 
+# Same-account deletes queue behind each other; stays under the released app's 30 s read timeout.
+# Only where accepted deletes cannot be dispatched (dev, local); elsewhere a busy gate accepts.
+CONVERSATION_DELETE_GATE_WAIT_SECONDS = 20.0
+# The obligation runner's erasure waits this long behind same-account erasures (lease is 300 s);
+# the reconciler sends at most MAX_ERASURES_PER_ACCOUNT per pass, which fit inside it.
+ACCEPTED_ERASURE_GATE_WAIT_SECONDS = 45.0
+
+
+def _same_account_delete_running(uid: str, db_client) -> bool:
+    from database.legal_holds import same_kind_gate_running
+
+    try:
+        return same_kind_gate_running(uid, kind='explicit_memory_deletion', firestore_client=db_client) is True
+    except Exception:  # noqa: BLE001 - unreadable: the gate acquisition decides
+        return False
+
+
+def _gate_busy_with_same_account_delete(error: BaseException, uid: str, db_client) -> bool:
+    from database.legal_holds import gate_busy_with_peer
+
+    try:
+        return gate_busy_with_peer(error, uid, kind='explicit_memory_deletion', firestore_client=db_client) is True
+    except Exception:  # noqa: BLE001 - an unreadable gate keeps the retryable 409
+        return False
+
+
+def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> None:
+    # Hide + tombstone + owe the cascade in one commit; the obligation runner erases it.
+    conversation_tombstones.accept_deletion(uid, conversation_id)
+    # Mode change, not a failure: the user's delete is done; derived-data erasure is deferred.
+    record_fallback(
+        component='other',
+        from_mode='synchronous_erasure',
+        to_mode='accepted_deferred_erasure',
+        reason='other',
+        outcome='degraded',
+        log=logger,
+    )
+    record_product_event('conversation_deleted', request=http_request)
+    # 204, no body: released mobile clients gate delete success on exactly 204.
+
+
+class _DeferredCleanup:
+    """``BackgroundTasks`` stand-in for the runner: deferred cleanup runs after the gate is released."""
+
+    def __init__(self):
+        self.calls: list = []
+
+    def add_task(self, func, *args, **kwargs) -> None:
+        self.calls.append((func, args, kwargs))
+
+
+def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids: List[str]) -> None:
+    """The obligation runner's cascade erasure of an accepted delete; raises while the gate is busy.
+
+    It is the request's own cascade, serialized behind same-account erasures and
+    re-run whole on retry (every step is idempotent). Merge donors recorded at
+    acceptance keep their canonical audio owed even after the row is gone.
+    """
+    db_client = getattr(db_client_module, 'db', None)
+    memory_service = MemoryService(db_client=db_client)
+    cleanup = _DeferredCleanup()
+    gate = destructive_operation_gate(
+        uid,
+        kind='explicit_memory_deletion',
+        firestore_client=db_client,
+        wait_seconds=ACCEPTED_ERASURE_GATE_WAIT_SECONDS,
+    )
+    with gate, deferred_batch_purges(uid):
+        _delete_conversation_under_gate(
+            conversation_id, cleanup, True, None, uid, memory_service, db_client, record_event=False
+        )
+    for func, args, kwargs in cleanup.calls:
+        if func is delete_privacy_conversation_audio:
+            known = list(kwargs.get('source_ids') or [])
+            kwargs = {**kwargs, 'source_ids': known + [source for source in audio_source_ids if source not in known]}
+        func(*args, **kwargs)
+
+
 def _delete_conversation_under_gate(
-    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
+    conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
 ):
     logger.info('event=conversation_delete cascade=%s', cascade)
 
@@ -1526,11 +1627,16 @@ def _delete_conversation_under_gate(
                     'event=conversation_delete action=task_vectors outcome=error exception_type=%s', type(e).__name__
                 )
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
-        source_ids = (
-            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
-            if os.getenv('BUCKET_CANONICAL_AUDIO')
-            else []
-        )
+        # A previous lake-purge attempt may already have removed the transcript blob.
+        source_ids = []
+        if os.getenv('BUCKET_CANONICAL_AUDIO'):
+            try:
+                raw = conversations_db.get_conversation_raw_snapshot(
+                    uid, conversation_id, field_paths=['sync_merged_from']
+                )
+            except Exception as error:
+                raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
+            source_ids = (raw or {}).get('sync_merged_from', [])
         background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1543,12 +1649,16 @@ def _delete_conversation_under_gate(
     # is gone.
     delete_conversation_screen_frames(uid, conversation_id)
 
-    delete_conversation_and_frame_evidence(uid, conversation_id)
+    try:
+        delete_conversation_and_frame_evidence(uid, conversation_id)
+    except object_lake.LakeFetchError as error:
+        raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
 
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
-    record_product_event('conversation_deleted', request=http_request)
+    if record_event:
+        record_product_event('conversation_deleted', request=http_request)
     # 204, no body: released mobile clients gate delete success on exactly 204.
 
 

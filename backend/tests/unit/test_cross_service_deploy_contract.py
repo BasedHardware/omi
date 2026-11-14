@@ -417,8 +417,20 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
-@pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])
-def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
+@pytest.mark.parametrize(
+    'helper',
+    [
+        '_default_on',
+        'default_on',
+        'modes_default_on',
+        'rollout_default_on',
+        '_default_off',
+        'default_off',
+        'modes_default_off',
+        'rollout_default_off',
+    ],
+)
+def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     source = OverlaySource(
         tmp_path,

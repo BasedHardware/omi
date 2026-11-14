@@ -9238,6 +9238,24 @@ class AppLocalizationsEl extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware';
 
   @override
+  String get applyCodeToCurrentPlan => 'Εφαρμογή στο τρέχον πρόγραμμα';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Ο κωδικός εφαρμόστηκε στο τρέχον πρόγραμμά σας.',
+        'refused': 'Δεν μπορεί να εφαρμοστεί ο κωδικός. Ελέγξτε τον κωδικό και το απαιτούμενο πρόγραμμα.',
+        'conflict': 'Ο κωδικός έχει χρησιμοποιηθεί ή το πρόγραμμά σας έχει ήδη έκπτωση.',
+        'rateLimited': 'Πολλές προσπάθειες. Περιμένετε και δοκιμάστε αργότερα.',
+        'other': 'Δεν εφαρμόστηκε ο κωδικός. Δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Κωδικός προσφοράς';
 
   @override
@@ -13737,6 +13755,9 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Δημιουργία σημειώσεων ξανά';
 
   @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';

@@ -106,6 +106,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": false,
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-2",
@@ -317,6 +318,7 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -416,6 +418,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -515,6 +518,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",

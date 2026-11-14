@@ -2396,6 +2396,12 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     prepared = _prepare_conversation_for_write(
         update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
     )
+    # The general codec also prepares summary enrollment metadata. A manual
+    # chat edit owns only its requested fields and correction encoding; carrying
+    # those derived fields would fail the chat allowlist (or re-enroll debt).
+    prepared = {
+        key: value for key, value in prepared.items() if key in update_data or key == 'user_corrections_compressed'
+    }
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
@@ -2468,7 +2474,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
     _sync_conversation_search_index(uid, conversation_id)
 
 
@@ -3257,6 +3263,9 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str, *, retur
         restored = {**current, **updates}
         stamp_terminal_decision(restored, path='user_restore')
         updates['relevance_decision'] = restored['relevance_decision']
+        due = summary_delivery.rearm_after_refusal_clear(current, restored)
+        if due is not None:
+            updates['summary_due_at'] = restored['summary_due_at'] = due
         transaction.update(conversation_ref, updates)
         return restored
 
@@ -4597,6 +4606,7 @@ def assign_sync_conversation(
     retry_contention: bool = False,
     timing: bool = False,
     defer_index: Callable[[str, str, list[str]], None] | None = None,
+    absorb_contained_processed_donor: bool = False,
 ):
     """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
 
@@ -4687,6 +4697,7 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
+                absorb_contained_processed_donor=absorb_contained_processed_donor,
                 **({'record_obligations': record_obligations} if incoming.get('_batch_replace_live') else {}),
                 **discovery.plan_kwargs(),
             )

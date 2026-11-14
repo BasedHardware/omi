@@ -9,6 +9,7 @@ from config.live_stt_preview_custody import preview_batch_custody_enabled
 from config.server_batch import capture_language, SUPPORTED as SERVER_BATCH_LANGUAGES
 from config.batch_live_preview import capture_snapshot
 from database.server_batch_audio import claim_server_batch_lane
+from utils.episodes.batch_close import attach_admitted_batch_capture
 from utils.executors import db_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
 
@@ -79,6 +80,21 @@ async def claim_preview_batch_custody(receiver) -> bool:
         return False
     receiver.host.batch_record_capture = capture_snapshot(row)
     receiver.host.server_batch_only = True
+    # The promotion is this capture's admission: give it its episode now rather
+    # than at audio close. Metadata only, fail-open, and never awaited on the
+    # audio path that calls this.
+    start_background_task(
+        run_blocking(
+            db_executor,
+            attach_admitted_batch_capture,
+            receiver.host.request.uid,
+            conversation_id,
+            # The full claim row carries the recorded clocks; the snapshot is
+            # eligibility only and would make the admission attach a no-op.
+            dict(row),
+        ),
+        name='listen_batch_admission_attach',
+    )
     OMI_LISTEN_PREVIEW_BATCH_CUSTODY_TOTAL.labels(outcome='promoted').inc()
     return True
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-backlog-release-shares-lane-with-fresh-work",
+  "violated_contract": "Making stuck work eligible must not release all of it at once into a stage that fresh work also depends on. A change that unblocks a backlog has to give that backlog its own class and its own rate in every downstream queue and compute pool it will enter, or keep it held until one exists.",
+  "canonical_prevention": "Hold the backlog by default behind an explicit release control, let only the fresh class through the newly opened path, and release the backlog through a metered path sized against the measured headroom of each downstream stage. Before shipping an unblocking change, state the size of the stock it makes eligible and the capacity of the next stage, and test that the default path commits fresh rows while leaving the stock in place.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_provider_merge_membership.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/**",
+    "backend/config/batch_pipeline.py"
+  ],
+  "status": "open"
+}

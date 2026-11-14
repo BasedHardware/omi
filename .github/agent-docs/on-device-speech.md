@@ -4,6 +4,10 @@
 - `PurePollingSocket` keeps one provider operation in flight. Do not wrap it in `Future.timeout`: that cannot cancel native/HTTP work and permits duplicate transcription. Providers own timeouts and throw failures so retained audio can be retried; an empty successful result means no speech.
 - Native deadline regression: `ruby app/ios/test/speech_deadline_test.rb` (local/CI manifest). Dart regressions (from `app/`): `flutter test test/unit/pure_polling_test.dart test/unit/on_device_transcription_upgrade_test.dart`.
 
+## Usage count
+
+`On Device Transcription Used` reports route, audio milliseconds and non-empty segment count only. Live allowance/custom sockets aggregate successful delivered chunks and emit once per disconnect; a locally persisted offline WAL emits once. Silence, failures and retries before persistence emit nothing. No transcript text, paths, record ids or device identifiers are admitted. Its executable consumer is `contracts/analytics/consumers/on-device-transcription-usage.json`; trigger regressions are in `app/test/unit/pure_polling_test.dart` and `app/test/unit/on_device_runner_test.dart`.
+
 ## Mobile freemium engine rollback
 
 The existing iOS speech channel selects SpeechAnalyzer/SpeechTranscriber on supported iOS 26 hardware and locales, reserving and installing its OS-managed asset through AssetInventory. Unsupported hardware/locales, model-install or recognition failures fall back to the existing on-device SFSpeech path. Existing fallback UX/status strings are retained; there is no Parakeet setup in this path.

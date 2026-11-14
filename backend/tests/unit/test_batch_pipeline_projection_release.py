@@ -871,11 +871,32 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
         **seeded,
         RESULT_KEY: {
             **seeded[RESULT_KEY],
-            **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if enabled else {}),
+            **(
+                {
+                    'projection_state': 'ready',
+                    'ghost_settled_cohort': 'g1',
+                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_backoff_step': 0,
+                }
+                if enabled
+                else {}
+            ),
         },
     }
     assert client.transactions[-1].updates == (
-        [(RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': 'g1'})] if enabled else []
+        [
+            (
+                RESULT_KEY,
+                {
+                    'projection_state': 'ready',
+                    'ghost_settled_cohort': 'g1',
+                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_backoff_step': 0,
+                },
+            )
+        ]
+        if enabled
+        else []
     )
     if enabled:
         assert not release.release('held', GHOST_NOW + 1)
@@ -1004,7 +1025,15 @@ def test_cohort_is_written_only_with_the_single_ghost_update(monkeypatch, label)
     client, store = store_for(ghost_rows())
     assert not ProjectionReleaseStore(store).release('held', GHOST_NOW)
     assert client.transactions[-1].updates == [
-        (RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': label})
+        (
+            RESULT_KEY,
+            {
+                'projection_state': 'ready',
+                'ghost_settled_cohort': label,
+                'projection_finish_due_at': GHOST_NOW,
+                'projection_finish_backoff_step': 0,
+            },
+        )
     ]
 
 
@@ -1137,11 +1166,32 @@ def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabl
         **before,
         RESULT_KEY: {
             **before[RESULT_KEY],
-            **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if settled else {}),
+            **(
+                {
+                    'projection_state': 'ready',
+                    'ghost_settled_cohort': 'g1',
+                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_backoff_step': 0,
+                }
+                if settled
+                else {}
+            ),
         },
     }
     assert client.transactions[-1].updates == (
-        [(RESULT_KEY, {'projection_state': 'ready', 'ghost_settled_cohort': 'g1'})] if settled else []
+        [
+            (
+                RESULT_KEY,
+                {
+                    'projection_state': 'ready',
+                    'ghost_settled_cohort': 'g1',
+                    'projection_finish_due_at': GHOST_NOW,
+                    'projection_finish_backoff_step': 0,
+                },
+            )
+        ]
+        if settled
+        else []
     )
 
 

@@ -145,8 +145,9 @@ def test_a_fully_blocked_oldest_page_no_longer_starves_the_rows_behind_it(drain,
     live, admitted = drain
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
     store = fenced_store(('a-fenced', True), ('b-fenced', True), ('c-ok', False))
-    # Pass 1: the whole oldest page is blocked; both rows leave it, so another pass is warranted.
-    assert asyncio.run(live.drain_recordings(store)) is True
+    # Pass 1: the whole oldest page is blocked; both rows leave it. Nothing was admitted, so
+    # the pass keeps the idle wait (no immediate rescan, record drain pacing) ...
+    assert asyncio.run(live.drain_recordings(store)) is False
     assert [store.rows['jobs', s]['available_at'] for s in ('a-fenced', 'b-fenced')] == [1900.0, 1900.0]
     assert [store.rows['jobs', s]['state'] for s in ('a-fenced', 'b-fenced')] == ['record_pending'] * 2
     # Pass 2: the row that was starved behind them is admitted.

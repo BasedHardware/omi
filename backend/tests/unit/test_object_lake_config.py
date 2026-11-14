@@ -29,6 +29,7 @@ def test_defaults():
     assert object_lake.key_cache_ttl_seconds() == 86400
     assert object_lake.release() == 'v1'
     assert not object_lake.write_admitted('s')
+    assert object_lake.put_deadline_seconds() == 5
 
 
 @pytest.mark.parametrize('raw', ['bad', '-1', '101', 'nan', 'inf', ''])

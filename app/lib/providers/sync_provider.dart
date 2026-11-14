@@ -795,20 +795,29 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteWal(wal);
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteWal(wal);
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> deleteAllSyncedWals() async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteAllSyncedWals();
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteAllSyncedWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> deleteAllPendingWals() async {
     final generation = _sessionGeneration;
-    await _walService.getSyncs().deleteAllPendingWals();
-    await _refreshWals(generation);
+    try {
+      await _walService.getSyncs().deleteAllPendingWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   /// Clears every local recording category. Unlike the retryable Pending
@@ -816,10 +825,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   Future<void> deleteAllClearableWals() async {
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
-    await syncs.deleteAllSyncedWals();
-    await syncs.deleteAllPendingWals();
-    await syncs.deleteAllCorruptedWals();
-    await _refreshWals(generation);
+    try {
+      await syncs.deleteAllSyncedWals();
+      await syncs.deleteAllPendingWals();
+      await syncs.deleteAllCorruptedWals();
+    } finally {
+      await _refreshWals(generation);
+    }
   }
 
   Future<void> syncWals({WakeTrigger trigger = WakeTrigger.userRetry}) async {
