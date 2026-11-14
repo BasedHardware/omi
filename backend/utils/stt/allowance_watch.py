@@ -12,30 +12,16 @@ import math
 import os
 from typing import Any
 
-from prometheus_client import Counter
+from utils.stt.allowance_metrics import DECISIONS as DECISIONS
+from utils.stt.allowance_metrics import LEASE_DECISIONS as LEASE_DECISIONS
+from utils.stt.allowance_metrics import SECONDS as SECONDS
+from utils.stt.allowance_metrics import SETTLED_SECONDS as SETTLED_SECONDS  # re-exported for allowance_session
 
 logger = logging.getLogger(__name__)
 PATHS = frozenset(
     {'live_open', 'live_billing', 'prerecorded', 'batch_gpu', 'batch_provider', 'one_shot', 'ptt', 'processing', 'sync'}
 )
 PROVIDERS = frozenset({'deepgram', 'soniox', 'modulate', 'parakeet', 'llm'})
-DECISIONS = Counter(
-    'omi_free_allowance_watch_decisions',
-    'Watch-only spend-point decisions; no user identifiers',
-    ['path', 'provider', 'decision'],
-)
-SECONDS = Counter(
-    'omi_free_allowance_watch_seconds',
-    'Observed seconds by decision; requests are estimates, billing observations are separate',
-    ['path', 'provider', 'decision'],
-)
-
-LEASE_DECISIONS = Counter(
-    'omi_free_allowance_lease_decisions', 'Shared shadow reservation decisions; no serving effect', ['path', 'reason']
-)
-SETTLED_SECONDS = Counter(
-    'omi_free_allowance_settled_seconds', 'Confirmed billing seconds joined to a shadow operation', ['path']
-)
 
 
 def enabled() -> bool:
@@ -164,10 +150,12 @@ def observe_unbound(uid: str | None, path: str, provider: Any, seconds: float = 
         return
     reason = 'billing_scope_unavailable' if limit is not None else decision
     LEASE_DECISIONS.labels(path, reason).inc()
+    # No uid means the call cannot be attributed to any account (speaker samples, recovery
+    # recognizers): report it as unbound, not as an allowance refusal (SCA-1750 coverage).
     emit(
         path,
         provider,
-        'would_refuse',
+        'unbound' if reason == 'identity_unavailable' else 'would_refuse',
         seconds if type(seconds) in (int, float) and math.isfinite(seconds) and seconds > 0 else 0,
     )
 
