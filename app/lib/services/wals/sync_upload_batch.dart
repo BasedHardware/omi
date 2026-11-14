@@ -193,6 +193,11 @@ Map<Wal, String> recordingGroupKeys(List<Wal> wals) {
 /// order, so a lone backlog is never throttled.
 const maxBatchesPerRecordingPerDrain = 36;
 
+/// Valid audio leads, but continuous arrivals may not starve unknown clocks.
+/// The ledger carries this class budget between drains, independently of a
+/// recording/session key that can contain both trusted and untrusted clocks.
+const maxValidBatchesBeforeClockRecovery = 36;
+
 /// How long a recording's spent share keeps counting across drain passes. A
 /// rate-limit break ends a pass before the cap fires; with a pass-local
 /// counter the oldest recording could spend 35 batches of every pass and

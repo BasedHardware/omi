@@ -182,6 +182,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// counter let the oldest recording re-enter every pass at the head and
   /// starve the recordings behind it without ever deferring (#14688).
   final Map<String, int> _drainGroupBatchCounts = {};
+  int _validBatchesSinceClockRecovery = 0;
   final Map<String, int> _drainGroupCountedAt = {};
 
   /// Session fence. Incremented on logout so in-flight chunk/flush/sync cannot
@@ -250,6 +251,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _backlogTelemetry.clearUserData();
     _sessionGeneration++;
     _drainGroupBatchCounts.clear();
+    _validBatchesSinceClockRecovery = 0;
     _drainGroupCountedAt.clear();
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
@@ -2110,14 +2112,19 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
+      final clockRecoveryTurn = _validBatchesSinceClockRecovery >= maxValidBatchesBeforeClockRecovery &&
+          pending.any((wal) => walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown);
+      final turnPending = clockRecoveryTurn
+          ? pending.where((wal) => walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown).toList()
+          : pending;
       // A deferred group waits only while another group can still be served in
       // this pass. Once nothing else is pending it rejoins the candidates, so
       // a capped recording finishes in the same drain instead of stranding its
       // tail until a later pass — a custom-STT user confirms one sync, and a
       // recording near the 30-day backfill deadline must not wait for a second
       // confirmation the deadline may not survive (#14688).
-      final waiting = pending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
-      final candidates = waiting.isNotEmpty ? waiting : pending;
+      final waiting = turnPending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
+      final candidates = waiting.isNotEmpty ? waiting : turnPending;
       var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
       if (batch.isEmpty) break;
       if (batch
@@ -2125,7 +2132,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         batch = [batch.first];
       }
       final drainGroup = groupKeys[batch.first]!;
-      if ((_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
+      if (!clockRecoveryTurn &&
+          (_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
           pending.any((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal]))) {
         // This recording spent its share while others still wait: defer its
         // remainder instead of letting it own every interrupted drain. The
@@ -2254,6 +2262,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         final audioBounds = syncUploadAudioBounds(batchWals);
+        _validBatchesSinceClockRecovery =
+            walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown
+                ? 0
+                : min(_validBatchesSinceClockRecovery + 1, maxValidBatchesBeforeClockRecovery);
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,

@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -33,6 +34,7 @@ void main() {
   late List<String> uploadedBatchFirstFiles;
   late int rateLimitAtBatch;
   late LocalWalSyncImpl sync;
+  Future<void> Function()? afterUpload;
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +54,7 @@ void main() {
     uploadedConversations = [];
     uploadedBatchFirstFiles = [];
     rateLimitAtBatch = 0;
+    afterUpload = null;
     SyncRateLimiter.instance.clear();
     sync = LocalWalSyncImpl(
       _Listener(),
@@ -71,6 +74,12 @@ void main() {
           }
           uploadedConversations.add(conversationId);
           uploadedBatchFirstFiles.add(files.first.uri.pathSegments.last);
+          expect(
+              files.map((file) => file.uri.pathSegments.last).toSet().contains('audio_2145916800.bin') &&
+                  files.length > 1,
+              isFalse,
+              reason: 'unknown clocks must never ride in a request with valid audio');
+          if (afterUpload != null) await afterUpload!();
           return UploadFilesResult.queued('job-${uploadedConversations.length}');
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -106,6 +115,39 @@ void main() {
         for (var index = 0; index < walCount; index++)
           await writeWal(startSeconds + index * 60, conversationId: conversationId),
       ];
+
+  for (final splitPass in [false, true]) {
+    test('unknown clock gets a bounded turn amid continuous valid arrivals in the same session (split=$splitPass)',
+        () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final future = await writeWal(2145916800, conversationId: 'shared', seconds: 300)
+        ..recordingSessionId = 'same-session';
+      final firstValid = await writeWal(now - 100, conversationId: 'shared', seconds: 300)
+        ..recordingSessionId = 'same-session';
+      sync.testWals = [future, firstValid];
+      afterUpload = () async {
+        if (uploadedBatchFirstFiles.last == future.filePath) {
+          afterUpload = null;
+          return;
+        }
+        final next = await writeWal(now - 100 + uploadedBatchFirstFiles.length, conversationId: 'shared', seconds: 300)
+          ..recordingSessionId = 'same-session';
+        sync.testWals.add(next);
+      };
+      if (splitPass) {
+        rateLimitAtBatch = 20;
+        await sync.syncAll();
+        expect(future.status, WalStatus.miss);
+        rateLimitAtBatch = 0;
+        SyncRateLimiter.instance.clear();
+      }
+      await sync.syncAll();
+      expect(uploadedBatchFirstFiles.indexOf(future.filePath!), lessThanOrEqualTo(maxValidBatchesBeforeClockRecovery));
+      expect(future.status, WalStatus.uploaded);
+      expect(uploadedBatchFirstFiles.first, firstValid.filePath);
+      expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded), isTrue);
+    });
+  }
 
   // Device-imported WALs (StorageSync → persistDeviceChunk) carry no
   // conversation or recording-session id; one contiguous run of 60s chunks
