@@ -66,6 +66,10 @@ already reads in `prepare`; the acknowledge write adds no read.
 `{namespace}_jobs` for states in the census vocabulary minus `record_pending`
 (a reservation, not an admitted unit), admitted in
 `[now − 900 − 300, now − 300]`, ordered by `enqueued_at`, capped at 5,000 rows.
+The query projects only `segment_id`, `enqueued_at`, `state`, `stt_route`,
+`policy.stt_route`, `projection_binding.language`, `delivered_in_target` and
+`delivered_at`, so owner ids, content ids, conversation ids and audio
+references are never materialized.
 `utils/batch_pipeline/delivered_share.DeliveredShare` runs that page on the
 maintenance leader at most every 300 s and publishes:
 

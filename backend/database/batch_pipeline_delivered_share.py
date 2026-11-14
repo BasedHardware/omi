@@ -2,8 +2,9 @@
 
 The signal is "of recordings admitted, what share reached the user within the
 target". It is read from job metadata only: admission clock, route, declared
-language and the delivery stamp the projection acknowledge writes. No
-transcript, audio, user id or email is read, and no document is streamed past
+language and the delivery stamp the projection acknowledge writes. The page
+projects exactly those fields, so no owner id, content id, conversation id,
+audio reference, transcript or email is read, and no document is streamed past
 the page cap.
 
 A ``record_pending`` row is a reservation, not an admitted unit: it has no
@@ -26,6 +27,19 @@ COHORT_SECONDS = 900
 PAGE_LIMIT = 5000
 
 ADMITTED_STATES = tuple(state for state in JOB_STATES if state != 'record_pending')
+# Projection, not a filter: the page must not materialize owner ids, content
+# ids, conversation ids or audio references it never reads. ``segment_id`` is
+# the result join key the backfill report needs.
+FIELDS = (
+    'segment_id',
+    'enqueued_at',
+    'state',
+    'stt_route',
+    'policy.stt_route',
+    'projection_binding.language',
+    'delivered_in_target',
+    'delivered_at',
+)
 
 
 def delivered_share_page(client, namespace: str, now: float, limit: int = PAGE_LIMIT):
@@ -44,6 +58,7 @@ def delivered_share_page(client, namespace: str, now: float, limit: int = PAGE_L
         .where('enqueued_at', '>=', start)
         .where('enqueued_at', '<=', end)
         .order_by('enqueued_at')
+        .select(FIELDS)
         .limit(limit)
     )
     rows = [doc.to_dict() for doc in query.stream(timeout=10, retry=None)]

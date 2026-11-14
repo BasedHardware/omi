@@ -9,6 +9,7 @@ from prometheus_client import CollectorRegistry
 from database.batch_pipeline_delivered_share import (
     ADMITTED_STATES,
     COHORT_SECONDS,
+    FIELDS,
     PAGE_LIMIT,
     TARGET_SECONDS,
     delivered_share_page,
@@ -20,21 +21,24 @@ NOW = 2_000_000_000.0
 
 
 class PageQuery:
-    def __init__(self, client, filters=(), page=None):
-        self.client, self.filters, self.page = client, filters, page
+    def __init__(self, client, filters=(), page=None, projection=()):
+        self.client, self.filters, self.page, self.projection = client, filters, page, projection
 
     def where(self, key, op, value):
-        return PageQuery(self.client, self.filters + ((key, op, value),), self.page)
+        return PageQuery(self.client, self.filters + ((key, op, value),), self.page, self.projection)
 
     def order_by(self, key):
-        return PageQuery(self.client, self.filters, self.page)
+        return PageQuery(self.client, self.filters, self.page, self.projection)
+
+    def select(self, fields):
+        return PageQuery(self.client, self.filters, self.page, tuple(fields))
 
     def limit(self, value):
-        return PageQuery(self.client, self.filters, value)
+        return PageQuery(self.client, self.filters, value, self.projection)
 
     def stream(self, *, timeout, retry):
         assert timeout == 10 and retry is None
-        self.client.calls.append((self.filters, self.page))
+        self.client.calls.append((self.filters, self.page, self.projection))
         if self.client.fail:
             raise RuntimeError('synthetic page failure')
         rows = [row for row in self.client.rows if _matches(row, self.filters)]
@@ -89,8 +93,10 @@ def test_page_selects_admitted_states_and_excludes_reservations():
     rows, truncated = delivered_share_page(client, 'batch_pipeline_dev', NOW)
     assert [row['state'] for row in rows] == ['committed', 'provider_pending', 'ready']
     assert truncated is False
-    filters, limit = client.calls[0]
+    filters, limit, projection = client.calls[0]
     assert limit == PAGE_LIMIT
+    assert projection == FIELDS
+    assert 'owner_id' not in projection
     assert ('state', 'in', list(ADMITTED_STATES)) in filters
     assert ('enqueued_at', '>=', NOW - COHORT_SECONDS - TARGET_SECONDS) in filters
     assert ('enqueued_at', '<=', NOW - TARGET_SECONDS) in filters

@@ -38,7 +38,6 @@ PREFIX = 'omi_batch_pipeline_delivered_share_'
 SAMPLE_SECONDS = 300
 # Counts and ratio stay readable for one missed 300 s sample.
 FRESH_SECONDS = 600
-ROUTES = ('parakeet', 'provider', 'unknown')
 OTHER = 'other'
 UNKNOWN = 'unknown'
 # Union of the deployed Parakeet and Modulate language tables; a code no route
@@ -110,8 +109,8 @@ LANGUAGES = frozenset(
     }
 )
 # The alarm compares a cell with its own trailing peak, then discounts it, so a
-# sustained dip cannot lower the baseline under itself for a week.
-BASELINE_SECONDS = 7 * 86400
+# sustained dip cannot lower the baseline under itself for a week. The rule's
+# 7-day range is pinned by the contract test; keep the factor and floor here.
 BASELINE_FACTOR = 0.7
 MIN_VOLUME = 20
 METRICS = {

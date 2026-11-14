@@ -12,7 +12,9 @@ Features can stay near normal while one language is at zero; that is the
 Companions:
 
 - `omi_batch_pipeline_delivered_share_admitted_units{route,language}` — cohort
-  volume. A cell under 20 units is not alarmed.
+  volume. A cell under 20 units in the 15-minute cohort is not alarmed, which
+  is about 1,920 units/day: a language with real but lower volume is visible on
+  the dashboard but cannot page. Lower the floor only with a noise review.
 - `omi_batch_pipeline_delivered_share_units{route,language}` — delivered count.
 - `omi_batch_pipeline_delivered_share_truncated` — 1 when the page hit 5,000
   rows; the share then covers the oldest rows only.

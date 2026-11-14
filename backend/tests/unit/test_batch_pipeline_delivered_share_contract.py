@@ -82,6 +82,9 @@ class Query:
     def order_by(self, *args):
         return self
 
+    def select(self, fields):
+        return self
+
     def limit(self, value):
         return self
 
