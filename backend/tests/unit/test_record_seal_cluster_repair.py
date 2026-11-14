@@ -950,6 +950,7 @@ def test_child_gap_bucket_is_allowlisted(candidate):
         'stage_ms',
         'event',
         'count',
+        'lane',
         'disposition',
         'seal_age_seconds',
         'proof_reason',
@@ -1450,7 +1451,7 @@ class OrderedJobsClient:
                     if op == '==':
                         docs = [d for d in docs if d.to_dict().get(field) == value]
                     else:
-                        assert field in ('enqueued_at', 'record_dead_letter_deadline_at') and op in ('<=', '>')
+                        assert field in ('enqueued_at', 'record_dead_letter_deadline_at') and op in ('<=', '>', '>=')
                         docs = [
                             d
                             for d in docs
@@ -1458,7 +1459,7 @@ class OrderedJobsClient:
                             and (
                                 (d.to_dict()[field] <= value or math.isnan(d.to_dict()[field]))
                                 if op == '<='
-                                else d.to_dict()[field] > value
+                                else d.to_dict()[field] >= value if op == '>=' else d.to_dict()[field] > value
                             )
                         ]
 
@@ -1508,6 +1509,9 @@ def pending_job(index, enqueued=0, **extra):
 @pytest.mark.parametrize('order', ['on', 'off'])
 @pytest.mark.parametrize('page', ['mixed', 'all_zero', 'nonpositive', 'positive_sentinel'])
 def test_run_gauge_excludes_invalid_enqueue_clocks_without_changing_discovery(source, proof, monkeypatch, order, page):
+    monkeypatch.setattr(
+        config, 'fresh_enabled', lambda: False
+    )  # This test covers the retained sweep's exact selection.
     horizon = datetime(2026, 11, 9, tzinfo=timezone.utc)
     stamp = horizon.timestamp()
     enqueued, expected = {

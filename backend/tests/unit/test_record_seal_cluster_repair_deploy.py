@@ -332,3 +332,17 @@ def test_worker_deploy_gates_selected_source_before_build_or_helm():
         or 'worker_image_only.py deploy' in step.get('run', '')
     ]
     assert len(mutations) == 4 and all(i > gate_index for i in mutations)
+
+
+def test_fresh_lane_has_minute_cadence_and_explicit_rollback():
+    repair = documents()[('CronJob', 'record-seal-repair')]['spec']
+    assert repair['schedule'] == '* * * * *'
+    assert repair['concurrencyPolicy'] == 'Forbid'
+    env = {e['name']: e.get('value') for e in repair['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+    old = documents(
+        '--set', 'recordSealRepair.freshEnabled=false', '--set-string', 'recordSealRepair.schedule=*/5 * * * *'
+    )[('CronJob', 'record-seal-repair')]['spec']
+    assert old['schedule'] == '*/5 * * * *'
+    env = {e['name']: e.get('value') for e in old['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'false'
