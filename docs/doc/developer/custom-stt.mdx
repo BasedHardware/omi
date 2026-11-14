@@ -29,8 +29,11 @@ two taps as a command.
 
 | Field | Meaning |
 |-------|---------|
-| `state` | `1` single tap, `2` double tap. Older firmware sends `3` when a long press starts and `5` on release. |
+| `state` | The code the device sent, unchanged: `1` single tap, `2` double tap. Current firmware also sends `5` when a press held past a tap is released, and older firmware sent `3` when a long press started. |
 | `timestamp` | When the app received the press, in milliseconds since the Unix epoch (phone clock). |
+
+Act on the states you use and ignore the rest, since future firmware may add codes. A service that doesn't use the
+button can ignore `ButtonEvent` frames entirely.
 
 The app sends button events even when **Omi button actions** are turned off. Turn those off if your service should be
 the only one acting on the button. Only the **Custom** live provider receives button events, because built-in
