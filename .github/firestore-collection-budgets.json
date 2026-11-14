@@ -5,7 +5,7 @@
     "guard": ".github/scripts/check_firestore_collection_budget.py",
     "surfaces": "Python under backend/ (.collection, .collection_group) and TypeScript/JavaScript under web/ (db.collection, db.collectionGroup, collection(db, ...), doc(db, ...)).",
     "kill_switch": "FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0 disables the guard for an approved rollback and requires FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON.",
-    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces.",
+    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. A grandfathered computed site whose literal namespace tuple grows keeps its site::expression key, so the guard also compares the enumerable collection family between revisions and requires a budget or exemption for each new member. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces, for computed-family expansion, and for Python collection_group_id.",
     "entry_fields": {
       "collection": "Firestore collection id, snake_case or camelCase",
       "owner": "lane that owns the collection and its budget",
@@ -29,7 +29,55 @@
       "reviewed": "YYYY-MM-DD date the budget was reviewed"
     }
   },
-  "budgets": [],
-  "dynamic": [],
+  "budgets": [
+    {
+      "collection": "conversation_erasure_jobs",
+      "owner": "backend conversation deletion (accepted-delete erasure obligations)",
+      "unit": "conversation delete accepted behind a busy account gate",
+      "reads_per_unit_budget": 25,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
+      "reviewed": "2026-11-13"
+    }
+  ],
+  "dynamic": [
+    {
+      "site": "backend/database/batch_pipeline_fresh_guard.py",
+      "expression": "f'{namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline fresh-delivery guard",
+      "unit": "one maintenance-leader sample at up to 100,000 fresh results per window per environment",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 576000,
+      "basis": "planning-bound",
+      "source": "SCA-2012: two count aggregations per 60s per prod/dev leader; each costs max(1, ceil(index entries/1000)); 100,000 total and <=100,000 pending => 200/sample, 288,000/day/environment. Not a throughput cap; revisit budget if cohorts exceed this planning envelope. Normally empty/small windows cost 2/sample. Existing lease check adds <=1 metadata read per maintenance call outside this count budget.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{namespace}_control'",
+      "collection_pattern": "batch_pipeline_*_control",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "serving process-minute or backfill page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 80000,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/projection-finish-backfill.md: 35 replicas x 1440 negative-marker checks/day plus up to 10000 backfill pages x 2 checkpoint reads. Completed marker is read once per process lifetime; lever off reads zero.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{store.namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "historical finish row stamped (including page query)",
+      "reads_per_unit_budget": 4,
+      "reads_per_day_budget": 2000000,
+      "basis": "planning-bound",
+      "source": "SCA-2024 census ~478000 persisted/ready rows: one page-query read plus one transactional fence read per row, allowing one repeated pass/retry (~1.912M). Operator-only, capped at 200 rows/page and 10000 pages/invocation; normal serving never invokes stamping.",
+      "reviewed": "2026-11-13"
+    }
+  ],
   "exempt": []
 }

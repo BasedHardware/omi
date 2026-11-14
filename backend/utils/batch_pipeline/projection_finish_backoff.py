@@ -1,16 +1,12 @@
-"""Dark finish-page backoff: page selection, one survey pass and per-row deferral.
+"""Finish-page selection gated by a shared, versioned backfill marker.
 
-The projection finish page re-reads and re-fences every ``persisted``/``ready``
-result on every serving tick. With ``BATCH_PROJECTION_FINISH_BACKOFF_ENABLED``
-on, a walk that changed nothing defers the row's next attempt (60 s, then 300 s,
-then 900 s, capped) instead of replaying it every tick.
-
-This owns only that lever's read path so ``utils.batch_pipeline.projection``
-stays the caller: with the lever off every method is the exact legacy call.
-Rows written before the lever carry no clock and a range filter cannot see a
-missing field, so the first pass after enablement is the unfiltered legacy page,
-which stamps them.
+Before maintenance completes, use the legacy page without stamp transactions.
+Once complete, every process (including a newly scaled replica) filters at once.
+Clock writes on state transitions are unconditional, so rollback/re-enable does
+not invalidate the pass. Negative marker reads are throttled to once a minute.
 """
+
+import time
 
 from config.batch_pipeline import projection_finish_backoff_enabled
 
@@ -18,61 +14,26 @@ from config.batch_pipeline import projection_finish_backoff_enabled
 class FinishBackoff:
     def __init__(self, projector):
         self.projector = projector
-        # One unfiltered pass per process after the lever turns on.
-        self.surveyed = False
-        # A short page ends the legacy walk, but the survey may only close once
-        # every row on it carries a clock: the filtered page cannot see a row
-        # whose stamp failed, so closing early would lose that obligation.
-        self.survey_short = False
-        # Rows whose stamp failed in this survey; a full page moves the cursor
-        # past them, so the failure must restart the walk.
-        self.unstamped: set[str] = set()
+        self.complete = False
+        self.check_after = 0.0
+        self.monotonic = time.monotonic
 
     def page(self, size: int) -> list[str]:
-        """The finish page: legacy while the lever is off, clock-filtered when on."""
         discovery = self.projector.finish_discovery
         if not projection_finish_backoff_enabled():
-            # A rollback can be followed by a re-enable in the same process.
-            # Rows written while the lever was off carry no clock, so the next
-            # enable must survey again before it filters.
-            self.surveyed = False
-            self.survey_short = False
-            self.unstamped.clear()
             return discovery.next(limit=size)
-        due_before = self.projector.clock() if self.surveyed else None
-        page = discovery.next(limit=size, due_before=due_before)
-        if due_before is None:
-            # A short survey page means the legacy range was walked once.
-            self.survey_short = len(page) < max(1, min(size, 200))
-        return page
-
-    def survey_done(self) -> None:
-        """Close the survey only after every surveyed row is durably stamped."""
-        if not self.survey_short:
-            return
-        self.survey_short = False
-        if not self.unstamped:
-            self.surveyed = True
-            return
-        # The cursor passed a row that kept no clock: restart the walk.
-        discovery = self.projector.finish_discovery
-        discovery.after = None
-        discovery.seeded = False
+        if not self.complete and self.monotonic() >= self.check_after:
+            self.check_after = self.monotonic() + 60.0
+            self.complete = discovery.store.projection_finish_backfill_complete()
+        return discovery.next(limit=size, due_before=self.projector.clock() if self.complete else None)
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
-        """Defer this row only after a walk that produced no completion.
+        """Defer only after a no-change walk using the clock-filtered page.
 
-        The store fences on the row's own state, so a row that moved on instead
-        of being deferred is left alone. ``entry`` is ``None`` when the row read
-        itself failed; the store then stamps only a row still in a finish state.
+        A failed deferral leaves the existing clock due, so discovery retries it.
+        The store fences on current state before changing the clock.
         """
-        self.unstamped.discard(segment_id)
-        if not projection_finish_backoff_enabled() or result is not None:
+        if not projection_finish_backoff_enabled() or not self.complete or result is not None:
             return
         state = entry.get('projection_state') if entry else None
-        try:
-            self.projector.store.defer_finish(segment_id, state, self.projector.clock())
-        except Exception:
-            # The row keeps no clock, so the rest of the survey must find it.
-            self.unstamped.add(segment_id)
-            raise
+        self.projector.store.defer_finish(segment_id, state, self.projector.clock())

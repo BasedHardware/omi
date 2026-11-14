@@ -180,3 +180,34 @@ def test_ceilings_report_soft_delete_noncurrent_and_cache_age():
     assert rc.ceiling_findings(CONTRACT, canonical, {'soft_delete_seconds': '0', 'versioning': True}) == [
         'ceiling_versioning'
     ]
+
+
+@pytest.mark.parametrize('prefix', ['chunks/', 'chunks/unit/', 'raw-live/', 'raw-live/unit/', ''])
+def test_live_voice_is_kept_until_user_deletion_on_ceiling_side(prefix):
+    metadata = {
+        'lifecycle': {'rule': [delete(3650, matchesPrefix=[prefix])]},
+        'soft_delete_seconds': '0',
+        'versioning': False,
+    }
+    assert 'ceiling_user_content_expiry' in rc.ceiling_findings(CONTRACT, SYNC, metadata)
+
+
+def test_voice_ceiling_allows_noncurrent_cleanup_and_cache_expiry():
+    metadata = {
+        'lifecycle': {
+            'rule': [
+                delete(3, matchesPrefix=['merged/']),
+                delete(30, matchesPrefix=['playback/']),
+                delete(1, matchesPrefix=['chunks/'], isLive=False),
+            ]
+        },
+        'soft_delete_seconds': '0',
+        'versioning': False,
+    }
+    assert 'ceiling_user_content_expiry' not in rc.ceiling_findings(CONTRACT, SYNC, metadata)
+
+
+def test_canonical_voice_ceiling_forbids_automatic_live_expiry():
+    bucket = 'canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)'
+    metadata = {'lifecycle': {'rule': [delete(365)]}, 'soft_delete_seconds': '0', 'versioning': False}
+    assert rc.ceiling_findings(CONTRACT, bucket, metadata) == ['ceiling_user_content_expiry']

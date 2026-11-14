@@ -87,6 +87,12 @@ class _Recording:
     def first_pending(self, owner_key: str) -> dict | None:
         return self._tx.first_pending(owner_key)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_pending(owner_key)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_ready_pending(owner_key)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._tx.ready_predecessor(owner_key, priority, segment_id)
 
@@ -98,6 +104,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def projection_finish_backfill_complete(self) -> bool:
+        return self.pg.projection_finish_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)

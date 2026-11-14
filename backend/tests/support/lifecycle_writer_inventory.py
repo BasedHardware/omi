@@ -2715,6 +2715,7 @@ FIELD_SITES = {
             (
                 'committed_at',
                 'conversation_id',
+                'fresh_capture',
                 'late_capture',
                 'log_sequence',
                 'owner_id',
@@ -2727,6 +2728,14 @@ FIELD_SITES = {
             ),
         ),
         ('OrderedMerge.commit_next.commit', 'state', "'committed'", ('merge_pending', 'state')),
+        # Transactional fresh gate: the skipped-row note copies the unready first row's state
+        # for the commit record; it is read, never written to a job.
+        (
+            'OrderedMerge.commit_next.commit',
+            'state',
+            "first.get('state') if first else None",
+            ('segment_ids', 'state', 'waited'),
+        ),
         ('_fresh_pick', 'state', "rows[0].get('state')", ('segment_ids', 'state', 'waited')),
     ],
     'utils/batch_pipeline/provider_stt.py': [

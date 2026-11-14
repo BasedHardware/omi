@@ -46,19 +46,9 @@ REVIEWED_INHERITANCE = {
         'the difference pending human ruling; other inherited differences '
         'are enumerated, not normalized.',
     },
-    'chart/prod/batch-pipeline-worker': {
-        'reason': 'intentionally inherits code defaults',
-        'status': 'UNRESOLVED',
-        'reviewed_by': 'lead2 e34fb4; David 9f4a0b4c (source preservation, not resolution)',
-        'comparison_surface': 'runtime/prod/cloud_run/services/backend',
-        'notes': 'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart {} '
-        'inherits 100; prod Cloud Run literals explicitly carry 0. '
-        'Preserve the difference pending human ruling; other inherited '
-        'differences are enumerated, not normalized.',
-    },
 }
 UNRESOLVED_NOTES = [
-    'UNRESOLVED: chart-vs-CR batch_timeliness_leader: worker chart {} inherits 100 from DEFAULT_PERCENTAGES; prod '
+    'UNRESOLVED: chart-vs-CR batch_timeliness_leader: default/dev worker charts {} inherit 100 from DEFAULT_PERCENTAGES; prod '
     'Cloud Run literals explicitly carry 0. No common value chosen.',
     'UNRESOLVED: README-vs-base triple: memory_list_index_window/people_scan_dedupe/finjob_candidate_queries are '
     'documented as 0 in runtime_env/README.md but _base.yaml carries 100. Neither source is selected as authority; '
@@ -248,7 +238,12 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
             ):
                 errors.append(f'{surface}: missing reviewed UNRESOLVED inheritance annotation')
         else:
-            target = f'runtime/{env}/gke/{chart}'
+            # The prod worker shares backend-integration's explicitly approved map.
+            target = (
+                'runtime/prod/cloud_run/services/backend-integration'
+                if surface == 'chart/prod/batch-pipeline-worker'
+                else f'runtime/{env}/gke/{chart}'
+            )
             if target not in expected or effective_levers(explicit) != effective_levers(expected[target]):
                 errors.append(f'{surface}: effective levers differ from {target}')
     return errors

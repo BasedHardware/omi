@@ -28,6 +28,7 @@ from config.record_drain import (
     record_drain_concurrency,
     record_drain_lease_seconds,
     record_drain_privacy_defer_seconds,
+    record_drain_idle_without_progress_enabled,
     barrier_retry_delay,
     record_drain_barrier_backoff_enabled,
 )
@@ -522,6 +523,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
     lease_seconds = record_drain_lease_seconds()
     segments, partial_count = [], 0
     privacy_blocked = False
+    # Rows this pass actually admitted. A full page of deferred/failed rows (for
+    # example captures still behind their upload barrier) made no progress, so
+    # rescanning at once only re-reads it (2026-11-07: store:due 4x in 30 min).
+    admitted = 0
     # Every admission rewrites the owner's scheduler row, so two local workers
     # admitting one owner only exhaust each other's contention retries. Leave
     # the busy owner's other rows due for the next pass instead.
@@ -581,7 +586,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         return lease
 
     async def admit_and_defer(segment, pending, lease):
-        nonlocal partial_count, privacy_blocked
+        nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
         failed = barrier_open = False
         try:
@@ -616,49 +621,54 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             # so a no-op cannot monopolize every immediately repeated pass,
             # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
-            if latest.get('state') == 'record_pending':
-                now = time.time()
-                expired = False
-                if barrier_open and latest.get('available_at') == lease and batch_held_dead_letter_enabled():
-                    deadline = latest.get('record_dead_letter_deadline_at')
-                    if deadline is None:
-                        latest['record_dead_letter_deadline_at'] = now + RECORD_DEAD_LETTER_SECONDS
-                    elif (
-                        not isinstance(deadline, bool)
-                        and isinstance(deadline, (int, float))
-                        and math.isfinite(deadline)
-                        and deadline <= now
-                    ):
-                        latest.update(
-                            state='dead',
-                            merge_pending=False,
-                            dead_letter_reason='record_barrier_aged',
-                            record_dead_letter_at=now,
-                        )
-                        expired = True
-                delay = 60
-                if not failed and (latest.get('partial_run') or {}).get('complete'):
-                    delay = INVENTORY_POLL_SECONDS
-                elif barrier_open and record_drain_barrier_backoff_enabled():
-                    # The capture is not finalized yet: back off by how long it has waited.
-                    enqueued = latest.get('enqueued_at')
-                    age = (
-                        max(0.0, now - enqueued)
-                        if not isinstance(enqueued, bool)
-                        and isinstance(enqueued, (int, float))
-                        and math.isfinite(enqueued)
-                        else 0.0
+            if latest.get('state') != 'record_pending':
+                # The row left record_pending: it was admitted (by us or a peer). A
+                # peer's dead-letter is not an admission, so it is not progress.
+                return latest.get('state') != 'dead', False
+            now = time.time()
+            expired = False
+            if barrier_open and latest.get('available_at') == lease and batch_held_dead_letter_enabled():
+                deadline = latest.get('record_dead_letter_deadline_at')
+                if deadline is None:
+                    latest['record_dead_letter_deadline_at'] = now + RECORD_DEAD_LETTER_SECONDS
+                elif (
+                    not isinstance(deadline, bool)
+                    and isinstance(deadline, (int, float))
+                    and math.isfinite(deadline)
+                    and deadline <= now
+                ):
+                    latest.update(
+                        state='dead',
+                        merge_pending=False,
+                        dead_letter_reason='record_barrier_aged',
+                        record_dead_letter_at=now,
                     )
-                    delay = barrier_retry_delay(age)
-                # Our own lease ends now; a later deferral written during
-                # admission (or another replica's newer lease) is kept.
-                current = latest.get('available_at', 0)
-                latest['available_at'] = max(0 if current == lease else current, now + delay)
-                tx.put('jobs', segment, latest)
-                return expired
-            return False
+                    expired = True
+            delay = 60
+            if not failed and (latest.get('partial_run') or {}).get('complete'):
+                delay = INVENTORY_POLL_SECONDS
+            elif barrier_open and record_drain_barrier_backoff_enabled():
+                # The capture is not finalized yet: back off by how long it has waited.
+                enqueued = latest.get('enqueued_at')
+                age = (
+                    max(0.0, now - enqueued)
+                    if not isinstance(enqueued, bool) and isinstance(enqueued, (int, float)) and math.isfinite(enqueued)
+                    else 0.0
+                )
+                delay = barrier_retry_delay(age)
+            # Our own lease ends now; a later deferral written during
+            # admission (or another replica's newer lease) is kept.
+            current = latest.get('available_at', 0)
+            latest['available_at'] = max(0 if current == lease else current, now + delay)
+            tx.put('jobs', segment, latest)
+            return False, expired
 
-        expired = await run_blocking(db_executor, store.run, defer)
+        # Progress means the row actually left record_pending; a normal return can be a
+        # no-op (an unchanged partial inventory poll), which must not count. The
+        # dead-letter verdict rides the same transaction but is not progress.
+        progressed, expired = await run_blocking(db_executor, store.run, defer)
+        if progressed:
+            admitted += 1
         if expired and metrics is not None:
             metrics.record_dead_letter.inc()
 
@@ -682,7 +692,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size and not privacy_blocked
+        progressed = admitted > 0 or not record_drain_idle_without_progress_enabled()
+        return len(segments) == batch_size and not privacy_blocked and progressed
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',

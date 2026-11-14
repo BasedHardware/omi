@@ -27,6 +27,8 @@ environment_shared:
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
@@ -968,6 +970,8 @@ environment_shared:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           LADDER_V1_PLUS_MONTH_PRICE_ID:
             env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
             provisional: true
@@ -1394,6 +1398,8 @@ environment_shared:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
@@ -1773,6 +1779,8 @@ environment_shared:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED: {value: 'on', category: ops_kill}
           SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
           SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
@@ -2134,6 +2142,8 @@ environment_shared:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
@@ -2905,4 +2915,11 @@ firestore_read_lever_policy:
     chart/prod/pusher:
       lifecycle_record_pending_head:
         value: 5
+        expires: '2026-11-17'
+    chart/prod/batch-pipeline-worker:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
         expires: '2026-11-17'
