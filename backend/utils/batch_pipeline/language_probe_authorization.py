@@ -29,7 +29,7 @@ class ServingLanguageProbeGuard:
             return False
         try:
             # Never share the initial intake snapshot or a prior probe's read.
-            self.authorize(self.store, self.item, snapshots=None)
+            self.authorize(self.store, self.item, snapshots={})
             if not consent_allows(self.item.owner_id):
                 self.decision = ProbeDecision.REFUSED
                 return False
