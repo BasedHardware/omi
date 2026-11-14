@@ -739,9 +739,16 @@ export type OmiBridgeApi = {
   /** Record a failed delivery attempt: bumps attempts, stores the last error. */
   recordVoiceTurnFailure: (idempotencyKey: string, error: string) => Promise<void>
   /** Sign-out teardown: delete every user-scoped local table (conversations,
-   *  captions, local KG, rewind frames, app usage, insights, indexed files) so a
-   *  different account on this machine starts clean. */
-  wipeUserData: () => Promise<void>
+   *  captions, local KG, app usage, insights, indexed files) so a different
+   *  account on this machine starts clean. Rewind frames are the exception:
+   *  with the signing-out owner's uid their index is PARKED instead of deleted
+   *  (INV-AUTH-1 owner transition, kept for them and invisible to other
+   *  accounts); null deletes it (fail-closed privacy). */
+  wipeUserData: (ownerUid?: string | null) => Promise<void>
+  /** Move a returning owner's parked rewind frames back into the live index
+   *  (see wipeUserData). Idempotent: nothing parked for the uid restores
+   *  nothing. Resolves to the number of rows restored. */
+  restoreRewindForOwner: (ownerUid: string) => Promise<number>
   // The mic record chord (default Ctrl+Space, rebindable via setRecordHotkey)
   // fires on channel 'recorder:hotkey' from main; the callback receives the
   // capture mode to toggle ('mic'). Returns an unsubscribe function.

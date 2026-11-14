@@ -462,6 +462,7 @@ import {
   pruneOrphanedRewindEmbeddings,
   getDbRecoveryStatus,
   initDatabase,
+  restoreRewindFramesForOwner,
   wipeUserData
 } from './ipc/db'
 
@@ -843,7 +844,18 @@ app.whenReady().then(async () => {
   )
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
-  ipcMain.handle('db:wipeUserData', async () => wipeUserData())
+  // The signing-out owner's uid PARKS their rewind index instead of deleting it
+  // (INV-AUTH-1 owner transition, see dbWipe.ts); null deletes it as before.
+  ipcMain.handle('db:wipeUserData', async (_e, ownerUid?: string | null) =>
+    wipeUserData(typeof ownerUid === 'string' && ownerUid ? ownerUid : null)
+  )
+  // A returning owner signs in: restore the rewind index parked for their uid
+  // (no-op when nothing is parked, safe to call on every sign-in).
+  ipcMain.handle('db:restoreRewindForOwner', async (_e, ownerUid: string) =>
+    typeof ownerUid === 'string' && ownerUid
+      ? restoreRewindFramesForOwner(ownerUid)
+      : Promise.reject(new Error('restoreRewindForOwner requires a uid'))
+  )
   registerOmiListenHandlers((ownerId) => {
     const captureWc = getCaptureWc()
     const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
@@ -1252,7 +1264,7 @@ app.whenReady().then(async () => {
         // peer — it's a time-triggered job (no screen frames). Registers the manual
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
-        { name: 'goalGeneration', run: () => registerGoalGeneration() },
+        { name: 'goalGeneration', run: () => registerGoalGeneration() }
       ],
       undefined,
       undefined,

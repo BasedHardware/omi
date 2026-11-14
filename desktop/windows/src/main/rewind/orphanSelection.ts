@@ -46,21 +46,42 @@ export function deriveKeepSetWindow(
  * only when it has NO DB row AND its most-recent age signal (filename ts or mtime,
  * whichever is newer) is older than the grace window, so an in-flight insert is
  * never raced.
+ *
+ * `retireBeforeMs` is the defense-in-depth bound (the sign-out index-reset
+ * incident): an unindexed file YOUNGER than the retention cutoff is kept, because
+ * its row may have been lost to an index reset rather than to retention -- such a
+ * file is recoverable via the disk rebuild (rebuildIndex.ts) and only the index
+ * itself retires files through normal retention. Pass
+ * `retentionCutoff(nowMs, retentionDays)`. The parameter is REQUIRED so no caller
+ * can silently drop the bound and get back the grace-only sweep that caused the
+ * sign-out deletions; the only sanctioned degenerate form is
+ * `retentionCutoff(nowMs, 0)` (retentionDays <= 0 clamps to nowMs), which keeps
+ * every current file and so behaves grace-only.
  */
 export function selectOrphanFiles(args: {
   files: SweepFile[]
   dbImagePaths: Set<string>
   nowMs: number
   graceMs: number
+  retireBeforeMs: number
 }): string[] {
-  const { files, dbImagePaths, nowMs, graceMs } = args
+  const { files, dbImagePaths, nowMs, graceMs, retireBeforeMs } = args
   const orphans: string[] = []
   for (const f of files) {
     if (dbImagePaths.has(f.fullPath)) continue // has a live row — keep
     const ts = parseFrameTs(f.filename)
     // Treat the file as young if EITHER signal says so (conservative).
     const newestSignal = ts == null ? f.mtimeMs : Math.max(f.mtimeMs, ts)
-    if (nowMs - newestSignal >= graceMs) orphans.push(f.fullPath)
+    if (nowMs - newestSignal < graceMs) continue // possible in-flight insert, keep
+    if (newestSignal >= retireBeforeMs) {
+      // Unindexed but younger than retention: possibly an index-reset victim,
+      // not garbage. Leave it for the disk rebuild to re-associate. Inclusive
+      // (>=) on purpose: normal retention deletes only rows with ts < cutoff,
+      // so a file whose newest signal sits exactly AT the cutoff is still
+      // inside retention and the sweep must treat it the same way.
+      continue
+    }
+    orphans.push(f.fullPath)
   }
   return orphans
 }

@@ -5,10 +5,14 @@ import { join } from 'path'
 
 const state = vi.hoisted(() => ({
   root: '',
-  removed: [] as Array<{ imagePath: string }>
+  removed: [] as Array<{ imagePath: string }>,
+  parkedRemoved: [] as Array<{ imagePath: string }>
 }))
 
-vi.mock('../ipc/db', () => ({ deleteRewindFramesOlderThan: () => state.removed }))
+vi.mock('../ipc/db', () => ({
+  deleteRewindFramesOlderThan: () => state.removed,
+  deleteParkedRewindFramesOlderThan: () => state.parkedRemoved
+}))
 vi.mock('./captureService', () => ({ getRewindSettings: () => ({ retentionDays: 30 }) }))
 vi.mock('./paths', () => ({ rewindRoot: () => state.root }))
 
@@ -19,6 +23,7 @@ describe('Rewind retention boundary', () => {
 
   beforeEach(() => {
     state.removed = []
+    state.parkedRemoved = []
   })
 
   afterEach(async () => {
@@ -45,5 +50,24 @@ describe('Rewind retention boundary', () => {
     await expect(readFile(valid)).rejects.toThrow()
     expect(await readFile(escaped)).toEqual(Buffer.from('outside'))
     expect(await readFile(reparseTarget)).toEqual(Buffer.from('linked'))
+  })
+
+  it('unlinks files for parked rows pruned at the same cutoff (a parked owner who never returns still ages out)', async () => {
+    // Regression for the review gap: retention used to prune only rewind_frames,
+    // so parked rows (and, via the sweep keep-set, their JPEGs) accumulated
+    // forever for any owner who never signed back in.
+    const temp = await mkdtemp(join(tmpdir(), 'omi-rewind-retention-parked-'))
+    tempPaths.push(temp)
+    const root = join(temp, 'rewind')
+    await mkdir(root)
+    const parkedFile = join(root, 'parked.jpg')
+    await writeFile(parkedFile, Buffer.from('parked'))
+    state.root = root
+    state.removed = []
+    state.parkedRemoved = [{ imagePath: parkedFile }]
+
+    await expect(pruneRewindOnce()).resolves.toBe(1)
+
+    await expect(readFile(parkedFile)).rejects.toThrow()
   })
 })

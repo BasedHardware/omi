@@ -28,7 +28,8 @@ import { cache as goalsCache } from './goalsCache'
 
 const LAST_UID_KEY = 'omi.lastSignedInUid'
 
-const wipeUserData = vi.fn(async () => {})
+const wipeUserData = vi.fn(async (_ownerUid?: string | null) => {})
+const restoreRewindForOwner = vi.fn(async (_ownerUid: string) => 0)
 const byokClearAll = vi.fn(async () => {})
 const byokClearCodex = vi.fn(async () => {})
 const mcpClearKey = vi.fn(async () => {})
@@ -36,6 +37,7 @@ const gmailSessionDisconnect = vi.fn(async () => ({ connected: false }))
 
 beforeEach(() => {
   wipeUserData.mockClear()
+  restoreRewindForOwner.mockClear()
   byokClearAll.mockClear()
   byokClearCodex.mockClear()
   mcpClearKey.mockClear()
@@ -47,6 +49,7 @@ beforeEach(() => {
   h.resetOnboarding.mockClear()
   ;(globalThis as { window: { omi: unknown } }).window.omi = {
     wipeUserData,
+    restoreRewindForOwner,
     byokClearAll,
     byokClearCodex,
     mcpClearKey,
@@ -60,6 +63,12 @@ beforeEach(() => {
 afterEach(() => localStorage.clear())
 
 describe('teardownUserData', () => {
+  it('passes the signing-out uid through so the rewind index parks for its owner', async () => {
+    await teardownUserData('uidA')
+
+    expect(wipeUserData).toHaveBeenCalledWith('uidA')
+  })
+
   it('wipes SQLite, clears caches, removes user localStorage, and clears identity prefs', async () => {
     await teardownUserData()
 
@@ -128,6 +137,31 @@ describe('teardownUserData', () => {
 })
 
 describe('reconcileAccountForSignIn — account-switch guard', () => {
+  it("passes the prior uid to the wipe (parks the outgoing owner's rewind) and restores for the incoming one", async () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+
+    await reconcileAccountForSignIn('userB')
+
+    // The outgoing owner's uid parks their rewind index (INV-AUTH-1) instead of
+    // erasing it; the incoming uid triggers the (no-op here) restore of their
+    // own parked index before the authed shell hydrates.
+    expect(wipeUserData).toHaveBeenCalledWith('userA')
+    expect(restoreRewindForOwner).toHaveBeenCalledWith('userB')
+    expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
+  })
+
+  it("restores the SAME owner's parked rewind on re-auth (sign-out then sign-back-in)", async () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+
+    await reconcileAccountForSignIn('userA')
+
+    // No teardown on same-uid, but the rewind parked at their earlier sign-out
+    // must come back before hydration.
+    expect(wipeUserData).not.toHaveBeenCalled()
+    expect(restoreRewindForOwner).toHaveBeenCalledWith('userA')
+    expect(localStorage.getItem(LAST_UID_KEY)).toBe('userA')
+  })
+
   it('wipes exactly once and stores the new uid when a DIFFERENT account signs in', async () => {
     localStorage.setItem(LAST_UID_KEY, 'userA')
 
