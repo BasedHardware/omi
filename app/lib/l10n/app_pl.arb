@@ -4674,11 +4674,19 @@
     "referralRewardSecondDetail": "Gdy kupi 3 kolejnych znajomych",
     "referralClaimShort": "Odbierz",
     "paymentDeclinedTitle": "Twoja karta została odrzucona",
+    "paymentDeclinedMonthlyMessage": "Zaktualizuj kartę lub odzyskaj {plan} za {price} miesięcznie",
     "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}",
     "hasLinkedTasksLabel": "Zawiera powiązane zadania",
     "hasTasksFilter": "Z zadaniami",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Przejdź na miesięczny",
+    "monthlySwitchPlanValue": "{plan}, {price} miesięcznie",
+    "monthlySwitchNote": "Zastępuje nieopłaconą roczną płatność {yearly}. Odnawia się co miesiąc. Anuluj w dowolnym momencie.",
+    "monthlySwitchDeclined": "Płatność odrzucona. Twój plan się nie zmienił.",
+    "monthlySwitchUnavailable": "Zmiana jest teraz niedostępna. Zamiast tego zaktualizuj kartę.",
+    "monthlySwitchDoneTitle": "Płacisz teraz co miesiąc",
+    "monthlySwitchDoneBody": "Zapłacono dziś {price}. Odnawia się co miesiąc."
 }

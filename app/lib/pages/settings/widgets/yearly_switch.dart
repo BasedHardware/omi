@@ -309,19 +309,19 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _FactRow(
+        PlanSwitchFactRow(
           label: l10n.yearlySwitchPlanLabel,
           value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(offer.yearlyAmount!, currency)),
         ),
         Divider(height: 1, thickness: 1, color: OmiColors.border),
-        _FactRow(
+        PlanSwitchFactRow(
           label: l10n.yearlySwitchDueToday,
           value: dueToday,
           valueKey: const Key('yearly_switch_due_today'),
           emphasized: true,
         ),
         Divider(height: 1, thickness: 1, color: OmiColors.border),
-        _FactRow(label: l10n.yearlySwitchRenews, value: renews),
+        PlanSwitchFactRow(label: l10n.yearlySwitchRenews, value: renews),
         if (offer.amountDueToday! < offer.yearlyAmount!)
           Padding(
             padding: const EdgeInsets.only(top: OmiSpacing.xxs),
@@ -360,9 +360,11 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
 /// What a switch attempt did: [unknown] when neither the response nor a re-read of Stripe says.
 enum _Outcome { switched, failed, unknown }
 
-/// One line of the preview: what it is on the left, its value on the right, aligned with the title.
-class _FactRow extends StatelessWidget {
-  const _FactRow({required this.label, required this.value, this.valueKey, this.emphasized = false});
+/// One line of a plan-switch preview: what it is on the left, its value on the right, aligned with
+/// the title. Shared by the yearly and monthly switch sheets.
+class PlanSwitchFactRow extends StatelessWidget {
+  const PlanSwitchFactRow(
+      {super.key, required this.label, required this.value, this.valueKey, this.emphasized = false});
 
   final String label;
   final String value;
@@ -373,27 +375,35 @@ class _FactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bodySize = OmiType.body.fontSize!;
+    // At large text sizes the value goes under its label so amounts never break mid-number.
+    final stack = MediaQuery.textScalerOf(context).scale(bodySize) > bodySize * 1.3;
+    final labelText = Text(label, style: OmiType.body.copyWith(color: OmiColors.textPrimary));
+    final valueText = Text(
+      value,
+      key: valueKey,
+      textAlign: stack ? TextAlign.start : TextAlign.end,
+      style: emphasized
+          ? OmiType.body.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)
+          : OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+    );
     return MergeSemantics(
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 48),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm),
-          child: Row(
-            children: [
-              Text(label, style: OmiType.body.copyWith(color: OmiColors.textPrimary)),
-              const SizedBox(width: OmiSpacing.md),
-              Expanded(
-                child: Text(
-                  value,
-                  key: valueKey,
-                  textAlign: TextAlign.end,
-                  style: emphasized
-                      ? OmiType.body.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600)
-                      : OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          child: stack
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [labelText, valueText],
+                )
+              : Row(
+                  children: [
+                    labelText,
+                    const SizedBox(width: OmiSpacing.md),
+                    Expanded(child: valueText),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

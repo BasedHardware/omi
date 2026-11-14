@@ -15286,6 +15286,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'עדכנו את הכרטיס או קבלו שוב את $plan ב-$price לחודש';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
   }
@@ -15310,4 +15315,31 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'מעבר לתשלום חודשי';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price לחודש';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'מחליף את החיוב השנתי שלא שולם בסך $yearly. מתחדש מדי חודש. אפשר לבטל בכל עת.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'התשלום נדחה. התוכנית שלך לא השתנתה.';
+
+  @override
+  String get monthlySwitchUnavailable => 'המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'עברת לתשלום חודשי';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price שולמו היום. מתחדש מדי חודש.';
+  }
 }

@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "再有 3 位好友购买后",
     "referralClaimShort": "领取",
     "paymentDeclinedTitle": "您的银行卡被拒绝",
+    "paymentDeclinedMonthlyMessage": "更新银行卡，或恢复使用 {plan}，每月 {price}",
     "paymentDeclinedMessage": "更新银行卡以恢复使用 {plan}",
     "hasLinkedTasksLabel": "包含关联任务",
     "hasTasksFilter": "有任务",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "改为按月付费",
+    "monthlySwitchPlanValue": "{plan}，每月 {price}",
+    "monthlySwitchNote": "替代未支付的年费 {yearly}。按月续订。可随时取消。",
+    "monthlySwitchDeclined": "付款被拒。你的计划没有变化。",
+    "monthlySwitchUnavailable": "目前无法切换。请改为更新银行卡。",
+    "monthlySwitchDoneTitle": "已改为按月付费",
+    "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。"
 }

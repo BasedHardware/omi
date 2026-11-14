@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Kui veel 3 sõpra ostavad",
     "referralClaimShort": "Lunasta",
     "paymentDeclinedTitle": "Sinu kaart lükati tagasi",
+    "paymentDeclinedMonthlyMessage": "Uuenda kaarti või saa {plan} tagasi hinnaga {price} kuus",
     "paymentDeclinedMessage": "Uuenda kaarti, et {plan} tagasi saada",
     "hasLinkedTasksLabel": "Sisaldab seotud ülesandeid",
     "hasTasksFilter": "Ülesannetega",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Mine üle igakuisele",
+    "monthlySwitchPlanValue": "{plan}, {price} kuus",
+    "monthlySwitchNote": "Asendab tasumata aastamakse {yearly}. Uueneb igakuiselt. Tühista igal ajal.",
+    "monthlySwitchDeclined": "Makse lükati tagasi. Sinu pakett ei muutunud.",
+    "monthlySwitchUnavailable": "Üleminek pole praegu saadaval. Uuenda selle asemel kaarti.",
+    "monthlySwitchDoneTitle": "Maksad nüüd igakuiselt",
+    "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt."
 }

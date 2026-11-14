@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Quando altri 3 amici acquistano",
     "referralClaimShort": "Riscatta",
     "paymentDeclinedTitle": "La tua carta è stata rifiutata",
+    "paymentDeclinedMonthlyMessage": "Aggiornala o riavi {plan} a {price} al mese",
     "paymentDeclinedMessage": "Aggiornala per riavere {plan}",
     "hasLinkedTasksLabel": "Contiene attività collegate",
     "hasTasksFilter": "Con attività",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Passa al mensile",
+    "monthlySwitchPlanValue": "{plan}, {price} al mese",
+    "monthlySwitchNote": "Sostituisce l'addebito annuale non pagato di {yearly}. Si rinnova ogni mese. Disdici quando vuoi.",
+    "monthlySwitchDeclined": "Pagamento rifiutato. Il tuo piano non è cambiato.",
+    "monthlySwitchUnavailable": "Il passaggio non è disponibile ora. Aggiorna invece la carta.",
+    "monthlySwitchDoneTitle": "Ora sei sul mensile",
+    "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese."
 }
