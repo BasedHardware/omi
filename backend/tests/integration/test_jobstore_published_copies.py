@@ -323,3 +323,16 @@ def test_lost_reference_commit_reply_replays_without_dropping_custody(published,
     with r.unit() as authority:
         r.copies.retire(r.uid, r.identity, authority, conversation=r.conversation)
     assert not r.copies._reference(row(r.result)).get().exists
+
+
+def test_original_probe_refuses_dispatch_after_unit_deadline(published, monkeypatch):
+    from database import rpc_deadline
+    from utils.other.local_storage import LocalBlob
+
+    r = published
+    left = iter([1, -1])  # actual retention delete still has time; probe does not
+    monkeypatch.setattr(rpc_deadline, 'remaining', lambda: next(left))
+    monkeypatch.setattr(LocalBlob, 'reload', lambda *a, **k: pytest.fail('expired probe was dispatched'))
+    with pytest.raises(ConnectionError, match='absence unresolved'):
+        r.copies._absent(r.uid, row(r.result))
+    assert r.copies._reference(row(r.result)).get().exists

@@ -5,10 +5,12 @@ The immutable upload row, original deadline and journal remain custodians.
 """
 
 import hashlib
+from typing import Any
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
+from database import rpc_deadline
 from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.erasure_operations import ErasureOperations
 from database.jobstore.postgres_store import jsonb
@@ -31,7 +33,7 @@ class PublishedCopies:
     def __init__(self, retained, *, storage_client=None):
         self.retained, self.handoff = retained, retained.handoff
         self.operations = ErasureOperations(retained)
-        self.storage = storage_client
+        self.storage: Any = storage_client
 
     def _rows(self, uid, identity, conversation):
         with self.handoff.pool.connection(timeout=2) as conn, conn.transaction():
@@ -127,7 +129,11 @@ class PublishedCopies:
             delete_batch_object(uid, uri(row), storage_client=self.storage, namespace=row['namespace'])
             blob = self.storage.bucket(row['bucket']).blob(row['object_key'], generation=row['generation'])
             try:
-                blob.reload(if_generation_match=row['generation'], timeout=UPLOAD_TIMEOUT, retry=None)
+                left = rpc_deadline.remaining()
+                if left is not None and left <= 0:
+                    raise TimeoutError('published original probe not sent: unit deadline passed')
+                timeout = UPLOAD_TIMEOUT if left is None else tuple(min(t, left / 2) for t in UPLOAD_TIMEOUT)
+                blob.reload(if_generation_match=row['generation'], timeout=timeout, retry=None)
             except NotFound:
                 return
         except Exception:
