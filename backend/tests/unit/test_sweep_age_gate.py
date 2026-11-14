@@ -31,7 +31,9 @@ def test_unknown_age_keeps_wake(queue, field, value):
     assert not skip_ancient({field: value}, queue, now=2_000_000)
 
 
-def _served_provider_stt_sweep_days() -> str:
+@pytest.fixture(scope='module')
+def served_provider_stt_sweep_days() -> str:
+    """Read immutable deployment config once, outside the six age-boundary calls."""
     import yaml
 
     from pathlib import Path
@@ -58,12 +60,13 @@ def _served_provider_stt_sweep_days() -> str:
 @pytest.mark.parametrize(
     'age_days,skipped', [(13.5, False), (14.5, False), (28.5, False), (29.08, False), (29.9, False), (30.5, True)]
 )
-def test_served_provider_stt_gate_repairs_held_rows_but_never_past_the_staged_audio(monkeypatch, age_days, skipped):
+def test_served_provider_stt_gate_repairs_held_rows_but_never_past_the_staged_audio(
+    monkeypatch, served_provider_stt_sweep_days, age_days, skipped
+):
     """Lost-wake repair lasts while the staged audio can be fetched, and no longer."""
     from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
 
-    served = _served_provider_stt_sweep_days()
-    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', served)
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', served_provider_stt_sweep_days)
     # Repair must outlast the pipeline's own 29-day end, where a 2 h hold can still come due,
     # and stop at the staging bucket's 30-day lifecycle (deploy/storage-lifecycle/retention_contract.json).
     assert TERMINAL_SECONDS + 7200 < sweep_age.max_age_seconds('provider-stt') <= 30 * 86400
