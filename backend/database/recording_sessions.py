@@ -257,6 +257,7 @@ def tombstone_and_delete_empty_conversation(
     recovery_cutoff: datetime | None = None,
     require_expired_recording_lease: bool = False,
     allow_empty_server_batch: bool = False,
+    transaction_guard: Any = None,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -279,6 +280,10 @@ def tombstone_and_delete_empty_conversation(
 
     @firestore.transactional
     def _delete_empty(transaction: Any) -> bool:
+        # The guard authorizes the owner before even reading the row. It may
+        # enroll its own row/job reads in the same transaction conflict set.
+        if transaction_guard is not None:
+            transaction_guard(transaction, None)
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
             return False

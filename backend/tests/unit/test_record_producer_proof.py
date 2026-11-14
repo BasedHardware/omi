@@ -1,4 +1,4 @@
-"""No token TTL: only scoped current-pod evidence or legacy attestation."""
+"""Original producer proof in off mode, plus the opt-in lease predicate matrix."""
 
 from datetime import datetime, timezone
 import json
@@ -134,3 +134,54 @@ def test_malformed_list_refuses(tmp_path, monkeypatch, raw):
     path.write_text(json.dumps(raw))
     with pytest.raises(ValueError):
         proof.load_pusher_pod_proof(path, datetime.fromtimestamp(999, timezone.utc).isoformat())
+
+
+@pytest.mark.parametrize(
+    'expiry,signal,dead',
+    [
+        (999, 1, False),  # heartbeat still inside 3600s
+        (999, -3000, False),  # invalid epoch
+        (999, 500, False),
+        (1000, 1, False),  # strict boundary
+    ],
+)
+def test_lease_needs_both_deadlines_load_safe(load, monkeypatch, expiry, signal, dead):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    token = {
+        't': {
+            'pod': 'live',
+            'process_started_at': 900,
+            'last_signal_at': signal,
+            'lease_expires_at': expiry,
+            'signal_source': 'frames',
+        }
+    }
+    assert proof.producer_tokens_dead(token, load([pod('live', 800)]), uid='synthetic') is dead
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {},
+        {'lease_expires_at': 9999},
+        {'last_signal_at': 9000},
+        {'lease_expires_at': float('nan')},
+        {'last_signal_at': True},
+        {'lease_expires_at': 6401},
+    ],
+)
+def test_three_quiet_clocks_and_malformed_fields(monkeypatch, change):
+    monkeypatch.setattr(proof.time, 'time', lambda: 10000)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    value = {
+        'pod': 'live',
+        'process_started_at': 100,
+        'last_signal_at': 1,
+        'lease_expires_at': 3601,
+        'signal_source': 'custody_append',
+        **change,
+    }
+    expected = change in ({}, {'lease_expires_at': 9999}, {'lease_expires_at': 6401})
+    assert proof.producer_tokens_dead({'s': value}, None, uid='synthetic') is expected

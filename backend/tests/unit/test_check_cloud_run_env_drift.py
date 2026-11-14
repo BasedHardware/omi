@@ -64,7 +64,7 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-sync': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_BACKFILL_ORDER_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
@@ -73,7 +73,7 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-sync-backfill': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync-backfill'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -81,7 +81,6 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-integration': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-integration'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                 ]
             },
         }
@@ -101,12 +100,12 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
     )
     assert by_service['backend'].unallowlisted_live_only == ()
     assert by_service['backend-sync'].allowlisted_live_only == (
-        'FIRST_SUMMARY_UID_ALLOWLIST',
+        'FAIR_USE_EXEMPT_UIDS',
         'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
     )
     assert by_service['backend-sync'].unallowlisted_live_only == ()
     assert by_service['backend-sync-backfill'].unallowlisted_live_only == ()
-    assert by_service['backend-integration'].allowlisted_live_only == ('FIRST_SUMMARY_UID_ALLOWLIST',)
+    assert by_service['backend-integration'].allowlisted_live_only == ()
     assert by_service['backend-integration'].unallowlisted_live_only == ()
 
 
@@ -162,7 +161,7 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-sync': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -170,7 +169,7 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-sync-backfill': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -178,7 +177,6 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-integration': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                 ]
             },
         }
@@ -307,7 +305,7 @@ def _sync_env(*, queue: str, repair: str, uid_allowlist: str = '') -> list[dict]
         {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': uid_allowlist},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest'}}},
-        {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': SENSITIVE_UID},
+        {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},
     ]
 
 
@@ -360,7 +358,7 @@ def test_replay_2026_10_18_reads_serving_revision_not_template(checker, tmp_path
     assert mismatches['SYNC_TASKS_QUEUE'].expected_hash == checker.value_hash('value', 'sync-jobs')
     assert mismatches['SYNC_TASKS_QUEUE'].target == SERVING_REVISION
     assert sync.missing_from_live == ()
-    assert sync.allowlisted_live_only == ('FIRST_SUMMARY_UID_ALLOWLIST',)
+    assert sync.allowlisted_live_only == ('FAIR_USE_EXEMPT_UIDS',)
     assert sync.value_unchecked_keys == 1  # env_var binding without rendered state
     assert sync.status == 'DRIFT'
     # Published fingerprint is the redacted one (a sensitive key is present).
@@ -3840,7 +3838,7 @@ def test_cloud_run_secret_alias_resolves_through_annotation(checker, tmp_path: P
         {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest'}}},
-        {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': SENSITIVE_UID},
+        {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},
     ]
     state = _replay_state(serving_env=serving_env)
     # Annotate both serving revision and template so fingerprints stay comparable.

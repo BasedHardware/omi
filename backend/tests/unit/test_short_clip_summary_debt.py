@@ -11,8 +11,6 @@ from utils.conversations import summary_delivery as delivery
 @pytest.fixture(autouse=True)
 def enabled(monkeypatch):
     importlib.import_module('database.conversations')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
 
 
 def minimum(*, intentional=False):

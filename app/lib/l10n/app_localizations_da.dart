@@ -9163,6 +9163,24 @@ class AppLocalizationsDa extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Kan ikke fastslå den aktuelle firmware-version';
 
   @override
+  String get applyCodeToCurrentPlan => 'Anvend på nuværende abonnement';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koden er anvendt på dit nuværende abonnement.',
+        'refused': 'Koden kan ikke anvendes. Kontroller koden og det krævede abonnement.',
+        'conflict': 'Koden er allerede brugt, eller dit abonnement har allerede rabat.',
+        'rateLimited': 'For mange forsøg. Vent og prøv igen senere.',
+        'other': 'Koden kunne ikke anvendes. Prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kampagnekode';
 
   @override
@@ -13640,6 +13658,9 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Generér noter igen';
+
+  @override
   String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';
 
   @override
@@ -15368,6 +15389,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get paymentDeclinedTitle => 'Dit kort blev afvist';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Opdater kortet, eller få $plan tilbage for $price om måneden';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Opdater kortet for at få $plan tilbage';
   }
@@ -15392,4 +15418,31 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Skift til månedlig';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price om måneden';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Erstatter den ubetalte årlige betaling på $yearly. Fornyes månedligt. Opsig når som helst.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betalingen blev afvist. Dit abonnement er uændret.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Skiftet er ikke tilgængeligt lige nu. Opdater kortet i stedet.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Du betaler nu månedligt';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price betalt i dag. Fornyes månedligt.';
+  }
 }

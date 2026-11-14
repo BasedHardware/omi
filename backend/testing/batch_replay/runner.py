@@ -192,7 +192,6 @@ def replay_worker_words(item, words):
             'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
             'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false',
             'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'false',
-            'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': 'false',
         },
     ):
         results = worker.process_batch([item])

@@ -40,7 +40,6 @@ _STARTED = datetime(2026, 10, 23, 9, 0, tzinfo=timezone.utc)
 @pytest.fixture(autouse=True)
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
 
 
 @pytest.fixture(scope='module')

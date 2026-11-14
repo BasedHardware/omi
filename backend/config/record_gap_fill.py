@@ -19,6 +19,11 @@ FINISH_SLACK_SECONDS = 1.0
 # One request writes at most this much audio, in objects of at most PIECE_SECONDS.
 MAX_FILL_SECONDS = 3600
 PIECE_SECONDS = 300
+# A fill holds the record_pending job's drain lease (``available_at``) while it
+# writes, so drain admission cannot start mid-fill; it stops writing new pieces
+# LEASE_MARGIN_SECONDS before the lease would lapse.
+FILL_LEASE_SECONDS = 600
+LEASE_MARGIN_SECONDS = 60
 
 
 def gap_fill_enabled(uid: str) -> bool:
@@ -29,3 +34,18 @@ def gap_fill_enabled(uid: str) -> bool:
     except ValueError:
         return False
     return bool(uid) and 0 < percent <= 100 and cohort_bucket(uid, 'record-gap-fill', bits=64) < percent
+
+
+def retained_ack_enabled(uid: str) -> bool:
+    """Option A: answer 200 once the server holds a byte-exact durable copy.
+
+    ``RECORD_RETAINED_ACK=on`` plus ``RECORD_RETAINED_ACK_PERCENT`` (0-100,
+    default 0). It runs only inside the gap-fill cohort, after its gates.
+    """
+    if os.getenv('RECORD_RETAINED_ACK', 'off').strip().lower() != 'on':
+        return False
+    try:
+        percent = float(os.getenv('RECORD_RETAINED_ACK_PERCENT', '0'))
+    except ValueError:
+        return False
+    return bool(uid) and 0 < percent <= 100 and cohort_bucket(uid, 'record-retained-ack', bits=64) < percent

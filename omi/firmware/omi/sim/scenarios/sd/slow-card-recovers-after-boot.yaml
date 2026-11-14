@@ -1,0 +1,19 @@
+id: sd/slow-card-recovers-after-boot
+summary: >
+  Committee item 4. A card that does not answer for the first 8 s after
+  power-on must still come up this boot; 3.0.23's worker gave up on the first
+  failed mount and dropped every offline packet until the next reboot.
+committee: [4]
+tags: [baseline-bug]
+initial: {sd: slow, sd_ready_ms: 8000}
+timeline: []
+end: 60000
+expect:
+  boots:
+    - {exit: stop, sd_ready: true, log: ["mount failed", "[SD_BOOT] raw ring ready"]}
+baseline_bug:
+  observed_at: sim SD commit (3.0.23 sd_card.c)
+  expect:
+    boots:
+      - {exit: stop, sd_ready: false, sd_written: 0, log: ["[SD_WORK] mount failed"],
+         not_log: ["[SD_BOOT] raw ring ready"]}

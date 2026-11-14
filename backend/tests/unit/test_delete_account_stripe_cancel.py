@@ -63,6 +63,7 @@ def users_service():
         "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.frame_request_storage": AutoMockModule("utils.retrieval.frame_request_storage"),
+        "utils.other.lake_wipe": AutoMockModule("utils.other.lake_wipe"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.sync": _pkg("utils.sync"),
         "utils.sync.cap_hold": AutoMockModule("utils.sync.cap_hold"),

@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 120) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
+          "expr": "((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{namespace=\"prod-omi-backend\"}) >= bool 900) or vector(1)) + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_oldest_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0)) + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"} != omi_batch_pipeline_retry_age_seconds{namespace=\"prod-omi-backend\"})) or vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -97,14 +97,14 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for two minutes.",
+      "summary": "Batch queue safety cannot measure every queue/retry priority, or its sample has been stale for fifteen minutes.",
       "user_impact": "Late batch transcripts may go unnoticed while a bounded scan is saturated or the worker sample is unavailable.",
       "scope": "Production queue freshness and oldest/retry NaN samples. A saturated exempt prefix is incomplete, never proven late work or a healthy empty queue.",
-      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates.",
+      "verification": "Inspect batch_safety metrics_blind and queue sample freshness; count the unmeasured priority with ro-prod metadata aggregates. The 900s freshness budget accommodates the worker-plane cadence measured at approximately 514s on 2026-11-08T14:05–14:59Z; the prior 120s arm falsely paged between healthy samples.",
       "safe_next_action": "Classify the saturated prefix and real overdue work; retain all held audio and custody. Do not delete rows, reset paid intents, or waive allowance to silence the alarm.",
       "runbook": "backend/docs/runbooks/batch-queue-safety.md",
-      "threshold": "$A > 0 for 5m; stale means at least 120s",
-      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for two minutes.",
+      "threshold": "$A > 0 for 5m; stale means at least 900s",
+      "evaluated_bad": "Synthetic: one oldest or retry NaN priority alongside a finite zero, or no successful queue sample for fifteen minutes.",
       "evaluated_good": "Synthetic: all priority age samples are finite and the queue sample is fresh."
     },
     "labels": {

@@ -7,6 +7,8 @@ import re
 
 import pytest
 
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
+
 BACKEND = Path(__file__).resolve().parents[2]
 MONITORING = BACKEND / 'charts/monitoring'
 spec = importlib.util.spec_from_file_location('pipeline_alert_backtest', BACKEND / 'scripts/alert_backtest.py')
@@ -31,11 +33,17 @@ def test_sources_match_inventory_and_are_routed_resolving_warnings():
         assert rule['keep_firing_for'] == '0s'
         assert rule['missingSeriesEvalsToResolve'] == 2
         assert rule['noDataState'] == 'OK'
-        assert not rule['isPaused']
+        assert rule['isPaused'] == (uid in {'omi-pipeline-held-row-age', 'omi-pipeline-projection-drain-stall'})
         assert uid not in gate
         assert (BACKEND.parent / rule['annotations']['runbook']).is_file()
         assert rule['annotations']['verification']
-        assert rule['annotations']['review_by'] == '2026-11-07'
+        if uid == 'omi-oldest-age-gauge-flat-1h':
+            # Sampler health is agent-tier; the original drain warnings keep their review deadline.
+            assert rule['labels']['tier'] == 'agent'
+            assert rule['labels']['audience'] == 'agent'
+            assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        else:
+            assert rule['annotations']['review_by'] == '2026-11-07'
         for q in rule['data']:
             if q['datasourceUid'] == 'gmp-cloud-run':
                 assert 'offset 10m' in q['model']['expr']
@@ -82,7 +90,7 @@ def test_held_legs_are_independent_and_use_fresh_uncapped_source():
     expr = rule['data'][0]['model']['expr']
     assert 'omi_batch_held_oldest_age_seconds' in expr
     assert 'record_pending_new_oldest' not in expr
-    assert 'and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900)' in expr
+    assert f'and ignoring(leg) {FRESH_NEWEST}' in expr
     values = {
         (("leg", 'quarantine_held'),): [300000],
         (("leg", 'assignment_held'),): [60],
@@ -99,7 +107,7 @@ def test_drain_uses_sum_for_rows_and_count_for_weighted_turn_share():
     assert 'owner_drain_advanced_sum' in nodes['B']['expr']
     assert 'rate(' in nodes['A']['expr'] and '[5m]' in nodes['B']['expr']
     assert 'or vector(0)' in nodes['B']['expr']
-    assert 'timeliness_observed_at_seconds < 900' in nodes['C']['expr']
+    assert f'and ignoring(leg) {FRESH_NEWEST}' in nodes['C']['expr']
     assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
     assert rule['data'][2]['datasourceUid'] == 'prometheus'
 
@@ -148,3 +156,78 @@ def test_log_metric_source_scopes_and_real_turn_extraction():
         assert int(re.search(pattern, line).group(1)) == rows
     assert 'outcome=turn ' in advanced['filter']
     assert 'stop=claim_busy([[:space:]]|$)' in metrics['omi_pipeline_owner_drain_claim_busy']['filter']
+
+
+def test_owner_drain_metrics_cover_serving_and_pump_with_identical_service_scope():
+    metrics = {m['name']: m for m in json.loads((MONITORING / 'batch-projection/log-metrics.json').read_text())}
+    expected_services = {'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'}
+    for name in ('omi_pipeline_owner_drain_advanced', 'omi_pipeline_owner_drain_claim_busy'):
+        metric_filter = metrics[name]['filter']
+        assert 'resource.type="cloud_run_revision"' in metric_filter
+        assert 'resource.labels.project_id="based-hardware"' in metric_filter
+        services = re.search(r'resource.labels.service_name=\(([^)]+)\)', metric_filter).group(1)
+        assert set(re.findall(r'"([^"]+)"', services)) == expected_services
+        assert 'textPayload:"event=batch_projection action=owner_drain outcome=turn "' in metric_filter
+
+
+def test_pump_gauges_are_declared_without_claiming_production_observation():
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    for name in ('omi_batch_projection_pump_last_tick_seconds', 'omi_batch_projection_pump_last_success_seconds'):
+        assert name in inventory['declared_metrics']
+        assert name not in inventory['metrics']
+
+
+@pytest.mark.parametrize(
+    'fresh_new,stale_new,fresh_old,duplicate_new,should_alert',
+    [
+        (0, 0, 0, False, True),
+        (0, 0, 4, False, True),
+        (0, 4, 4, False, True),
+        (3, 0, 4, True, True),
+        (4, 0, 4, True, False),
+        (4, 0, 0, False, False),
+    ],
+)
+def test_pump_bundle_liveness_selector_excludes_old_revisions(
+    fresh_new, stale_new, fresh_old, duplicate_new, should_alert
+):
+    doc = (BACKEND / 'docs/listen_pusher_pipeline/changes/2026-11-08-projection-pump-deploy-bundle.md').read_text()
+    expressions = re.findall(r'```promql\n(.*?)\n```', doc, re.DOTALL)
+    query = next(expr for expr in expressions if 'omi_batch_projection_pump_last_success_seconds' in expr)
+    selector = re.search(r'omi_batch_projection_pump_last_success_seconds\{([^}]+)\}', query).group(1)
+    labels = dict(re.findall(r'(\w+)="([^"]+)"', selector))
+    assert labels == {
+        'project_id': 'based-hardware',
+        'service_name': 'backend-projection-pump',
+        'revision_name': 'NEW_REV',
+    }
+    assert 'count(count by (instance)' in query
+    assert 'or vector(0)' in query
+    max_age = int(re.search(r'<=\s*(\d+)', query).group(1))
+    floor = int(re.search(r'<\s*(\d+)$', query).group(1))
+    assert (max_age, floor) == (120, 4)
+
+    # Exercise the documented selector/age/count contract with overlap fixtures;
+    # this is not a live PromQL engine or collector-ingestion proof.
+    samples = []
+    for revision, count, age in [('NEW_REV', fresh_new, 10), ('NEW_REV', stale_new, 121), ('PRIOR_REV', fresh_old, 10)]:
+        for index in range(count):
+            sample = ({**labels, 'revision_name': revision, 'instance': f'{revision}-{age}-{index}'}, 1000 - age)
+            samples.append(sample)
+            if duplicate_new and revision == 'NEW_REV':
+                samples.append(sample)
+    fresh_instances = {
+        sample_labels['instance']
+        for sample_labels, timestamp in samples
+        if all(sample_labels.get(key) == value for key, value in labels.items()) and 1000 - timestamp <= max_age
+    }
+    assert (len(fresh_instances) < floor) is should_alert
+
+
+def test_pump_bundle_requires_revision_metadata_and_readback():
+    doc = (BACKEND / 'docs/listen_pusher_pipeline/changes/2026-11-08-projection-pump-deploy-bundle.md').read_text()
+    assert 'metadata: [service, revision]' in doc
+    assert 'K_REVISION' in doc
+    assert 'do **not** emit a revision label' in doc
+    assert 'never remove the revision matcher to get data' in doc
+    assert 'Retarget this matcher on every rollout and traffic rollback' in doc

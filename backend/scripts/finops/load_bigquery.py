@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import pathlib
@@ -158,10 +159,15 @@ SCHEMAS["vendor_balance_spend_daily"] = [
 CLUSTER["vendor_balance_spend_daily"] = ["vendor", "flag"]
 
 # Modelled Modulate STT cost: measured Prometheus audio seconds x the committed
-# rate-card price. Dark while either input is missing; never a guessed number.
+# live/REST prices. Dark while an input is missing; never a guessed number.
 SCHEMAS["stt_modulate_modelled_daily"] = [
     ("date", "DATE"),
     ("audio_seconds", "FLOAT64"),
+    ("live_seconds", "FLOAT64"),
+    ("rest_stt_seconds", "FLOAT64"),
+    ("lid_seconds", "FLOAT64"),
+    ("rest_price_usd_per_hour", "NUMERIC"),
+    ("lid_price_usd_per_hour", "NUMERIC"),
     ("usd", "NUMERIC"),
     ("price_usd_per_hour", "NUMERIC"),
     ("price_as_of", "DATE"),
@@ -170,7 +176,7 @@ SCHEMAS["stt_modulate_modelled_daily"] = [
     ("computed_at", "TIMESTAMP"),
 ]
 CLUSTER["stt_modulate_modelled_daily"] = ["run_id"]
-MODULATE_ROW_KEYS = {"date", "audio_seconds", "usd"}
+MODULATE_ROW_KEYS = {"date", "audio_seconds", "live_seconds", "rest_stt_seconds", "lid_seconds", "usd"}
 
 
 SCHEMAS["spend_daily"] = [
@@ -332,8 +338,15 @@ def load_vendor_balance(raw: pathlib.Path, run_id: str, computed_at: str, ensure
         raise SystemExit("unknown vendor balance vendor")
     if not str(snapshot["ts"]).endswith("Z"):
         raise SystemExit("vendor balance ts must be UTC ISO with Z")
-    pull_vendor_balance.usd(snapshot["used_usd"])
-    pull_vendor_balance.usd(snapshot["available_usd"])
+    # Re-render through the NUMERIC contract so an artifact written by an older
+    # image can never reach BigQuery with more than nine fractional digits.
+    try:
+        snapshot["used_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["used_usd"]))
+        snapshot["available_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["available_usd"]))
+    except pull_vendor_balance.BalanceError as error:
+        # Same rule as the puller: an unusable value is a bounded skip, never a failed daily job.
+        print("vendor balance artifact skipped: %s" % error.reason, file=sys.stderr)
+        return {}
     if type(snapshot["invoice_billing_enabled"]) is not bool:
         raise SystemExit("invalid vendor balance invoice flag")
     vendor = snapshot["vendor"]
@@ -379,23 +392,39 @@ def load_modulate_modelled(raw: pathlib.Path, run_id: str, computed_at: str, ens
     artifact = json.loads(path.read_text())
     if artifact.get("status") == "skipped":
         return {}
-    required = {"status", "method", "price_usd_per_hour", "price_source", "price_as_of", "rows"}
+    required = {"status", "method", "rows"} | {
+        prefix + key
+        for prefix in ("", "rest_", "lid_")
+        for key in ("price_usd_per_hour", "price_source", "price_as_of")
+    }
     if set(artifact) != required or artifact["status"] != "ready" or artifact["method"] != "modelled":
         raise SystemExit("invalid Modulate modelled artifact")
-    dt.date.fromisoformat(artifact["price_as_of"])
-    if float(artifact["price_usd_per_hour"]) <= 0:
-        raise SystemExit("invalid Modulate modelled price")
+    for prefix in ("", "rest_", "lid_"):
+        dt.date.fromisoformat(artifact[prefix + "price_as_of"])
+        try:
+            price = Decimal(str(artifact[prefix + "price_usd_per_hour"]))
+            if not price.is_finite() or price <= 0:
+                raise ValueError("invalid price")
+        except (ValueError, InvalidOperation):
+            raise SystemExit("invalid Modulate modelled price") from None
     for row in artifact["rows"]:
         if set(row) != MODULATE_ROW_KEYS:
             raise SystemExit("invalid Modulate modelled row")
-        if float(row["audio_seconds"]) < 0 or float(row["usd"]) < 0:
-            raise SystemExit("invalid Modulate modelled amounts")
+        for key in MODULATE_ROW_KEYS - {"date"}:
+            try:
+                amount = Decimal(str(row[key]))
+                if not amount.is_finite() or amount < 0:
+                    raise ValueError("invalid amount")
+            except (ValueError, InvalidOperation):
+                raise SystemExit("invalid Modulate modelled amounts") from None
     dates = sorted({row["date"] for row in artifact["rows"]})
     ensure_table("stt_modulate_modelled_daily")
     rows = [
         dict(
             row,
             price_usd_per_hour=artifact["price_usd_per_hour"],
+            rest_price_usd_per_hour=artifact["rest_price_usd_per_hour"],
+            lid_price_usd_per_hour=artifact["lid_price_usd_per_hour"],
             price_as_of=artifact["price_as_of"],
             method="modelled",
             run_id=run_id,

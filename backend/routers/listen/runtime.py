@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import Operation
 from utils.conversations import quiet_finalization
 
 import asyncio
@@ -16,7 +17,6 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from config.ladder_v1 import enabled as ladder_enabled
-from config import ladder_v1 as ladder_policy
 from database import conversation_tombstones
 from database.privacy_check_metrics import with_session_census, flush_session_census, reset_session_census
 from database.firestore_read_metrics import FirestoreReadSite
@@ -33,7 +33,7 @@ from models.message_event import (
 )
 from models.users import PlanType, WebhookType
 from database.redis_db import user_webhook_status_db
-from utils.analytics import billable_transcription_seconds, record_usage
+from utils.analytics import billable_transcription_seconds, billable_transcription_window_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
@@ -184,6 +184,8 @@ class ListenSessionRuntime:
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
         self.session_id = str(uuid.uuid4())
+        self.allowance_operation = Operation(request.uid, 'live_open', operation=f'live:{self.session_id}', live=True)
+        self.allowance_operation.clock = self._allowance_billable_clock
         self.client_conversation_id = _normalize_client_conversation_id(request.client_conversation_id)
         self.recording_session_id = self.client_conversation_id or str(uuid.uuid4())
         self.recording_session_ids_by_conversation: Dict[str, str] = {}
@@ -792,6 +794,21 @@ class ListenSessionRuntime:
             if await self.wait(10):
                 break
 
+    async def _allowance_watch(self) -> None:
+        scope = getattr(self, 'allowance_operation', None)
+        if scope is not None:
+            await scope.monitor()
+
+    def _allowance_billable_clock(self) -> float:
+        admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
+        return billable_transcription_window_seconds(
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            time.time(),
+            getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
+        )
+
     async def _record_usage_periodically(self) -> None:
         await self.persistence.call(reset_session_census)
         while self.state.active:
@@ -849,10 +866,7 @@ class ListenSessionRuntime:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
-        ladder_session = (
-            ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
-            and ladder_policy.entitlements(subscription) is not None
-        )
+        ladder_session = False
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
@@ -922,6 +936,9 @@ class ListenSessionRuntime:
                     logger.error('Silent-user notification refresh failed type=%s', type(error).__name__)
 
     async def _flush_usage(self, *, final: bool) -> int:
+        scope = getattr(self, 'allowance_operation', None)
+        if scope is not None and final:
+            scope.closed = True
         if getattr(self, 'server_batch_only', False):
             return 0  # Batch projection owns transcription usage; no live provider ran.
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
@@ -946,6 +963,8 @@ class ListenSessionRuntime:
                 )
             return 0
         if not self.state.last_usage_record_timestamp:
+            if final and scope is not None:
+                await self.persistence.call(scope.billed, 0)
             return 0
         speech_seconds = 0
         speech_ms = 0
@@ -981,6 +1000,14 @@ class ListenSessionRuntime:
             held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
+        if seconds and getattr(self, 'allowance_operation', None) is None:
+            from utils.stt.allowance_watch import observe_async
+            from utils.stt_cap_dispatch import customer_funded
+
+            provider = getattr(self, 'stt_service', None)
+            await observe_async(
+                self.request.uid, 'live_billing', provider, seconds, customer_funded=customer_funded(provider)
+            )
         self.state.words_transcribed_since_last_record = 0
         usage_metadata: Dict[str, Any] = live_usage_metadata(self)
         if (
@@ -998,9 +1025,18 @@ class ListenSessionRuntime:
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
                 usage_metadata=usage_metadata,
+                **(
+                    {'allowance_operation': self.allowance_operation}
+                    if getattr(self, 'allowance_operation', None) is not None
+                    else {}
+                ),
             )
+        elif final and scope is not None:
+            await self.persistence.call(scope.billed, 0)
         if not final:
             self.state.last_usage_record_timestamp = now
+            if scope is not None and scope.reference is None and scope.provider != 'unknown':
+                await scope.reserve_async(scope.provider, customer_funded=scope.customer_funded)
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
@@ -1216,6 +1252,10 @@ class ListenSessionRuntime:
                     *self.pusher_tasks,
                 ]
             )
+            if getattr(self, 'allowance_operation', None) is not None:
+                background.append(
+                    self.task_supervisor.create_lifetime_task(self._allowance_watch(), name='allowance_watch')
+                )
             if self.is_multi_channel:
                 self.state.speaker_id_done.set()
             else:
@@ -1261,6 +1301,10 @@ class ListenSessionRuntime:
                     except asyncio.CancelledError:
                         pass
             self.state.shutdown_event.set()
+            scope = getattr(self, 'allowance_operation', None)
+            if scope is not None:
+                scope.closed = True
+                scope.changed.set()
             if self.recovery_enabled:
                 await self.task_supervisor.drain_monitored(
                     timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
@@ -1497,6 +1541,5 @@ async def run_listen_session(request: ListenRequest) -> None:
         soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
-                source=request.source,
-                platform=runtime.client_device_context.platform,
+                source=request.source, platform=runtime.client_device_context.platform, state=runtime.state
             )

@@ -258,7 +258,12 @@ def _render_env(values_file: Path, *extra: str) -> list[dict]:
 
 
 def _expected_env(values: dict) -> list[dict]:
-    expected = []
+    expected = [
+        {
+            "name": "ROLLOUT_POD_TEMPLATE_HASH",
+            "valueFrom": {"fieldRef": {"fieldPath": "metadata.labels['pod-template-hash']"}},
+        }
+    ]
     for entry in values["env"]:
         if entry["name"] == "GOOGLE_CLOUD_PROJECT":
             expected.append({"name": entry["name"], "value": values["runtimeGcpProjectId"]})
@@ -307,7 +312,7 @@ def test_chart_private_env_replaces_by_name_and_renders_each_name_once(tmp_path:
     }
     others = [entry for entry in env if entry["name"] not in private_names]
     assert others == [entry for entry in _expected_env(values) if entry["name"] not in private_names]
-    assert set(names) == {entry["name"] for entry in values["env"]} | {"LISTEN_PRIVATE_ONLY_FLAG"}
+    assert set(names) == {entry["name"] for entry in _expected_env(values)} | {"LISTEN_PRIVATE_ONLY_FLAG"}
 
 
 def test_chart_private_env_non_string_fails_without_echoing_value(tmp_path: Path):

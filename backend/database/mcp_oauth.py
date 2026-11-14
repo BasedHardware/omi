@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit
 from google.cloud import firestore
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
 
+from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
 from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
 import database.mcp_cache_integrity as mcp_cache_integrity
@@ -59,14 +60,14 @@ MCP_OAUTH_REPLAY_GRACE_SECONDS = int(os.getenv("MCP_OAUTH_REPLAY_GRACE_SECONDS",
 MCP_OAUTH_REPLAY_REISSUE_LIMIT = int(os.getenv("MCP_OAUTH_REPLAY_REISSUE_LIMIT", "2"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
-PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
+PUBLIC_CHATGPT_CLIENT_IDS = set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])
 # Read scopes the first-party ChatGPT directory experience assumes a ChatGPT
-# grant carries (mirrors the mobile app's `chatGptRequiredScopes`). ChatGPT's
+# grant carries (served to clients by the connector-access contract). ChatGPT's
 # directory authorization flow requests only ``memories.read``, which would
 # leave every grant below this floor and the app's screens permanently showing
 # "Needs more access", so narrow explicit requests from these clients are
 # widened to the floor at scope-normalization time.
-CHATGPT_READ_SCOPE_FLOOR = frozenset({"memories.read", "conversations.read", "action_items.read", "goals.read"})
+CHATGPT_READ_SCOPE_FLOOR = frozenset(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["required_scopes"])
 PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"

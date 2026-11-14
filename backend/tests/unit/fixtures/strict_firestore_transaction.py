@@ -117,7 +117,9 @@ class StrictFirestoreDocument:
                 ["folder_id"],
                 ["language"],
                 ["private_cloud_sync_enabled"],
+                ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
+                ['external_data', 'created_at', 'deleted', 'sync_merged_from'],
                 [
                     'discarded',
                     'deleted',
@@ -432,11 +434,12 @@ class StrictFirestore:
         self,
         references: list[StrictFirestoreDocument],
         *,
-        field_paths: list[str],
+        field_paths: list[str] | None = None,
         transaction: StrictFirestoreTransaction,
     ) -> list[StrictFirestoreSnapshot]:
-        if field_paths != ['folder_id']:
-            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
+        if field_paths is not None and field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only whole-document or folder membership BatchGet is supported')
         snapshots = []
         for reference in reversed(references):
             if reference._database is not self:

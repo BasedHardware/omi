@@ -213,15 +213,10 @@ def test_successful_reprocess_schedules_durable_learning():
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_busy_claim_answers_409_regardless_of_the_result_contract_flag(monkeypatch, enabled):
+def test_busy_claim_answers_409(monkeypatch):
     """Another writer owns the conversation: never report the stale row as an update."""
     from database import processing_attention as attention
 
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
     monkeypatch.setattr(attention, 'claim', lambda *a, **k: ({'operation_id': 'other'}, False))
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
     with p1, p2, p3, p4, p5, p6, process_patch as process:
@@ -306,7 +301,8 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
         result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
     assert result is model
     assert process.call_args.kwargs['user_kept'] is expected
-    assert restore.call_count == int(discarded)
+    # A user_kept row re-runs restore registration on reprocess (register-first retry).
+    assert restore.call_count == int(discarded or stored_keep)
 
 
 @pytest.mark.parametrize(

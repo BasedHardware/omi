@@ -45,9 +45,7 @@ def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     assert live['Deployment']['spec']['template']['spec']['affinity']['nodeAffinity']
     assert all(batch[k]['metadata']['name'] != live[k]['metadata']['name'] for k in batch if k in live)
     assert batch['HorizontalPodAutoscaler']['spec']['minReplicas'] == 1
-    assert (
-        batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 18
-    )  # main's burst ceiling; +1 additive warm fallback
+    assert batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 5  # C031 burst ceiling; +1 additive warm fallback
     assert live['BackendConfig']['spec']['timeoutSec'] == 30
     assert batch['BackendConfig']['spec']['timeoutSec'] == 900
     assert 'Ingress' not in batch

@@ -73,6 +73,7 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
+@metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -104,12 +105,14 @@ def assert_batch_write_allowed(
         read_budget=read_budget,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
+    live_evidence = metrics.DecisionEvidence() if shadow or enforce else None
 
     def shadow_after(reason):
         if not shadow or transaction is None or snapshots is not None or enforce:
             return
         try:
-            with metrics.mode_scope('shadow'):
+            candidate_evidence = metrics.DecisionEvidence()
+            with metrics.mode_scope('shadow'), metrics.evidence_scope(candidate_evidence):
                 metrics.called('batch')
                 try:
                     _assert_batch_write_allowed_memo(client, transaction, uid, **kwargs)
@@ -117,22 +120,36 @@ def assert_batch_write_allowed(
                 except BatchPrivacyBlocked as error:
                     candidate = error.reason.value
                 metrics.decision('batch', candidate)
-            metrics.compare('batch', reason, candidate)
+            metrics.compare(
+                'batch', reason, candidate, live_evidence=live_evidence, candidate_evidence=candidate_evidence
+            )
         except Exception:
             metrics.shadow_error('batch')
 
-    try:
-        result = function(client, transaction, uid, **kwargs)
-    except BatchPrivacyBlocked as error:
-        metrics.decision('batch', error.reason.value)
-        shadow_after(error.reason.value)
-        raise
-    except Exception:
-        metrics.decision('batch', 'authority_unavailable')
-        raise
-    metrics.decision('batch')
-    shadow_after('allow')
-    return result
+    with metrics.evidence_scope(live_evidence):
+        if shadow and transaction is not None and snapshots is None:
+            # Observation only, before the live walk; failures cannot alter live authority.
+            try:
+                metrics.read_snapshot(
+                    'batch',
+                    client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid)),
+                    transaction=transaction,
+                    read_budget=read_budget,
+                )
+            except Exception:
+                pass
+        try:
+            result = function(client, transaction, uid, **kwargs)
+        except BatchPrivacyBlocked as error:
+            metrics.decision('batch', error.reason.value)
+            shadow_after(error.reason.value)
+            raise
+        except Exception:
+            metrics.decision('batch', 'authority_unavailable')
+            raise
+        metrics.decision('batch')
+        shadow_after('allow')
+        return result
 
 
 def _assert_batch_write_allowed_memo(
@@ -149,7 +166,14 @@ def _assert_batch_write_allowed_memo(
     # Full-row exports always stay live: the token certifies authorization, not
     # arbitrary metadata returned to a snapshots= consumer.
     attempt = current_attempt()
-    if attempt is None or transaction is None or snapshots is not None:
+    # A call with no attempt may still consult the process cache, but only inside
+    # a transaction with no snapshots export and only when the process cache lever
+    # and its kill switch are clear. Short-circuit so nontransactional and
+    # snapshots calls never poll the kill switch.
+    process_on = (
+        attempt is None and transaction is not None and snapshots is None and ttl_enabled('bpp_decision_cache', uid)
+    )
+    if (attempt is None and not process_on) or transaction is None or snapshots is not None:
         metrics.memo_result('batch', 'ineligible')
         metrics.memo_ineligible(
             'no_attempt' if attempt is None else 'no_transaction' if transaction is None else 'snapshots'
@@ -167,30 +191,69 @@ def _assert_batch_write_allowed_memo(
     # Retain the client object itself, preventing id reuse and cross-plane hits.
     key = (client, uid, ids)
     reference = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid))
-    process_on = ttl_enabled('bpp_decision_cache', uid)
+    if attempt is not None:
+        process_on = ttl_enabled('bpp_decision_cache', uid)
     started = PROCESS_DECISIONS.clock()
+    evidence = metrics.current_evidence()
     try:
         # Every decision reads this token afresh, including repeated checks in one transaction.
         # Every authorizing transaction enrolls the token in its conflict set.
-        snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
+        try:
+            snapshot = metrics.read_snapshot('batch', reference, transaction=transaction, read_budget=read_budget)
+        except Exception:
+            if attempt is not None:
+                attempt.forget(key)
+            PROCESS_DECISIONS.forget(key)
+            metrics.memo_result('batch', 'ineligible')
+            if evidence is not None:
+                evidence.token_seen, evidence.token, evidence.generation = True, None, None
+                evidence.source, evidence.certification = 'fresh_read', 'unavailable'
+            return _assert_batch_write_allowed_live(
+                client,
+                transaction,
+                uid,
+                conversation_ids=ids,
+                expected_generation=expected_generation,
+                read_budget=read_budget,
+            )
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
         # nanoseconds too rather than relying on datetime's microsecond equality.
         version = token_version(snapshot)
-        eligible = version is not None
-        generation = attempt.get(key, version) if eligible else None
+        authority_generation = (snapshot.to_dict() or {}).get('generation', 0)
+        eligible = version is not None and type(authority_generation) is int
+        generation = attempt.get(key, version) if eligible and attempt is not None else None
+        if type(generation) is not int or generation != authority_generation:
+            generation = None
+        if evidence is not None:
+            evidence.certification = 'miss' if eligible else 'unavailable'
+            if generation is not None:
+                evidence.source, evidence.certification = 'session_hit', 'matched'
         if generation is None and eligible and process_on:
             # Process-wide reuse across attempts (lever bpp_decision_cache), at most
             # 60s old, and still certified by THIS transaction's token read: any
             # authority write since the cached walk rotated the token in the same
             # commit (database.batch_privacy_write_fence), so a changed token misses
             # and a concurrent writer aborts this transaction at commit.
-            cached, _age = PROCESS_DECISIONS.get(key)
-            if not is_missing(cached) and cached[0] == version:
+            cached, age = PROCESS_DECISIONS.get(key)
+            if evidence is not None:
+                evidence.age = age
+                evidence.certification = 'miss' if is_missing(cached) else 'mismatch'
+            if (
+                isinstance(cached, tuple)
+                and len(cached) == 3
+                and cached[0] == version
+                and type(cached[1]) is int
+                and cached[1] == authority_generation
+            ):
                 generation = cached[1]
                 metrics.ttl_result('batch', 'hit')
-                attempt.put(key, version, generation)
+                if evidence is not None:
+                    evidence.source, evidence.certification = 'ttl_hit', 'matched'
+                    evidence.markers.update(cached[2])
+                if attempt is not None:
+                    attempt.put(key, version, generation)
             else:
                 metrics.ttl_result('batch', 'miss')
         if generation is not None and (expected_generation is None or generation == expected_generation):
@@ -203,7 +266,10 @@ def _assert_batch_write_allowed_memo(
                 schedule_token_mint(client, reference, uid)
             except Exception:  # best effort: scheduling must never change or block the decision
                 metrics.memo_result('batch', 'mint_error')
-        attempt.forget(key)
+        if attempt is not None:
+            attempt.forget(key)
+        if evidence is not None:
+            evidence.source = 'fresh_read'
         generation = _assert_batch_write_allowed_live(
             client,
             transaction,
@@ -214,13 +280,17 @@ def _assert_batch_write_allowed_memo(
             read_budget=read_budget,
         )
         if eligible:
-            attempt.put(key, version, generation)
-            if process_on and PROCESS_DECISIONS.put(key, (version, generation), started=started):
+            if attempt is not None:
+                attempt.put(key, version, generation)
+            if process_on and PROCESS_DECISIONS.put(
+                key, (version, generation, dict(evidence.markers) if evidence else {}), started=started
+            ):
                 metrics.ttl_result('batch', 'store')
         return generation
     except BaseException:
         # Neither a partial authority walk nor a failed token read is reusable.
-        attempt.forget(key)
+        if attempt is not None:
+            attempt.forget(key)
         PROCESS_DECISIONS.forget(key)
         raise
 
@@ -274,6 +344,8 @@ def _assert_batch_write_allowed_live(
     user = client.collection('users').document(uid)
     snapshot = read(user)
     data = snapshot.to_dict() or {}
+    subscription = data.get('subscription')
+    metrics.observe_batch_plan(subscription.get('plan') if isinstance(subscription, dict) else None)
     if snapshots is not None:
         snapshots['user'] = data
     if not snapshot.exists:

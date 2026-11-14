@@ -1,0 +1,399 @@
+[
+  {
+    "uid": "omi-backlog-retry-cap-quarantine-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Retry cap quarantine rate (enforcement off by default)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Enforced retry caps are quarantining or failing more than 50 units in 30 minutes.",
+      "user_impact": "Affected recordings keep their audio but wait in a held state instead of retrying; sync uploads end failed and need a re-upload or operator redrive.",
+      "scope": "Counts committed cap decisions with outcome=quarantine across batch lease expiry and sync checks. Enforced for every uid only with CAPTURE_RETRY_CAP_ENFORCED on (default off); otherwise the CAPTURE_COVERAGE_MODE cohort. Agent tier only.",
+      "verification": "Read omi_capture_retry_cap_total by check and outcome, then batch worker failure reasons and sync dispatch errors.",
+      "safe_next_action": "Find the failure that exhausts attempts (worker crash, OOM, provider outage) before requeueing; requeue only after the cause is fixed. Rollback: CAPTURE_RETRY_CAP_ENFORCED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">50 quarantines in 30m for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 51 quarantine decisions in 30m.",
+      "evaluated_good": "Synthetic: 50 quarantine decisions in 30m, or would_quarantine only."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-retry-cap-quarantine-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-budget-spent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Held units with a spent re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 64",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The nightly held pass or status-poll re-drives saw more than 64 units whose re-drive counter reached the max in an hour.",
+      "user_impact": "These recordings keep their audio but have been re-driven 3 times without a transcript and keep looping.",
+      "scope": "Counts new committed spent transitions once per unit, after the content/privacy CAS. Staging repairs, expired-today skips, refusals and later cycles of marked units are excluded. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} and sample worker failure reasons with an authorized operator read.",
+      "safe_next_action": "Fix the failure cause before requeueing. Never delete audio. Rollback: BATCH_HELD_REDRIVE_COUNTER_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">64 in 1h for 5m (two nightly 32-row pages); initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 65 observations in 1h.",
+      "evaluated_good": "Synthetic: 64 observations in 1h."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-budget-spent",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-unit-looping",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "A held unit is still being re-driven after spending its re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A held recording newly entered its spent re-drive state in the last hour.",
+      "user_impact": "The recording exhausted three held re-drives and failed again; retained audio needs investigation.",
+      "scope": "Pages only for a new committed held_redrive_budget_spent transition. The durable held_redrive_budget_spent_at marker prevents later cycles of the same unit from re-firing. Nightly, poll and operator paths share the content/privacy CAS; staging repairs are excluded. The >64/h rule covers volume.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} over 1h, then inspect held_redrive_budget_spent_at and the unit failure history.",
+      "safe_next_action": "Investigate the worker, audio or provider failure before another re-drive. Audio and results are retained. BATCH_HELD_REDRIVE_COUNTER_ENABLED=false silences telemetry without changing custody or budget accounting.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">0 new spent transitions in 1h for 5m; the same unit cannot emit again.",
+      "evaluated_bad": "Synthetic: one unit commits its first re-drive after three held re-drives.",
+      "evaluated_good": "Synthetic: below-budget re-drives, refusals, staging repairs, or later cycles of an already marked unit."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-unit-looping",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  }
+]

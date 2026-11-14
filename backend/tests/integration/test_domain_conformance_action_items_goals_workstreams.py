@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from database.ports.action_items import ActionItemDraft, ActionItemEntity, TaskRelationshipConflictError
+from database.read_boundary import MalformedDocError
 from database.ports.base import MutationConflict, RevisionConflict
 from database.ports.folders import FolderCreate
 from database.ports.goals import GoalCreate, GoalUpdate, GoalEntity, GoalConflictError
@@ -301,11 +302,12 @@ def test_goal_revision_and_mutation_receipt(domain_backend):
         repo.update(row.id, GoalUpdate(data={'title': 'Stale'}), expected_revision=1)
 
 
-def test_goal_progress_and_local_history_bucket(domain_backend):
+@pytest.mark.parametrize('time_zone', ['Pacific/Honolulu', None, 'Invalid/Zone', ''])
+def test_goal_progress_and_local_history_bucket(domain_backend, time_zone):
     h = domain_backend
     sid = h.space('history')
     repo = h.goals(sid)
-    h.seed(sid, 'users', 'profile', {'time_zone': 'Pacific/Honolulu'})
+    h.seed(sid, 'users', 'profile', {'time_zone': time_zone})
     row = repo.create(GoalCreate(data={'title': 'Progress'}))
     event = {
         'kind': 'metric_update',
@@ -318,8 +320,17 @@ def test_goal_progress_and_local_history_bucket(domain_backend):
         == saved.event_id
     )
     assert len(repo.list_progress_events(row.id)) == 1
-    expected = saved.created_at.astimezone(ZoneInfo('Pacific/Honolulu')).strftime('%Y-%m-%d')
+    expected = saved.created_at.astimezone(
+        ZoneInfo('Pacific/Honolulu') if time_zone == 'Pacific/Honolulu' else timezone.utc
+    ).strftime('%Y-%m-%d')
     assert repo.get_history(row.id)[0]['date'] == expected and repo.get_history(row.id)[0]['value'] == 2
+    assert repo.update_progress(row.id, 3, idempotency_key='update', account_generation=0).id == row.id
+    latest = repo.list_progress_events(row.id)[0]
+    expected_update = latest.created_at.astimezone(
+        ZoneInfo('Pacific/Honolulu') if time_zone == 'Pacific/Honolulu' else timezone.utc
+    ).strftime('%Y-%m-%d')
+    assert repo.get_history(row.id)[0]['date'] == expected_update
+    assert repo.get_history(row.id)[0]['value'] == 3
 
 
 def test_goal_sort_retains_missing_created_at(domain_backend):
@@ -450,6 +461,39 @@ def test_noop_skip_and_escape_flag(domain_backend, monkeypatch):
     assert repo.get(tid).revision == 2
 
 
+@pytest.mark.parametrize('description', ['Concurrent edit', 'Chat edit'])
+def test_task_chat_state_rejects_stale_snapshot_and_returns_after(domain_backend, description):
+    h = domain_backend
+    sid = h.space('chat-state')
+    repo = h.action_items(sid)
+    original = {'description': 'Original', 'updated_at': NOW}
+    h.seed(sid, 'action_items', 'task', original)
+    before = {'description': 'Original', 'updated_at': {'__chat_datetime__': NOW.isoformat()}}
+    assert repo.update('task', {'description': 'Concurrent edit', 'updated_at': NOW})
+    current = h.read(sid, 'action_items', 'task')
+    stale_state = {'before': before}
+    patch = {'description': description}
+    with pytest.raises(PermissionError, match='Edit target changed before write'):
+        repo.update('task', patch, expected_chat_state=stale_state, mutation_id='chat-edit')
+    assert h.read(sid, 'action_items', 'task') == current
+    assert 'after' not in stale_state
+
+    state = {
+        'before': {
+            'description': current['description'],
+            'updated_at': {'__chat_datetime__': current['updated_at'].isoformat()},
+        }
+    }
+    assert repo.update('task', patch, expected_chat_state=state, mutation_id='chat-edit')
+    assert state['after'] == {**state['before'], **patch}
+    assert repo.get('task').description == description
+    saved = h.read(sid, 'action_items', 'task')
+    # Match Firestore replay ordering and fingerprint: the before snapshot is
+    # not part of the digest, and a successful receipt precedes the state check.
+    assert repo.update('task', patch, expected_chat_state=stale_state, mutation_id='chat-edit')
+    assert h.read(sid, 'action_items', 'task') == saved
+
+
 def test_sync_keyset_lookahead_and_soft_tombstones(domain_backend):
     h = domain_backend
     sid = h.space('sync')
@@ -569,3 +613,311 @@ def test_fence_cleanup_failure_finishes_all_and_resets_uow(domain_backend, abort
     assert events == [not abort_body, not abort_body]
     assert (h.action_items(sid).get('task') is not None) is (not abort_body)
     assert h.store(sid).run(lambda tx: tx.action_items.read_control()) == {}
+
+
+def test_legacy_workflow_ids_and_retirement_use_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-workflow-ids')
+    for tid in ('active', 'retire', 'replace'):
+        h.seed(
+            sid,
+            'action_items',
+            tid,
+            {
+                'description': tid,
+                'conversation_id': 'conversation',
+                'updated_at': NOW,
+            },
+        )
+        assert 'id' not in h.read(sid, 'action_items', tid)
+    tasks = h.action_items(sid)
+    assert tasks.get('active').id == 'active'
+    assert [r.id for r in tasks.get_by_ids(['retire', 'active'])] == ['retire', 'active']
+    assert {r.id for r in tasks.iter_all()} == {'active', 'retire', 'replace'}
+    assert {r.id for r in tasks.list().items} == {'active', 'retire', 'replace'}
+    assert {r.id for r in tasks.sync_page().items} == {'active', 'retire', 'replace'}
+    assert (
+        tasks.retire_for_conversation(
+            'conversation',
+            active_ids=['active'],
+            replacements={'replace': 'active'},
+        )
+        == 2
+    )
+    assert not tasks.get('active').deleted
+    assert tasks.get('retire').status == 'cancelled'
+    assert tasks.get('replace').status == 'superseded'
+    assert tasks.get('replace').superseded_by == 'active'
+    assert [r.id for r in tasks.list().items] == ['active']
+    assert {r.id for r in tasks.sync_page().items} == {'active', 'retire', 'replace'}
+    assert 'id' not in h.read(sid, 'action_items', 'retire')
+
+    h.seed(sid, 'goals', 'goal-key', {'title': 'Legacy goal', 'is_active': True})
+    goals = h.goals(sid)
+    assert goals.get('goal-key').id == 'goal-key'
+    assert goals.get_user_goal().id == 'goal-key'
+    assert goals.get_user_goals()[0].id == 'goal-key'
+    assert goals.get_all()[0].id == 'goal-key'
+    assert goals.update('goal-key', GoalUpdate(data={'title': 'Changed'})).id == 'goal-key'
+    assert goals.focus('goal-key', idempotency_key='focus', account_generation=0).id == 'goal-key'
+    assert goals.unfocus('goal-key', idempotency_key='unfocus', account_generation=0).id == 'goal-key'
+    assert 'id' not in h.read(sid, 'goals', 'goal-key')
+
+    h.seed(
+        sid,
+        'workstreams',
+        'ws-key',
+        {
+            'title': 'Legacy workstream',
+            'workstream_id': 'ws-key',
+            'objective': 'Finish synthetic work',
+            'created_at': NOW,
+            'status': 'open',
+            'goal_id': 'goal-key',
+            'updated_at': NOW,
+        },
+    )
+    streams = h.workstreams(sid)
+    assert streams.get('ws-key').id == 'ws-key'
+    assert streams.list_open()[0].workstream_id == 'ws-key'
+    assert streams.list_for_goal('goal-key')[0].workstream_id == 'ws-key'
+    assert (
+        streams.update(
+            'ws-key',
+            WorkstreamUpdate(data={'title': 'Changed'}),
+            idempotency_key='update',
+            account_generation=0,
+        ).workstream_id
+        == 'ws-key'
+    )
+    assert 'id' not in h.read(sid, 'workstreams', 'ws-key')
+
+
+def test_legacy_goal_focus_replacement_uses_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-focus')
+    for gid, status in [('focused-key', 'focused'), ('replacement-key', 'background')]:
+        h.seed(
+            sid,
+            'goals',
+            gid,
+            {
+                'title': gid,
+                'desired_outcome': 'Finish',
+                'is_active': True,
+                'status': status,
+                'focus_rank': 0 if status == 'focused' else None,
+            },
+        )
+    repo = h.goals(sid)
+    assert (
+        repo.focus(
+            'replacement-key',
+            idempotency_key='replace',
+            account_generation=0,
+            replacement_goal_id='focused-key',
+            focus_cap=1,
+        ).id
+        == 'replacement-key'
+    )
+    assert repo.get('focused-key').status == 'background'
+    assert repo.get('replacement-key').status == 'focused'
+
+
+def test_retirement_ignores_redundant_payload_id(domain_backend):
+    h = domain_backend
+    sid = h.space('retire-payload-id')
+    h.seed(
+        sid,
+        'action_items',
+        'keep-key',
+        {
+            'id': 'wrong-keep',
+            'description': 'Keep',
+            'conversation_id': 'c',
+        },
+    )
+    h.seed(
+        sid,
+        'action_items',
+        'retire-key',
+        {
+            'id': 'keep-key',
+            'description': 'Retire',
+            'conversation_id': 'c',
+        },
+    )
+    repo = h.action_items(sid)
+    assert repo.retire_for_conversation('c', active_ids=['keep-key'], replacements={'retire-key': 'keep-key'}) == 1
+    assert not repo.get('keep-key').deleted
+    assert repo.get('retire-key').superseded_by == 'keep-key'
+
+
+@pytest.mark.parametrize('status', ['background', 'paused', 'achieved', 'abandoned'])
+def test_unfocus_only_changes_focused_goals(domain_backend, status):
+    h = domain_backend
+    sid = h.space('unfocus-' + status)
+    repo = h.goals(sid)
+    goal = repo.create(GoalCreate(data={'title': 'Goal', 'status': status}))
+    before = h.read(sid, 'goals', goal.id)
+    result = repo.unfocus(goal.id, idempotency_key='unfocus', account_generation=0)
+    assert result.status == status
+    assert h.read(sid, 'goals', goal.id) == before
+    assert repo.unfocus(goal.id, idempotency_key='unfocus', account_generation=0).status == status
+    if status in ('achieved', 'abandoned'):
+        with pytest.raises(GoalConflictError):
+            repo.focus(goal.id, idempotency_key='refocus', account_generation=0)
+
+
+@pytest.mark.parametrize('field,value', [('id', 'other'), ('workstream_id', 'other'), ('account_generation', 9)])
+def test_workstream_update_rejects_identity_patch(domain_backend, field, value):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'identity-' + field)
+    repo = h.workstreams(sid)
+    before = h.read(sid, 'workstreams', ws.workstream_id)
+    with pytest.raises(MalformedDocError):
+        repo.update(
+            ws.workstream_id,
+            WorkstreamUpdate(data={field: value, 'title': 'Rejected'}),
+            idempotency_key='update',
+            account_generation=0,
+        )
+    assert h.read(sid, 'workstreams', ws.workstream_id) == before
+    # Rejection must not consume the mutation key.
+    assert (
+        repo.update(
+            ws.workstream_id,
+            WorkstreamUpdate(data={'title': 'Accepted'}),
+            idempotency_key='update',
+            account_generation=0,
+        ).title
+        == 'Accepted'
+    )
+
+
+def test_invalid_goal_relationship_disposition_is_atomic(domain_backend):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'bad-disposition')
+    repo = h.goals(sid)
+    before = h.read(sid, 'goals', goal.id)
+    with pytest.raises(ValueError):
+        repo.transition_lifecycle(
+            goal.id, status='achieved', relationship_disposition='typo', idempotency_key='end', account_generation=0
+        )
+    assert h.read(sid, 'goals', goal.id) == before
+    assert h.workstreams(sid).get(ws.workstream_id).goal_id == goal.id
+    assert (
+        repo.transition_lifecycle(
+            goal.id, status='achieved', relationship_disposition='retain', idempotency_key='end', account_generation=0
+        ).status
+        == 'achieved'
+    )
+
+
+@pytest.mark.parametrize('malformed', ['not-a-sequence', None, {'legacy': 42}, [], 1.5, 0, -1, False, NOW])
+def test_event_lists_skip_malformed_legacy_sequences(domain_backend, malformed):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'malformed-events')
+    goals, streams = h.goals(sid), h.workstreams(sid)
+    good_goal = goals.append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    good_ws = streams.append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    for entity, parent, good in [('goal_events', goal.id, good_goal), ('workstream_events', ws.workstream_id, good_ws)]:
+        bad = {**good.model_dump(), 'event_id': 'bad', 'sequence': malformed}
+        h.seed(sid, entity, parent + '/bad', bad)
+    assert [e.event_id for e in goals.list_progress_events(goal.id)] == [good_goal.event_id]
+    assert [e.event_id for e in streams.list_events(ws.workstream_id)] == [good_ws.event_id]
+    # Non-numeric types sort above numbers in Firestore (null sorts below).
+    first_goal = [] if isinstance(malformed, (str, dict, list, datetime)) or malformed == 1.5 else [good_goal.event_id]
+    assert [e.event_id for e in goals.list_progress_events(goal.id, limit=1)] == first_goal
+    assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
+    assert streams.list_events(ws.workstream_id, after_sequence=good_ws.sequence) == []
+
+
+@pytest.mark.parametrize('domain', ['goal', 'workstream'])
+@pytest.mark.parametrize('malformed_field', ['kind', 'summary', 'parent_id'])
+def test_event_limit_precedes_payload_validation(domain_backend, domain, malformed_field):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-window-' + domain)
+    if domain == 'goal':
+        repo, parent, entity = h.goals(sid), goal.id, 'goal_events'
+        good = repo.append_progress_event(
+            parent, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+        )
+        read = lambda limit: repo.list_progress_events(parent, limit=limit)
+        bad_sequence = 2  # DESC: malformed payload consumes the first slot.
+    else:
+        repo, parent, entity = h.workstreams(sid), ws.workstream_id, 'workstream_events'
+        good = repo.append_event(
+            parent, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+        )
+        read = lambda limit: repo.list_events(parent, limit=limit)
+        good = good.model_copy(update={'sequence': 2})
+        h.seed(sid, entity, parent + '/' + good.event_id, good.model_dump())
+        bad_sequence = 1  # ASC: malformed payload consumes the first slot.
+    bad = {**good.model_dump(), 'event_id': 'bad', 'sequence': bad_sequence}
+    if malformed_field == 'parent_id':
+        bad.pop('goal_id' if domain == 'goal' else 'workstream_id')
+    else:
+        bad[malformed_field] = 'bad' if malformed_field == 'kind' else ''
+    h.seed(sid, entity, parent + '/bad', bad)
+    assert read(1) == []
+    assert [event.event_id for event in read(2)] == [good.event_id]
+    # Missing ordered fields never enter Firestore's window.
+    missing = {**good.model_dump(), 'event_id': 'missing'}
+    missing.pop('sequence')
+    h.seed(sid, entity, parent + '/missing', missing)
+    assert [event.event_id for event in read(100)] == [good.event_id]
+
+
+@pytest.mark.parametrize('sequence', ['2', '9' * 40, 1e18, 1e25])
+def test_event_sequences_preserve_valid_coercions_without_bigint_overflow(domain_backend, sequence):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-coercion')
+    goals, streams = h.goals(sid), h.workstreams(sid)
+    good_goal = goals.append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    good_ws = streams.append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='good', account_generation=0
+    )
+    for entity, parent, good in [('goal_events', goal.id, good_goal), ('workstream_events', ws.workstream_id, good_ws)]:
+        h.seed(sid, entity, parent + '/large', {**good.model_dump(), 'event_id': 'large', 'sequence': sequence})
+    # Goal order_by includes strings; the model accepts integer strings beyond bigint.
+    events = goals.list_progress_events(goal.id, limit=1)
+    expected_goal = [] if isinstance(sequence, float) and sequence > 2**63 - 1 else [('large', int(sequence))]
+    assert [(e.event_id, e.sequence) for e in events] == expected_goal
+    # Numeric inequality excludes strings; the model rejects doubles beyond bigint.
+    expected = [(good_ws.event_id, good_ws.sequence)]
+    if isinstance(sequence, float) and sequence <= 2**63 - 1:
+        expected.append(('large', int(sequence)))
+    assert [(e.event_id, e.sequence) for e in streams.list_events(ws.workstream_id)] == expected
+    assert [e.event_id for e in streams.list_events(ws.workstream_id, limit=1)] == [good_ws.event_id]
+
+
+def test_event_order_uses_stored_types_and_document_key_tiebreaks(domain_backend):
+    h = domain_backend
+    sid, goal, ws = workflow(h, 'event-order')
+    goal_event = h.goals(sid).append_progress_event(
+        goal.id, {'kind': 'evidence', 'summary': 'Valid'}, idempotency_key='base', account_generation=0
+    )
+    ws_event = h.workstreams(sid).append_event(
+        ws.workstream_id, {'kind': 'user_note', 'summary': 'Valid'}, idempotency_key='base', account_generation=0
+    )
+    for entity, parent, base in [
+        ('goal_events', goal.id, goal_event),
+        ('workstream_events', ws.workstream_id, ws_event),
+    ]:
+        for key, sequence in [('z', 2), ('a', 2.0), ('s2', '2'), ('s10', '10')]:
+            h.seed(sid, entity, parent + '/' + key, {**base.model_dump(), 'event_id': key, 'sequence': sequence})
+    assert [e.event_id for e in h.goals(sid).list_progress_events(goal.id)] == [
+        's2',
+        's10',
+        'z',
+        'a',
+        goal_event.event_id,
+    ]
+    assert [e.event_id for e in h.workstreams(sid).list_events(ws.workstream_id)] == [ws_event.event_id, 'a', 'z']

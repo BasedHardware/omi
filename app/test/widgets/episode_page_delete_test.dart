@@ -1,3 +1,4 @@
+import 'package:omi/backend/http/api_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -39,7 +40,7 @@ void main() {
         calls.add(id);
         return outcome != 'partial failure' || id != 'weekend';
       };
-      final episodes = EpisodeProvider()
+      final episodes = EpisodeProvider(detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
         ..debugSetLive(null)
         ..debugSetHomeEpisodes([episode]);
       episodes.observeHomeConversations(history);

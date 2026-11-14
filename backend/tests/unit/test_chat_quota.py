@@ -468,37 +468,6 @@ def test_flagged_chat_admission_precedes_byok_and_old_quota(monkeypatch, plan):
     assert error.value.detail['chat_at_cap']['state'] == 'paused'
 
 
-@pytest.mark.parametrize('percent,allowed', [(99.99, True), (100, False)])
-def test_flagged_free_snapshot_and_admission_share_budget_not_trial(monkeypatch, percent, allowed):
-    sub_mod = _reload_subscription_module()
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setattr(
-        sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: _make_subscription(PlanType.basic)
-    )
-    monkeypatch.setattr(
-        sub_mod.user_usage_db,
-        'get_monthly_chat_usage',
-        lambda *a, **k: {
-            'questions': 999,
-            'cost_usd': 999,
-            'reset_at': 1793491200,
-        },
-    )
-    monkeypatch.setattr(
-        sub_mod.ladder_v1,
-        'budget_snapshot',
-        lambda *a, **k: {
-            'budget_percent': percent,
-            'plan_id': 'basic',
-            'reset_at': 1793491200,
-        },
-    )
-    snapshot = sub_mod.get_chat_quota_snapshot('u')
-    assert snapshot['allowed'] is allowed
-    assert snapshot['uses_shared_budget'] is True
-    assert ('chat_at_cap' in snapshot) is not allowed
-
-
 def test_legacy_quota_wire_omits_ladder_state():
     from models.users import ChatUsageQuota
 

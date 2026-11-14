@@ -22,6 +22,7 @@ def test_default_off(monkeypatch):
         'conversation_list_cursor',
         'finjob_candidate_queries',
         'sync_snapshot_resolve_cache',
+        'episode_members_cache',
         'privacy_negative_lookup_cache',
     ],
 )
@@ -43,6 +44,7 @@ def test_registered_lever_stays_off_when_key_absent(monkeypatch, name, raw):
         'conversation_list_cursor',
         'finjob_candidate_queries',
         'sync_snapshot_resolve_cache',
+        'episode_members_cache',
         'privacy_negative_lookup_cache',
     ],
 )

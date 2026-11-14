@@ -244,6 +244,7 @@ def test_assignment_count_and_offset_quirk(domain_backend):
         )
     assert repo.conversations_in_folder(first.id, limit=1) == []
     assert repo.conversations_in_folder(first.id, limit=1, offset=1)[0]['id'] == '1'
+    assert 'id' not in h.read(sid, 'conversations', '1')
     assert repo.refresh_conversation_count(first.id) == 3  # includes deleted: established count query
     assert repo.bulk_move_conversations(['0', '1', 'missing'], second.id) == 2
     assert repo.get(first.id).conversation_count == 1 and repo.get(second.id).conversation_count == 2
@@ -318,3 +319,57 @@ def test_noop_initialization_reserves_mutation_id_across_domains(domain_backend)
     assert [f.id for f in repo.initialize_system(mutation_id='shared')] == [f.id for f in first]
     with pytest.raises(MutationConflict):
         h.people(sid).get_or_create_by_name(PersonDraft(id='p', name='Different operation'), mutation_id='shared')
+
+
+def test_legacy_folder_and_person_ids_come_from_document_keys(domain_backend):
+    h = domain_backend
+    sid = h.space('legacy-ids')
+    h.seed(sid, 'folders', 'folder-key', {'name': 'Legacy', 'order': 0})
+    folders = h.folders(sid)
+    assert 'id' not in h.read(sid, 'folders', 'folder-key')
+    assert folders.get('folder-key').id == 'folder-key'
+    assert folders.list().items[0].id == 'folder-key'
+    assert folders.update('folder-key', FolderUpdate(name='Changed')).id == 'folder-key'
+    assert 'id' not in h.read(sid, 'folders', 'folder-key')
+
+    h.seed(sid, 'people', 'person-key', {'name': 'Legacy person'})
+    people = h.people(sid)
+    draft = PersonDraft(id='unused', name='Legacy person')
+    assert 'id' not in h.read(sid, 'people', 'person-key')
+    assert people.get_or_create_by_name(draft, mutation_id='legacy-person').id == 'person-key'
+    assert people.get_or_create_by_name(draft, mutation_id='legacy-person').id == 'person-key'
+    assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
+    assert people.set_pinned('person-key', True, mutation_id='pin').id == 'person-key'
+    assert 'id' not in h.read(sid, 'people', 'person-key')
+
+
+@pytest.mark.parametrize('include_discarded', [False, True])
+def test_folder_listing_requires_explicit_false_before_paging(domain_backend, include_discarded):
+    h = domain_backend
+    sid = h.space('missing-discarded')
+    repo = h.folders(sid)
+    folder = repo.create(FolderCreate(name='Legacy'))
+    for i, fields in enumerate([{'discarded': True}, {}, {'discarded': False}, {'discarded': None}]):
+        h.seed(
+            sid, 'conversations', str(i), {'folder_id': folder.id, 'created_at': NOW - timedelta(seconds=i), **fields}
+        )
+    expected = ['0', '1', '2', '3'] if include_discarded else ['2']
+    assert [r['id'] for r in repo.conversations_in_folder(folder.id)] == ['2']
+    assert [r['id'] for r in repo.conversations_in_folder(folder.id, include_discarded=include_discarded)] == expected
+    assert [
+        r['id'] for r in repo.conversations_in_folder(folder.id, limit=1, offset=1, include_discarded=include_discarded)
+    ] == expected[1:2]
+
+
+@pytest.mark.parametrize(
+    'legacy_name,draft_name', [(42, '42'), (True, 'true'), ({'x': 1}, '{"x": 1}'), (['x'], '["x"]')]
+)
+def test_people_name_match_requires_string(domain_backend, legacy_name, draft_name):
+    h = domain_backend
+    sid = h.space('typed-name')
+    h.seed(sid, 'people', 'legacy', {'name': legacy_name})
+    repo = h.people(sid)
+    draft = PersonDraft(id='fresh', name=draft_name)
+    assert repo.get_or_create_by_name(draft).id == 'fresh'
+    assert repo.get_or_create_by_name(PersonDraft(id='unused', name=draft_name)).id == 'fresh'
+    assert h.read(sid, 'people', 'legacy')['name'] == legacy_name

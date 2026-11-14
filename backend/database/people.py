@@ -89,7 +89,8 @@ class FirestorePeople:
         receipt = read_port_mutation(self.owner, self.transaction, mutation_id, digest)
         if receipt is not None:
             snapshot = self.ref.document(receipt['entity_id']).get(transaction=self.transaction)
-            data = snapshot.to_dict() or {'id': receipt['entity_id']}
+            person = snapshot.to_dict() or {}
+            data = {**person, 'id': person.get('id') or receipt['entity_id']}
             if project:
                 data = project_person_learning(self.space_id, data, firestore_client=self.client)
             return data, True

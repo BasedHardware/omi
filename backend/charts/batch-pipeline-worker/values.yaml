@@ -1,6 +1,16 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+# Part A only. All repair children inherit a stable release epoch; 0 is
+# dormant while off. The release owner pins the epoch with the shadow flip,
+# then retains it across restarts and later ramp steps.
+recordTokenLease:
+  mode: "off"
+  servePercent: 0
+  seconds: 3600
+  deployedAt: 0
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
@@ -50,6 +60,7 @@ borrowedNodePools:
   priority: -1
 worker:
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
   servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
@@ -74,7 +85,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
-  ladderBudgetEnforcement: false
+  # Default-off unlimited_v2 backfill/import daily transcribed-hours cap (see
+  # utils/backfill_hours_cap.py). false restores current behavior exactly.
+  unlimitedV2BackfillHoursCapEnabled: false
+  unlimitedV2BackfillHoursCapHours: "24"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
@@ -138,7 +152,6 @@ worker:
   diarizeSpeechOnlyEnabled: true
   # Default off until a paired run on the prod pyannote revision qualifies it
   # (see backend/diarizer/batch_pipeline_runtime.md).
-  shortSpeechSingleEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
@@ -225,6 +238,25 @@ recordSealRepair:
   mode: apply
   workers: 8
   rowSeconds: 270
+  # CPU-only repair pod placement. The old affinity excluded the batch-pipeline
+  # pool, so repair landed on the monitoring pool at 101% CPU and received ~2 of
+  # its 4-core limit; the batch-pipeline pool sits at 8-19% CPU. Empty nodePool
+  # restores the old exclusion (and empty tolerations the old no-toleration pod).
+  # g2-standard-8 allocatable is ~7.8 vCPU and the GPU worker requests 4, so a
+  # 4-CPU request does not co-schedule with a worker: the pool autoscaler adds a
+  # node. Lower cpuRequest to "3" to share a worker's node instead.
+  nodePool: batch-pipeline-pool
+  tolerations:
+    - key: omi.ai/batch-pipeline
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  # 2 -> 4 (== the unchanged limit) so 16 row workers are not starved to ~2 cores.
+  cpuRequest: "4"
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}

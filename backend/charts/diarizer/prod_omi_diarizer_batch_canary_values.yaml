@@ -1,0 +1,32 @@
+# Apply AFTER prod_omi_diarizer_values.yaml + prod_omi_diarizer_batch_values.yaml.
+# Deployer supplies the main-built image.digest. Rendering without it fails.
+shadowCanary: true
+fullnameOverride: prod-omi-diarizer-batch-canary
+image:
+  tag: ""
+  digest: ""
+replicaCount: 1
+maintenanceMode: false
+autoscaling:
+  enabled: false
+warmFallback:
+  enabled: false
+gateway:
+  enabled: false
+ingress:
+  enabled: false
+backendConfig:
+  enabled: false
+podMonitoring:
+  enabled: false
+podLabels:
+  omi.ai/diarizer-batch-route: canary
+service:
+  type: ClusterIP
+  selectorLabels:
+    app.kubernetes.io/name: diarizer
+    app.kubernetes.io/instance: prod-omi-diarizer-batch-canary
+    omi.ai/diarizer-batch-route: canary
+serviceAccount:
+  automount: false
+# Node selectors, tolerations, probes, GPU and CPU/memory resources inherit batch.

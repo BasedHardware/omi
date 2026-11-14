@@ -6,9 +6,11 @@ from typing import Callable
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
-from config.record_audio import require_record_audio_barrier
+from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
+from config.record_seal_rules import token_lease_mode
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
+from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -34,6 +36,7 @@ def admit(
     enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
+    coalescing_group: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -60,7 +63,40 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        if coalescing_group is not None:
+            from database.batch_pipeline_coalescing import guard
+
+            guard(tx, coalescing_group, now)
+        row = {}
+        partial_parent = (intake or {}).get('record_partial_parent')
+        if binding.record_origin:
+            target = binding.target_conversation_id
+            if not target:
+                raise ValueError('registered record target unavailable')
+            key = f'{binding.owner_id}/{target}'
+            row = tx.get('conversations', key)
+            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
+                raise ValueError('registered record target unavailable')
+            if row.get('discarded'):
+                # Full archives, partial children and ledger replays can name
+                # another unit. Read the row's canonical obligation as well.
+                obligation_ids = {
+                    binding.segment_ids[0],
+                    record_identity(binding.owner_id, target)[1],
+                }
+                if partial_parent:
+                    obligation_ids.add(partial_parent)
+                if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
+                    raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
+        if (
+            coalescing_group is not None
+            and coalescing_group['mode'] == 'individual'
+            and existing.get('job_id') == binding.job_id
+        ):
+            held = tx.get('intakes', binding.job_id)
+            if held.get('coalesce_group') == coalescing_group['id'] and not held.get('coalesce_target'):
+                existing = {}  # Fenced conversion of this exact original receipt.
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(existing.get('result')):
@@ -114,9 +150,6 @@ def admit(
             raise AdmissionDisabled('recorded admission policy does not enable batch')
         if binding.record_origin:
             key = f'{binding.owner_id}/{binding.target_conversation_id}'
-            row = tx.get('conversations', key)
-            if not row or row.get('deleted') or row.get('uses_custom_stt') or (partial_parent and row.get('discarded')):
-                raise ValueError('registered record target unavailable')
             if binding.native_record:
                 require_record_protocol_ready()
                 require_record_audio_barrier(row, expected=record_barrier)
@@ -151,6 +184,8 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
+                job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
             if partial_metadata.get('release'):
                 # Readers (hard-3, the 2h alarm) split released backfill from fresh audio per row.
                 job['release'] = partial_metadata['release']
@@ -162,6 +197,7 @@ def admit(
             'content',
             content_key,
             {
+                **coalescing_completion.manifest(coalescing_group),
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',

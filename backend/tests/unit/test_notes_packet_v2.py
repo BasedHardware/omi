@@ -31,7 +31,7 @@ START = datetime(2026, 1, 12, 1, 30, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def isolated_flags(monkeypatch):
-    for flag in ('NOTES_PACKET_V2_MODE', 'STT_LANGUAGE_HINTS_MODE'):
+    for flag in ('NOTES_PACKET_V2_MODE',):
         monkeypatch.delenv(flag, raising=False)
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)

@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -26,7 +26,19 @@ bool memoryIsEditable(Memory memory) {
 /// Safe to call from a sheet that closes right after: the toast is shown synchronously and the
 /// rest only talks to [provider].
 Future<void> deleteMemoryWithUndo(BuildContext context, MemoriesProvider provider, Memory memory) async {
-  final indexDelete = provider.deleteMemory(memory);
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final failure = OmiFeedback.buildSnackBar(
+    context,
+    context.l10n.failedToDeleteItems,
+    kind: OmiFeedbackKind.error,
+    duration: OmiFeedbackTiming.error,
+    showClose: true,
+  );
+  final indexDelete = provider.deleteMemory(memory, onFailure: () {
+    // The triggering row or edit sheet may already be gone. Queue behind the
+    // next Undo rather than closing its window or using a disposed context.
+    if (messenger?.mounted == true) messenger!.showSnackBar(failure);
+  });
   PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
   final undone = await OmiFeedback.undo(
     context,

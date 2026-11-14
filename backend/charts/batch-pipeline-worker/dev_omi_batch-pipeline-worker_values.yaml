@@ -1,4 +1,6 @@
 enabled: true
+podLabels:
+  service_name: batch-pipeline-worker
 image:
   repository: gcr.io/based-hardware-dev/batch-pipeline-worker
   digest: ""
@@ -27,6 +29,7 @@ tolerations:
     effect: NoSchedule
 worker:
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   servingMetricsMinRefreshSeconds: 30
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false

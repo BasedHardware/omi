@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-redeem-field.png",
+      "platform": "mobile-ios",
+      "description": "Existing annual subscription promo field: field. Hermetic real PlansSheet widget render at 393x852 logical pixels; synthetic code only. Not an installed-app or live billing proof.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-redeem-error.png",
+      "platform": "mobile-ios",
+      "description": "Existing annual subscription promo field: error. Hermetic real PlansSheet widget render at 393x852 logical pixels; synthetic code only. Not an installed-app or live billing proof.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-redeem-success.png",
+      "platform": "mobile-ios",
+      "description": "Existing annual subscription promo field: success. Hermetic real PlansSheet widget render at 393x852 logical pixels; synthetic code only. Not an installed-app or live billing proof.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

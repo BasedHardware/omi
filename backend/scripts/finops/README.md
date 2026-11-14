@@ -679,6 +679,9 @@ The loader writes two dark-able tables:
 - `omi_finops.vendor_balance_snapshot` — one row per successful pull
   (`date`, `ts`, `vendor`, `used_usd`, `available_usd`,
   `invoice_billing_enabled`), idempotent per (date, vendor).
+  Money is rendered to the NUMERIC contract at the artifact boundary (at most
+  nine fractional digits, rounded half-up; the loader re-renders it too), because
+  the vendor sends longer decimals than BigQuery NUMERIC accepts.
 - `omi_finops.vendor_balance_spend_daily` — the **derived day rate**: each
   interval between consecutive snapshots belongs to the UTC days strictly
   after the previous snapshot's day through the current snapshot's day
@@ -691,7 +694,12 @@ The loader writes two dark-able tables:
   without backfilling.
 
 Optional by design: a missing key, a 401/403, or a transport/shape failure
-writes `status=skipped` with a reason and never fails the daily job. The TV
+writes `status=skipped` with a reason and never fails the daily job. The reason
+is a fixed token — `key_unavailable`, `permission_unavailable`,
+`redirect_refused`, `http_error`, `transport_error` or `invalid_response` — plus
+an integer `http_status` on `http_error`; the daily job copies that token (never
+free text, a URL, a header or a response body) onto its own stderr, because the
+run's `pull.log` is ephemeral on Cloud Run. The TV
 (`fetchVendorBalanceHistory`) shows Soniox as **measured** with its as-of
 date only once **≥2 snapshots** exist; before that the labelled, dated
 console constant (read 2026-10-16, STALE after 14 days) stays as the
@@ -720,17 +728,36 @@ platform.modulate.ai (100 credits = $1, so $0.06/h is 6 credits/h); live SKU
 The rate card is SHA-pinned by backend tests; a price change is a reviewed
 commit that updates the pinned expectations and this line's as-of date.
 
-Coverage caveat, surfaced by the reconciliation rather than hidden: the
-Prometheus series meters backend live/PTT streaming sessions; any Modulate
-batch-REST volume outside that counter appears as reconciliation variance
-against Mercury cash. The wall computes the trailing-30-day variance between
-the modelled line and Mercury `modulate` cash (`stt_vendor` in the vendor
-map) and prints it on the STT line. When the modelled line is unavailable
-(missing series or missing card) the wall falls back to labelled Mercury
-Modulate cash, exactly as before.
+REST coverage uses `omi_prerecorded_vendor_audio_seconds_total{provider="modulate"}`
+from Grafana `uid/prometheus` with `cluster!="__run__"` and `uid/gmp-cloud-run`
+with `project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics"`.
+Only `outcome="ok"` is priced: `endpoint="stt"` at **$0.03/audio hour** and
+`endpoint="lid"` at **$0.01/audio hour**. These prices, their public source and
+2026-11-08 as-of date live in the finops-owned `modulate_prices.json`; the live
+rate card is unchanged. Error seconds are logged as an unpriced upper bound.
+Live and REST counters do not overlap; the REST cluster selectors keep GKE and
+Cloud Run disjoint. The daily total is `(live_seconds * live_price +
+rest_stt_seconds * rest_price + lid_seconds * lid_price) / 3600`.
 
-The loader writes `omi_finops.stt_modulate_modelled_daily` (date, audio
-seconds, usd, price, price as-of, `method='modelled'`), dark while skipped.
+Measured reference supplied for this change (ro-prod GMP, **2026-11-06 UTC**):
+STT ok **1,360.2 h**, LID ok **184.8 h**, STT error **6.7 h**. At these list
+prices the modelled estimate is approximately **$40.81 + $1.85 = $42.66**,
+plus live **0**. This is a dated operator reference, independent of test fixtures;
+no GCP measurement was made during implementation. Cloud Run `increase()` can
+miss audio sent before an instance's first scrape. The wall's trailing-30-day
+variance against Mercury cash remains the reconciliation authority, including
+any difference between public list prices and contract prices.
+
+If any query fails (or an expected live/REST query is absent), the whole window
+is skipped with `reason=gmp_query_failed`; stale ready rows are replaced by a
+skipped artifact. A day with no series in either source gets no row. Missing
+prices or series keep the line unavailable and the wall uses labelled Mercury
+Modulate cash.
+
+The loader writes `omi_finops.stt_modulate_modelled_daily` with total audio
+seconds, `live_seconds`, `rest_stt_seconds`, `lid_seconds`, usd, the live price
+and as-of date, `rest_price_usd_per_hour`, `lid_price_usd_per_hour` and
+`method='modelled'`. The new columns are nullable for historical rows.
 The Modulate ORG key binding (`FINOPS_MODULATE_ORG_KEY`) is mounted for a
 future vendor API; **no code calls a Modulate endpoint with it**, pinned by
 test.

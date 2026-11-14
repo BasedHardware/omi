@@ -1,12 +1,11 @@
 import os
 import re
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
 from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
 
-from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -17,9 +16,13 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from fastapi import Response
 
 # All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
@@ -36,12 +39,6 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
-)
-
-OMI_FLAG_DUAL_READ_TOTAL = Counter(
-    'omi_flag_dual_read_total',
-    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
-    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
@@ -1121,6 +1118,17 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     ['outcome', 'reason'],
 )
 
+OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL = Counter(
+    'omi_sync_bridge_contained_donor_shadow_total',
+    (
+        'Shadow-mode outcomes for a processed sync donor the contained-donor bridge merge would consider. '
+        'Labels are a closed set: '
+        'outcome=would_absorb|partial_overlap|no_segment_span|unplaced_donor|donor_ineligible|open_target|no_overlap|error. '
+        'Never labeled by uid, conversation id, or content.'
+    ),
+    ['outcome'],
+)
+
 # Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
 # the bounded internal cause (config.sync_telemetry.SyncFailureReason).
 OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
@@ -1326,16 +1334,6 @@ OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
     'omi_listen_deferred_stream_opened_total',
     'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
     ['deferred_by'],
-)
-
-OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL = Counter(
-    'omi_listen_visible_restore_streams_total',
-    'Batch-only visible Modulate preview stream attempts by bounded outcome',
-    ['outcome'],
-)
-OMI_LISTEN_VISIBLE_RESTORE_SECONDS_TOTAL = Counter(
-    'omi_listen_visible_restore_seconds_total',
-    'Visible wall seconds served by batch-only Modulate preview streams',
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -1572,6 +1570,18 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
+    'omi_billing_renewal_observations_total',
+    'Verified billing observation deliveries, not distinct invoices or attempts',
+    ['outcome'],
+)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
+
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
     'Stripe subscription lifecycle events observed via webhook. Counts webhook '
@@ -1668,7 +1678,13 @@ def record_action_items_list_cache(outcome: str) -> None:
     OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
 
 
-def metrics_response() -> Response:
+def metrics_response() -> 'Response':
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (utils.observability.fallback -> utils.metrics),
+    # and fastapi/pydantic is ~60% of that process's import bill. Only the
+    # /metrics route needs the web framework.
+    from fastapi import Response
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

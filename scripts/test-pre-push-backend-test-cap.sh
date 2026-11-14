@@ -66,9 +66,9 @@ wc -l < "$BACKEND_UNIT_TEST_FILE_LIST" | tr -d ' ' > "$RAN_COUNT_FILE"
 cp "$BACKEND_UNIT_TEST_FILE_LIST" "$RAN_LIST_FILE"
 STUB
 
-# $1 = number of changed backend test files in the diff, $2 = cap
+# $1 = changed suffix-style tests, $2 = cap, $3 = include helpers and a nested test
 run_case() {
-  local changed_test_files="$1" cap="$2" i
+  local changed_test_files="$1" cap="$2" include_helpers="${3:-0}" i
   rm -f "$WORK/ran_count" "$WORK/ran_list"
   rm -f "$WORK/repo/backend/tests/"*.py
   local -a changed=()
@@ -77,6 +77,18 @@ run_case() {
     touch "$WORK/repo/$name"
     changed+=("$name")
   done
+  if [ "$include_helpers" = 1 ]; then
+    mkdir -p "$WORK/repo/backend/tests/support" "$WORK/repo/backend/tests/unit"
+    for name in backend/tests/support/lifecycle_state_table.py backend/tests/support/__init__.py backend/tests/unit/conftest.py; do
+      touch "$WORK/repo/$name"
+      changed+=("$name")
+    done
+    if [ "$changed_test_files" -gt 0 ]; then
+      name=backend/tests/unit/test_nested.py
+      touch "$WORK/repo/$name"
+      changed+=("$name")
+    fi
+  fi
 
   (
     cd "$WORK/repo"
@@ -144,5 +156,19 @@ output="$(run_case 0 "$CAP")"
 test ! -f "$WORK/ran_count"
 grep -q "Skipping broad backend unit suite in pre-push" <<<"$output" || {
   echo "FAIL: empty fallback no longer skips" >&2; echo "$output" >&2; exit 1; }
+
+# A helper edit still requires CI's broad selector, but is not itself a test file.
+# Both standard pytest filename forms must survive while support/conftest do not.
+output="$(run_case 3 "$CAP" 1)"
+test "$(cat "$WORK/ran_count")" = 4
+grep -qx 'tests/unit/test_nested.py' "$WORK/ran_list"
+grep -qx 'tests/changed_002_test.py' "$WORK/ran_list"
+if grep -Eq '(^|/)(conftest|__init__|lifecycle_state_table)\.py$' "$WORK/ran_list"; then
+  echo "FAIL: fallback selected a helper as a standalone pytest file" >&2
+  exit 1
+fi
+output="$(run_case 0 "$CAP" 1)"
+test ! -f "$WORK/ran_count"
+grep -q "Skipping broad backend unit suite in pre-push" <<<"$output"
 
 echo "pre-push backend unit test cap tests passed"

@@ -13,7 +13,7 @@ from config.episodes import home_hide_episode_members_enabled, episodes_enabled_
 from config.home_processing import ownership_enabled
 from database import episodes
 from utils.episodes import client_gate
-from utils.episodes.home_processing import live_owner, owns_recording, OWNERSHIP_HEADER
+from utils.episodes.home_processing import live_owner_for_home as live_owner, owns_recording, OWNERSHIP_HEADER
 
 logger = logging.getLogger(__name__)
 HELD_EPISODES_HEADER = 'X-Omi-Home-Episode-Ids'

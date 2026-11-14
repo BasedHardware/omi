@@ -16,6 +16,7 @@ from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
 from database import users as users_db
 from database import sync_cap_holds, sync_cap_recovery, cap_recovery_pacing
+from utils.stt.allowance_session import Operation, track
 from utils.analytics import record_usage
 from utils.executors import run_blocking, db_executor, sync_executor, storage_executor
 from utils.stt_cap_dispatch import sync_allowed
@@ -75,9 +76,13 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
     return saved
 
 
-def _new_dispatch_allowed(uid: str, lane: str) -> bool:
+def _new_dispatch_allowed(uid: str, lane: str, backfill: bool = False) -> bool:
     """Rechecked before every new provider request, so a lapse between pieces stops spend."""
-    if not enabled(uid, lane) or not funded_processing.paid_owner(uid) or not sync_allowed(uid, lane=lane):
+    if (
+        not enabled(uid, lane)
+        or not funded_processing.paid_owner(uid)
+        or not sync_allowed(uid, lane=lane, backfill=backfill)
+    ):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)
@@ -98,7 +103,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             return await _save(uid, snapshot, row, {'finalized': True, 'ledger_already_settled': True})
         if status != 'ready':
             return False
-    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
+    if not row.get('piece_receipts') and not await run_blocking(
+        db_executor, _new_dispatch_allowed, uid, lane, meta.get('sync_lane') == 'backfill'
+    ):
         return False
     prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid) or {}
     private = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
@@ -137,240 +144,253 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
         processed = set(row.get('processed_paths') or [])
         pending = False
         for name in sorted(set(plan) | set(receipts)):
-            if cap_work_budget.exhausted():
-                pending = True
-                break
-            if not await run_blocking(
-                db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
-            ):
-                return False
-            if name in processed:
-                continue
-            receipt: dict[str, Any] | None = receipts.get(name)
-            if receipt and receipt.get('state') == 'failed_reconciliation':
-                continue
-            attempt = max(
-                attempt_floor(plan.get(name, {})),
-                (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1,
+            scope = Operation(
+                uid,
+                'sync',
+                operation=f'cap-hold:{snapshot.id}:{name}',
+                seconds=(plan.get(name) or receipts.get(name) or {}).get('seconds'),
             )
-            settled = _settled_empty(receipt)
-            if settled is not None:
-                # Crash between the result checkpoint and the receipt save.
-                if not await save_receipt(name, settled):
+            async with track(scope, close=True):
+                if cap_work_budget.exhausted():
+                    pending = True
+                    break
+                if not await run_blocking(
+                    db_executor, cap_hold.renew, uid, snapshot.reference, row['lease_token'], time.time()
+                ):
                     return False
-                record_reconciliation('settled_empty', snapshot.id, name)
-                receipt = settled
-            elif receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
-                if 'dispatched_at' not in receipt:
-                    receipt = {
-                        **receipt,
-                        'attempt': receipt.get('attempt', 1),
-                        'dispatched_at': row.get('created_at', time.time()),
-                    }
-                    if not await save_receipt(name, receipt):
-                        return False
-                if time.time() - receipt['dispatched_at'] < RECONCILIATION_COOLDOWN_SECONDS:
-                    pending = True
+                if name in processed:
                     continue
-                proof = await run_blocking(db_executor, sync_cap_recovery.ingested_piece, uid, snapshot.id, name)
-                if proof:
-                    receipt = {**proof, 'reconciled_ingested': True}
-                    if not await save_receipt(name, receipt):
-                        return False
-                    record_reconciliation('reconciled_ingested', snapshot.id, name)
-                elif receipt.get('attempt', 1) >= 2 or name not in plan:
-                    if not await save_receipt(
-                        name, {**receipt, 'state': 'failed_reconciliation', 'has_content': False}
-                    ):
-                        return False
-                    record_reconciliation('failed', snapshot.id, name)
+                receipt: dict[str, Any] | None = receipts.get(name)
+                if receipt and receipt.get('state') == 'failed_reconciliation':
                     continue
-                else:
-                    attempt = 2
-            if receipt is None or receipt.get('state') == 'dispatched':
-                cached_result = (receipt or {}).get('provider_result')
-                if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
-                    pending = True
-                    continue
-                previous = receipt
-                try:
-                    segment_path, context = await cap_recovery_plan.stage_piece(
-                        uid, name, plan[name], directory, local_paths, contexts
-                    )
-                    coverage_state = (
-                        await run_blocking(db_executor, piece_state, uid, segment_path, meta, context)
-                        if not cached_result
-                        else None
-                    )
-                    if coverage_state is not None and coverage_state.state == 'partial':
-                        piece = (name, segment_path, context, coverage_state, attempt)
-                        if not await delegate(uid, snapshot, row, piece, plan, receipts, processed, save=_save):
-                            return False
-                        pending = True
-                        continue
-                    if coverage_state is not None:
-                        if not await save_receipt(name, covered_receipt(previous)):
-                            return False
-                        processed.add(name)
-                        if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
-                            return False
-                        continue
-                    language = prefs.get('language') or ''
-                    service = (
-                        ((receipt or {})['provider'], None, (receipt or {})['model'])
-                        if cached_result
-                        else get_prerecorded_service(
-                            language if prefs.get('single_language_mode') and language else 'multi'
-                        )
-                    )
-                except Exception as error:
-                    logger.warning(
-                        'event=stt_cap_recovery outcome=prepare_deferred hold_id=%s piece=%r exception_type=%s',
-                        snapshot.id,
-                        name,
-                        type(error).__name__,
-                    )
-                    pending = True
-                    continue
-                if not cached_result:
-                    pacing = await run_blocking(db_executor, cap_recovery_pacing.reserve, plan[name]['seconds'])
-                    now = time.time()
-                    if pacing.outcome != 'granted':
-                        since = row.get('pacing_deferred_since') or now
-                        if not await _save(
-                            uid,
-                            snapshot,
-                            row,
-                            {
-                                'next_attempt_at': now + pacing.retry_after,
-                                'pacing_deferred_since': since,
-                                'pacing_reason': pacing.reason,
-                            },
-                        ):
-                            return False
-                        record_pacing(pacing.outcome, plan[name]['seconds'], now - since)
-                        pending = True
-                        break
-                    record_pacing('granted', plan[name]['seconds'])
-                    if row.get('pacing_deferred_since') and not await _save(
-                        uid, snapshot, row, {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0}
-                    ):
-                        return False
-                intent: dict[str, Any] = {
-                    **({'provider_result': cached_result} if cached_result else {}),
-                    'state': 'dispatched',
-                    'provider': service[0],
-                    'model': service[2],
-                    'funding': 'omi',
-                    'attempt': attempt,
-                    'dispatched_at': time.time(),
-                    'seconds': plan[name]['seconds'],
-                    'usage_metadata': {'funding': 'omi', 'provider': service[0], 'source': 'sync_v2'},
-                }
-                if not await save_receipt(name, intent):
-                    return False
-                response = {'new_memories': set(), 'updated_memories': set()}
-                errors, outcome = [], {'provider_called': False}
-                try:
-                    ok = await run_blocking(
-                        sync_executor,
-                        process_segment,
-                        segment_path,
-                        uid,
-                        response,
-                        threading.Lock(),
-                        errors,
-                        ConversationSource(meta['source']),
-                        False,
-                        prefs,
-                        embeddings,
-                        private_cloud_sync_enabled=bool(private),
-                        data_protection_level=protection,
-                        client_device_id=meta.get('client_device_id'),
-                        client_platform=meta.get('client_platform'),
-                        target_conversation_id=context.get('target_conversation_id'),
-                        geolocation=geolocation,
-                        source_position_map=context.get('source_position_map'),
-                        **(
-                            {'recording_session_id': context['recording_session_id']}
-                            if context.get('recording_session_id')
-                            else {}
-                        ),
-                        lineage_binding=context.get('lineage_binding'),
-                        early_capture_offset=context.get('early_capture_offset', 0.0),
-                        sync_lane=meta.get('sync_lane', 'fresh'),
-                        cap_recovery=True,
-                        cap_dispatch_lane=lane,
-                        deferred_outcome=outcome,
-                        cap_recovery_service=service,
-                        cap_recovery_checkpoint={
-                            'hold_id': snapshot.id,
-                            'piece': name,
-                            'lease_token': row['lease_token'],
-                            'attempt': attempt,
-                            'receipt': intent,
-                            **(
-                                {'capture_partition': f"live:{snapshot.id}:channel:{meta.get('channel', 0)}"}
-                                if meta.get('origin') == 'live'
-                                else {}
-                            ),
-                        },
-                    )
-                except Exception as error:
-                    ok = False
-                    errors.append(type(error).__name__)
-                    logger.warning(
-                        'event=stt_cap_recovery outcome=processing_deferred hold_id=%s piece=%r exception_type=%s',
-                        snapshot.id,
-                        name,
-                        type(error).__name__,
-                    )
-                if not outcome['provider_called']:
-                    if not await save_receipt(name, previous):
-                        return False
-                    record_reconciliation('cleared_noncall', snapshot.id, name)
-                    pending = True
-                    continue
-                if attempt == 2:
-                    record_reconciliation('redispatched', snapshot.id, name)
-                if errors or outcome.get('cap_held') or outcome.get('recovery_ambiguous'):
-                    refreshed = await run_blocking(db_executor, snapshot.reference.get)
-                    persisted = (refreshed.to_dict() or {}).get('piece_receipts') or {}
-                    receipts.update(persisted)
-                    row['piece_receipts'] = dict(receipts)
-                    receipt = _settled_empty(receipts.get(name))
-                    if receipt is None:
-                        pending = True
-                        continue
-                    if not await save_receipt(name, receipt):
+                attempt = max(
+                    attempt_floor(plan.get(name, {})),
+                    (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1,
+                )
+                settled = _settled_empty(receipt)
+                if settled is not None:
+                    # Crash between the result checkpoint and the receipt save.
+                    if not await save_receipt(name, settled):
                         return False
                     record_reconciliation('settled_empty', snapshot.id, name)
-                else:
-                    receipt = {
-                        **{k: v for k, v in intent.items() if k != 'provider_result'},
-                        'state': 'transcribed',
-                        'response': _stored(response),
-                        'seconds': intent['seconds'] if ok else 0,
-                        'has_content': bool(ok),
+                    receipt = settled
+                elif receipt and receipt.get('state') == 'dispatched' and not receipt.get('provider_result'):
+                    if 'dispatched_at' not in receipt:
+                        receipt = {
+                            **receipt,
+                            'attempt': receipt.get('attempt', 1),
+                            'dispatched_at': row.get('created_at', time.time()),
+                        }
+                        if not await save_receipt(name, receipt):
+                            return False
+                    if time.time() - receipt['dispatched_at'] < RECONCILIATION_COOLDOWN_SECONDS:
+                        pending = True
+                        continue
+                    proof = await run_blocking(db_executor, sync_cap_recovery.ingested_piece, uid, snapshot.id, name)
+                    if proof:
+                        receipt = {**proof, 'reconciled_ingested': True}
+                        if not await save_receipt(name, receipt):
+                            return False
+                        record_reconciliation('reconciled_ingested', snapshot.id, name)
+                    elif receipt.get('attempt', 1) >= 2 or name not in plan:
+                        if not await save_receipt(
+                            name, {**receipt, 'state': 'failed_reconciliation', 'has_content': False}
+                        ):
+                            return False
+                        record_reconciliation('failed', snapshot.id, name)
+                        continue
+                    else:
+                        attempt = 2
+                if receipt is None or receipt.get('state') == 'dispatched':
+                    cached_result = (receipt or {}).get('provider_result')
+                    if not cached_result and not await run_blocking(
+                        db_executor, _new_dispatch_allowed, uid, lane, meta.get('sync_lane') == 'backfill'
+                    ):
+                        pending = True
+                        continue
+                    previous = receipt
+                    try:
+                        segment_path, context = await cap_recovery_plan.stage_piece(
+                            uid, name, plan[name], directory, local_paths, contexts
+                        )
+                        coverage_state = (
+                            await run_blocking(db_executor, piece_state, uid, segment_path, meta, context)
+                            if not cached_result
+                            else None
+                        )
+                        if coverage_state is not None and coverage_state.state == 'partial':
+                            piece = (name, segment_path, context, coverage_state, attempt)
+                            if not await delegate(uid, snapshot, row, piece, plan, receipts, processed, save=_save):
+                                return False
+                            pending = True
+                            continue
+                        if coverage_state is not None:
+                            if not await save_receipt(name, covered_receipt(previous)):
+                                return False
+                            processed.add(name)
+                            if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
+                                return False
+                            continue
+                        language = prefs.get('language') or ''
+                        service = (
+                            ((receipt or {})['provider'], None, (receipt or {})['model'])
+                            if cached_result
+                            else get_prerecorded_service(
+                                language if prefs.get('single_language_mode') and language else 'multi'
+                            )
+                        )
+                    except Exception as error:
+                        logger.warning(
+                            'event=stt_cap_recovery outcome=prepare_deferred hold_id=%s piece=%r exception_type=%s',
+                            snapshot.id,
+                            name,
+                            type(error).__name__,
+                        )
+                        pending = True
+                        continue
+                    if not cached_result:
+                        pacing = await run_blocking(db_executor, cap_recovery_pacing.reserve, plan[name]['seconds'])
+                        now = time.time()
+                        if pacing.outcome != 'granted':
+                            since = row.get('pacing_deferred_since') or now
+                            if not await _save(
+                                uid,
+                                snapshot,
+                                row,
+                                {
+                                    'next_attempt_at': now + pacing.retry_after,
+                                    'pacing_deferred_since': since,
+                                    'pacing_reason': pacing.reason,
+                                },
+                            ):
+                                return False
+                            record_pacing(pacing.outcome, plan[name]['seconds'], now - since)
+                            pending = True
+                            break
+                        record_pacing('granted', plan[name]['seconds'])
+                        if row.get('pacing_deferred_since') and not await _save(
+                            uid, snapshot, row, {'pacing_deferred_since': 0, 'pacing_reason': '', 'next_attempt_at': 0}
+                        ):
+                            return False
+                    intent: dict[str, Any] = {
+                        **({'provider_result': cached_result} if cached_result else {}),
+                        'state': 'dispatched',
+                        'provider': service[0],
+                        'model': service[2],
+                        'funding': 'omi',
+                        'attempt': attempt,
+                        'dispatched_at': time.time(),
+                        'seconds': plan[name]['seconds'],
+                        'usage_metadata': {'funding': 'omi', 'provider': service[0], 'source': 'sync_v2'},
                     }
-                    if not await save_receipt(name, receipt):
+                    if not await save_receipt(name, intent):
                         return False
-            if receipt['has_content']:
-                seconds = int(receipt['seconds'])
-                await run_blocking(
-                    db_executor,
-                    record_usage,
-                    uid,
-                    transcription_seconds=seconds,
-                    speech_seconds=seconds,
-                    idempotency_key=f'cap-hold-{snapshot.id}-{name}',
-                    usage_metadata=receipt.get(
-                        'usage_metadata', {'funding': 'omi', 'provider': 'unknown', 'source': 'sync_v2'}
-                    ),
-                )
-            processed.add(name)
-            if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
-                return False
+                    response = {'new_memories': set(), 'updated_memories': set()}
+                    errors, outcome = [], {'provider_called': False}
+                    try:
+                        ok = await run_blocking(
+                            sync_executor,
+                            process_segment,
+                            segment_path,
+                            uid,
+                            response,
+                            threading.Lock(),
+                            errors,
+                            ConversationSource(meta['source']),
+                            False,
+                            prefs,
+                            embeddings,
+                            private_cloud_sync_enabled=bool(private),
+                            data_protection_level=protection,
+                            client_device_id=meta.get('client_device_id'),
+                            client_platform=meta.get('client_platform'),
+                            target_conversation_id=context.get('target_conversation_id'),
+                            geolocation=geolocation,
+                            source_position_map=context.get('source_position_map'),
+                            **(
+                                {'recording_session_id': context['recording_session_id']}
+                                if context.get('recording_session_id')
+                                else {}
+                            ),
+                            lineage_binding=context.get('lineage_binding'),
+                            early_capture_offset=context.get('early_capture_offset', 0.0),
+                            sync_lane=meta.get('sync_lane', 'fresh'),
+                            cap_recovery=True,
+                            cap_dispatch_lane=lane,
+                            deferred_outcome=outcome,
+                            cap_recovery_service=service,
+                            cap_recovery_checkpoint={
+                                'hold_id': snapshot.id,
+                                'piece': name,
+                                'lease_token': row['lease_token'],
+                                'attempt': attempt,
+                                'receipt': intent,
+                                **(
+                                    {'capture_partition': f"live:{snapshot.id}:channel:{meta.get('channel', 0)}"}
+                                    if meta.get('origin') == 'live'
+                                    else {}
+                                ),
+                            },
+                        )
+                    except Exception as error:
+                        ok = False
+                        errors.append(type(error).__name__)
+                        logger.warning(
+                            'event=stt_cap_recovery outcome=processing_deferred hold_id=%s piece=%r exception_type=%s',
+                            snapshot.id,
+                            name,
+                            type(error).__name__,
+                        )
+                    if not outcome['provider_called']:
+                        if not await save_receipt(name, previous):
+                            return False
+                        record_reconciliation('cleared_noncall', snapshot.id, name)
+                        pending = True
+                        continue
+                    if attempt == 2:
+                        record_reconciliation('redispatched', snapshot.id, name)
+                    if errors or outcome.get('cap_held') or outcome.get('recovery_ambiguous'):
+                        refreshed = await run_blocking(db_executor, snapshot.reference.get)
+                        persisted = (refreshed.to_dict() or {}).get('piece_receipts') or {}
+                        receipts.update(persisted)
+                        row['piece_receipts'] = dict(receipts)
+                        receipt = _settled_empty(receipts.get(name))
+                        if receipt is None:
+                            pending = True
+                            continue
+                        if not await save_receipt(name, receipt):
+                            return False
+                        record_reconciliation('settled_empty', snapshot.id, name)
+                    else:
+                        receipt = {
+                            **{k: v for k, v in intent.items() if k != 'provider_result'},
+                            'state': 'transcribed',
+                            'response': _stored(response),
+                            'seconds': intent['seconds'] if ok else 0,
+                            'has_content': bool(ok),
+                        }
+                        if not await save_receipt(name, receipt):
+                            return False
+                if receipt['has_content']:
+                    seconds = int(receipt['seconds'])
+                    await run_blocking(
+                        db_executor,
+                        record_usage,
+                        uid,
+                        transcription_seconds=seconds,
+                        speech_seconds=seconds,
+                        idempotency_key=f'cap-hold-{snapshot.id}-{name}',
+                        usage_metadata=receipt.get(
+                            'usage_metadata', {'funding': 'omi', 'provider': 'unknown', 'source': 'sync_v2'}
+                        ),
+                    )
+                    if seconds == 0:
+                        await run_blocking(db_executor, scope.billed, 0)
+                else:
+                    await run_blocking(db_executor, scope.billed, 0)
+                processed.add(name)
+                if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
+                    return False
         # Finalize completed siblings even while another piece is cooling down.
         finalized = set(row.get('finalized_paths') or [])
         ready = {name: receipts[name] for name in processed - finalized if name in receipts}
@@ -534,6 +554,9 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         from utils.batch_pipeline import cap_hold_admission
 
         if await run_blocking(db_executor, cap_hold_admission.enabled_for, row, uid=uid):
+            # The batch hand-off re-admits through intake with lane='backfill', so
+            # the backfill day cap is evaluated there; this pre-check keeps the
+            # existing lane/allowance contract.
             if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                 return False
             if not await _handoff_paced(uid, snapshot, row):

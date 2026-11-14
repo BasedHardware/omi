@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from unittest.mock import Mock
 
 import pytest
 
@@ -20,11 +21,11 @@ def drained(monkeypatch):
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
     monkeypatch.setattr(live.time, 'time', lambda: 100000.0)
 
-    def run(enqueued_at, error, env=None):
-        if env is not None:
-            monkeypatch.setenv('RECORD_DRAIN_BARRIER_BACKOFF', env)
+    def run(enqueued_at, error, env='on'):
+        monkeypatch.setenv('RECORD_DRAIN_BARRIER_BACKOFF', env)
         store = MemoryStore()
         store.rows['jobs', 's'] = {
             'owner_id': 'synthetic-owner',
@@ -60,20 +61,27 @@ def test_other_admission_errors_keep_the_flat_retry(drained):
 def test_kill_switch_restores_the_flat_retry(drained):
     run, live = drained
     assert run(100000.0 - 2 * 86400, ValueError(live.BARRIER_NOT_CLOSED), env='off') == 60
+    assert run(100000.0 - 2 * 86400, ValueError(live.BARRIER_NOT_CLOSED)) == 3600
 
 
-def test_missing_enqueued_at_is_treated_as_young(drained):
+@pytest.mark.parametrize(
+    'enqueued_at', [None, True, False, float('nan'), float('inf'), -float('inf'), 'bad', {}, 100001.0]
+)
+def test_unknown_or_future_enqueued_at_is_treated_as_young(drained, monkeypatch, enqueued_at):
     run, live = drained
-    assert run(None, ValueError(live.BARRIER_NOT_CLOSED)) == 60
+    retry = Mock(wraps=live.barrier_retry_delay)
+    monkeypatch.setattr(live, 'barrier_retry_delay', retry)
+    assert run(enqueued_at, ValueError(live.BARRIER_NOT_CLOSED)) == 60
+    retry.assert_called_once_with(0.0)
 
 
 def test_barrier_text_matches_the_raise_site():
-    from config.record_audio import require_record_audio_barrier
+    from config.record_audio import BARRIER_NOT_CLOSED as shared_barrier, require_record_audio_barrier
     from utils.batch_pipeline.live import BARRIER_NOT_CLOSED
 
     with pytest.raises(ValueError) as raised:
         require_record_audio_barrier({'status': 'in_progress'})
-    assert str(raised.value) == BARRIER_NOT_CLOSED
+    assert str(raised.value) == BARRIER_NOT_CLOSED == shared_barrier
 
 
 def test_retry_line_carries_the_record_key_without_owner(drained, caplog):

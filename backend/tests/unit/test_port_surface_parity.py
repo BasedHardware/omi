@@ -6,6 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from database.cells.adapters import CellSpaceStore
+from database.cells.adapters.action_items import CellActionItems
+from database.cells.adapters.goals import CellGoals
+from database.cells.adapters.workstreams import CellWorkstreams
+from database.cells.adapters.folders import CellFolders
+from database.cells.adapters.people import CellPeople
 from database.action_items import FirestoreActionItems
 from database.goals import FirestoreGoals
 from database.workstreams import FirestoreWorkstreams
@@ -28,6 +34,17 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, Re
 @pytest.mark.parametrize(
     'protocol,adapter',
     [
+        (ActionItemsTx, CellActionItems),
+        (ActionItemsRepo, CellActionItems),
+        (GoalsTx, CellGoals),
+        (GoalsRepo, CellGoals),
+        (WorkstreamsTx, CellWorkstreams),
+        (WorkstreamsRepo, CellWorkstreams),
+        (FoldersTx, CellFolders),
+        (FoldersRepo, CellFolders),
+        (PeopleTx, CellPeople),
+        (PeopleRepo, CellPeople),
+        (SpaceStore, CellSpaceStore),
         (ActionItemsTx, FirestoreActionItems),
         (ActionItemsRepo, FirestoreActionItems),
         (GoalsTx, FirestoreGoals),

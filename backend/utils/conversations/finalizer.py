@@ -18,6 +18,7 @@ from config.merge_before_processing import enabled as merge_before_processing_en
 from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
+from config.server_batch import proven_empty as server_batch_proven_empty
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -36,6 +37,7 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.recovery import recovery_minimum_terminal_enabled
 from utils.conversations.smart_merge import (
     _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
     SmartMergeIncomplete,
@@ -221,7 +223,11 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
 
 
 class ConversationFinalizationError(RuntimeError):
-    """A retryable persisted-conversation finalization failure."""
+    """A persisted-conversation failure classified by its owning entrypoint.
+
+    Generic processing_failed wrappers retain their exception chain; absent
+    evidence of a transient cause, entrypoints apply the deterministic cap.
+    """
 
     def __init__(self, code: str):
         self.code = code
@@ -232,17 +238,15 @@ class ConversationFinalizationDisposition(str, Enum):
     completed = 'completed'
     fenced = 'fenced'
     deferred = 'deferred'
+    discarded = 'discarded'
 
 
 def _record_registration_required(row: dict[str, Any]) -> bool:
-    """Retain native audio obligations unless a closed archive proves no input."""
-    return row.get('record_lane_owner') == 'batch_live_v1' and not (
-        server_batch_owned(row)
-        and row.get('server_batch_audio_closed') is True
-        and row.get('server_batch_audio_received') is False
-        and not row.get('record_upload_failed')
-        and not row.get('record_upload_sessions')
-        and not server_batch_has_audio(row)
+    """Retain required audio obligations; discarded and proven-empty rows have none."""
+    return (
+        row.get('record_lane_owner') == 'batch_live_v1'
+        and not row.get('discarded')
+        and not server_batch_proven_empty(row)
     )
 
 
@@ -299,6 +303,19 @@ async def finalize_persisted_conversation(
         and not conversation.transcript_segments
         and not getattr(conversation, 'photos', None)
     ):
+        if conversation_data.get('discarded'):
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_discarded_server_batch_fanout,
+                uid,
+                conversation_id,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise ConversationFinalizationError('fanout_completion_conflict')
+            logger.info('event=server_batch_finalization outcome=discarded')
+            return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
                 raise RuntimeError('server batch archive is not closed')
@@ -457,6 +474,7 @@ async def finalize_persisted_conversation(
                 recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
                 finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
+                recovery_final_attempt=final_attempt or recovery_minimum_terminal_enabled(),
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
@@ -493,7 +511,10 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if _record_registration_required(conversation_data):
+        # Processing may have persisted a discard or revival after the initial read.
+        # Preserve that result while retaining the raw archive/producer metadata.
+        conversation_discarded = bool(getattr(conversation, 'discarded', False))
+        if _record_registration_required({**conversation_data, 'discarded': conversation_discarded}):
             stage = 'record_registration'
             if not await run_blocking(
                 db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()}
@@ -510,12 +531,14 @@ async def finalize_persisted_conversation(
         # action/goal, audio, webhook, memory) so a losing finalizer produces
         # zero canonical side effects (#10468 r5).
         stage = 'fanout_claim'
+        claim_kwargs = {'expected_discarded': True} if conversation_discarded else {}
         fanout = await run_blocking(
             db_executor,
             lifecycle_service.claim_finalization_fanout,
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
+            **claim_kwargs,
         )
         if silent_backfill:
             if fanout['status'] == 'completed':

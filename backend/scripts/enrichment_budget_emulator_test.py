@@ -49,8 +49,13 @@ LEASE = 120.0
 
 @pytest.fixture
 def ob(outbox_backend, monkeypatch):  # noqa: F811
+    # Import delivery dependencies before starting the budget/callback latch.
+    from config import action_item_identity  # noqa: F401
+    from database import action_item_refresh, summary_processing  # noqa: F401
+    from utils.conversations import summary_delivery  # noqa: F401
+    from utils.enrichment import callback  # noqa: F401
+
     outbox_backend.store_harness.seed_user('o')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
     monkeypatch.delenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', raising=False)
@@ -68,7 +73,7 @@ def put(ob):
     return ob.outbox.enqueue(
         ob.key(owner, 'owed'),
         owner,
-        ob.payload('owed', language='en', first_pending_at=T0),
+        ob.payload('owed', language='en', first_pending_at=T0, summary_seen=True),
         T0,
         now=T0,
     )
@@ -125,7 +130,8 @@ def test_pl420_budget_frees_http_slot_without_cancelling_the_settlement_owner(ob
         async def expire(work, timeout):
             # Exercise the production 300s budget without racing a tiny real timer.
             assert timeout == 300.0
-            assert await asyncio.get_running_loop().run_in_executor(pool, running.wait, 10)
+            started = await asyncio.get_running_loop().run_in_executor(pool, running.wait, 10)
+            assert started, f'callback did not start; settlement={tasks[0].result() if tasks[0].done() else tasks[0]}'
             # wait_for cancels its awaited future on timeout. A shield must keep
             # the real settlement task alive, including its late error observer.
             work.cancel()

@@ -1,0 +1,28 @@
+id: safe/crash-loop-safe-then-off-and-wake
+summary: >
+  The on-device way out of an automatic SAFE: release, hold 3 s (System OFF),
+  press to wake. The wake is a normal boot.
+committee: [1]
+tags: [baseline-bug]
+build: wdt-starve
+timeline:
+  - {t: 200000, hold: 4000}
+  - {t: 220000, tap: [150]}
+end: 240000
+expect:
+  boots:
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: poweroff, safe: true, latch_reason: 1, button_held_at_poweroff: false}
+    - {reset: off-wake, safe: false, boot_count: 1}
+  invariants: [no-stuck-safe, poweroff-waits-release]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: poweroff, safe: true}
+      - {reset: off-wake, safe: true}

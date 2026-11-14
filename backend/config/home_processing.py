@@ -17,3 +17,7 @@ def ownership_enabled(uid: str | None = None) -> bool:
 
 def live_member_notes_enabled(uid: str | None = None) -> bool:
     return os.getenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', 'true').strip().lower() == 'true' and in_cohort(uid)
+
+
+def owner_cache_enabled() -> bool:
+    return os.getenv('HOME_LIVE_OWNER_CACHE_ENABLED', 'true').strip().lower() == 'true'

@@ -389,17 +389,21 @@ def clear_byok_active(uid: str):
 
 @cache_writer('deletion_marker_cache')
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
-    # Stored in a top-level collection so it survives the user record being deleted.
-    # Use merge=True so a retried delete request does not erase a durable wipe marker
-    # (pending/failed/retrying/deleting_auth) already written to the same document.
-    account_deletion_document(uid).set(
+    """Attach deletion feedback to an existing wipe marker. Never creates one.
+
+    The feedback fields used to be merge-written before the wipe intent. A failed
+    intent then left a marker with only feedback fields and no wipe_status, which
+    blocks sign-in with no restore path. Update-only fails when no marker exists,
+    so feedback can no longer create a marker. Callers run after the intent write
+    and treat a failure as best-effort.
+    """
+    account_deletion_document(uid).update(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        },
-        merge=True,
+        }
     )
 
 

@@ -9,6 +9,8 @@ from database.jobstore.connection import Pool, iam_connector
 
 _store: CellStore | None = None
 _lock = threading.Lock()
+# The singleton pool serves this label only; additional cells require dispatch.
+CELL_LABEL = 'cell1'
 
 
 def cell_store(*, for_wipe: bool = False) -> CellStore:

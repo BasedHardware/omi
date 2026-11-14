@@ -9183,6 +9183,24 @@ class AppLocalizationsTr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
 
   @override
+  String get applyCodeToCurrentPlan => 'Mevcut Plana Uygula';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod mevcut planınıza uygulandı.',
+        'refused': 'Bu kod uygulanamıyor. Kodu ve gerekli planı kontrol edin.',
+        'conflict': 'Kod zaten kullanılmış veya planınızda zaten indirim var.',
+        'rateLimited': 'Çok fazla deneme. Lütfen bekleyip daha sonra tekrar deneyin.',
+        'other': 'Kod uygulanamadı. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promosyon kodu';
 
   @override
@@ -13667,6 +13685,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Notları yeniden oluştur';
+
+  @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
 
   @override
@@ -15388,6 +15409,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Kartınız reddedildi';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Kartınızı güncelleyin veya $plan planını aylık $price ile geri alın';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan planınızı geri almak için kartınızı güncelleyin';
   }
@@ -15412,4 +15438,31 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Aylığa geçin';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, aylık $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ödenmemiş $yearly yıllık ücretin yerine geçer. Her ay yenilenir. İstediğiniz zaman iptal edin.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Ödeme reddedildi. Planınız değişmedi.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Artık aylık ödüyorsunuz';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Bugün $price ödendi. Her ay yenilenir.';
+  }
 }

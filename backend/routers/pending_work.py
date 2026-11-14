@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse, Response
 from google.cloud import firestore
 
 from config.app_channel import APP_CHANNEL_HEADER
-from config.episodes import client_channel_admitted
+from config.episodes import client_channel_admitted, home_step_projection_enabled
 from config.home_processing import ownership_enabled
 from database import processing_attention as store
 from database import sync_jobs
@@ -55,6 +55,7 @@ def pending_work(
         syncs = sync_jobs.pending_sync_jobs(uid)
     return {
         'enabled': True,
+        'home_processing_today': home_step_projection_enabled(),
         'items': conversations + syncs,
         'attention_unseen_count': sum(not item['seen'] for item in attention),
     }

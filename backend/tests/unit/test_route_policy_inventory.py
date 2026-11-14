@@ -11,6 +11,13 @@ from starlette.responses import PlainTextResponse
 from scripts import route_policy_inventory as inventory
 
 
+def test_spaces_policies_declare_auth_byok_validation():
+    manifest = inventory.load_manifest(Path(__file__).parents[2] / 'route_policy_manifest.yaml')
+    spaces = [route for route in manifest['routes'] if route['path'].startswith('/v1/spaces/{sid}/')]
+    assert {route['path'].rsplit('/', 1)[1] for route in spaces} == {'changes', 'snapshot', 'mutations', 'cursors'}
+    assert all(route['policy']['byok'] == 'validated_when_headers_present' for route in spaces)
+
+
 def _policy(**overrides):
     policy = {
         'review_status': 'reviewed',

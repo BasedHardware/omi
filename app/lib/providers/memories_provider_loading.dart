@@ -43,11 +43,6 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     final generation = _sessionGeneration;
     final loadSequence = ++_loadSequence;
     final ledgerProjectionRevision = _ledgerProjectionRevision;
-    // Snapshot the pending-deletion ID before any await: a refresh that
-    // started during the undo window must still suppress the deleted item
-    // even if _finalizeDeletion() clears the field while the fetch is in
-    // flight.
-    final tombstoneId = _pendingDeletionId;
     _loading = true;
     _notify();
 
@@ -81,13 +76,10 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     var ledgerHistoryOffset = 0;
     String? ledgerHistoryNextCursor;
     void publishProvisional({bool failed = false}) {
-      final effectiveTombstoneId = _pendingDeletionId ?? tombstoneId;
-      _memories = effectiveTombstoneId != null
-          ? all.where((memory) => memory.id != effectiveTombstoneId).toList()
-          : List<Memory>.of(all);
+      _memories = _visibleMemories(all);
       final pendingMemories = SharedPreferencesUtil().pendingMemories;
       for (var pending in pendingMemories) {
-        if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
+        if (_memoryIsVisible(pending) && !_memories.any((m) => m.id == pending.id)) {
           _memories.add(pending);
         }
       }
@@ -131,17 +123,13 @@ extension _MemoriesProviderLoading on MemoriesProvider {
             // The retained partial projection is the same non-authoritative
             // shape as the final non-complete path: index what is shown so
             // Siri/search stay consistent with the visible rows.
-            SiriIntegration.current.queueUpsertMemories(all);
             publishProvisional(failed: true);
             return;
           }
           _loadFailed = true;
-          final effectiveTombstoneId = _pendingDeletionId ?? tombstoneId;
           final cached = SharedPreferencesUtil().cachedMemories;
           if (cached.isNotEmpty) {
-            _memories = effectiveTombstoneId != null
-                ? cached.where((memory) => memory.id != effectiveTombstoneId).toList()
-                : List<Memory>.of(cached);
+            _memories = _visibleMemories(cached);
             _setCategories();
           }
           _loading = false;
@@ -283,15 +271,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
       }
       return;
     }
-    // Keep an optimistic delete hidden throughout its undo window. Use the
-    // snapshot taken before the fetch so a concurrent finalization that
-    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
-    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
-    // after loadMemories() started (tombstoneId was null at snapshot), the
-    // stale response still contains it and would reinsert the row.
-    final currentTombstoneId = _pendingDeletionId;
-    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
-    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    _memories = _visibleMemories(all);
     // The default useful-now/device views do not cover every indexed memory.
     // Only an exhausted, owner-wide all/current view may remove absent IDs.
     final siriMemoryFetchIsAuthoritative = currentTraversalComplete && !_filterThisDeviceOnly && currentFetchCoversAll;
@@ -310,7 +290,7 @@ extension _MemoriesProviderLoading on MemoriesProvider {
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
+      if (_memoryIsVisible(pending) && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }

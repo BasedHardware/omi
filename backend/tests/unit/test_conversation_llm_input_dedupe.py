@@ -22,7 +22,7 @@ def enabled(monkeypatch):
 def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
     from models.conversation import Structured
 
-    generate = Mock(return_value=Structured(title='Saved title'))
+    generate = Mock(return_value=Structured(title='Saved title', overview='Saved summary'))
     inputs = dict(
         language_code='en',
         tz='UTC',
@@ -71,21 +71,6 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
     ]:
         changed, matched = dedupe.l1_input('u', enabled, {**inputs, name: value})
         assert changed != digest and not matched
-
-
-def test_memory_l1_route_retarget_alone_invalidates_successful_hash(monkeypatch):
-    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
-    routes = {'memory_l1': 'old-model', 'memories': 'unchanged-model', 'conv_structure': 'notes-model'}
-    monkeypatch.setattr(dedupe, 'get_route_ref', lambda feature: {'feature': feature, 'model': routes[feature]})
-    conversation = SimpleNamespace(id='c', sync_content_revision=1)
-    inputs = {'transcript': 'synthetic input', 'language': 'en'}
-    digest, matched = dedupe.l1_input('u', conversation, inputs)
-    assert digest and not matched
-    conversation.l1_llm_input_hash = digest
-    assert dedupe.l1_input('u', conversation, inputs) == (digest, True)
-    routes['memory_l1'] = 'new-model'
-    changed, matched = dedupe.l1_input('u', conversation, inputs)
-    assert changed != digest and not matched
 
 
 def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypatch):
@@ -240,7 +225,7 @@ def test_evaluation_counters_report_hit_miss_and_checkpoint_error(enabled, monke
     errors = _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes')
     l1_misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'l1')
 
-    generate = Mock(return_value=Structured(title='Fresh'))
+    generate = Mock(return_value=Structured(title='Fresh', overview='Fresh summary'))
     hashes = {}
     dedupe.notes('u', enabled, 'input', generate, hashes)
     assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
@@ -289,36 +274,34 @@ def test_l1_checkpoint_uses_injected_client_even_when_disabled(memory_stack, mon
 
 
 @pytest.mark.parametrize('route_file', ['model_config.py', 'model_constants.py', 'clients.py', 'providers.py'])
-def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, route_file):
+def test_route_module_changes_invalidate_feature_fingerprints(monkeypatch, route_file):
+    """Model routing changes alter the effective output even with identical prompts."""
     from pathlib import Path
 
+    dedupe.routing_digest.cache_clear()
     original = Path.read_bytes
-    dedupe.implementation_digest.cache_clear()
     before = {feature: dedupe.fingerprint(feature, 'same input') for feature in ('notes', 'l1')}
 
     def changed_route(path):
         contents = original(path)
         return contents + b'\n# changed route' if path.name == route_file else contents
 
+    monkeypatch.setattr(Path, 'read_bytes', changed_route)
+    dedupe.routing_digest.cache_clear()
     try:
-        monkeypatch.setattr(Path, 'read_bytes', changed_route)
-        dedupe.implementation_digest.cache_clear()
         for feature, old in before.items():
             assert dedupe.fingerprint(feature, 'same input') != old
     finally:
-        dedupe.implementation_digest.cache_clear()
+        dedupe.routing_digest.cache_clear()
 
 
-@pytest.mark.parametrize('summary_gate', [False, True])
-def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summary_gate):
+def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
     from models.structured import Structured
     from utils.conversations import llm_input_dedupe as target
 
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     empty = Structured(title='Server transcript title', overview='')
     rich = Structured(title='Generated title', overview='A supported synthetic summary')
@@ -336,12 +319,8 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summar
     monkeypatch.setattr(target, 'record_feature', lambda *_: None)
     generate = Mock(return_value=rich)
     output = target.notes('u', SimpleNamespace(id='c'), [], generate, {})
-    if summary_gate:
-        generate.assert_called_once()
-        assert output.overview == rich.overview
-    else:
-        generate.assert_not_called()
-        assert output.overview == ''
+    generate.assert_called_once()
+    assert output.overview == rich.overview
 
 
 def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled, monkeypatch):
@@ -369,7 +348,185 @@ def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled
     assert digest() == legacy
 
 
-def test_implementation_digest_tracks_packet_output_language_and_evidence_modules():
-    # Read the actual dependency closure; a missing/renamed module must invalidate generation.
-    dedupe.implementation_digest.cache_clear()
-    assert len(dedupe.implementation_digest('notes')) == 64
+def test_implementation_digest_is_the_explicit_prompt_version():
+    # The reuse key is a deliberate version, not a digest of the source tree.
+    from config.llm_input_versions import PROMPT_VERSIONS
+
+    assert dedupe.implementation_digest('notes').startswith(PROMPT_VERSIONS['notes'] + ':')
+    assert dedupe.implementation_digest('l1').startswith(PROMPT_VERSIONS['l1'] + ':')
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(enabled, monkeypatch, feature):
+    from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
+    from models.structured import Structured
+
+    assert LEGACY_IMPLEMENTATIONS[feature], 'migration must include the pre-deploy main checkpoint'
+    original = dedupe.implementation_digest
+    monkeypatch.setattr(dedupe, 'implementation_digest', lambda _: LEGACY_IMPLEMENTATIONS[feature][0])
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored work'))
+    if feature == 'notes':
+        hashes = {}
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+        row = {**hashes, 'structured': generate.return_value.model_dump()}
+    else:
+        digest, _ = dedupe.l1_input('u', enabled, {'text': 'unchanged'})
+        row = {dedupe.L1_HASH: digest}
+    monkeypatch.setattr(dedupe, 'implementation_digest', original)
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    for flag in ('true', 'off', 'true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        if feature == 'notes':
+            hashes = {}
+            assert dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes).title == 'Already paid'
+            row.update(hashes)
+            assert generate.call_count == 1
+        else:
+            digest, matched = dedupe.l1_input('u', enabled, {'text': 'unchanged'})
+            assert matched, f'{flag} re-bought a successful checkpoint'
+            row[dedupe.L1_HASH] = digest
+
+
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_dependency_qualified_notes_checkpoint_survives_prompt_version_bump(enabled, monkeypatch, flag):
+    from models.structured import Structured
+
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    dependencies = '|'.join(f'{name}:{version}' for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS)
+    before_bump = f'notes-2:{dedupe.routing_digest()}:{dependencies}'
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored work'))
+    hashes = {}
+    with monkeypatch.context() as old_process:
+        old_process.setattr(dedupe, 'implementation_digest', lambda _: before_bump)
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+
+    for _ in range(2):
+        current_hashes = {}
+        output = dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, current_hashes)
+        assert output.title == 'Already paid'
+        assert generate.call_count == 1
+        assert current_hashes[dedupe.NOTES_HASH] != row[dedupe.NOTES_HASH]
+
+    dedupe.notes('u', enabled, {'context': 'changed'}, generate, {})
+    assert generate.call_count == 2
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, feature):
+    from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
+
+    inputs = {'text': 'unchanged'}
+    old = dedupe._fingerprint(feature, inputs, LEGACY_IMPLEMENTATIONS[feature][0])
+    monkeypatch.setattr(dedupe, 'routing_digest', lambda: 'new-model-route')
+    assert not dedupe._matches(old, feature, inputs, dedupe.fingerprint(feature, inputs))
+
+
+def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypatch):
+    from models.structured import Structured
+
+    original = dedupe.implementation_digest
+    monkeypatch.setattr(dedupe, 'implementation_digest', lambda _: f'notes-1:{dedupe.routing_digest()}')
+    generate = Mock(return_value=Structured(title='Already paid', overview='Useful stored notes'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': generate.return_value.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    monkeypatch.setattr(dedupe, 'implementation_digest', original)
+    assert dedupe.notes('u', enabled, 'unchanged', generate, {}).overview == 'Useful stored notes'
+    assert generate.call_count == 1
+
+
+@pytest.fixture
+def dependency_identity():
+    # Simulate a fresh process after upgrading an installed distribution.
+    dedupe._legacy_implementation_digest.cache_clear()
+    yield
+    dedupe._legacy_implementation_digest.cache_clear()
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+@pytest.mark.parametrize('dependency', ['pydantic', 'langchain-core'])
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_dependency_upgrade_invalidates_checkpoint_in_both_modes(
+    enabled, monkeypatch, dependency_identity, feature, dependency, flag
+):
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    inputs = {'text': 'unchanged'}
+    saved = dedupe.fingerprint(feature, inputs)
+    stable = dedupe.stable_implementation(feature)
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS
+        ),
+    )
+    dedupe._legacy_implementation_digest.cache_clear()
+    digest = dedupe.fingerprint(feature, inputs)
+    assert digest != saved
+    assert dedupe.stable_implementation(feature) != stable
+    assert not dedupe._matches(saved, feature, inputs, digest)
+
+
+@pytest.mark.parametrize('feature', ['notes', 'l1'])
+@pytest.mark.parametrize('dependency', [None, 'pydantic', 'langchain-core'])
+@pytest.mark.parametrize('flag', ['true', 'off'])
+def test_historical_aliases_require_the_recorded_dependency_versions(
+    enabled, monkeypatch, dependency_identity, feature, dependency, flag
+):
+    monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.LEGACY_DEPENDENCY_VERSIONS
+        ),
+    )
+    inputs = {'text': 'unchanged'}
+    digest = dedupe.fingerprint(feature, inputs)
+    for implementation in dedupe.LEGACY_IMPLEMENTATIONS[feature]:
+        saved = dedupe._fingerprint(feature, inputs, implementation)
+        assert dedupe._matches(saved, feature, inputs, digest) == (dependency is None)
+
+
+@pytest.mark.parametrize('dependency', ['pydantic', 'langchain-core'])
+def test_dependency_upgrade_recomputes_notes_once_then_reuses_across_flag_flips(
+    enabled, monkeypatch, dependency_identity, dependency
+):
+    from models.structured import Structured
+
+    generate = Mock(return_value=Structured(title='Paid notes', overview='Useful stored work'))
+    row = {}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+
+    def process():
+        hashes = {}
+        dedupe.notes('u', enabled, {'context': 'unchanged'}, generate, hashes)
+        row.update(hashes, structured=generate.return_value.model_dump())
+
+    process()
+    monkeypatch.setattr(
+        dedupe,
+        'INSTALLED_DEPENDENCY_VERSIONS',
+        tuple(
+            (name, version + '.changed' if name == dependency else version)
+            for name, version in dedupe.INSTALLED_DEPENDENCY_VERSIONS
+        ),
+    )
+    dedupe._legacy_implementation_digest.cache_clear()
+    for flag in ('true', 'off', 'true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        process()
+        assert generate.call_count == 2
+
+
+def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch, dependency_identity):
+    monkeypatch.setattr(dedupe, 'distribution_version', Mock(side_effect=AssertionError('per-call metadata read')))
+    for flag in ('true', 'off'):
+        monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
+        for feature in ('notes', 'l1'):
+            assert dedupe.fingerprint(feature, {'text': 'unchanged'})

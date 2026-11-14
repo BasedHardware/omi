@@ -46,7 +46,16 @@ from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestoreCollection,
     StrictFirestoreTransaction,
 )
-from tests.unit.test_transcript_pointer import lake_world, UID, CID, PATH, encode, speech, pointer_doc
+from tests.unit.test_transcript_pointer import (
+    lake_world,
+    UID,
+    CID,
+    PATH,
+    encode,
+    speech,
+    pointer_doc,
+    assert_all_uploads_recorded,
+)
 from utils.other import object_lake as lake, space_keys
 from utils.other.local_storage import LocalBlob
 from utils.firestore_document_size import estimate_firestore_document_bytes, FIRESTORE_MAX_DOCUMENT_BYTES
@@ -188,6 +197,9 @@ def test_transaction_candidate_rechecks_source_after_upload(lake_world, monkeypa
     stored = lake_world.store.rows[PATH]
     assert candidates == [incoming, incoming + [concurrent]]
     assert db.decode_transcript_segments_verified(UID, stored['transcript_segments'], True) == incoming + [concurrent]
+    # The superseded first candidate is discoverable without deleting either
+    # the current pointer or a digest another writer may have referenced.
+    assert_all_uploads_recorded(lake_world, expected=2)
 
 
 @pytest.mark.parametrize('state', ['destroyed', 'unavailable'])

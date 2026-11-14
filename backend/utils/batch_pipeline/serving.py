@@ -33,6 +33,7 @@ from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
+from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -86,6 +87,7 @@ class Serving:
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
+        self.ready_discovery = ReadyDiscovery(store, 'serving')
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
         self.held_partial_due = 0.0
@@ -126,6 +128,20 @@ class Serving:
         for _ in range(100):
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
+
+    @with_batch_privacy_attempt
+    async def drain_settled_async(self, owner_id: str) -> None:
+        """A provider unit of ``owner_id`` settled: commit the owner's ready rows and walk its chain.
+
+        The owner-only half of a recovery wake without a recovered unit, so no row skips the head
+        wait or the catch-up depth hold. Global maintenance stays with the periodic owner.
+        """
+        priority = await run_blocking(sync_executor, self._reconcile_owner, owner_id, None)
+        if self.projector:
+            if priority:
+                await self.projector.start_followups(priority, discover=False)
+            if getattr(self.projector, 'owes_index', False) is True:
+                self.projector.schedule_index_flush(owner_id)
 
     @with_batch_privacy_attempt
     async def reconcile_async(
@@ -188,6 +204,9 @@ class Serving:
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
+        elif self.metrics:
+            self.metrics.fresh_guard.deactivate()
+            self.metrics.delivered_share.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -278,6 +297,14 @@ class Serving:
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        if self.metrics:
+            # Explicit reconcile bypasses the periodic lease; the guard never does.
+            if self._leads(True):
+                self.metrics.fresh_guard.refresh(self.store)
+                self.metrics.delivered_share.refresh(self.store)
+            else:
+                self.metrics.fresh_guard.deactivate()
+                self.metrics.delivered_share.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -339,6 +366,23 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time())
+        page = self.ready_discovery.page()
+        if page is not None:
+            for _, owner_id in self.ready_discovery.owners(page):
+                try:
+                    if owner_id:
+                        self.drain_owner(owner_id)
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'event=batch_merge action=ready_drain outcome=retry exception_type=%s count=1',
+                        type(error).__name__,
+                    )
+        if page is None or not self.ready_discovery.finish(page):
+            self._drain_ready_page()
+        # Held owners by durable marker: the page above can be all one held backlog.
+        self.merge.reoffer_marked(self.drain_owner)
+
+    def _drain_ready_page(self):
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
             job = self.store.run(lambda tx: tx.get('jobs', segment))
@@ -352,8 +396,6 @@ class Serving:
                         'event=batch_merge action=ready_drain outcome=retry exception_type=%s count=1',
                         type(error).__name__,
                     )
-        # Held owners by durable marker: the page above can be all one held backlog.
-        self.merge.reoffer_marked(self.drain_owner)
 
 
 @lru_cache(maxsize=2)
@@ -422,6 +464,8 @@ def start_serving_from_env():
                 logging.getLogger(__name__).error(
                     'event=batch_projection_pump outcome=retry exception_type=%s', type(error).__name__
                 )
+            else:
+                metrics.projection_pump_last_success.set(time.time())
             finally:
                 metrics.projection_pump_last_tick.set(time.time())
                 logging.getLogger(__name__).info(
@@ -453,7 +497,9 @@ def start_serving_from_env():
     async def drain_tick():
         service = await run_blocking(sync_executor, serving_for_stage, current_stage())
         return await drain_recordings(
-            service.store, provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT)
+            service.store,
+            provider_outbox_factory=lambda: outbox_for(OutboxKind.PROVIDER_STT),
+            metrics=getattr(service, 'metrics', None),
         )
 
     async def drain():
@@ -493,11 +539,35 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def drain_upload_holds():
+        from utils.batch_pipeline.upload_coalescing import drain as drain_uploads
+
+        while not stop.is_set():
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                await drain_uploads(service.store)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_coalescing outcome=scan_retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=2)
+            except asyncio.TimeoutError:
+                pass
+
     async def run():
-        if pump_enabled:
-            await projection_pump()
-        else:
-            await asyncio.gather(supervise(), drain(), dispatch_recovery())
+        from utils.batch_pipeline.projection_drain import set_recurring_sweep
+
+        # Owner drains hold live-target owners passively only while this loop
+        # will sweep them again.
+        set_recurring_sweep('pump' if pump_enabled else 'serving')
+        try:
+            if pump_enabled:
+                await asyncio.gather(projection_pump(), drain_upload_holds())
+            else:
+                await asyncio.gather(supervise(), drain(), dispatch_recovery(), drain_upload_holds())
+        finally:
+            set_recurring_sweep(None)
 
     return stop, start_background_task(
         run(), name='batch_projection_pump' if pump_enabled else 'batch_pipeline_serving'

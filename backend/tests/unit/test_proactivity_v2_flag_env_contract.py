@@ -25,6 +25,16 @@ SURFACES = (
     ('cloud_run', 'services', 'backend-sync-backfill'),
     ('cloud_run', 'services', 'backend-integration'),
 )
+FROZEN_PROD_SOURCES = (
+    (('gke', 'pusher'), 'dual'),
+    (('gke', 'backend-listen'), 'dual'),
+    (('llm_gateway',), 'omi'),
+    (('desktop_backend',), 'dual'),
+    (('cloud_run', 'services', 'backend'), 'dual'),
+    (('cloud_run', 'services', 'backend-sync'), 'dual'),
+    (('cloud_run', 'services', 'backend-sync-backfill'), 'dual'),
+    (('cloud_run', 'services', 'backend-integration'), 'dual'),
+)
 
 
 @pytest.fixture(scope='module')
@@ -36,6 +46,20 @@ def surface(config, path):
     for name in path:
         config = config[name]
     return config
+
+
+@pytest.mark.parametrize('artifact', ['overlay', 'manifest'])
+@pytest.mark.parametrize('path,expected', FROZEN_PROD_SOURCES)
+def test_prod_sources_remain_frozen_per_lead2_95e1f1(artifact, path, expected, deployment_manifest):
+    # Integration/backfill had no env (effective posthog); dual fills the
+    # provisioning gap to the authorized frozen target, still serving PostHog.
+    assert {path for path, _ in FROZEN_PROD_SOURCES} == set(SURFACES)
+    config = (
+        yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())['overlay']
+        if artifact == 'overlay'
+        else deployment_manifest['environments']['prod']
+    )
+    assert surface(config, path)['env']['OMI_FLAGS_SOURCE'] == {'value': expected, 'category': 'rollout'}
 
 
 def serves_from_store(host):

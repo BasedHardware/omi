@@ -52,6 +52,7 @@ from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
+from utils.rollout.runtime_percent import register_runtime_percent
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ class SynchronizedWorker:
 def health_server(
     state: RuntimeState, registry: CollectorRegistry, port: int, host: str = '0.0.0.0'
 ) -> ThreadingHTTPServer:
+    register_runtime_percent(registry)
     register_probe_collectors(registry)  # Every child exports before the pod's merge_metrics.
     registry.register(LANGUAGE_ROUTES)
     for collector in WORKER_IO_COLLECTORS:

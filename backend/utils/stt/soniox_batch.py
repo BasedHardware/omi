@@ -121,11 +121,11 @@ def resource_id(value):
     return str(UUID(value))
 
 
-def transcription_body(file_id, language):
+def transcription_body(file_id, language, *, diarize=True):
     body: dict[str, object] = {
         'model': MODEL,
         'file_id': file_id,
-        'enable_speaker_diarization': True,
+        'enable_speaker_diarization': diarize,
         'enable_language_identification': True,
     }
     hint = normalized_stt_language(language)
@@ -222,12 +222,20 @@ def transcribe(
     *,
     language=None,
     second_chance=False,
+    failover=False,
+    diarize=True,
+    retry_rate_limits=True,
     takeover_max_seconds=None,
     client_factory=httpx.Client,
     clock=time.monotonic,
     sleep=time.sleep,
 ):
-    headers = authorization(duration, second_chance=second_chance, takeover_max_seconds=takeover_max_seconds)
+    headers = authorization(
+        duration,
+        second_chance=second_chance,
+        failover=failover,
+        takeover_max_seconds=takeover_max_seconds,
+    )
     file_id, transcription_id, submitted = None, None, False
     deadline = clock() + DEADLINE_SECONDS
     # The transport has no implicit retries; an accepted paid POST occurs once.
@@ -254,6 +262,8 @@ def transcribe(
                         submitted = True
                     return response.json()
                 except Exception as error:
+                    if not retry_rate_limits and isinstance(error, SonioxBatchError) and error.kind == 'rate_limited':
+                        raise
                     delay = request_retry_delay(error, method, path, attempt, deadline - clock())
                     if delay is None:
                         raise
@@ -262,7 +272,10 @@ def transcribe(
 
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
-            body = transcription_body(file_id, language)
+            body = transcription_body(file_id, language, diarize=diarize)
+            from utils.stt.allowance_watch import observe_request
+
+            observe_request('prerecorded', 'soniox', duration)
             created = request('POST', '/transcriptions', json=body)
             transcription_id = resource_id(created['id'])
             state = created
@@ -365,6 +378,10 @@ async def transcribe_async(
         )
         body = transcription_body(file_id, language)
         try:
+            from utils.stt.allowance_watch import observe_async
+            from utils.byok import get_byok_uid
+
+            await observe_async(get_byok_uid(), 'prerecorded', 'soniox', duration)
             state = await request('POST', '/transcriptions', json=body)
         except SonioxBatchError:
             # request() preserves paid uncertainty on 5xx; explicit 429 refusals

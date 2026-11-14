@@ -89,17 +89,15 @@ def validate_runtime_binding(document: Mapping, contract: Mapping) -> list[str]:
             for name in (contract.get('bucket_env_var'), 'OBJECT_LAKE_KMS_KEY'):
                 if name not in bindings or not isinstance(bindings[name], Mapping):
                     errors.append(f'{env_name}/{service} must declare {name}')
-            # Empty, unprovisioned bindings are intentional while write admission is off.
-            write = bindings.get('OBJECT_LAKE_WRITE_ENABLED', {})
-            percent = bindings.get('OBJECT_LAKE_WRITE_PERCENT', {})
-            if (
-                str(write.get('value', '')).strip().lower() in ('true', '1', 'on', 'yes')
-                and percent.get('value') != '0'
-            ):
-                for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
-                    if not str(bindings.get(name, {}).get('value') or '').strip():
-                        errors.append(f'{env_name}/{service} enabled writes require a real {name}')
     return errors
+
+
+def _zero_percent(percent) -> bool:
+    """A numerically zero cohort ('0', '0.0', ' 0 ') admits no writes; unparseable values do."""
+    try:
+        return float(str(percent).strip()) == 0
+    except ValueError:
+        return False
 
 
 def validate_write_admission(stage: str, environment: Mapping) -> list[str]:
@@ -117,6 +115,12 @@ def validate_write_admission(stage: str, environment: Mapping) -> list[str]:
         enabled = bindings.get('OBJECT_LAKE_WRITE_ENABLED', {}).get('value', 'false')
         percent = bindings.get('OBJECT_LAKE_WRITE_PERCENT', {}).get('value', '0')
         errors.extend(f'{stage}/{name} {error}' for error in validate_write_settings(stage, enabled, percent))
+        # Shared with runtime manifest validation: empty bindings are permitted
+        # only while writes are off, including hosts outside the initial rollout.
+        if str(enabled).strip().lower() in ('true', '1', 'on', 'yes') and not _zero_percent(percent):
+            for binding in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+                if not str(bindings.get(binding, {}).get('value') or '').strip():
+                    errors.append(f'{stage}/{name} enabled writes require a real {binding}')
     return errors
 
 

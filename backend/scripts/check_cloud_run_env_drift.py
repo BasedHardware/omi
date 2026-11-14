@@ -127,7 +127,6 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     'backend-sync': frozenset(
         {
-            'FIRST_SUMMARY_UID_ALLOWLIST',
             'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
             'FAIR_USE_EXEMPT_UIDS',
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
@@ -135,17 +134,12 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
     ),
     'backend-sync-backfill': frozenset(
         {
-            'FIRST_SUMMARY_UID_ALLOWLIST',
             'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
             'FAIR_USE_EXEMPT_UIDS',
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
         }
     ),
-    'backend-integration': frozenset(
-        {
-            'FIRST_SUMMARY_UID_ALLOWLIST',
-        }
-    ),
+    'backend-integration': frozenset(),
 }
 
 

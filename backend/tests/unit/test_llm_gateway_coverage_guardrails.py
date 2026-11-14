@@ -102,7 +102,6 @@ _RESOLVER_DEFINITION_FILE = 'utils/llm/model_config.py'
 # clients._so_gemini: iterates the active profile.
 # judge.py: model_feature defaults to the pinned screen_frame_judge key.
 # managed_compute.py: pass-through of authorize_managed_compute's feature into get_provider.
-# llm_input_dedupe.py: checkpoint identity follows the actual notes / L1 extractor route.
 KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
     {
         ('utils/llm/persona.py', 'get_llm', 'feature'),
@@ -112,11 +111,6 @@ KNOWN_DYNAMIC_FEATURE_SITES = frozenset(
         ('utils/llm/clients.py', '_get_model_config', 'f'),
         ('utils/screen_frames/judge.py', 'get_llm', 'model_feature'),
         ('utils/managed_compute.py', 'get_provider', 'feature'),
-        (
-            'utils/conversations/llm_input_dedupe.py',
-            'get_route_ref',
-            "'conv_structure' if feature == 'notes' else 'memory_l1'",
-        ),
     }
 )
 _FEATURE_SCAN_SKIP_DIRS = {'.venv', 'venv', '.openapi-venv', '__pycache__', 'tests'}

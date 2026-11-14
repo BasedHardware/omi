@@ -24,17 +24,26 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
-    def test_funnel_row_sits_below_the_tv_wall(self):
+    def test_funnel_row_is_its_own_board_that_fills_the_screen(self):
         from build_wall_dashboard import WALL_H
-        row = [p for p in load("omi-tv-v2")["panels"] if p["gridPos"]["y"] >= WALL_H]
-        self.assertEqual({p["gridPos"]["y"] for p in row}, {WALL_H})
+        board = load("omi-tv-funnel")
+        self.assertEqual(board["uid"], "omi-tv-funnel")
+        row = board["panels"]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {0})
+        self.assertEqual({p["gridPos"]["h"] for p in row}, {WALL_H})  # fills 1920×1080, no scroll
         self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
         self.assertEqual({p["targets"][0]["root_selector"] for p in row},
                          {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
 
-    def test_checked_in_wall_matches_builder(self):
-        from build_wall_dashboard import build_wall_board
+    def test_wall_board_has_no_funnel_row(self):
+        board = load("omi-tv-v2")
+        self.assertFalse(any(p["targets"][0]["root_selector"].startswith("frames.funnel")
+                             for p in board["panels"] if p.get("targets")))
+
+    def test_checked_in_boards_match_builder(self):
+        from build_wall_dashboard import build_funnel_board, build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
+        self.assertEqual(load("omi-tv-funnel"), build_funnel_board())
 
     def test_wall_columns_plugins_and_utc(self):
         from build_wall_dashboard import BASE, COLUMNS, GEOMETRY, UPTIME_URL
@@ -149,6 +158,9 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn(name, styled)
             self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
+        # Under the plot, never beside it: Health is a narrow column, and a right
+        # legend squeezed the 35-day stack and revenue line into a sliver.
+        self.assertEqual(cost["options"]["legend"]["placement"], "bottom")
         self.assertIn("Soniox console", cost["description"])
         self.assertIn("measured SaaS (Mercury)", cost["description"])
         self.assertIn("Modulate modelled", cost["description"])
@@ -232,6 +244,10 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
         fields = [c["selector"] for c in target["columns"]]
         self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
+        # the sidecar emits the UTC day as epoch milliseconds; a plain "timestamp" column parses
+        # that to null and the panel reads "Data outside time range"
+        date_col = next(c for c in target["columns"] if c["selector"] == "date")
+        self.assertEqual(date_col["type"], "timestamp_epoch")
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
         hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
@@ -268,6 +284,10 @@ class WallV2Contract(unittest.TestCase):
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertEqual(panel["fieldConfig"]["defaults"]["unit"], "percent")
         self.assertTrue(custom["axisCenteredZero"])
+        # An empty frame names its cause; "Loading…" would read as a stuck query.
+        self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"],
+                         "No day in the last 35 has both plan cost and revenue")
+        self.assertEqual(panel["timeFrom"], "35d")  # MARGIN_DAYS in lib/wall-series.ts
         self.assertFalse(custom["spanNulls"])
         self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
         # Tooltip rows: drawn invisibly on their own hidden scale (Grafana 13 drops
