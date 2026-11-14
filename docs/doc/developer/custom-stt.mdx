@@ -34,7 +34,7 @@ two taps as a command.
 
 The app sends button events even when **Omi button actions** are turned off. Turn those off if your service should be
 the only one acting on the button. Only the **Custom** live provider receives button events, because built-in
-providers such as Deepgram don't accept messages they don't know.
+providers speak a fixed protocol and may drop the connection on a message they don't know.
 
 ## What your service sends
 
