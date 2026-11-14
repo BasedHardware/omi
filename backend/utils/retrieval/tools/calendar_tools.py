@@ -29,7 +29,6 @@ from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.retrieval.tools.integration_base import (
-    ensure_capped,
     parse_iso_with_tz,
     prepare_access,
 )
@@ -524,7 +523,11 @@ async def get_calendar_events_tool(
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
 
-        max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
+        try:
+            max_results = int(max_results)
+        except (ValueError, TypeError):
+            max_results = 10
+        max_results = max(1, min(max_results, 50))
 
         # Parse dates if provided
         time_min = None
@@ -544,6 +547,10 @@ async def get_calendar_events_tool(
         )
         if err:
             return err
+
+        if time_min and time_max and time_max < time_min:
+            span_str = format_span(time_min, time_max, clock)
+            return f"Error: end_date must be after start_date. Requested range: {span_str}"
 
         requested_time_min = time_min
         requested_time_max = time_max
@@ -834,6 +841,13 @@ async def create_calendar_event_tool(
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
 
+        if not title or not str(title).strip():
+            return "Error: Event title cannot be empty."
+        if not start_time or not isinstance(start_time, str) or not start_time.strip():
+            return "Error: start_time must be provided as an ISO string with timezone."
+        if not end_time or not isinstance(end_time, str) or not end_time.strip():
+            return "Error: end_time must be provided as an ISO string with timezone."
+
         # Parse start and end times
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
@@ -1078,6 +1092,9 @@ async def delete_calendar_event_tool(
         if time_min and not time_max:
             time_max = time_min + timedelta(days=1)
             logger.info("Auto-set calendar end_date to one day after start_date")
+        elif time_min and time_max and time_max < time_min:
+            span_str = format_span(time_min, time_max, clock)
+            return f"Error: end_date must be after start_date. Requested range: {span_str}"
 
         # Search for matching events
         try:
@@ -1102,7 +1119,7 @@ async def delete_calendar_event_tool(
             # Filter events by title if provided
             matching_events: List[Dict[str, Any]] = events
             if event_title:
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
             if not matching_events:
                 date_info = ""
@@ -1279,6 +1296,7 @@ async def update_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
+        clock = clock_for_config(config, uid)
         # Find the event if event_id not provided
         target_event_id = event_id
         if not target_event_id:
@@ -1299,6 +1317,9 @@ async def update_calendar_event_tool(
             # If only start_date provided, set end_date to 1 day later
             if time_min and not time_max:
                 time_max = time_min + timedelta(days=1)
+            elif time_min and time_max and time_max < time_min:
+                span_str = format_span(time_min, time_max, clock)
+                return f"Error: end_date must be after start_date. Requested range: {span_str}"
 
             # Search for matching events
             try:
@@ -1314,7 +1335,7 @@ async def update_calendar_event_tool(
                     return f"No calendar events found matching '{event_title}'."
 
                 # Filter events by title if provided
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
                 if not matching_events:
                     return f"No calendar events found matching '{event_title}'."
