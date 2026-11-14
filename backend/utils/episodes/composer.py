@@ -45,6 +45,9 @@ from utils.conversations import phase_shadow
 
 from config.episodes import (
     COMPOSER_FEATURE,
+    episode_compose_transcript_wait_enabled,
+    episode_compose_transcript_wait_seconds,
+    episode_compose_transcript_ready_enabled,
     COMPOSER_SETTLE_SECONDS,
     COMPOSER_MAX_SETTLE_SECONDS,
     episode_compose_settle_enabled,
@@ -737,12 +740,20 @@ def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
     return owner._named_segments(uid, _segments(row), c)
 
 
+def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
+    pending = _utc(row.get('home_transcription_pending_at'))
+    if episode_compose_transcript_wait_enabled() and pending and not _segments(row):
+        return pending + timedelta(seconds=episode_compose_transcript_wait_seconds())
+    return None
+
+
 def _members(
     uid: str,
     episode: Mapping[str, Any],
     c: Any,
     *,
     revisions: Optional[dict[str, Optional[datetime]]] = None,
+    waiting_until: Optional[list[datetime]] = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
@@ -755,6 +766,11 @@ def _members(
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             continue
         if str(row.get('status') or '') not in _DONE:
+            return 'waiting', []
+        due = _transcript_wait_until(row)
+        if due and due > datetime.now(timezone.utc):
+            if waiting_until is not None:
+                waiting_until.append(due)
             return 'waiting', []
         members.append({**row, 'id': cid, 'transcript_segments': _named(uid, row, c)})
     members.sort(key=lambda row: _span(row)[0] or datetime.max.replace(tzinfo=timezone.utc))
@@ -1085,8 +1101,14 @@ def _compose(
     if policy.is_live(episode):
         return 'live'
     member_revisions: dict[str, Optional[datetime]] = {}
-    state, members = _members(uid, episode, c, revisions=member_revisions)
+    waiting_until: list[datetime] = []
+    state, members = _members(uid, episode, c, revisions=member_revisions, waiting_until=waiting_until)
     if state == 'waiting':
+        if waiting_until:
+            now = datetime.now(timezone.utc)
+            if not episode.get('compose_pending_since'):
+                _write(uid, episode_id, c, {'compose_pending_since': now})
+            _defer(uid, episode_id, c, max(0.0, (min(waiting_until) - now).total_seconds()))
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):
@@ -1596,7 +1618,7 @@ def schedule(
                         _recent.pop(key, None)
                     foreground = foreground or key in _foreground
                     _foreground.discard(key)
-                    if outcome not in {'settling', 'kept_pending'}:
+                    if outcome not in {'settling', 'kept_pending', 'waiting'}:
                         _deferred.pop(key, None)
                 if outcome == 'settling' and not foreground:
                     break
@@ -1608,7 +1630,9 @@ def schedule(
                 # inflight ownership. Hand it off instead of dropping its promotion until the timer.
                 enabled = episode_compose_settle_enabled()
                 promote = (
-                    enabled and outcome != 'kept_pending' and (key in _foreground or (foreground and key in _deferred))
+                    enabled
+                    and outcome not in {'kept_pending', 'waiting'}
+                    and (key in _foreground or (foreground and key in _deferred))
                 )
                 reschedule = enabled and (key in _rerun or promote)
                 if promote:
@@ -1637,7 +1661,12 @@ def after_finalized(
 
 
 def schedule_for_conversation(
-    uid: str, conversation_id: str, *, collaborators: Any = None, row: Optional[Mapping[str, Any]] = None
+    uid: str,
+    conversation_id: str,
+    *,
+    collaborators: Any = None,
+    row: Optional[Mapping[str, Any]] = None,
+    transcript_updated: bool = False,
 ) -> None:
     if not episode_composer_enabled():
         return
@@ -1646,7 +1675,9 @@ def schedule_for_conversation(
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
-            if defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):
+            # An already composed partial episode must catch up even when the original capture is old.
+            catch_up = transcript_updated and episode.get('composed_fingerprint')
+            if not catch_up and defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):
                 return
             if episode_compose_settle_enabled():
                 c = c or SimpleNamespace(firestore_client=None, people_names=None)
@@ -1693,6 +1724,23 @@ def schedule_for_conversation(
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
 
 
+def transcript_projected(uid: str, row: Mapping[str, Any], *, firestore_client: Any = None) -> None:
+    """Post-commit signal, before playback/enrichment can stall. No model call on this thread."""
+    if not episode_compose_transcript_ready_enabled() or not episode_composer_enabled():
+        return
+    from utils.episodes.service import Collaborators
+
+    for member in [row, *(part for part, _ in row.get('_sync_size_rollover_rows', []))]:
+        if member.get('id') and _segments(member):
+            schedule_for_conversation(
+                uid,
+                str(member['id']),
+                row=member,
+                collaborators=Collaborators(firestore_client=firestore_client),
+                transcript_updated=True,
+            )
+
+
 def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str, c: Any) -> bool:
     """Whether the composer will write this closed episode's notes, so a per-moment write may skip
     its model call. Every other retained member must already be done (else compose would wait,
@@ -1705,8 +1753,10 @@ def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str
             if cid == conversation_id:
                 continue
             row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
-            if row and not hidden_member(row) and str(row.get('status') or '') not in _DONE:
-                return False
+            if row and not hidden_member(row):
+                due = _transcript_wait_until(row)
+                if str(row.get('status') or '') not in _DONE or (due and due > datetime.now(timezone.utc)):
+                    return False
     except Exception:
         return False
     return True

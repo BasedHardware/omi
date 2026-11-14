@@ -1710,3 +1710,67 @@ def test_first_open_while_waiting_does_not_strand_a_later_member_final(store, mo
     assert store.episode['composed_member_ids'] == ['c1', 'c2']
     assert store.episode['compose_deferred_at'] is None
     assert store.episode['compose_opened_deferred_at'] is None
+
+
+def test_waits_for_completed_member_with_pending_transcript_and_recovers_after_restart(store):
+    now = datetime.now(timezone.utc)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=now)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls), force=True) == 'waiting'
+    assert calls == []
+    assert store.episode['compose_pending_since'] >= now
+    assert composer.needs_compose(store.episode)
+    assert 21590 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= 21600
+    composer._deferred.clear()  # A restarted process recovers the persisted debt on read.
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert 'The late launch details.' in calls[0][1][1]
+
+
+@pytest.mark.parametrize('expired,disabled', [(True, False), (False, True)])
+def test_pending_transcript_wait_is_bounded_and_can_be_disabled(store, monkeypatch, expired, disabled):
+    pending = datetime.now(timezone.utc) - timedelta(hours=7 if expired else 1)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=pending)
+    if disabled:
+        monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV, 'false')
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+
+
+@pytest.mark.parametrize('hidden', ['discarded', 'deleted', 'duplicate'])
+def test_pending_transcript_of_excluded_member_does_not_block(store, hidden):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    if hidden == 'duplicate':
+        store.episode['duplicate_conversation_ids'] = ['c2']
+    else:
+        store.rows['c2'][hidden] = True
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+
+
+def test_projected_transcript_rearms_already_composed_old_episode_before_enrichment(store, monkeypatch):
+    store.rows['c2']['transcript_segments'] = []
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    # Even an old partial summary must catch up without waiting for a page open.
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: True)
+    seen = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *a, **kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *a, **kw: seen.append((a, kw)))
+    row = store.rows['c2']
+    row['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'A newly recovered decision.'}]
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1
+    assert store.episode['compose_pending_since']
+    assert seen[0][1]['trigger'] == 'member_final'
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1  # The same committed evidence cannot buy another call.
+    monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_READY_ENV, 'false')
+    row['transcript_segments'][0]['text'] = 'Another change'
+    composer.transcript_projected(UID, row)
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize('raw,expected', [('1800', 1800), ('-1', 0), ('999999', 86400), ('bad', 21600)])
+def test_transcript_wait_config_is_bounded(monkeypatch, raw, expected):
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raw)
+    assert config.episode_compose_transcript_wait_seconds() == expected

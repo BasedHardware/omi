@@ -53,6 +53,8 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED'
+EPISODE_COMPOSE_TRANSCRIPT_READY_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
 EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV = 'EPISODE_COMPOSE_LATE_ATTACH_ENABLED'
 
@@ -172,6 +174,22 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_compose_transcript_wait_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV)
+
+
+def episode_compose_transcript_ready_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_READY_ENV)
+
+
+def episode_compose_transcript_wait_seconds() -> float:
+    """A fixed deadline from the member's pending stamp; reads never renew it."""
+    try:
+        return max(0.0, min(float(os.getenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '21600')), 86400.0))
+    except ValueError:
+        return 21600.0
 
 
 def episode_compose_settle_enabled() -> bool:
