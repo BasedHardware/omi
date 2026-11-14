@@ -464,7 +464,7 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
 
 
 @pytest.mark.parametrize('export_snapshots', [False, True])
-def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_stay_live(
+def test_artifact_authorizer_shadows_every_caller_without_enforcement_but_exports_stay_live(
     monkeypatch, reads, export_snapshots
 ):
     from types import SimpleNamespace
@@ -484,9 +484,12 @@ def test_artifact_authorizer_exercises_shadow_without_enforcement_but_exports_st
             snapshots = {} if export_snapshots else None
             outputs.append(retention.batch_artifact_authorize(store, item, snapshots=snapshots))
             if snapshots is not None:
+                # The live decision still exports its rows; the shadow
+                # candidate never publishes into this dict.
                 assert snapshots['conversations']['source']['title'] == f'fresh-shadow-{i}'
     assert outputs[0] == outputs[1] and outputs[0].generation == 7
-    assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + (0 if export_snapshots else 2)
+    # The sampled cohort compares an owner-memo candidate on the export path too.
+    assert metrics.SHADOW_CHECKS.labels('batch', 'match')._value.get() == before + 2
 
 
 @pytest.mark.parametrize('on', [False, True])
@@ -606,10 +609,19 @@ async def test_serving_attempt_second_commit_reads_only_token_and_mutations_bloc
         await followups.run('source')
         await followups.run('source')
     else:
+        from utils.batch_pipeline import upload_coalescing
+
         monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
         monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
         service = SimpleNamespace(store=store, reconcile_async=AsyncMock())
         monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+
+        async def no_upload_drain(_store):
+            # The runtime's own coalescing loop reads its quota document on this
+            # shared client; keep the read window to this tick's privacy reads.
+            return None
+
+        monkeypatch.setattr(upload_coalescing, 'drain', no_upload_drain)
 
         async def drain(*args, **kwargs):
             await run_blocking(db_executor, commit_pair)

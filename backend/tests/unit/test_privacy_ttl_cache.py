@@ -1059,6 +1059,72 @@ def test_owner_memo_shadow_comparison_labels_the_owner_source(world, monkeypatch
     assert after > before
 
 
+def test_owner_memo_shadow_covers_the_no_attempt_store_and_retention_paths(world, monkeypatch):
+    """The store/retention mass runs without an attempt scope; those calls must
+    still serve the live decision and compare an owner-memo candidate."""
+    db, reads, _, _ = world
+    owner_enable(monkeypatch, 'privacy_checks_shadow')
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    owner_hits = metrics.COMPARISONS.labels(
+        'batch', 'match', 'owner_hit', 'lt_1s', 'same', 'same', 'unknown', 'matched'
+    )
+    matches_before, owner_before = matches._value.get(), owner_hits._value.get()
+    # No batch_privacy_attempt: the no_attempt mass must never enforce unshadowed.
+    assert check(db) == 7
+    assert check(db) == 7
+    assert matches._value.get() == matches_before + 2
+    assert owner_hits._value.get() == owner_before + 1
+    # Both calls served live (full walk each time); the second compared a
+    # process owner-memo candidate that read only the token.
+    assert reads[-1] == TOKEN
+
+
+def test_owner_memo_shadow_compares_snapshot_callers_with_a_throwaway_export(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch, 'privacy_checks_shadow')
+    calls = []
+    original = privacy._assert_batch_write_allowed_memo
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get('snapshots'))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', spy)
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    before = matches._value.get()
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+        == 7
+    )
+    # The live decision still exports the rows it read.
+    assert output['user'] == {'data_protection_level': 'standard'}
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    assert matches._value.get() == before + 1
+    # The compared candidate got its own throwaway export: never the caller's.
+    # (It may fill that copy in place; the caller's dict is a different object.)
+    assert len(calls) == 1 and calls[0] is not output
+    assert output['user'] == {'data_protection_level': 'standard'}
+
+
+def test_owner_memo_partial_export_covers_only_unseen_ids(world, monkeypatch):
+    """Contract: a served decision exports nothing for certified ids; unseen ids
+    are walked live and their rows are exported, so exports can be partial."""
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7  # certify 'source'
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(
+            db, db.transaction(), UID, conversation_ids=['source', 'other'], snapshots=output
+        )
+        == 7
+    )
+    assert set(output) == {'conversations'}
+    assert set(output['conversations']) == {'other'}  # the certified id is not re-exported
+    assert reads[-2:] == [('users', UID, 'deleted_conversations', 'other'), OTHER]
+
+
 def test_owner_memo_growth_cannot_extend_the_sixty_second_bound(world, monkeypatch):
     db, reads, _, clock = world
     owner_enable(monkeypatch)

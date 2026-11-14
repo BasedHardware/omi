@@ -92,20 +92,32 @@ def assert_batch_write_allowed(
     expected_generation: int | None = None,
     snapshots: dict | None = None,
     read_budget=None,
+    verified_out: set | None = None,
 ) -> int:
     """Measure the authorizing decision; shadow always runs after live authority.
 
-    The nontransactional provider-STT preflight stays live. Full-row exports
-    walk live unless the owner memo (bpp_owner_memo) serves the decision, in
-    which case the export stays empty and the caller reads the rows it needs.
-    Shadow never publishes snapshots, raises its failure or changes a decision.
+    The nontransactional provider-STT preflight stays live. A decision the owner
+    memo (bpp_owner_memo) serves exports no rows for ids it has already certified;
+    unseen ids are walked live and their rows are exported, so a caller may get a
+    partial export. Shadow never publishes snapshots, raises its failure or
+    changes a decision.
+
+    ``verified_out`` optionally receives every conversation document id this
+    check actually verified, redirect hops included. Callers use it to keep a
+    distinct-document budget across several checks without an export.
     """
     metrics.called('batch')
     # A generation-memo hit would hide the live lookups needed for shadow proof.
     negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
         'privacy_checks_shadow', uid
     )
-    shadow = lever_enabled('privacy_checks_shadow', uid) and current_attempt() is not None and not negative_shadow
+    # The sampled cohort serves the live decision and compares an owner-memo
+    # candidate on EVERY transactional path: attempt-scoped calls, the
+    # store/retention no_attempt mass, and the snapshots callers (projection,
+    # intake). Requiring an attempt here would leave those paths enforcing the
+    # memo with no comparison. Nontransactional calls cannot be compared (and
+    # the memo cannot enforce there); the negative cache keeps its own shadow.
+    shadow = lever_enabled('privacy_checks_shadow', uid) and not negative_shadow
     enforce = (
         (lever_enabled('bpp_generation_memo', uid) or lever_enabled('bpp_owner_memo', uid))
         and not shadow
@@ -118,19 +130,28 @@ def assert_batch_write_allowed(
         expected_generation=expected_generation,
         snapshots=snapshots,
         read_budget=read_budget,
+        verified_out=verified_out,
+    )
+    # The candidate always gets a throwaway export: a comparison may fill its
+    # own copy but can never publish rows or perturb the caller's export.
+    candidate_kwargs: dict[str, Any] = dict(
+        conversation_ids=ids,
+        expected_generation=expected_generation,
+        snapshots={} if snapshots is not None else None,
+        read_budget=read_budget,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
     live_evidence = metrics.DecisionEvidence() if shadow or enforce else None
 
     def shadow_after(reason):
-        if not shadow or transaction is None or snapshots is not None or enforce:
+        if not shadow or transaction is None or enforce:
             return
         try:
             candidate_evidence = metrics.DecisionEvidence()
             with metrics.mode_scope('shadow'), metrics.evidence_scope(candidate_evidence):
                 metrics.called('batch')
                 try:
-                    _assert_batch_write_allowed_memo(client, transaction, uid, **kwargs)
+                    _assert_batch_write_allowed_memo(client, transaction, uid, **candidate_kwargs)
                     candidate = 'allow'
                 except BatchPrivacyBlocked as error:
                     candidate = error.reason.value
@@ -142,7 +163,7 @@ def assert_batch_write_allowed(
             metrics.shadow_error('batch')
 
     with metrics.evidence_scope(live_evidence):
-        if shadow and transaction is not None and snapshots is None:
+        if shadow and transaction is not None:
             # Observation only, before the live walk; failures cannot alter live authority.
             try:
                 metrics.read_snapshot(
@@ -176,12 +197,14 @@ def _assert_batch_write_allowed_memo(
     expected_generation: int | None = None,
     snapshots: dict | None = None,
     read_budget=None,
+    verified_out: set | None = None,
 ):
     # Keep the disabled path's live read order and counts unchanged.
-    # Full-row exports stay live unless the owner memo is on: a served decision
-    # leaves the export EMPTY (the token certifies authorization, not row
-    # payloads) and the caller reads the rows it needs itself; a miss walks
-    # live and fills the export exactly as before.
+    # A served owner decision exports no rows for ids the entry has already
+    # certified; unseen ids are verified live here and their rows ARE exported,
+    # so an export caller may receive a partial export. The token certifies
+    # authorization, not row payloads, and the caller reads any missing rows
+    # itself. A miss walks live and fills the export exactly as before.
     attempt = current_attempt()
     # A call with no attempt may still consult a process cache, but only inside
     # a transaction with no snapshots export (bpp_decision_cache) or through
@@ -212,6 +235,7 @@ def _assert_batch_write_allowed_memo(
             expected_generation=expected_generation,
             snapshots=snapshots,
             read_budget=read_budget,
+            verified_out=verified_out,
         )
     ids = frozenset(conversation_ids)
     # Retain the client object itself, preventing id reuse and cross-plane hits.
@@ -246,6 +270,7 @@ def _assert_batch_write_allowed_memo(
                 expected_generation=expected_generation,
                 snapshots=snapshots,
                 read_budget=read_budget,
+                verified_out=verified_out,
             )
         # GAPIC transport retries may replay an already-prepared random token
         # after another writer. The server revision prevents that ABA: replay
@@ -275,6 +300,7 @@ def _assert_batch_write_allowed_memo(
                 attempt=attempt,
                 evidence=evidence,
                 started=owner_started,
+                verified_out=verified_out,
             )
             if served is not None:
                 return served
@@ -333,6 +359,7 @@ def _assert_batch_write_allowed_memo(
             privacy_snapshot=snapshot,
             read_budget=read_budget,
             walk_out=walk_out,
+            verified_out=verified_out,
         )
         if eligible:
             if idset_on:
@@ -396,6 +423,7 @@ def _owner_decision(
     attempt,
     evidence,
     started: float,
+    verified_out: set | None = None,
 ) -> int | None:
     """Serve one check from the owner-level memo; None when it cannot certify.
 
@@ -403,8 +431,9 @@ def _owner_decision(
     match the entry's token version and generation, and every conversation id
     the entry has not certified under that token is verified live inside this
     transaction (tombstone, conversation row, redirect chain, lane check)
-    before the decision is served. A served decision leaves ``snapshots``
-    empty: the caller reads the rows it needs itself.
+    before the decision is served. A served decision leaves ``snapshots`` empty
+    for already-certified ids; unseen ids are verified live here and their rows
+    are written into the caller's export.
     """
     owner_key = (client, uid)
     entry = attempt.owner_get(owner_key) if attempt is not None else None
@@ -460,7 +489,9 @@ def _owner_decision(
             return live_read(reference)
 
         try:
-            _verify_conversation_ids(client, transaction, uid, new_ids, user_sync_enabled, snapshots, read)
+            _verify_conversation_ids(
+                client, transaction, uid, new_ids, user_sync_enabled, snapshots, read, verified_out=verified_out
+            )
         except BatchPrivacyBlocked:
             # The entry's previously certified ids remain certified, but a
             # refusal on a new id must never be served from this entry again.
@@ -497,6 +528,7 @@ def _assert_batch_write_allowed_live(
     read_budget=None,
     privacy_snapshot: Any = None,
     walk_out: dict | None = None,
+    verified_out: set | None = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
@@ -563,7 +595,15 @@ def _assert_batch_write_allowed_live(
     # still read and checked itself.
     user_sync_enabled = bool(data.get('private_cloud_sync_enabled', True))
     _verify_conversation_ids(
-        client, transaction, uid, set(conversation_ids), user_sync_enabled, snapshots, read, walk_out=walk_out
+        client,
+        transaction,
+        uid,
+        set(conversation_ids),
+        user_sync_enabled,
+        snapshots,
+        read,
+        walk_out=walk_out,
+        verified_out=verified_out,
     )
     return generation
 
@@ -577,12 +617,15 @@ def _verify_conversation_ids(
     snapshots: dict | None,
     read,
     walk_out: dict | None = None,
+    verified_out: set | None = None,
 ) -> None:
     """Check every source id (and its redirect chain) inside this transaction.
 
     Shared by the live walk (which passes the user row it just read) and the
     owner memo's new-id verification (which passes the token-certified user
-    sync default). Exports rows it reads into ``snapshots`` when given.
+    sync default). Exports rows it reads into ``snapshots`` when given, and
+    reports every verified document id (redirect survivors included) into
+    ``verified_out`` when given.
     """
     verified: dict[str, bool] = {}  # conversation ID -> document existed
     for source_id in ids:
@@ -634,6 +677,10 @@ def _verify_conversation_ids(
             # transaction; user intent above always dominates a redirect.
             conversation_id, redirected = target, True
         verified.update(chain)
+        if verified_out is not None:
+            # Charge the fence for every document this prepare actually verified,
+            # including the redirect hops a later check would otherwise miss.
+            verified_out.update(chain)
     if walk_out is not None:
         walk_out['verified'] = set(verified)
         walk_out['user_sync_enabled'] = user_sync_enabled

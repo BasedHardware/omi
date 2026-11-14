@@ -824,6 +824,34 @@ def test_separate_output_guards_preserve_distinct_document_budget(binding, delet
     session.guard(transaction, ['later-input'])
 
 
+def test_prepare_fence_counts_redirect_survivors_across_guards(binding, monkeypatch):
+    """Two redirect chains each fit the per-call cap, together they must not."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_hops'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+
+    def chain(prefix, hops):
+        for index in range(hops):
+            user.collection('conversations').document(f'{prefix}-{index}').create(
+                {'deleted': True, 'sync_merged_into': f'{prefix}-{index + 1}'}
+            )
+        user.collection('conversations').document(f'{prefix}-{hops}').create({})
+
+    chain('first', 129)  # 130 distinct documents: under the walk's per-call cap
+    chain('second', 129)
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()
+    transaction = client.transaction()
+    session.guard(transaction, ['first-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['second-0'])
+    assert len(session._privacy_fence_ids) == 260
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
