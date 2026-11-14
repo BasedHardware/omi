@@ -615,6 +615,7 @@ and an explicit empty literal renders as `''`.
 | `RECORD_SEAL_REFUSED_STAMP_ENABLED` | Default on; persist first producer-pending seal refusal and observe its bounded sweeper age | backend | env | open | — | — | — | — | keep | keep | — | omi-lifecycle |
 | `RECORD_SEAL_REPAIR_AGE_ORDER` | Default on; repair near-dead-letter jobs in their final 24 hours first, then newest enqueued jobs with a frozen horizon; off restores hash order | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_REPAIR_ENABLED` | Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_REPAIR_FRESH_ENABLED` | Default on; reserve existing repair slots for continuous newest-first recent recordings and atomically wake their normal intake after a proven seal | backend | env | open | — | — | — | — | keep | keep | — | pipeline quality |
 | `RECORD_SEAL_REPAIR_JOBS` | Default on; bounded aged record-pending jobs discovery feeds existing producer, tail and privacy proof paths | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` | Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
@@ -1370,6 +1371,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_REFUSED_STAMP_ENABLED` — Default on; persist first producer-pending seal refusal and observe its bounded sweeper age (fail: open)
 - `RECORD_SEAL_REPAIR_AGE_ORDER` — Default on; repair near-dead-letter jobs in their final 24 hours first, then newest enqueued jobs with a frozen horizon; off restores hash order (fail: open)
 - `RECORD_SEAL_REPAIR_ENABLED` — Default on; CPU seal workers and retained repair cron use canonical privacy and tail proof with isolated row budgets (fail: open)
+- `RECORD_SEAL_REPAIR_FRESH_ENABLED` — Default on; reserve existing repair slots for continuous newest-first recent recordings and atomically wake their normal intake after a proven seal (fail: open)
 - `RECORD_SEAL_REPAIR_JOBS` — Default on; bounded aged record-pending jobs discovery feeds existing producer, tail and privacy proof paths (fail: open)
 - `RECORD_SEAL_REPAIR_MODE` — plan or apply; default apply, plan performs canonical proofs without writes (fail: closed)
 - `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)

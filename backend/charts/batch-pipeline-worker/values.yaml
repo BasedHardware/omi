@@ -234,6 +234,9 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  freshEnabled: true
+  # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.
+  schedule: "* * * * *"
   projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
