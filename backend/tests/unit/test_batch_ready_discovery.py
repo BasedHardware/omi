@@ -20,7 +20,7 @@ SWITCH = 'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED'
 BUDGET = 'BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK'
 
 
-def stock(sim=False, count=60):
+def stock(sim=False, count=51):
     customer = CustomerData()
     store = SimStore(customer) if sim else MemoryStore()
     owners = sorted(['synthetic-a', 'synthetic-b', 'synthetic-c'], key=owner_key)
@@ -75,11 +75,13 @@ async def test_quiet_owner_commits_within_one_pass_without_markers(monkeypatch, 
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
     store, _ = stock(sim)
     service = Pump(Scheduler(store), Mock()) if pump else Serving(store)
-    for _ in range(3):
+    # Two held owners with 51 rows each fill the old 100-row page, so one tick shows the old path's miss;
+    # the cursor visits one owner per tick and needs all three.
+    for _ in range(3 if enabled else 1):
         await tick(service)
     assert (store.rows['jobs', 's2']['state'] == 'committed') == enabled
     assert not any(t == 'merge_holds' for t, _ in store.rows)
-    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 121 - enabled
+    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 103 - enabled
 
 
 async def tick(service):
