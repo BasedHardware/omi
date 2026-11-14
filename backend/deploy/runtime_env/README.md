@@ -81,7 +81,8 @@ Monthly-total enablement and epoch deliberately remain split:
 
 | Surface | `usage_month_total` | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
 | --- | --- | --- |
-| Four prod Cloud Run services: backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run: backend-sync, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run: backend, backend-sync-backfill | 0 | `c2fs_20261026_r1` |
 | Base, both GKE charts/environments, jobs, desktop backend, all dev services | 0 | `v1` |
 
 The Cloud Run overrides preserve the previously qualified serving scope. An off
@@ -115,7 +116,8 @@ establishes no realized savings.
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
 and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
-complete lever map, including `bpp_decision_cache:100`, and enables held-poll
+complete lever map except `usage_month_cache:0` and `usage_month_total:0`,
+including `bpp_decision_cache:100` and `batch_timeliness_leader:100`, and enables held-poll
 skip; its kill switch is setting `heldPollSkipEnabled` to false.
 Projection finish backoff remains at its code default, off (SCA-2024).
 The three control knobs
@@ -148,10 +150,19 @@ in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
 `code/defaults` covers partial defaults even if an explicit literal overrides them.
 No broad exception grants expiry coverage to another surface or percentage.
 
-UNRESOLVED: chart-vs-CR `batch_timeliness_leader`: worker chart `{}` inherits
-100 from `DEFAULT_PERCENTAGES`; prod Cloud Run literals explicitly carry 0.
+RESOLVED (SCA-2173, 2026-11-14): the prod worker and the prod Cloud Run
+services pin `batch_timeliness_leader:100` and `lifecycle_record_pending_head:100`,
+and set `privacy_checks_shadow:0`; `backend-sync-backfill` keeps its ec191a row 3
+pins (`batch_timeliness_leader:0`, `privacy_checks_shadow:100`,
+`lifecycle_record_pending_head:5`). `privacy_ttl60` remains 0. Integration, sync
+and backend pin both `usage_month_cache` and `usage_month_total` to 100 (SCA-2222
+Train 1); backfill and the worker keep both at 0. Every other lever and epoch is
+unchanged.
+These source values ride each surface's next train; no worker roll is requested.
 The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
-worker surfaces and annotates the generated differences. It does not resolve them.
+worker surfaces and enumerates the remaining unresolved inherited differences.
+The pending 5% monthly-reader proposal is not a compose input; its refreshed
+preimage now includes integration at 100%, while its proposed target remains 5%.
 
 UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
 `people_scan_dedupe`, and `finjob_candidate_queries` are documented as 0 in the

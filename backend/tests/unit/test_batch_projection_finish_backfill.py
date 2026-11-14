@@ -48,6 +48,26 @@ def test_dry_run_and_atomic_checkpoint_use_strict_read_before_write_fixture():
     assert stamp_page(store, 200.0, apply=True)['scanned'] == 0
 
 
+def test_apply_reads_the_page_in_one_batch_get_inside_the_transaction():
+    store = fixture()
+    batch_get = Mock(wraps=store.client.get_all)
+    store.client.get_all = batch_get
+    assert stamp_page(store, 100.0, apply=True)['stamped'] == 1
+    assert batch_get.call_count == 1
+    (references,), keywords = batch_get.call_args
+    assert [reference.id for reference in references] == ['a', 'b', 'c']
+    assert keywords['transaction'] is store.client.transactions[-1]
+
+
+def test_apply_with_an_empty_page_issues_no_batch_get():
+    store = fixture()
+    store.projection_page.return_value = ([], None)
+    batch_get = Mock(wraps=store.client.get_all)
+    store.client.get_all = batch_get
+    assert stamp_page(store, 100.0, apply=True) == {'complete': True, 'scanned': 0, 'missing': 0, 'stamped': 0}
+    batch_get.assert_not_called()
+
+
 def test_full_page_resumes_shared_checkpoint():
     store = fixture()
     store.projection_page.return_value = (['a'], (1.0, 'a'))

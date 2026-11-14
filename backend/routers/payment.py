@@ -856,6 +856,35 @@ def _unlock_paid_content(uid: str) -> None:
     action_items_db.unlock_all_action_items(uid)
 
 
+def _store_modified_subscription(
+    uid: str, price_id: str, current_subscription: Subscription, updated_sub_dict: dict
+) -> Optional[Subscription]:
+    """Store an immediately modified subscription, or 402 if Stripe left it incomplete."""
+    if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
+        logger.warning(
+            f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
+        )
+        raise HTTPException(
+            status_code=402,
+            detail="Payment for the plan change could not be completed. Your current subscription remains active.",
+        )
+
+    new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
+    if new_subscription:
+        users_db.update_user_subscription(uid, new_subscription.model_dump())
+        set_credits_invalidation_signal(uid)
+        if is_paid_plan(new_subscription.plan):
+            conversations_db.unlock_all_conversations(uid)
+            memories_db.unlock_all_memories(uid)
+            action_items_db.unlock_all_action_items(uid)
+            clear_fair_use_on_upgrade(uid)
+            if funded_processing_enabled(uid):
+                from utils.processing_backlog_worker import plan_changed
+
+                plan_changed(uid, price_id, current_subscription, new_subscription, updated_sub_dict.get('status'))
+    return new_subscription
+
+
 @router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 @fresh_reader
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
@@ -980,36 +1009,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
-            updated_sub_dict = updated_sub.to_dict()
-            if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
-                logger.warning(
-                    f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
-                )
-                raise HTTPException(
-                    status_code=402,
-                    detail="Payment for the plan change could not be completed. Your current subscription remains active.",
-                )
-
-            # Update our database immediately
-            new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
-            if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.model_dump())
-                set_credits_invalidation_signal(uid)
-                if is_paid_plan(new_subscription.plan):
-                    conversations_db.unlock_all_conversations(uid)
-                    memories_db.unlock_all_memories(uid)
-                    action_items_db.unlock_all_action_items(uid)
-                    clear_fair_use_on_upgrade(uid)
-                    if funded_processing_enabled(uid):
-                        from utils.processing_backlog_worker import plan_changed
-
-                        plan_changed(
-                            uid,
-                            request.price_id,
-                            current_subscription,
-                            new_subscription,
-                            updated_sub_dict.get('status'),
-                        )
+            new_subscription = _store_modified_subscription(
+                uid, request.price_id, current_subscription, updated_sub.to_dict()
+            )
 
             logger.info(f"Immediate plan change for user {uid}: {current_plan.value} -> {target_plan.value}")
 
@@ -1020,6 +1022,45 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
                 ),
                 "days_remaining": 0,
+                "schedule_id": None,
+            }
+
+        # Same plan, different interval during a Stripe trial: swap the price in place. A schedule
+        # ends the trial and bills the full current price at once (#23298). Only Stripe's status
+        # says trialing; the stored status never does. Every swap issues a new latest_invoice, so
+        # the key replays a retry of this change, never a later switch back.
+        trial_end = stripe_sub.get('trial_end')
+        if stripe_sub.get('status') == 'trialing' and trial_end:
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'none',
+                'payment_behavior': 'error_if_incomplete',
+                'trial_end': trial_end,
+                'metadata': {'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
+                'idempotency_key': (
+                    f"omi-trial-interval-{stripe_sub['id']}-{stripe_sub.get('latest_invoice')}"
+                    f"-{request.price_id}-{trial_end}"
+                ),
+            }
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            new_subscription = _store_modified_subscription(
+                uid, request.price_id, current_subscription, updated_sub.to_dict()
+            )
+
+            logger.info(f"Trial interval change for user {uid}: {current_plan.value} -> {target_interval}")
+
+            remaining_days = max(0, (trial_end - int(time.time())) // 86400)
+            label = {'month': 'monthly', 'year': 'annual'}.get(target_interval, target_interval)
+            return {
+                "status": "success",
+                "message": f"Your free trial continues for {remaining_days} more days, then your {label} plan starts.",
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
+                "days_remaining": remaining_days,
                 "schedule_id": None,
             }
 

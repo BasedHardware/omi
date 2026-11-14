@@ -1380,6 +1380,7 @@ _PROMQL_KEYWORDS = frozenset(
         "histogram_quantile",
         "topk",
         "bottomk",
+        "quantile",
         "count",
         "max",
         "min",
