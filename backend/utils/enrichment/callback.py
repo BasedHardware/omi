@@ -29,7 +29,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
-from utils.sync import processing_hold, bridge_pending, bridge, capture_end
+from utils.sync import processing_hold, bridge_pending, bridge
 from database import capture_end as capture_end_db
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.smart_merge_policy import refresh_owed
@@ -56,24 +56,6 @@ logger = logging.getLogger(__name__)
 
 # Shared with legacy sync's lineage retry intents; the stored row's language wins.
 _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
-
-
-def _end_proven(uid: str, conversation_data: dict) -> bool:
-    """One session-document read, only when admission would otherwise wait.
-
-    Any failure is "not proven": the quiet rule is the fallback, never an error.
-    """
-    recording = (conversation_data.get('external_data') or {}).get('recording_session_id')
-    if not capture_end.enabled() or not isinstance(recording, str) or not recording:
-        return False
-    try:
-        marker = capture_end_db.load(uid, recording)
-    except Exception as error:
-        logger.warning('event=capture_end_proof outcome=read_error exception_type=%s', type(error).__name__)
-        return False
-    result = capture_end.proof(conversation_data, marker)
-    capture_end.record_proof(result)
-    return result == 'proven'
 
 
 @observe_sync_failures
@@ -140,7 +122,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
                 conversation_data,
                 context,
                 now=time.time(),
-                end_proven=lambda: _end_proven(uid, conversation_data),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
             )
             if processing_hold.enabled_for(context)
             else ('ready', None)

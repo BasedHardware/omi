@@ -20,13 +20,21 @@ from typing import Any
 
 from prometheus_client import REGISTRY, Counter, Histogram
 
+from utils.observability.reasons import (
+    CaptureEndOutcome,
+    CaptureEndProofOutcome,
+    CaptureEndTypeReason,
+    ReasonFamily,
+    UploadTraceGateReason,
+    reason_label,
+)
+
 FIELD = 'capture_end'
 # The phone's VAD and the server's transcript place the last speech a few
 # seconds apart; the same bound separates a resumed recording from this end.
 TOLERANCE_SECONDS = 5.0
 MAX_CLOCK_SPAN_SECONDS = 7 * 86400
 CLIENT_END_TYPES = {'user_initiated': 'user_initiated', 'silence_backstop': 'silence_backstop', 'disconnect': 'unknown'}
-PROOF_RESULTS = frozenset({'proven', 'absent', 'pending', 'content_behind', 'resumed'})
 TRACE_GATES = frozenset(
     'none rate_limited auto_upload_off background retries_exhausted in_flight offline server_hold other'.split()
 )
@@ -84,9 +92,10 @@ def _seal_to_accept() -> Histogram:
 
 
 def record_received(end_type: str, outcome: str) -> None:
-    kind = end_type if end_type in {'user_initiated', 'silence_backstop', 'unknown'} else 'unknown'
-    result = outcome if outcome in {'stored', 'duplicate', 'stale', 'unbound', 'disabled', 'invalid'} else 'invalid'
-    _received().labels(end_type=kind, outcome=result).inc()
+    _received().labels(
+        end_type=reason_label(ReasonFamily.CAPTURE_END, end_type, CaptureEndTypeReason),
+        outcome=reason_label(ReasonFamily.CAPTURE_END, outcome, CaptureEndOutcome),
+    ).inc()
 
 
 def _number(value: Any) -> float | None:
@@ -162,7 +171,7 @@ def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
 
 
 def record_proof(result: str) -> None:
-    _proof().labels(result=result if result in PROOF_RESULTS else 'absent').inc()
+    _proof().labels(result=reason_label(ReasonFamily.CAPTURE_END, result, CaptureEndProofOutcome)).inc()
 
 
 def parse_trace(header: str | None, *, received_at: float) -> tuple[str, float] | None:
@@ -191,4 +200,6 @@ def observe_trace(header: str | None, *, received_at: float) -> None:
         return
     parsed = parse_trace(header, received_at=received_at)
     if parsed is not None:
-        _seal_to_accept().labels(gate=parsed[0]).observe(parsed[1])
+        _seal_to_accept().labels(gate=reason_label(ReasonFamily.CAPTURE_END, parsed[0], UploadTraceGateReason)).observe(
+            parsed[1]
+        )

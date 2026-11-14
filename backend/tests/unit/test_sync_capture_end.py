@@ -12,7 +12,6 @@ from tests.unit.test_pipeline_ledger import _FakeClient, _FakeTransaction
 from models.message_event import MessageServiceStatusEvent
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.enrichment import callback
 from utils.sync import capture_end
 from utils.sync import processing_hold as hold
 
@@ -239,21 +238,21 @@ def test_kill_switch_disables_the_feature(monkeypatch):
     assert capture_end.enabled()
 
 
-def test_callback_reads_the_marker_only_for_a_row_with_a_recording_session(monkeypatch):
+def test_the_marker_is_read_only_for_a_row_with_a_recording_session(monkeypatch):
     load = Mock(return_value=marker())
-    monkeypatch.setattr(callback.capture_end_db, 'load', load)
-    assert callback._end_proven('u', {'finished_at': 999.0}) is False
+    monkeypatch.setattr(store, 'load', load)
+    assert store.proven('u', {'finished_at': 999.0}) is False
     load.assert_not_called()
     conversation = {'finished_at': 999.0, 'external_data': {'recording_session_id': 's'}}
-    assert callback._end_proven('u', conversation) is True
-    load.assert_called_once_with('u', 's')
-    assert callback._end_proven('u', {**conversation, 'finished_at': 5000.0}) is False
-    monkeypatch.setattr(callback.capture_end_db, 'load', Mock(side_effect=OSError('synthetic')))
-    assert callback._end_proven('u', conversation) is False
+    assert store.proven('u', conversation) is True
+    load.assert_called_once_with('u', 's', firestore_client=None)
+    assert store.proven('u', {**conversation, 'finished_at': 5000.0}) is False
+    monkeypatch.setattr(store, 'load', Mock(side_effect=OSError('synthetic')))
+    assert store.proven('u', conversation) is False
     monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'off')
-    monkeypatch.setattr(callback.capture_end_db, 'load', load)
+    monkeypatch.setattr(store, 'load', load)
     load.reset_mock()
-    assert callback._end_proven('u', conversation) is False
+    assert store.proven('u', conversation) is False
     load.assert_not_called()
 
 

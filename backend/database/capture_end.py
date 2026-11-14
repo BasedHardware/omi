@@ -8,13 +8,17 @@ and closed labels.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
 from database.recording_sessions import RECORDING_SESSIONS_COLLECTION
+from utils.sync import capture_end as policy
 from utils.sync.capture_end import FIELD
+
+logger = logging.getLogger(__name__)
 
 
 def _ref(client: Any, uid: str, recording_session_id: str) -> Any:
@@ -73,3 +77,23 @@ def load(uid: str, recording_session_id: str, *, firestore_client: Any = None) -
     data = snapshot.to_dict() or {}
     marker = data.get(FIELD)
     return dict(marker) if data.get('uid') == uid and isinstance(marker, Mapping) else None
+
+
+def proven(uid: str, conversation_data: Mapping[str, Any], *, firestore_client: Any = None) -> bool:
+    """Whether the phone has proven this row's recording ended and its speech landed.
+
+    Asked by hold admission only when it would otherwise wait: one session
+    document read, and only for a row that carries a recording session id. Any
+    failure is "not proven"; the quiet rule is the fallback, never an error.
+    """
+    recording = (conversation_data.get('external_data') or {}).get('recording_session_id')
+    if not policy.enabled() or not isinstance(recording, str) or not recording:
+        return False
+    try:
+        marker = load(uid, recording, firestore_client=firestore_client)
+    except Exception as error:
+        logger.warning('event=capture_end_proof outcome=read_error exception_type=%s', type(error).__name__)
+        return False
+    result = policy.proof(conversation_data, marker)
+    policy.record_proof(result)
+    return result == 'proven'

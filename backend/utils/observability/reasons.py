@@ -86,6 +86,7 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    CAPTURE_END = 'capture_end'
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
@@ -161,6 +162,44 @@ class DeliveryOutcome(StrEnum):
     NO_OP = 'no_op'
     DEFERRED = 'deferred'
     FAILED = 'failed'
+
+
+class CaptureEndOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    STORED = 'stored'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    UNBOUND = 'unbound'
+    DISABLED = 'disabled'
+    INVALID = 'invalid'
+
+
+class CaptureEndTypeReason(StrEnum):
+    UNKNOWN = 'unknown'
+    USER_INITIATED = 'user_initiated'
+    SILENCE_BACKSTOP = 'silence_backstop'
+
+
+class CaptureEndProofOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PROVEN = 'proven'
+    ABSENT = 'absent'
+    PENDING = 'pending'
+    CONTENT_BEHIND = 'content_behind'
+    RESUMED = 'resumed'
+
+
+class UploadTraceGateReason(StrEnum):
+    UNKNOWN = 'unknown'
+    NONE = 'none'
+    RATE_LIMITED = 'rate_limited'
+    AUTO_UPLOAD_OFF = 'auto_upload_off'
+    BACKGROUND = 'background'
+    RETRIES_EXHAUSTED = 'retries_exhausted'
+    IN_FLIGHT = 'in_flight'
+    OFFLINE = 'offline'
+    SERVER_HOLD = 'server_hold'
+    OTHER = 'other'
 
 
 class SyncProcessingHoldOutcome(StrEnum):

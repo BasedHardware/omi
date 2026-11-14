@@ -57,6 +57,7 @@ from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_sta
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
+from database import capture_end as capture_end_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
     repair_fenced,
@@ -1125,7 +1126,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(
+                conversation_data,
+                context,
+                now=time.time(),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
+            )
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
