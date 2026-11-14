@@ -405,6 +405,8 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
 # 10-minute bar the traces were recorded with (provider admission now defaults to a day).
 _PROVIDER_BACKLOG_RELEASE = {
     'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': 'true',
+    # The characterization traces predate the metered lane: they record the unmetered release.
+    'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': 'false',
     'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS': '600',
 }
 
