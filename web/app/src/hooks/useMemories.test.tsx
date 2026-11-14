@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   authLoading: false,
   backendScope: 'https://backend-a',
   getCachedMemories: vi.fn(async (_scope?: unknown) => null),
-  cacheMemories: vi.fn(async () => {}),
+  cacheMemories: vi.fn(async (..._args: unknown[]) => {}),
 }));
 
 vi.mock('@/components/auth/AuthProvider', () => ({
@@ -208,5 +208,83 @@ describe('useMemories standard list and cache scope', () => {
     expect(result.current.memories[0]?.content).toBe('All memories');
     expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBeNull();
+  });
+});
+
+describe('useMemories unfinished (truncated) reads', () => {
+  beforeEach(() => {
+    mocks.authUser = { uid: 'owner-a' };
+    mocks.authLoading = false;
+    mocks.backendScope = 'https://backend-a';
+    mocks.cacheEntries.clear();
+    mocks.invalidationListeners.clear();
+    mocks.getCache.mockImplementation(
+      (key: string) => mocks.cacheEntries.get(key) ?? null,
+    );
+    mocks.setCache.mockImplementation((key: string, data: unknown) => {
+      mocks.cacheEntries.set(key, { data, isStale: false });
+    });
+    mocks.getCachedMemories.mockReset();
+    mocks.getCachedMemories.mockResolvedValue(null);
+    mocks.cacheMemories.mockReset();
+    mocks.cacheMemories.mockResolvedValue(undefined);
+    mocks.getMemoriesPage.mockReset();
+  });
+
+  const truncatedEmptyPage = { memories: [], nextCursor: null, truncated: true };
+
+  it('keeps the rows already on screen when a refresh comes back truncated and empty', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page('Kept memory'));
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(result.current.memories[0]?.content).toBe('Kept memory'));
+
+    mocks.getMemoriesPage.mockResolvedValueOnce(truncatedEmptyPage);
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.memories.map((memory) => memory.content)).toEqual([
+      'Kept memory',
+    ]);
+    expect(result.current.truncated).toBe(true);
+    expect(result.current.hasMore).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('reports an empty truncated first read as unfinished, not as no memories', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(truncatedEmptyPage);
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.memories).toEqual([]);
+    expect(result.current.truncated).toBe(true);
+    expect(result.current.hasMore).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('does not let a truncated first page prune the browser cache', async () => {
+    const partial = page('Partial memory');
+    mocks.getMemoriesPage.mockResolvedValueOnce({ ...partial, truncated: true });
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.cacheMemories).toHaveBeenCalledTimes(1));
+
+    expect(mocks.cacheMemories).toHaveBeenCalledWith(
+      partial.memories,
+      expect.objectContaining({ ownerId: 'owner-a' }),
+      { complete: false },
+    );
+    expect(result.current.memories.map((memory) => memory.content)).toEqual([
+      'Partial memory',
+    ]);
+    expect(result.current.truncated).toBe(true);
+  });
+
+  it('lets a complete first page replace the browser cache', async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page());
+    renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(mocks.cacheMemories).toHaveBeenCalledTimes(1));
+
+    expect(mocks.cacheMemories.mock.calls[0][2]).toEqual({ complete: true });
   });
 });

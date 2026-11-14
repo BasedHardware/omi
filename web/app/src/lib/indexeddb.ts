@@ -61,22 +61,32 @@ function belongsToScope(memory: CachedMemory, scope: MemoryCacheScope): boolean 
   return memory.ownerId === scope.ownerId && memory.backendScope === scope.backendScope;
 }
 
-/** Cache a page for one owner/backend scope. */
+/**
+ * Cache a page for one owner/backend scope.
+ *
+ * A complete page replaces the scope: rows the server no longer lists are
+ * dropped and the sync time is recorded. A truncated page (`complete: false`)
+ * only adds the rows it carries, because the server stopped early and absence
+ * from it proves nothing (#24722).
+ */
 export async function cacheMemories(
   memories: Memory[],
   scope: MemoryCacheScope,
+  { complete = true }: { complete?: boolean } = {},
 ): Promise<void> {
   try {
     const db = await getDB();
     const tx = db.transaction(['memories', 'metadata'], 'readwrite');
     const memoryStore = tx.objectStore('memories');
-    const existing = await memoryStore.getAll();
     const now = Date.now();
     const scopePrefix = `${memoryCacheScopeKey(scope)}:useful_now:`;
 
-    for (const memory of existing) {
-      if (memory.cacheKey.startsWith(scopePrefix)) {
-        await memoryStore.delete(memory.cacheKey);
+    if (complete) {
+      const existing = await memoryStore.getAll();
+      for (const memory of existing) {
+        if (memory.cacheKey.startsWith(scopePrefix)) {
+          await memoryStore.delete(memory.cacheKey);
+        }
       }
     }
     for (const memory of memories) {
@@ -88,7 +98,7 @@ export async function cacheMemories(
         cachedAt: now,
       });
     }
-    await tx.objectStore('metadata').put(now, metadataKey(scope));
+    if (complete) await tx.objectStore('metadata').put(now, metadataKey(scope));
     await tx.done;
   } catch (error) {
     console.error('[IndexedDB] Failed to cache memories:', error);

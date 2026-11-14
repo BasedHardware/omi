@@ -73,3 +73,55 @@ describe('MemoryList layout', () => {
     );
   });
 });
+
+describe('MemoryList unfinished reads', () => {
+  const handlers = () => ({
+    onLoadMore: vi.fn().mockResolvedValue(undefined),
+    onEdit: vi.fn().mockResolvedValue(true),
+    onDelete: vi.fn().mockResolvedValue(true),
+    onToggleVisibility: vi.fn().mockResolvedValue(true),
+  });
+
+  it('does not claim "No memories yet" when the read stopped before the history', () => {
+    render(
+      <MemoryList
+        memories={[]}
+        loading={false}
+        hasMore={false}
+        truncated
+        {...handlers()}
+      />,
+    );
+
+    expect(screen.getByTestId('memory-list-unfinished')).toHaveTextContent(
+      "Memories didn't finish loading",
+    );
+    expect(screen.queryByText('No memories yet')).not.toBeInTheDocument();
+  });
+
+  it('keeps the ordinary empty state for a complete empty read', () => {
+    render(<MemoryList memories={[]} loading={false} hasMore={false} {...handlers()} />);
+
+    expect(screen.getByText('No memories yet')).toBeInTheDocument();
+    expect(screen.queryByTestId('memory-list-unfinished')).not.toBeInTheDocument();
+  });
+
+  it('does not announce the end of history after a truncated page', () => {
+    render(
+      <MemoryList
+        memories={[memory]}
+        loading={false}
+        hasMore={false}
+        truncated
+        {...handlers()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        'Some memories were not loaded. This is not the complete history.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("You've reached the end")).not.toBeInTheDocument();
+  });
+});

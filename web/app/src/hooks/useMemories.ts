@@ -5,6 +5,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
 import {
   getMemoriesPage,
+  type MemoriesPage as MemoriesPageResult,
   createMemory,
   updateMemoryContent,
   updateMemoryVisibility,
@@ -219,6 +220,38 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     [limit],
   );
 
+  /**
+   * Adopt a freshly fetched first page as the visible list.
+   *
+   * A truncated page with no rows is an unfinished read, not proof of an empty
+   * account: the server stopped before it reached anything. Keep whatever is
+   * already on screen and only flag the incompleteness, so the list cannot
+   * claim "No memories yet" and the cache is not overwritten with nothing (#24722).
+   */
+  const adoptFirstPage = useCallback(
+    (key: string, page: MemoriesPageResult) => {
+      const pageHasMore =
+        Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
+      const unfinishedAndEmpty = page.truncated && page.memories.length === 0;
+      if (!unfinishedAndEmpty) {
+        setMemories(page.memories);
+        offsetRef.current = page.memories.length;
+        cursorRef.current = page.nextCursor;
+        setToCache(
+          key,
+          page.memories,
+          page.memories.length,
+          page.nextCursor,
+          pageHasMore,
+          page.truncated,
+        );
+      }
+      setHasMore(pageHasMore);
+      setTruncated(page.truncated);
+    },
+    [limit],
+  );
+
   // Initial load - check cache first (memory → IndexedDB → network)
   useEffect(() => {
     if (!scopeKey || authLoading || !memoryCacheScope || !cacheKey) return;
@@ -307,23 +340,12 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       try {
         const page = await doFetch(activeCategories, 0);
         if (!isCurrentRequest() || !isQueryCurrent()) return;
-        const pageHasMore =
-          Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
-        setMemories(page.memories);
-        offsetRef.current = page.memories.length;
-        cursorRef.current = page.nextCursor;
-        setHasMore(pageHasMore);
-        setTruncated(page.truncated);
-        // Update both caches
-        setToCache(
-          key,
-          page.memories,
-          page.memories.length,
-          page.nextCursor,
-          pageHasMore,
-          page.truncated,
-        );
-        await cacheMemories(page.memories, memoryCacheScope);
+        adoptFirstPage(key, page);
+        // A truncated page is not the whole scope, so it must not evict the
+        // rows the browser already holds for it.
+        await cacheMemories(page.memories, memoryCacheScope, {
+          complete: !page.truncated,
+        });
         if (!isCurrentRequest() || !isQueryCurrent()) return;
       } catch (err) {
         if (!isCurrentRequest() || !isQueryCurrent()) return;
@@ -360,6 +382,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   }, [
     authLoading,
     cacheKey,
+    adoptFirstPage,
     doFetch,
     activeCategories,
     limit,
@@ -424,22 +447,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       try {
         const page = await doFetch(activeCategories, 0);
         if (!isCurrentRequest() || !isQueryCurrent()) return;
-        const pageHasMore =
-          Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
-        setMemories(page.memories);
-        offsetRef.current = page.memories.length;
-        cursorRef.current = page.nextCursor;
-        setHasMore(pageHasMore);
-        setTruncated(page.truncated);
-        // Update cache
-        setToCache(
-          key,
-          page.memories,
-          page.memories.length,
-          page.nextCursor,
-          pageHasMore,
-          page.truncated,
-        );
+        adoptFirstPage(key, page);
       } catch (err) {
         if (isCurrentRequest() && isQueryCurrent() && !cached) {
           setError(err instanceof Error ? err.message : 'Failed to load memories');
@@ -456,6 +464,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     loadForCategories();
   }, [
     activeCategories,
+    adoptFirstPage,
     authLoading,
     doFetch,
     fetchIdleTick,
@@ -554,23 +563,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
         try {
           const page = await doFetch(activeCategories, 0);
           if (!isCurrentRequest() || !isQueryCurrent()) return false;
-          const pageHasMore =
-            Boolean(page.nextCursor) ||
-            (!page.truncated && page.memories.length >= limit);
-          setMemories(page.memories);
-          offsetRef.current = page.memories.length;
-          cursorRef.current = page.nextCursor;
-          setHasMore(pageHasMore);
-          setTruncated(page.truncated);
-          // Update cache
-          setToCache(
-            key,
-            page.memories,
-            page.memories.length,
-            page.nextCursor,
-            pageHasMore,
-            page.truncated,
-          );
+          adoptFirstPage(key, page);
           return true;
         } catch (err) {
           if (isCurrentRequest() && isQueryCurrent()) {
@@ -591,7 +584,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       refreshInFlightRef.current = holder.promise;
       return holder.promise;
     },
-    [activeCategories, doFetch, limit],
+    [activeCategories, adoptFirstPage, doFetch, limit],
   );
 
   // Subscribe to cache invalidation - refetch when memories are modified elsewhere
