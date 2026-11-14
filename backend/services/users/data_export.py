@@ -9,6 +9,7 @@ from typing import IO, Any, Generator, Iterable, Iterator, Mapping, Optional, Se
 
 from database import chat as chat_db
 from database import conversations as conversations_db
+from database import pipeline_ledger
 from database.action_items import iter_all_action_items
 from utils.retrieval.frame_request_storage import download_frame_request_pixels
 from database.users import get_people, get_user_profile
@@ -96,6 +97,10 @@ MEMORY_REVIEW_EXPORT_COLLECTIONS = (
     'memory_review_queue',
     'memory_corrections',
 )
+
+# The in-flight capture ledger is content-free implementation state, but it is
+# durable per-user data and must be portable and erasable with the account.
+PIPELINE_LEDGER_EXPORT_COLLECTIONS = (pipeline_ledger.COLLECTION,)
 
 # Account-lifetime canonical ledger history and lineage authority. These rows
 # are retained independently of the user-facing MemoryDB projection and must
@@ -315,6 +320,15 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
         yield f"    {json.dumps(collection_name)}: "
         yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
         yield ",\n" if index < len(JIT_EXPORT_COLLECTIONS) - 1 else "\n"
+    yield '  },\n'
+
+    # Content-free capture lifecycle rows: stage, deadlines, bounded reasons
+    # and timestamps only. No transcript, title, overview or audio path.
+    yield '  "pipeline_ledger": {\n'
+    for index, collection_name in enumerate(PIPELINE_LEDGER_EXPORT_COLLECTIONS):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
+        yield ",\n" if index < len(PIPELINE_LEDGER_EXPORT_COLLECTIONS) - 1 else "\n"
     yield '  },\n'
 
     # Soft-dismissed people stay in the user's portable archive even though

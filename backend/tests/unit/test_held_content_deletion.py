@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from google.api_core.exceptions import NotFound
 
-from database import batch_pipeline_purge, user_data_deletion
+from database import batch_pipeline_purge, pipeline_ledger, user_data_deletion
 from utils.other import storage
 from utils.sync import cap_hold_recovery as recovery
 from utils.sync.cap_hold_erasure import terminal_receipts
@@ -130,6 +130,10 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     user = Mock()
     user.get.return_value.exists = root_exists
     user.collections.return_value = subcollections
+    user.collection.side_effect = lambda name: SimpleNamespace(
+        id=name,
+        document=lambda doc: SimpleNamespace(delete=lambda: None),
+    )
     client = Mock()
     client.collection.return_value.document.return_value = user
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
@@ -145,7 +149,7 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     )
     assert user_data_deletion.purge_user_subtree('synthetic', client, recursive)['status'] == 'ok'
     assert retirements == [('synthetic', client)]
-    assert [call.args[0].id for call in recursive.call_args_list] == names
+    assert [call.args[0].id for call in recursive.call_args_list] == names + [pipeline_ledger.COLLECTION]
     assert all(call.kwargs == {'client': client} for call in recursive.call_args_list)
     assert user.delete.call_count == int(root_exists)
 

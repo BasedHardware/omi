@@ -45,6 +45,9 @@ COLLECTION = 'pipeline_ledger'
 MAX_TRANSITIONS = 16
 DEFAULT_TERMINAL_TTL_SECONDS = 93600  # 26h: 24h exact census + 2h grace.
 MAX_TERMINAL_TTL_SECONDS = 7 * 86400
+# A nonterminal row is refreshed on every transition. The max lifetime is a
+# backstop for a row that never transitions again, not a serving deadline.
+NONTERMINAL_TTL_SECONDS = MAX_TERMINAL_TTL_SECONDS
 DEFAULT_WINDOW_LIMIT = 5000
 
 CAPTURING, SEALED, TRANSCRIBED, NOTED, DONE = 'capturing', 'sealed', 'transcribed', 'noted', 'done'
@@ -210,6 +213,10 @@ def plan_advance(
     stored one. ``illegal`` means a backward or unknown transition.
     ``terminal`` means the capture already reached a terminal and cannot move
     again without an explicit, higher-revision re-open.
+
+    For ``failed:upload_failed`` the supplied ``end_at`` is the most recent
+    failed-attempt stamp (``mark_record_upload_failed`` overwrites it), not the
+    first loss of audio. It is a firing clock, not a first-failure measure.
     """
     current = time.time() if now is None else now
     if stage.startswith(FAILED_PREFIX):
@@ -286,7 +293,11 @@ def plan_advance(
         'episode_done_at': _epoch(_pick(episode_done_at, existing, 'episode_done_at')),
         'transitions': transitions,
         # Firestore TTL policies require a timestamp field, not a numeric epoch.
-        'expires_at': datetime.fromtimestamp(current + terminal_ttl_seconds(), tz=timezone.utc) if terminal else None,
+        # Nonterminal rows get a bounded max lifetime too, refreshed on every
+        # transition, so a stalled row cannot live forever.
+        'expires_at': datetime.fromtimestamp(
+            current + (terminal_ttl_seconds() if terminal else NONTERMINAL_TTL_SECONDS), tz=timezone.utc
+        ),
     }
     return Plan(doc, 'written')
 
@@ -333,11 +344,42 @@ def ledger_ref(client: Any, uid: str, capture_id: str) -> Any:
     return client.collection('users').document(uid).collection(COLLECTION).document(capture_id)
 
 
-def _commit(client: Any, ref: Any, uid: str, stage: str, **kwargs: Any) -> str:
+def source_revision(snapshot: Any) -> int:
+    """Ordered, persisted source revision from a Firestore snapshot's update_time."""
+    update_time = getattr(snapshot, 'update_time', None)
+    if isinstance(update_time, datetime):
+        # Integer seconds plus microseconds avoids the float64 ulp at 2026
+        # epochs collapsing two distinct commits into one revision.
+        return int(update_time.timestamp()) * 1_000_000 + update_time.microsecond
+    return 0
+
+
+def _commit(
+    client: Any,
+    ref: Any,
+    uid: str,
+    stage: str,
+    *,
+    source_ref: Any = None,
+    owner_ref: Any = None,
+    **kwargs: Any,
+) -> str:
     observed: dict[str, Any] = {}
 
     @firestore.transactional
     def commit(transaction: Any) -> str:
+        # Fence a delayed post-commit write against source deletion and account
+        # erasure inside the same transaction that would create the row.
+        if owner_ref is not None:
+            owner = owner_ref.get(transaction=transaction)
+            if not getattr(owner, 'exists', False):
+                observed['outcome'] = 'deleted'
+                return 'deleted'
+        if source_ref is not None:
+            source = source_ref.get(transaction=transaction)
+            if not getattr(source, 'exists', False) or (source.to_dict() or {}).get('deleted'):
+                observed['outcome'] = 'deleted'
+                return 'deleted'
         snapshot = ref.get(transaction=transaction)
         existing = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
         plan = plan_advance(existing, stage, **kwargs)
@@ -379,16 +421,28 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
     ``fields`` are the :func:`plan_advance` keyword arguments (``now``,
     ``reason``, ``end_type``, ``end_at``, ``last_speech_at``, ``quiet_due_at``,
     ``revision``, ``reopen``, ``speech_seconds``, ``has_speech``,
-    ``speech_basis``, ``home_ready_at``, ``episode_done_at``). Returns ``True``
-    only when a new document was committed. Every error is swallowed: the real
-    transition already committed and stays authoritative.
+    ``speech_basis``, ``home_ready_at``, ``episode_done_at``). ``source_ref``
+    and ``owner_ref`` fence the write against a deleted source or erased
+    account. Returns ``True`` only when a new document was committed. Every
+    error is swallowed: the real transition already committed and stays
+    authoritative.
     """
-    if not pipeline_ledger_enabled():
-        _observe_write('disabled')
-        return False
     try:
+        if not pipeline_ledger_enabled():
+            _observe_write('disabled')
+            return False
         client = firestore_client if firestore_client is not None else get_firestore_client()
-        outcome = _commit(client, ledger_ref(client, uid, capture_id), uid, stage, **fields)
+        source_ref = fields.pop('source_ref', None)
+        owner_ref = fields.pop('owner_ref', None)
+        outcome = _commit(
+            client,
+            ledger_ref(client, uid, capture_id),
+            uid,
+            stage,
+            source_ref=source_ref,
+            owner_ref=owner_ref,
+            **fields,
+        )
         _observe_write('ok' if outcome == 'written' else outcome)
         return outcome == 'written'
     except Exception as error:  # Fail open: the real transition is authoritative.

@@ -356,7 +356,7 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
 
 @pytest.mark.parametrize('root_exists', [False, True])
 def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, root_exists):
-    from database import batch_pipeline_purge, user_data_deletion
+    from database import batch_pipeline_purge, pipeline_ledger, user_data_deletion
 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
@@ -374,13 +374,17 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
             SimpleNamespace(id='conversations'),
         ],
         collection=lambda name: SimpleNamespace(
-            document=lambda doc: SimpleNamespace(delete=lambda: rows.pop(doc, None))
+            id=name,
+            document=lambda doc: SimpleNamespace(delete=lambda: rows.pop(doc, None)),
         ),
         delete=lambda: events.append('root'),
     )
 
     def erase(sub, **kwargs):
         events.append(sub.id)
+        if sub.id == pipeline_ledger.COLLECTION:
+            # The post-root sweep; this fake has no ledger rows to drop.
+            return
         if sub.id in {'memory_state', user_data_deletion.STATE_COLLECTION}:
             rows.clear()
         elif sub.id == 'memories':
@@ -400,7 +404,7 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
     assert rows == {}
     assert events == ['memory_state', user_data_deletion.STATE_COLLECTION, 'memories', 'conversations'] + (
         ['root'] if root_exists else []
-    )
+    ) + [pipeline_ledger.COLLECTION]
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):

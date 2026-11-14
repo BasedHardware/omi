@@ -13,6 +13,8 @@ is not one, so its orphans could never be removed either.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from database import conversations as conversations_db
@@ -204,7 +206,22 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     conversations_db.delete_conversation('uid-1', 'conv-1')
 
     assert not conversation.exists
-    assert store.deleted == ['users/uid-1/conversations/conv-1', 'users/uid-1/transcript_corrections/conv-1']
+    assert store.deleted == [
+        'users/uid-1/conversations/conv-1',
+        'users/uid-1/transcript_corrections/conv-1',
+        'users/uid-1/pipeline_ledger/conv-1',
+    ]
+
+
+def test_delete_pipeline_ledger_row_propagates_a_transient_failure(monkeypatch):
+    client = MagicMock()
+    client.collection.return_value.document.return_value.collection.return_value.document.return_value.delete.side_effect = RuntimeError(
+        'synthetic ledger delete failure'
+    )
+    monkeypatch.setattr(conversations_db, 'db', client)
+
+    with pytest.raises(RuntimeError, match='synthetic ledger delete failure'):
+        conversations_db.delete_pipeline_ledger_row('uid-1', 'conv-1')
 
 
 def test_delete_conversation_purges_only_its_owner_scoped_correction_overlay(store):

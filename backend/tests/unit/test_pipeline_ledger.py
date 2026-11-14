@@ -172,7 +172,11 @@ def test_expires_at_is_a_utc_timestamp_not_an_epoch():
     doc = ledger.plan_advance(None, ledger.NO_SPEECH, now=100).doc
     assert isinstance(doc['expires_at'], datetime)
     assert doc['expires_at'].tzinfo == timezone.utc
-    assert ledger.plan_advance(None, ledger.SEALED, now=100).doc['expires_at'] is None
+    # Nonterminal rows also carry a bounded max lifetime, refreshed on every
+    # transition, so a stalled row cannot live forever.
+    nonterminal = ledger.plan_advance(None, ledger.SEALED, now=100).doc
+    assert isinstance(nonterminal['expires_at'], datetime)
+    assert ledger._epoch(nonterminal['expires_at']) == 100 + ledger.NONTERMINAL_TTL_SECONDS
 
 
 def test_arbitrary_failed_reason_collapses_to_the_closed_enum():
@@ -315,6 +319,14 @@ def test_advance_is_fail_open_on_store_error(monkeypatch):
 
 def test_advance_is_silent_when_disabled(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'off')
+    assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
+
+
+def test_advance_swallows_a_raising_enable_check(monkeypatch):
+    def boom():
+        raise RuntimeError('synthetic enable-check failure')
+
+    monkeypatch.setattr(ledger, 'pipeline_ledger_enabled', boom)
     assert ledger.advance('uid', 'capture', ledger.SEALED, firestore_client=_BoomClient()) is False
 
 

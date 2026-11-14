@@ -72,6 +72,7 @@ def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
         "memory_review_data": {name: [{"id": f"{name}-1"}] for name in data_export.MEMORY_REVIEW_EXPORT_COLLECTIONS},
         "memory_ledger_data": {name: [{"id": f"{name}-1"}] for name in data_export.MEMORY_LEDGER_EXPORT_COLLECTIONS},
         "jit_data": {name: [{"id": f"{name}-1"}] for name in data_export.JIT_EXPORT_COLLECTIONS},
+        "pipeline_ledger": {name: [{"id": f"{name}-1"}] for name in data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS},
         "people": [{"id": "person1"}],
         "action_items": [{"id": "task1"}],
         "frame_vision_receipts": [{"id": "frame_vision_receipts-1"}],

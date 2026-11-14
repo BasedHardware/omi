@@ -54,7 +54,7 @@
   "backend/database/speaker_learning_jobs.py:finish_job": "b1e032311338e69209098f5caa213b3329777cf6fd31ce0d1561facd734396ed",
   "backend/database/speaker_learning_jobs.py:finish_job.body": "c45f27f274329a99657f41ff964e8db55aa7a8ab5697522f273ff579b3b0652e",
   "backend/database/speaker_learning_jobs.py:prepare_assignment_jobs": "412ede10470cb5abbd5a34df70bf76b35d69f6ced3198add04fb273bb258db2d",
-  "backend/database/user_data_deletion.py:purge_user_subtree": "b7b5b360293cdd89c0287acabd33dc99c03cbf61b30ae6cf7ce3fdbc19227c36",
+  "backend/database/user_data_deletion.py:purge_user_subtree": "ce8da8e78694ad8eb003cd1ca5711fea15c7fed15a30ff84dafabbcf7fd96570",
   "backend/database/users.py:_invalidate_speech_profile_transaction": "6de957a4ede90a320a4c1e9b3c602e9d1eb39cd980eaa0549c7bd5d39d4ed495",
   "backend/database/users.py:_remove_sample_transaction": "7e33932de87ec44695f710dfbfd82bf1adf03e9313d557bddf30bd21383ee36c",
   "backend/database/users.py:_replace_speech_profile_transaction": "316a5a72d62e40db783749fa0d77ba05a8bd4eda8b224205943997a10fc83c1c",

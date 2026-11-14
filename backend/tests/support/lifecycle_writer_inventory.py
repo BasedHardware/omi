@@ -2007,6 +2007,7 @@ FIELD_SITES = {
         ),
         ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
+        ('seal_record_audio.commit', 'record_admitted_at', 'time.time()', ('record_admitted_at',)),
         ('seal_record_audio.commit', 'record_audio_closed', 'True', ('record_audio_closed',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'None', ('record_seal_refused_at',)),
         ('seal_record_audio.commit', 'record_seal_refused_at', 'time.time()', ('record_seal_refused_at',)),

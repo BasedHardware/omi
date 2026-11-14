@@ -453,7 +453,10 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
     }
 
     def collection(name):
-        return SimpleNamespace(document=lambda key: SimpleNamespace(delete=lambda: rows.get(name, {}).pop(key, None)))
+        return SimpleNamespace(
+            id=name,
+            document=lambda key: SimpleNamespace(delete=lambda: rows.get(name, {}).pop(key, None)),
+        )
 
     root = SimpleNamespace(
         get=lambda: SimpleNamespace(exists=False),
@@ -472,7 +475,8 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
     )
 
     def recursive(subcollection, **kwargs):
-        rows[subcollection.id].clear()
+        # The post-root ledger sweep names a collection this fake does not model.
+        rows.get(subcollection.id, {}).clear()
         if subcollection.id in projection.ROW_COLLECTIONS:
             # Model atomic source-delete hooks running after the heads were
             # walked, the worst collection-enumeration order for an erase.
