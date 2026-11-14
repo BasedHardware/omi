@@ -283,8 +283,8 @@ struct CancelSubscriptionFlowSheet: View {
         .scrollContentBackground(.hidden)
         .padding(OmiSpacing.sm)
         .frame(minHeight: 120)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Ink.rowFill))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Ink.hairline, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius).fill(Ink.rowFill))
+        .overlay(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius).stroke(Ink.hairline, lineWidth: 1))
         .onChange(of: controller.details) { _, value in
           if value.count > 300 { controller.details = String(value.prefix(300)) }
         }
@@ -427,11 +427,11 @@ struct CancelSubscriptionFlowSheet: View {
       .padding(.vertical, OmiSpacing.xs)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .fill(selected ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .stroke(selected ? Ink.hairline : Color.clear, lineWidth: 1)
       )
     }
@@ -449,7 +449,7 @@ struct CancelSubscriptionFlowSheet: View {
     }
     .padding(OmiSpacing.sm)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(RoundedRectangle(cornerRadius: 10).fill(tint.opacity(0.12)))
+    .background(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius).fill(tint.opacity(0.12)))
   }
 
   // MARK: - Close
@@ -517,10 +517,8 @@ enum CancelFlowCopy {
 
   static func periodEnd(_ seconds: Int?) -> String? {
     guard let seconds else { return nil }
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US")
-    formatter.dateFormat = "MMMM d, yyyy"
-    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(seconds)))
+    // Locale-aware long date; no fixed format string (INV-UI-2).
+    return Date(timeIntervalSince1970: TimeInterval(seconds)).formatted(date: .long, time: .omitted)
   }
 
   private static let zeroDecimal: Set<String> = [
