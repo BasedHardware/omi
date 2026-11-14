@@ -3287,6 +3287,12 @@ _add(
     )
 )
 _add(DriverEntry('database.user_usage.get_daily_history_for_month', base={'uid': UID, 'date': T0}))
+_add(
+    DriverEntry(
+        'utils.backfill_hours_cap.transcribed_seconds_for_day',
+        base={'uid': UID, 'day': FROZEN_TODAY},
+    )
+)
 _add(DriverEntry('database.user_usage.get_hourly_history_for_today', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(

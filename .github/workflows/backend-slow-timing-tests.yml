@@ -1,0 +1,59 @@
+name: Backend slow timing tests
+
+on:
+  # Unfiltered and without concurrency coalescing: each main commit gets a run.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+jobs:
+  slow-timing-tests:
+    # This workflow is independent of the required Backend unit suite check.
+    # Failures stay red here; do not hide them with continue-on-error.
+    name: Slow timing / ${{ matrix.test_file }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        test_file:
+          - test_soniox_recovery_retry.py
+          - test_live_replay_provider_pairs.py
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+      - uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+      - name: Install native audio dependencies
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ffmpeg libopus0
+      - name: Run slow timing coverage
+        working-directory: backend
+        env:
+          TEST_FILE: ${{ matrix.test_file }}
+        run: .venv/bin/python -m pytest -q -p no:cacheprovider -m 'slow and not integration' "tests/unit/$TEST_FILE" --junitxml=slow-timing-results.xml
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: slow-timing-${{ matrix.test_file }}
+          path: backend/slow-timing-results.xml
+          if-no-files-found: warn

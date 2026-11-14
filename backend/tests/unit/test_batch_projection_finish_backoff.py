@@ -1,7 +1,7 @@
 """Dark finish-backoff lever: identical output, no reads when a walk changed nothing.
 
 The lever (``BATCH_PROJECTION_FINISH_BACKOFF_ENABLED``) is off by default. Off,
-the finish page is exactly the legacy page and no result field is written. On,
+the finish page is exactly the legacy page. Clock writes are unconditional. On,
 a no-change walk stamps a durable next-attempt clock and the page filters on it,
 which is what removes the projection replay reads. Any state move clears the
 clock in the same write, so no obligation waits on it, and the ``pending``
@@ -19,6 +19,7 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionStor
 from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STEP_FIELD,
+    projection_finish_entry_fields,
     projection_finish_state_fields,
 )
 from database.batch_pipeline_store import projection_page
@@ -57,11 +58,13 @@ def finish_log(*, persisted=2):
     ids = chain(log, BURST, 'a', persisted)
     for sid in ids:
         log.results[sid]['projection_state'] = 'persisted'
+        log.results[sid][PROJECTION_FINISH_DUE_FIELD] = 1.0
         log.results[sid]['projection'] = {'state': 'persisted', 'conversation_id': None, 'enrichment_required': False}
     return log, ids
 
 
 def silent_projector(log, now=1000.0):
+    log.projection_finish_backfill_complete = Mock(return_value=True)
     projector = projector_for(log)
     projector.clock = lambda: now
     # The walk changes nothing: this is the replay A-1 bounds.
@@ -69,7 +72,7 @@ def silent_projector(log, now=1000.0):
     return projector
 
 
-def test_flag_off_is_byte_identical_and_writes_no_field():
+def test_flag_off_uses_legacy_page_without_deferral_or_marker_reads():
     log, ids = finish_log()
     projector = silent_projector(log)
     recorder = Recording(log)
@@ -82,10 +85,11 @@ def test_flag_off_is_byte_identical_and_writes_no_field():
     assert finish and all('due_before' not in page for page in finish)
     assert counts == {'completed': 0, 'waiting': len(ids), 'blocked': 0, 'error': 0}
     for sid in ids:
-        assert PROJECTION_FINISH_DUE_FIELD not in log.results[sid]
+        assert log.results[sid][PROJECTION_FINISH_DUE_FIELD] == 1.0
         assert PROJECTION_FINISH_STEP_FIELD not in log.results[sid]
     assert [call for call in recorder.calls if call[0] == 'defer_finish'] == []
-    assert projection_finish_state_fields('ready', 5.0) == {}
+    assert projection_finish_state_fields('ready', 5.0)[PROJECTION_FINISH_DUE_FIELD] == 5.0
+    log.projection_finish_backfill_complete.assert_not_called()
 
 
 def test_no_change_walk_defers_60_then_300_then_900_and_caps(monkeypatch):
@@ -124,7 +128,8 @@ def test_a_deferred_row_leaves_the_page_until_its_clock_passes(monkeypatch):
     assert counts['waiting'] == len(ids)
 
 
-def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch):
+@pytest.mark.parametrize("enabled", ["true", "false"])
+def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch, enabled):
     from tests.unit.test_batch_pipeline_quarantine import projection_fixture
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -133,7 +138,7 @@ def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch):
     client.rows[row]['projection_state'] = 'persisted'
     client.rows[row][PROJECTION_FINISH_DUE_FIELD] = 9.0
     client.rows[row][PROJECTION_FINISH_STEP_FIELD] = 1
-    monkeypatch.setenv(LEVER, 'true')
+    monkeypatch.setenv(LEVER, enabled)
     assert projection_finish_state_fields('ready', 5.0) == {
         PROJECTION_FINISH_DUE_FIELD: 5.0,
         PROJECTION_FINISH_STEP_FIELD: 0,
@@ -162,9 +167,9 @@ def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch):
     patches = [dict(patch) for _path, patch in client.transactions[-1].updates]
     cleared = [patch for patch in patches if patch.get(PROJECTION_FINISH_DUE_FIELD) is firestore.DELETE_FIELD]
     assert cleared and cleared[0][PROJECTION_FINISH_STEP_FIELD] is firestore.DELETE_FIELD
-    # Off, the same write carries no backoff field at all.
+    # Off, writers still stamp the clock for later filtered discovery.
     monkeypatch.setenv(LEVER, 'false')
-    assert projection_finish_state_fields('ready', 5.0) == {}
+    assert projection_finish_state_fields('ready', 5.0)[PROJECTION_FINISH_DUE_FIELD] == 5.0
 
 
 def test_defer_finish_fence_refuses_a_row_that_moved_on():
@@ -226,8 +231,7 @@ def test_same_output_with_the_flag_on_and_off():
         monkeypatch = pytest.MonkeyPatch()
         monkeypatch.setenv(LEVER, 'true' if enabled else 'false')
         try:
-            # The first tick is the survey; the second is the filtered page when
-            # the lever is on, so this exercises the path the first tick skips.
+            # Both ticks filter immediately once the shared marker exists.
             projector.sweep(limit=10)
             now[0] += 60
             projector._finish.reset_mock()
@@ -246,12 +250,12 @@ def test_same_output_with_the_flag_on_and_off():
         outcomes.append((counts, walked, ids, pages))
     assert outcomes[0][:3] == outcomes[1][:3]
     assert outcomes[0][0] == {'completed': 0, 'waiting': 3, 'blocked': 0, 'error': 0}
-    # Off never filters; on filters on the clock after the survey.
+    # Off never filters; on filters immediately after reading the shared marker.
     assert all('due_before' not in page for page in outcomes[0][3])
     assert any(page.get('due_before') is not None for page in outcomes[1][3])
 
 
-def test_a_blocked_survey_row_is_stamped_so_the_filtered_page_can_see_it(monkeypatch):
+def test_a_blocked_row_is_deferred_and_revisited_when_due(monkeypatch):
     monkeypatch.setenv(LEVER, 'true')
     log, ids = finish_log(persisted=2)
     now = [1000.0]
@@ -267,43 +271,12 @@ def test_a_blocked_survey_row_is_stamped_so_the_filtered_page_can_see_it(monkeyp
     projector._finish = Mock(side_effect=finish)
     counts = projector.sweep(limit=10)
     assert counts['blocked'] == 1
-    # The survey is once per process; a blocked row must still carry a clock.
+    # A blocked row keeps its durable retry clock.
     assert log.results[blocked][PROJECTION_FINISH_DUE_FIELD] == 1060.0
     now[0] += 60
     projector._finish = Mock(return_value=None)
     projector.sweep(limit=10)
     assert blocked in [call.args[0] for call in projector._finish.call_args_list]
-
-
-def test_reenable_after_rollback_surveys_rows_written_while_off(monkeypatch):
-    monkeypatch.setenv(LEVER, 'true')
-    log, _ids = finish_log(persisted=1)
-    now = [1000.0]
-    projector = silent_projector(log)
-    projector.clock = lambda: now[0]
-    projector.sweep(limit=10)
-    assert projector.finish_backoff.surveyed is True
-    # Roll back: the next tick is the legacy page and clears the survey flag.
-    monkeypatch.setenv(LEVER, 'false')
-    now[0] += 1
-    projector.sweep(limit=10)
-    assert projector.finish_backoff.surveyed is False
-    # A row written while the lever was off has no clock.
-    log.commit(BURST, 'b', 'off-window', ['off-window'], state='persisted')
-    log.results['off-window']['projection'] = {
-        'state': 'persisted',
-        'conversation_id': None,
-        'enrichment_required': False,
-    }
-    assert PROJECTION_FINISH_DUE_FIELD not in log.results['off-window']
-    # Re-enable in the same process: the survey runs again and stamps it.
-    monkeypatch.setenv(LEVER, 'true')
-    now[0] += 1
-    walked = []
-    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
-    projector.sweep(limit=10)
-    assert 'off-window' in walked
-    assert PROJECTION_FINISH_DUE_FIELD in log.results['off-window']
 
 
 def test_kill_switch_flip_restores_the_legacy_page_on_the_next_tick(monkeypatch):
@@ -329,91 +302,6 @@ def test_kill_switch_flip_restores_the_legacy_page_on_the_next_tick(monkeypatch)
         if call[0] == 'projection_page' and dict(call[2])['states'] == ('persisted', 'ready')
     ]
     assert finish and all('due_before' not in page for page in finish)
-
-
-def test_stamped_rows_the_lever_did_not_see_are_surveyed_before_filtering(monkeypatch):
-    """A row written before the lever has no clock: the first pass still finds it."""
-    monkeypatch.setenv(LEVER, 'true')
-    log, ids = finish_log(persisted=1)
-    legacy = 'legacy-0'
-    log.commit('old', 'old', legacy, [legacy], state='persisted')
-    log.results[legacy]['projection'] = {'state': 'persisted', 'conversation_id': None, 'enrichment_required': False}
-    now = [1000.0]
-    projector = silent_projector(log)
-    projector.clock = lambda: now[0]
-    walked = []
-    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
-    projector.sweep(limit=10)
-    assert legacy in walked
-    assert PROJECTION_FINISH_DUE_FIELD in log.results[legacy]
-
-
-def test_a_stamp_failure_keeps_the_survey_open_for_the_next_tick(monkeypatch):
-    """A failed stamp leaves no clock, so the survey must not close behind it."""
-    monkeypatch.setenv(LEVER, 'true')
-    log, ids = finish_log(persisted=2)
-    now = [1000.0]
-    projector = silent_projector(log)
-    projector.clock = lambda: now[0]
-    failing = ids[0]
-    real, attempts = log.defer_finish, []
-
-    def defer_finish(sid, state, at):
-        attempts.append(sid)
-        if sid == failing and len(attempts) <= 2:
-            raise RuntimeError('synthetic stamp failure')
-        return real(sid, state, at)
-
-    log.defer_finish = defer_finish
-    counts = projector.sweep(limit=10)
-    # A deferral failure is its own error, not a second walk error.
-    assert counts == {'completed': 0, 'waiting': 2, 'blocked': 0, 'error': 0}
-    assert projector.finish_backoff.surveyed is False
-    assert PROJECTION_FINISH_DUE_FIELD not in log.results[failing]
-    assert PROJECTION_FINISH_DUE_FIELD in log.results[ids[1]]
-    # Still surveying, so the unfiltered legacy page discovers the row again.
-    now[0] += 60
-    walked = []
-    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
-    projector.sweep(limit=10)
-    assert failing in walked
-    assert PROJECTION_FINISH_DUE_FIELD in log.results[failing]
-    assert projector.finish_backoff.surveyed is True
-
-
-def test_a_stamp_failure_on_a_full_page_restarts_the_whole_survey(monkeypatch):
-    """A full page moves the cursor past the failed row; a later short page must not close."""
-    monkeypatch.setenv(LEVER, 'true')
-    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
-    log, ids = finish_log(persisted=3)
-    now = [1000.0]
-    projector = silent_projector(log)
-    projector.clock = lambda: now[0]
-    failing = ids[0]
-    real, attempts = log.defer_finish, []
-
-    def defer_finish(sid, state, at):
-        attempts.append(sid)
-        if sid == failing and len(attempts) == 1:
-            raise RuntimeError('synthetic stamp failure')
-        return real(sid, state, at)
-
-    log.defer_finish = defer_finish
-    # The first page is full, so discovery advances past the unstamped row.
-    projector.sweep(limit=2)
-    assert PROJECTION_FINISH_DUE_FIELD not in log.results[failing]
-    assert PROJECTION_FINISH_DUE_FIELD in log.results[ids[1]]
-    # The short page that ends the walk must not close the survey behind it.
-    now[0] += 1
-    projector.sweep(limit=2)
-    assert projector.finish_backoff.surveyed is False
-    # The walk restarted, so the row is rediscovered and stamped.
-    now[0] += 1
-    walked = []
-    projector._finish = Mock(side_effect=lambda sid, *_a: walked.append(sid))
-    projector.sweep(limit=2)
-    assert failing in walked
-    assert PROJECTION_FINISH_DUE_FIELD in log.results[failing]
 
 
 def test_projection_page_due_cursor_and_seed_shapes():
@@ -489,3 +377,62 @@ def test_the_finish_index_is_declared_for_both_namespaces():
             'committed_at',
             '__name__',
         ]
+
+
+def test_missing_marker_uses_legacy_without_stamp_transactions(monkeypatch):
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log()
+    projector = silent_projector(log)
+    log.projection_finish_backfill_complete.return_value = False
+    log.defer_finish = Mock()
+    projector.finish_backoff.monotonic = Mock(return_value=10.0)
+    for _ in range(3):
+        assert projector.sweep(limit=10)['waiting'] == len(ids)
+    log.defer_finish.assert_not_called()
+    assert log.projection_finish_backfill_complete.call_count == 1
+    # The maintenance pass finishes; the next bounded check switches queries.
+    log.projection_finish_backfill_complete.return_value = True
+    projector.finish_backoff.monotonic.return_value = 70.0
+    projector.sweep(limit=10)
+    assert projector.finish_discovery.due_mode is True
+    assert log.defer_finish.call_count == len(ids)
+
+
+def test_new_replicas_and_reenable_trust_shared_completion(monkeypatch):
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log()
+    first = silent_projector(log)
+    first.sweep(limit=10)
+    second = silent_projector(log)
+    assert second.sweep(limit=10)['waiting'] == 0
+    assert second.finish_discovery.due_mode is True
+    monkeypatch.setenv(LEVER, 'false')
+    second.sweep(limit=10)
+    monkeypatch.setenv(LEVER, 'true')
+    assert second.sweep(limit=10)['waiting'] == 0
+    assert log.projection_finish_backfill_complete.call_count == 1
+
+
+def test_flag_off_writer_fields_remain_discoverable_on_listen_host(monkeypatch):
+    monkeypatch.setenv(LEVER, 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    for state in ('persisted', 'ready'):
+        assert projection_finish_entry_fields(state, 123.0) == {
+            PROJECTION_FINISH_DUE_FIELD: 123.0,
+            PROJECTION_FINISH_STEP_FIELD: 0,
+        }
+        assert projection_finish_state_fields(state, 123.0) == projection_finish_entry_fields(state, 123.0)
+
+
+def test_defer_failure_keeps_existing_clock_due(monkeypatch):
+    monkeypatch.setenv(LEVER, 'true')
+    log, ids = finish_log(persisted=1)
+    projector = silent_projector(log)
+    real = log.defer_finish
+    log.defer_finish = Mock(side_effect=RuntimeError('synthetic failure'))
+    projector.sweep(limit=10)
+    assert log.results[ids[0]][PROJECTION_FINISH_DUE_FIELD] == 1.0
+    log.defer_finish = real
+    assert projector.sweep(limit=10)['waiting'] == 1
+    assert log.results[ids[0]][PROJECTION_FINISH_DUE_FIELD] == 1060.0
