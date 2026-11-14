@@ -61,8 +61,7 @@ def test_clean_counts_rejects_invalids():
 def test_clean_counts_limits_max_codes():
     """Verify output is bounded to MAX_CODES highest-frequency tags."""
     sample = {
-        f'{c1}{c2}': i + 1
-        for i, (c1, c2) in enumerate(zip('abcdefghijklmnopqrstuvwxy', 'bcdefghijklmnopqrstuvwxyz'))
+        f'{c1}{c2}': i + 1 for i, (c1, c2) in enumerate(zip('abcdefghijklmnopqrstuvwxy', 'bcdefghijklmnopqrstuvwxyz'))
     }
     result = _clean_counts(sample)
     assert len(result) == MAX_CODES
@@ -96,7 +95,9 @@ def test_get_live_language_sessions_re_raises_on_firestore_error(caplog):
         with pytest.raises(RuntimeError, match='Firestore down'):
             get_live_language_sessions('user123', firestore_client=client)
 
-    assert any("Failed to fetch live language sessions for user user123: Firestore down" in rec.message for rec in caplog.records)
+    assert any(
+        "Failed to fetch live language sessions for user user123: RuntimeError" in rec.message for rec in caplog.records
+    )
 
 
 def test_get_live_language_sessions_cached_path_does_not_cache_on_error(monkeypatch, caplog):
@@ -122,7 +123,10 @@ def test_get_live_language_sessions_cached_path_does_not_cache_on_error(monkeypa
             get_live_language_sessions('user_cached_123')
 
     # Verify error was logged and nothing was written into Redis cache
-    assert any("Failed to fetch live language sessions for user user_cached_123: Firestore transient outage" in rec.message for rec in caplog.records)
+    assert any(
+        "Failed to fetch live language sessions for user user_cached_123: RuntimeError" in rec.message
+        for rec in caplog.records
+    )
     assert fake_redis.set_calls == 0
     assert fake_redis.store == {}
 
@@ -144,8 +148,8 @@ def test_append_live_language_session_invalid_input_short_circuits():
     assert not append_live_language_session('user1', {'invalid_long': 1})
 
 
-def test_append_live_language_session_handles_transaction_exception(caplog):
-    """Verify append_live_language_session catches transaction errors safely and logs a warning."""
+def test_append_live_language_session_re_raises_on_transaction_exception(caplog):
+    """Verify append_live_language_session logs sanitized warning and re-raises on transaction errors."""
     mock_txn = MagicMock()
     mock_txn._read_only = False
     client = SimpleNamespace(
@@ -157,9 +161,13 @@ def test_append_live_language_session_handles_transaction_exception(caplog):
         ),
     )
     with caplog.at_level(logging.WARNING):
-        assert not append_live_language_session('user1', {'en': 1}, firestore_client=client)
+        with pytest.raises(RuntimeError, match='Conflict on commit'):
+            append_live_language_session('user1', {'en': 1}, firestore_client=client)
 
-    assert any("Failed to append live language session for user user1: Conflict on commit" in rec.message for rec in caplog.records)
+    assert any(
+        "Failed to append live language session for user user1: RuntimeError" in rec.message for rec in caplog.records
+    )
+
 
 def test_append_live_language_session_successful_invalidation():
     """Verify cache is invalidated on successful append without custom firestore client."""
@@ -172,4 +180,3 @@ def test_append_live_language_session_successful_invalidation():
         mock_client_factory.return_value = mock_client
         assert append_live_language_session('user_valid', {'en': 2})
         mock_invalidate.assert_called_once()
-
