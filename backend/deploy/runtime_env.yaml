@@ -2446,7 +2446,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
-          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2977,7 +2977,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
-          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -3341,6 +3341,7 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -4151,7 +4152,7 @@ environments:
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -4768,6 +4769,7 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - SYNC_REPROCESS_COALESCE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -5011,7 +5013,7 @@ environments:
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
