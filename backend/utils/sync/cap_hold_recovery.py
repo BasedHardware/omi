@@ -76,9 +76,13 @@ async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
     return saved
 
 
-def _new_dispatch_allowed(uid: str, lane: str) -> bool:
+def _new_dispatch_allowed(uid: str, lane: str, backfill: bool = False) -> bool:
     """Rechecked before every new provider request, so a lapse between pieces stops spend."""
-    if not enabled(uid, lane) or not funded_processing.paid_owner(uid) or not sync_allowed(uid, lane=lane):
+    if (
+        not enabled(uid, lane)
+        or not funded_processing.paid_owner(uid)
+        or not sync_allowed(uid, lane=lane, backfill=backfill)
+    ):
         return False
     restricted, _ = get_hard_restriction_status(uid)
     return not restricted and not is_daily_audio_ceiling_exceeded(uid)
@@ -99,7 +103,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             return await _save(uid, snapshot, row, {'finalized': True, 'ledger_already_settled': True})
         if status != 'ready':
             return False
-    if not row.get('piece_receipts') and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
+    if not row.get('piece_receipts') and not await run_blocking(
+        db_executor, _new_dispatch_allowed, uid, lane, meta.get('sync_lane') == 'backfill'
+    ):
         return False
     prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid) or {}
     private = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
@@ -197,7 +203,9 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         attempt = 2
                 if receipt is None or receipt.get('state') == 'dispatched':
                     cached_result = (receipt or {}).get('provider_result')
-                    if not cached_result and not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
+                    if not cached_result and not await run_blocking(
+                        db_executor, _new_dispatch_allowed, uid, lane, meta.get('sync_lane') == 'backfill'
+                    ):
                         pending = True
                         continue
                     previous = receipt
@@ -546,6 +554,9 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         from utils.batch_pipeline import cap_hold_admission
 
         if await run_blocking(db_executor, cap_hold_admission.enabled_for, row, uid=uid):
+            # The batch hand-off re-admits through intake with lane='backfill', so
+            # the backfill day cap is evaluated there; this pre-check keeps the
+            # existing lane/allowance contract.
             if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                 return False
             if not await _handoff_paced(uid, snapshot, row):
