@@ -153,6 +153,7 @@ def test_close_capacity_idempotence_watermark_and_uncommitted_fence():
     state.audio('c', 4)
     assert state.prepare('c', 'request', set()) == ('prepared', 4)
     assert state.blocks('c', True) and state.blocks('c', False)
+    assert state.commit('c', 'request', 3) == 'invalid_watermark'
     assert state.commit('c', 'request', 10) == 'watermark_pending'
     assert state.commit('c', 'request', 8) == 'accepted'
     assert state.commit('c', 'request', 8) == 'accepted'

@@ -55,6 +55,7 @@ never awaits discovery. `drain_refresh` times actual background discovery.
 
 The authenticated audio URL reader distinguishes an empty batch projection with
 outstanding durable debt as `metadata_status=pending`, `retry_after_seconds=5`.
+Each empty batch URL poll adds one marker point read; no collection scan is added.
 An unavailable debt read also returns pending. Confirmed absent debt retains the
 existing empty-audio response. The reader never manufactures an audio URL.
 
@@ -65,7 +66,11 @@ dependency: claims remove `record_intake_retry_at`; certified deferrals set it t
 exactly `available_at`. Native seal reads the job before transaction writes and
 wakes only a due clock or an exact matching marker. Future retries cannot be
 woken without the marker writer; unmarked future clocks stay protected as
-possible live claims. Invalid runtime stage skips optional wake, never guesses
+possible live claims. Its read budget is one job document per eligible transaction
+attempt, with a planning envelope of one million reads/day (100000 recordings
+times10 attempts/duplicate closes); producer-pending refusals do not read the job.
+This is a planning bound, not measured spend or a traffic cap.
+Invalid runtime stage skips optional wake, never guesses
 a production collection or prevents the native custody seal.
 
 Roll out **intake with the marker writer first, pusher second, backend-listen

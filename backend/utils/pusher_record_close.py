@@ -72,6 +72,8 @@ class PusherCloseState:
     def commit(self, cid, request_id, watermark, *, accept=True):
         if cid not in self.requests or self.requests[cid][0] != request_id:
             return 'unknown'
+        if watermark < self.requests[cid][1]:
+            return 'invalid_watermark'
         if self.received.get(cid, 0) < watermark:
             return 'watermark_pending'
         if accept:
