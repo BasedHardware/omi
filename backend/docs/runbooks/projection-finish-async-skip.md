@@ -44,9 +44,9 @@ follow-up execution.
 
 ## Bounded classification and progress
 
-`BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **16 attempts per page**;
+`BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **8 attempts per page**;
 0 pauses classification, 1-16 are accepted, and malformed/out-of-range values
-keep 16. Pages on different executor threads have separate caps but share a
+keep 8. Pages on different executor threads have separate caps but share a
 locked process budget. That budget refills only 20 seconds after its last
 attempt finishes; in-flight transactions prevent a refill. There is no sleep,
 new queue or delay imposed on transcript/follow-up delivery by the limiter.
@@ -54,18 +54,20 @@ Failures consume budget, increment a dedicated counter, and leave the row
 eligible without incrementing the sweep's generic error count or deferring it.
 A state/policy race returning false is neither a success nor a failure.
 
-At the reported approximately 42 processes, sixteen per process permits at most
-**672 classification writes in a synchronized one-second burst**, and at most
-**33.6 writes/s averaged over the cooldown**. These are incremental
-classification bounds, leaving headroom for ordinary writes under the 500
-writes/s index limit; they are not a fleet-wide cap on all result writers.
-The nominal 518k-row pass is at least **4.3 hours** at that maximum successful
-rate (4.5 hours at 40 processes). Overlap, failures, slower sweep cadence and
+At the reported approximately 42 processes, eight per process permits at most
+**336 classification writes in a synchronized one-second burst**, and at most
+**16.8 writes/s averaged over the cooldown**. These are incremental
+classification bounds only. Ordinary result writes are additional; their
+combined peak has not been measured here, so this does not establish headroom
+under the 500 writes/s index limit or cap all result writers.
+The nominal 518k-row pass is at least **8.6 hours** at that maximum successful
+rate (9.0 hours at 40 processes). Overlap, failures, slower sweep cadence and
 other work make it longer; new async session writes avoid migration entirely.
 Expect gradual read reduction during that window rather than an immediate cut.
-Fleet growth or raising this setting requires recalculating `processes × limit`
-and retaining headroom for ordinary writes. The default should not be increased
-to meet a train deadline.
+The cost lead may raise the setting by environment only after the first hour
+of production readings if classification failures remain zero. Before raising
+it, include ordinary writes and fleet size in the total peak write budget;
+recalculate `processes × limit`. Do not raise it to meet a train deadline.
 
 Read `omi_batch_projection_finish_classified_total` for acknowledged successful
 clock updates and `omi_batch_projection_finish_classification_failures_total`

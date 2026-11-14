@@ -705,7 +705,7 @@ def test_classification_fence_noop_is_neither_success_nor_failure(monkeypatch):
     assert PROJECTION_FINISH_CLASSIFICATION_FAILURES._value.get() == failures
 
 
-@pytest.mark.parametrize('value,expected', [(None, 16), ('0', 0), ('16', 16), ('-1', 16), ('17', 16), ('bad', 16)])
+@pytest.mark.parametrize('value,expected', [(None, 8), ('0', 0), ('16', 16), ('-1', 8), ('17', 8), ('bad', 8)])
 def test_classification_page_limit_setting(monkeypatch, value, expected):
     from config.batch_pipeline import projection_finish_classify_page_limit
 
@@ -764,12 +764,12 @@ def test_overlapping_pages_keep_individual_caps_and_share_process_budget(monkeyp
     ]
 
 
-def test_default_classification_budget_stops_at_sixteen(monkeypatch):
+def test_default_classification_budget_stops_at_eight(monkeypatch):
     monkeypatch.delenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', raising=False)
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     log, ids = legacy_async_log(rows=25)
     projector = silent_projector(log)
     log.retire_async_finish = Mock(wraps=log.retire_async_finish)
     projector.sweep(limit=100)
-    assert log.retire_async_finish.call_count == 16
-    assert sum(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == -1.0 for sid in ids) == 16
+    assert log.retire_async_finish.call_count == 8
+    assert sum(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == -1.0 for sid in ids) == 8
