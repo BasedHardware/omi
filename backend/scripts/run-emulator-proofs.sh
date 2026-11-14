@@ -171,6 +171,11 @@ run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_conversation_page.py
 
+# PL-487/482: durable record settlement and pacing use the real Store on every
+# backend. CI requires sim/emulator; full local qualification requires =all.
+run_proof "record dead-letter and retry conformance (PL-487/482)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/record_dead_letter_emulator_test.py
 
 if (( ${#failures[@]} )); then
   echo
