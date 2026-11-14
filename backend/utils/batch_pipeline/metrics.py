@@ -29,6 +29,7 @@ from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
+from utils.batch_pipeline.delivered_share import DeliveredShare
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -135,6 +136,7 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self.fresh_guard = FreshGuard(registry)
+        self.delivered_share = DeliveredShare(registry)
         self._timeliness_lock = threading.Lock()
         self._timeliness_all_time_visible = False
         self._timeliness_visible = False

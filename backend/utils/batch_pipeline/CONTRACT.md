@@ -682,3 +682,15 @@ queries have no ratio; stale counts/ratios expire at 120 s. The default-on
 `BATCH_PIPELINE_FRESH_GUARD_ENABLED` kill switch suppresses queries and all guard
 gauges when off. Reader inventory and rollout proof requirements are recorded in
 `docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
+
+The projection acknowledge also stamps `jobs.delivered_at` and
+`jobs.delivered_in_target` in the transaction that sets
+`projection_state=completed`. The only semantic reader is the delivered-share
+sampler: the maintenance leader walks one bounded job-metadata page (admitted
+20 to 5 minutes ago, capped at 5,000 rows) every 300 s and publishes
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+per route and language. A unit is delivered in target when its first
+acknowledge is at most 300 s after `enqueued_at`; the stamp is sticky on replay.
+Missing or failed samples never publish a healthy ratio. The default-on
+`BATCH_PIPELINE_DELIVERED_SHARE_ENABLED` kill switch suppresses the page and all
+gauges. See `docs/listen_pusher_pipeline/changes/2026-11-14-delivered-share.md`.
