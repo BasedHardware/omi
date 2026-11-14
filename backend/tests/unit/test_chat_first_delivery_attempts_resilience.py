@@ -148,3 +148,26 @@ def test_repair_transient_dead_letters_handles_client_failure():
             )
             assert res is True
 
+
+def test_requeue_transient_dead_letter_raises_when_client_missing():
+    with patch("database.chat_first_delivery_attempts._resolve_client", return_value=None):
+        with pytest.raises(RuntimeError, match="Firestore client unavailable"):
+            requeue_transient_dead_letter(
+                "user_1",
+                "intent_1",
+                account_generation=1,
+                now=datetime.now(timezone.utc),
+            )
+
+
+def test_requeue_transient_dead_letter_propagates_reference_error():
+    mock_client = MagicMock()
+    mock_client.collection.side_effect = RuntimeError("Failed creating collection reference")
+    with pytest.raises(RuntimeError, match="Failed creating collection reference"):
+        requeue_transient_dead_letter(
+            "user_1",
+            "intent_1",
+            account_generation=1,
+            now=datetime.now(timezone.utc),
+            firestore_client=mock_client,
+        )

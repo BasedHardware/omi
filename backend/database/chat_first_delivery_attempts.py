@@ -120,9 +120,7 @@ def dead_letter_ref(uid: str, intent_id: str, *, firestore_client: Any = None) -
     if not cleaned_intent_id:
         raise ValueError(f"Invalid intent ID: {intent_id!r}")
     return (
-        user_ref(uid, firestore_client=firestore_client)
-        .collection(DEAD_LETTERS_COLLECTION)
-        .document(cleaned_intent_id)
+        user_ref(uid, firestore_client=firestore_client).collection(DEAD_LETTERS_COLLECTION).document(cleaned_intent_id)
     )
 
 
@@ -210,8 +208,7 @@ def requeue_transient_dead_letter(
 ) -> ProactiveIntent | None:
     client = _resolve_client(firestore_client)
     if client is None:
-        logger.warning('Firestore client unavailable for requeue_transient_dead_letter')
-        return None
+        raise RuntimeError('Firestore client unavailable for requeue_transient_dead_letter')
 
     cleaned_uid = _clean_id(uid)
     cleaned_intent_id = _clean_id(intent_id)
@@ -220,14 +217,10 @@ def requeue_transient_dead_letter(
         return None
 
     safe_now = _ensure_utc(now) or datetime.now(timezone.utc)
-    try:
-        dead_ref = dead_letter_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
-        active_ref = intent_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
-        attempt_ref = delivery_attempt_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
-        transaction = client.transaction()
-    except (ValueError, RuntimeError) as exc:
-        logger.warning('Failed creating references in requeue_transient_dead_letter: %s', exc)
-        return None
+    dead_ref = dead_letter_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
+    active_ref = intent_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
+    attempt_ref = delivery_attempt_ref(cleaned_uid, cleaned_intent_id, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
@@ -310,7 +303,7 @@ def repair_transient_dead_letters(
         if client is None:
             raise RuntimeError('Firestore client unavailable for repair_transient_dead_letters')
     except Exception as exc:
-        logger.exception('Failed to resolve Firestore client for repair_transient_dead_letters: %s', exc)
+        logger.exception('Failed to resolve Firestore client for repair_transient_dead_letters: %s', type(exc).__name__)
         return True
 
     cleaned_uid = _clean_id(uid)
@@ -364,6 +357,6 @@ def repair_transient_dead_letters(
             except ChatFirstMalformedDeliveryAttempt:
                 continue
     except (GoogleAPICallError, Exception) as exc:
-        logger.exception('Chat-first transient dead-letter repair scan failed: %s', exc)
+        logger.exception('Chat-first transient dead-letter repair scan failed: %s', type(exc).__name__)
         return True
     return False
