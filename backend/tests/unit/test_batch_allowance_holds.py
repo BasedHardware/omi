@@ -35,6 +35,14 @@ def test_subscription_expiry_changes_generation_without_a_writer():
     assert generation(user, now) != generation(user, now + 61)
 
 
+def test_enabled_backfill_daily_cap_has_a_daily_generation(monkeypatch):
+    monkeypatch.setattr(allowance_hold.backfill_hours_cap, 'cap_enabled', lambda: True)
+    user = {'subscription': {'plan': 'unlimited_v2', 'status': 'active'}}
+    start = stamp('2026-11-14')
+    assert generation(user, start) == generation(user, start + 86399)
+    assert generation(user, start) != generation(user, start + 86400)
+
+
 @pytest.fixture
 def discovery(monkeypatch):
     monkeypatch.setenv('OMI_REFERRAL_CAMPAIGN_ENABLED', 'true')
@@ -68,6 +76,44 @@ def discovery(monkeypatch):
 def discover(fixture, at, previous=None):
     fixture.clock[0] = at
     return allowance_hold.entitlement('synthetic-owner', at, previous)
+
+
+@pytest.mark.parametrize('reason', ['usage_invalid', 'allowance_unavailable'])
+def test_untrusted_usage_does_not_acknowledge_generation(discovery, reason):
+    discovery.funded.side_effect = [
+        TranscriptionAllowance('on_device', 0, reason),
+        TranscriptionAllowance('managed', None, 'resolved'),
+    ]
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held', owner='synthetic-owner'), 0)
+    lease = queue.pull(1)[0]
+    assert queue.defer('held', lease.token, 2, held_reason='allowance_exhausted')
+    controller = allowance_hold.AllowanceHolds(store, allowance_hold.entitlement)
+    assert controller.tick(discovery.now) == 0
+    mark = store.rows['allowance_holds', store.rows['jobs', 'held']['owner_key']]
+    assert 'generation' not in mark
+    assert controller.tick(discovery.now + 121) == 1
+    assert store.rows['jobs', 'held']['state'] == 'ready'
+
+
+def test_reparked_daily_cap_refusal_releases_after_utc_reset(discovery, monkeypatch):
+    monkeypatch.setattr(allowance_hold.backfill_hours_cap, 'cap_enabled', lambda: True)
+    discovery.funded.side_effect = lambda *args, **kwargs: TranscriptionAllowance('managed', None, 'resolved')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held', owner='synthetic-owner'), 0)
+    lease = queue.pull(1)[0]
+    assert queue.defer('held', lease.token, 2, held_reason='allowance_exhausted')
+    controller = allowance_hold.AllowanceHolds(store, allowance_hold.entitlement)
+    assert controller.tick(discovery.now) == 1
+    # Ordinary backfill admission can still reject the same day's reoffer.
+    lease = queue.pull(discovery.now + 1)[0]
+    assert queue.defer('held', lease.token, discovery.now + 2, held_reason='allowance_exhausted')
+    assert controller.tick(discovery.now + 301) == 0
+    assert store.rows['jobs', 'held']['state'] == 'allowance_held'
+    assert controller.tick(discovery.now + 86400) == 1
+    assert store.rows['jobs', 'held']['state'] == 'ready'
 
 
 def grant(start, end, **fields):

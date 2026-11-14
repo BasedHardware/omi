@@ -85,6 +85,64 @@ def test_held_head_does_not_block_later_entitled_result(h):
     assert get(h)['state'] == STATE
 
 
+@pytest.mark.parametrize('held_fresh', [False, True], ids=['backlog-held', 'fresh-stamped-held'])
+@pytest.mark.parametrize('transactional', [False, True], ids=['probe', 'transactional'])
+def test_parking_forty_allowance_retries_reaches_ready_fresh_in_capture_order(
+    h, monkeypatch, held_fresh, transactional
+):
+    """The migration's transition removes policy stock from both pending selectors."""
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', str(transactional).lower())
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'off')
+    uid = h.uid('owner')
+    for index in range(40):
+        segment = f'held-{index:02d}'
+        enqueue(h, segment, capture=index + 1)
+
+        def legacy_retry(tx):
+            job = tx.get('jobs', segment)
+            job.update(
+                state='retry',
+                fresh_capture=held_fresh,
+                available_at=0,
+                compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'},
+            )
+            tx.put('jobs', segment, job)
+
+        h.store.run(legacy_retry)
+
+    for segment, capture, fresh in [('provider-backlog', 0, False)] + [(f'fresh-{i}', 41 + i, True) for i in range(3)]:
+        enqueue(h, segment, capture=capture)
+
+        def ready(tx):
+            job = tx.get('jobs', segment)
+            job.update(
+                state='result_ready',
+                fresh_capture=fresh,
+                ready_at=100,
+                stt_route={'stt_route': 'provider'},
+                result=f'gs://synthetic/{segment}-result',
+            )
+            tx.put('jobs', segment, job)
+
+        h.store.run(ready)
+
+    for index in range(40):
+        segment = f'held-{index:02d}'
+        assert h.store.run(lambda tx: park(tx, tx.get('jobs', segment), 100))
+        assert get(h, segment)['state'] == STATE
+        assert get(h, segment)['merge_pending'] is False
+    assert h.store.fresh_pending(owner_key(uid), 32)[0]['segment_id'] == 'fresh-0'
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=10)
+    entries = [merge.commit_next(uid, 101 + i) for i in range(3)]
+    assert [entry['segment_id'] for entry in entries] == ['fresh-0', 'fresh-1', 'fresh-2']
+    assert [entry['log_sequence'] for entry in entries] == [1, 2, 3]
+    assert entries[1]['previous_segment_id'] == 'fresh-0'
+    assert entries[2]['previous_segment_id'] == 'fresh-1'
+    assert merge.commit_next(uid, 105) is None
+    assert get(h, 'provider-backlog')['state'] == 'result_ready'
+    assert not h.store.run(lambda tx: tx.get('results', 'provider-backlog'))
+
+
 @pytest.mark.parametrize('reason', [None, 'fair_use_restricted', 'budget_exhausted'])
 def test_other_refusals_keep_recovery(h, reason):
     queue = enqueue(h)

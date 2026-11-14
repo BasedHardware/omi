@@ -23,17 +23,25 @@ held owners with one leader at this rate). There is no per-recording poll.
 The generation reads both the commercial subscription and
 `referral_campaign_grant`. It hashes commercial authority/validity, campaign
 enablement, the grant fields admission consumes, the shared effective plan
-projection, and the UTC usage month. Grant claims/extensions and starts, expiry
+projection, and the UTC usage month (UTC day when the optional backfill day cap
+is enabled). The daily signal prevents a re-parked day-cap refusal from waiting
+until next month. Discovery may reoffer a still-capped row once per day; normal
+admission still refuses it, without changing entitlement or allowance amounts.
+This adds at most one generation recheck/release attempt per owner per day while
+that cap is enabled; repeated large daily bursts need the same cost remeasurement
+as other repeated generation bursts. Grant claims/extensions and starts, expiry
 or paid-coverage time boundaries therefore change discovery even without a
 commercial write. Other usage counters and profile fields do not. This uses
 `effective_subscription_payload`, the same promotion composition as admission;
 it does not introduce an entitlement rule or require writers to send a wake. Funded allowance is evaluated once per changed generation, with
-unavailability retried rather than recorded as a denial. A successful change
+unavailability and invalid usage retried rather than recorded as a denial. A successful change
 releases existing rows in `(capture_at, segment_id)` order in pages of 100;
 each transaction appends through the existing scheduler and still requires
 ordinary admission before compute. A new refusal during the pass stays parked
 until the next generation. The durable cursor and claim survive restart and
-prevent overlapping controllers from releasing twice. Empty owners retire.
+prevent overlapping controllers from releasing twice. Empty owners retire;
+conversation purges decrement the held count in the same transaction as job
+deletion and refresh the shadow. A repeated purge cannot decrement it again.
 
 Changed query membership:
 

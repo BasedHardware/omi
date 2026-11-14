@@ -69,6 +69,32 @@ def _conversation(plane, cid):
     )
 
 
+def test_deleting_parked_jobs_retires_hold_owner_exactly_once(plane):
+    from database.batch_pipeline_purge import _delete_job
+
+    holds = plane.client.collection('batch_pipeline_prod_allowance_holds').document(plane.key)
+    holds.set({'owner_key': plane.key, 'owner_id': plane.uid, 'held_count': 2, 'active': True, 'revision': 2})
+    jobs = plane.client.collection('batch_pipeline_prod_jobs')
+    for index in range(2):
+        ref = jobs.document(f'held-{index}')
+        ref.set(
+            {
+                'owner_id': plane.uid,
+                'owner_key': plane.key,
+                'priority': 2,
+                'state': 'allowance_held',
+                'conversation_id': f'conversation-{index}',
+            }
+        )
+        snapshot = ref.get()
+        _delete_job(plane.client, 'batch_pipeline_prod', snapshot, retain_ordering=True)
+        assert holds.get().to_dict()['held_count'] == 1 - index
+        assert holds.get().to_dict()['active'] is (index == 0)
+        # A repeated purge of the same snapshot cannot spend the count twice.
+        _delete_job(plane.client, 'batch_pipeline_prod', snapshot, retain_ordering=True)
+        assert holds.get().to_dict()['held_count'] == 1 - index
+
+
 def _exists(plane, *path):
     return plane.client.document('/'.join(path)).get().exists
 

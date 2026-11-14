@@ -18,13 +18,15 @@ from utils.referral_campaign import effective_subscription_payload
 from utils.stt_cap_dispatch import funded_allowance
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_read_origin import read_origin
+from utils import backfill_hours_cap
+from utils.subscription import TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
 
 CHECK_SECONDS = 300
 CLAIM_SECONDS = 120
 
 
 def generation(snapshot: dict, now: float) -> str:
-    """Effective plan authority and UTC usage month, never usage counters or content."""
+    """Effective authority and its reset periods, never usage counters or content."""
     subscription = snapshot.get('subscription') or {}
     end = subscription.get('current_period_end')
     valid = isinstance(end, (int, float)) and end >= now
@@ -41,7 +43,11 @@ def generation(snapshot: dict, now: float) -> str:
         else None
     )
     effective = effective_subscription_payload(subscription, grant, now=clock)
-    value = [subscription, valid, promotions, grant_authority, effective, clock.strftime('%Y-%m')]
+    # Admission maps the optional backfill day-cap refusal to allowance_exhausted
+    # too. Recheck at its UTC reset even without a plan/month change. Admission
+    # remains authority: a still-capped release may park again, once per day.
+    reset_period = clock.strftime('%Y-%m-%d') if backfill_hours_cap.cap_enabled() else clock.strftime('%Y-%m')
+    value = [subscription, valid, promotions, grant_authority, effective, reset_period]
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -205,6 +211,6 @@ def entitlement(uid: str, now: float, previous: str | None) -> tuple[str, bool]:
     if current == previous:
         return current, False
     allowance = funded_allowance(uid, lane='batch')
-    if allowance.reason == 'allowance_unavailable':
+    if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
         raise RuntimeError('allowance unavailable')
     return current, allowance.managed
