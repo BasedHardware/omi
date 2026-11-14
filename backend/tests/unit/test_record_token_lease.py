@@ -86,7 +86,7 @@ def test_default_and_malformed_mode_are_dark(monkeypatch):
 
 
 @pytest.mark.parametrize('mode', ['off', None])
-def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypatch, mode):
+def test_off_preserves_custody_payload_and_performs_no_renewal_io(monkeypatch, mode):
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     if mode:
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
@@ -115,7 +115,11 @@ def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypat
     assert record_audio.set_record_upload_pending('synthetic', 'record', 's', False, firestore_client=client)
     assert client.transactions[-1].updates == [(PATH, {'record_upload_sessions': {}})]
     assert record_audio.seal_record_audio('synthetic', 'record', firestore_client=client) is None
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True})]
+    patch = client.transactions[-1].updates[0][1]
+    assert isinstance(patch['record_sealed_at'], (int, float))
+    assert client.transactions[-1].updates == [
+        (PATH, {'record_audio_closed': True, 'record_sealed_at': patch['record_sealed_at']})
+    ]
 
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])

@@ -49,6 +49,7 @@ def recording(monkeypatch, request):
             'status': 'completed',
             'record_audio_closed': True,
             'record_lane_owner': 'batch_sync_v1',
+            'record_upload_revision': 1,
             'finished_at': datetime.fromtimestamp(NOW - 700, timezone.utc),
         }
     )
@@ -78,6 +79,7 @@ def recording(monkeypatch, request):
                 'result': result,
                 'fresh_capture': True,
                 'record_notes_after_complete': True,
+                'record_input_upload_revision': 1,
                 'record_finished_at': NOW - 700,
             }
         )
@@ -170,6 +172,30 @@ def test_large_output_set_checkpoints_without_repeating_notes_after_restart(reco
     assert len(rows) == 129 and all(row['version'] == 1 for row in rows)
 
 
+def test_eager_completion_reuses_visible_rows_with_a_decision_only_privacy_guard(recording, monkeypatch):
+    from database.batch_pipeline_privacy import assert_batch_write_allowed
+    from database.batch_pipeline_projection_session import ProjectionSession
+
+    def decision_only(session, transaction, conversation_ids=()):
+        return assert_batch_write_allowed(
+            session.client,
+            transaction,
+            session.binding.owner_id,
+            conversation_ids=conversation_ids,
+            expected_generation=session.binding.privacy_generation,
+        )
+
+    monkeypatch.setattr(ProjectionSession, 'guard', decision_only)
+    f = recording
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    row = (
+        f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture')).get().to_dict()
+    )
+    assert row['version'] == 1 and row['due_at'] == NOW
+
+
 def test_two_siblings_no_notes_until_both_ready_then_one_durable_refresh(recording, monkeypatch):
     f = recording
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'synthetic-notes')
@@ -195,7 +221,9 @@ def test_two_siblings_no_notes_until_both_ready_then_one_durable_refresh(recordi
     assert f.wake.call_count == 1
 
 
-@pytest.mark.parametrize('hold', ['producer', 'partial', 'failed', 'processing', 'sync', 'merge', 'off', 'aged'])
+@pytest.mark.parametrize(
+    'hold', ['producer', 'partial', 'failed', 'revision', 'processing', 'sync', 'merge', 'off', 'aged']
+)
 def test_complete_record_respects_holds_and_toggle_or_age_change(recording, monkeypatch, hold):
     f = recording
     key = reprocess.key(f.binding.owner_id, 'capture')
@@ -206,6 +234,7 @@ def test_complete_record_respects_holds_and_toggle_or_age_change(recording, monk
         'producer': {'record_upload_sessions': {'producer': True}},
         'partial': {'record_audio_partial': True},
         'failed': {'record_upload_failed': True},
+        'revision': {'record_upload_revision': 2},
         'processing': {'sync_processing_hold': {'held': True}},
     }.get(hold, {})
     f.client.rows[f.conversation.path].update(patch)

@@ -9836,3 +9836,10 @@ content ledger and leaves ready receipts discoverable. Completion replay skips
 those IDs, so a restart cannot multiply notes revisions. This adds one ledger
 write only for each non-final group in a recording with over 128 distinct
 output conversations; the usual single-output path is unchanged.
+
+Notes hold checks reuse the canonical conversation rows already read by content
+completion's visibility/redirect walk. They do not request full-row exports
+from the privacy guard, preserving its decision-only cache contract. A known
+input-upload revision that differs from the current sealed revision retains
+the ordinary settle policy. Privacy, generation and account fences still run
+in the completion transaction before any notes writes.

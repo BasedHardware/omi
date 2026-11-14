@@ -702,7 +702,8 @@ class ProjectionStore:
             # This is a job-wide decision after collecting every sibling/part.
             # A no-text receipt must suppress IDs from parts assigned earlier.
             source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
-            new, updated = self._visible(transaction, binding, receipts)
+            conversation_rows = {}
+            new, updated = self._visible(transaction, binding, receipts, rows_out=conversation_rows)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
@@ -794,7 +795,7 @@ class ProjectionStore:
                 # Bound output writes so a size rollover cannot exceed the
                 # Firestore commit ceiling. Ready receipts remain discoverable.
                 for canonical in outputs[:128]:
-                    row = session.conversation_rows.get(canonical) or {}
+                    row = conversation_rows.get(canonical) or {}
                     hold = row.get('sync_processing_hold') or {}
                     eager = (
                         record_notes_eager_enabled()
@@ -803,6 +804,10 @@ class ProjectionStore:
                         and bool(row.get('record_audio_closed'))
                         and not row.get('record_audio_partial')
                         and not row.get('record_upload_failed')
+                        and (
+                            session.job.get('record_input_upload_revision') is None
+                            or session.job['record_input_upload_revision'] == row.get('record_upload_revision')
+                        )
                     )
                     if eager:
                         try:
@@ -872,7 +877,7 @@ class ProjectionStore:
         return result
 
     def _visible(
-        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False
+        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False, rows_out=None
     ) -> tuple[list[str], list[str]]:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
@@ -903,6 +908,8 @@ class ProjectionStore:
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
                 if not row.get('sync_merged_into'):
+                    if rows_out is not None:
+                        rows_out[cid] = row
                     break
                 cid = row['sync_merged_into']
             if cid:

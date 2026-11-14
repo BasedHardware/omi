@@ -66,7 +66,6 @@ class ProjectionSession:
         self.entry: dict[str, Any] = {}
         self.ledger: dict[str, Any] = {}
         self.job: dict[str, Any] = {}
-        self.conversation_rows: dict[str, dict] = {}
         self.incoming_segment_count = 0
         self.speech_seconds = 0.0
         self.erased_predecessors: list[Any] = []
@@ -146,7 +145,6 @@ class ProjectionSession:
                 snapshots.setdefault('conversations', {})[error.conversation_id] = {}
             raise
         finally:
-            self.conversation_rows.update(snapshots.get('conversations', {}))
             # Input/output checks have separate refusal semantics, but share
             # the same distinct-document ceiling during prepare. Later plan
             # validations retain their existing independent walk budgets.
