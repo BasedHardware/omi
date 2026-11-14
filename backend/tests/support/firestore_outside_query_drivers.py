@@ -76,6 +76,14 @@ _driver(
     serving=False,
 )
 
+_driver(
+    'utils.enrichment.unpark.discover',
+    domains={'after': [None, {'deferred_since': T0.timestamp(), 'path': f'sync_reprocess_outbox/{"a" * 64}'}]},
+    neutrals={'limit': (128, 'bounds the operator discovery page only')},
+    profile='operational-enrichment-age-gate-unpark',
+    serving=False,
+)
+
 
 _driver(
     'utils.batch_pipeline.no_speech.discover',

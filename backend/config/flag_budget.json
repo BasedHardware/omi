@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 282,
+  "count": 283,
   "names": {
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED": {"owner": "provider-stt-drain", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
@@ -195,6 +195,7 @@
     "EDGE_SHADOW_TOKEN": {"seeded": "2026-10-25"},
     "EDGE_SHADOW_URL": {"seeded": "2026-10-25"},
     "ENCRYPTION_SECRET": {"seeded": "2026-10-25"},
+    "ENRICHMENT_AGE_GATE_UNPARK_ENABLED": {"owner": "refactor-lead", "review_by": "2026-12-10", "registry": "config/feature-flags.yaml"},
     "LATE_AUDIO_SYNC_INTAKE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_RECORDED_TIME_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_LIVE_TIMER_START_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},

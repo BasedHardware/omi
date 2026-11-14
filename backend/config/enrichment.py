@@ -31,6 +31,11 @@ def max_age_hours() -> str:
     return os.getenv('ENRICHMENT_MAX_AGE_HOURS', '72')
 
 
+def age_gate_unpark_enabled() -> bool:
+    # Operator-local apply switch. Dry-run remains available when this is false.
+    return os.getenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', 'true').strip().lower() != 'false'
+
+
 def primary_queue() -> str:
     return os.getenv('ENRICHMENT_TASKS_QUEUE', '').strip()
 
