@@ -7,6 +7,8 @@ import re
 
 import pytest
 
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
+
 BACKEND = Path(__file__).resolve().parents[2]
 MONITORING = BACKEND / 'charts/monitoring'
 spec = importlib.util.spec_from_file_location('pipeline_alert_backtest', BACKEND / 'scripts/alert_backtest.py')
@@ -88,7 +90,7 @@ def test_held_legs_are_independent_and_use_fresh_uncapped_source():
     expr = rule['data'][0]['model']['expr']
     assert 'omi_batch_held_oldest_age_seconds' in expr
     assert 'record_pending_new_oldest' not in expr
-    assert 'and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900)' in expr
+    assert f'and ignoring(leg) {FRESH_NEWEST}' in expr
     values = {
         (("leg", 'quarantine_held'),): [300000],
         (("leg", 'assignment_held'),): [60],
@@ -105,7 +107,7 @@ def test_drain_uses_sum_for_rows_and_count_for_weighted_turn_share():
     assert 'owner_drain_advanced_sum' in nodes['B']['expr']
     assert 'rate(' in nodes['A']['expr'] and '[5m]' in nodes['B']['expr']
     assert 'or vector(0)' in nodes['B']['expr']
-    assert 'timeliness_observed_at_seconds < 900' in nodes['C']['expr']
+    assert f'and ignoring(leg) {FRESH_NEWEST}' in nodes['C']['expr']
     assert rule['data'][0]['datasourceUid'] == 'gmp-cloud-run'
     assert rule['data'][2]['datasourceUid'] == 'prometheus'
 

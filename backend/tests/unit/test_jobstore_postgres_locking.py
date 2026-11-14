@@ -38,6 +38,7 @@ class Conn:
         yield
 
     def execute(self, sql, params=()):
+        sql = sql.as_string() if hasattr(sql, 'as_string') else sql
         self.sql.append(sql)
         if self.fail and self.fail[0] in sql:
             raise self.fail[1]

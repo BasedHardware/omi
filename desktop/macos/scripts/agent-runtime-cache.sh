@@ -374,17 +374,118 @@ arc_write_stamp() {
   mv -f "$temp" "$stamp"
 }
 
+# Lock ownership is an owner record (pid + process start stamp), not a bare pid.
+# A pid alone cannot say whether the process that created the directory is still
+# the one holding it, and destroying a directory on that guess is what let two
+# contenders overlap. Mirrors desktop/macos/scripts/run-sh-build-lock.sh.
+if [ -z "${ARC_LOCK_OWNER_FILE+x}" ]; then
+  readonly ARC_LOCK_OWNER_FILE="owner"
+fi
+if [ -z "${ARC_LOCK_EMPTY_GRACE_SECONDS+x}" ]; then
+  readonly ARC_LOCK_EMPTY_GRACE_SECONDS=5
+fi
+
+arc_process_start_stamp() {
+  local pid="$1"
+  ps -o lstart= -p "$pid" 2>/dev/null | awk '{$1 = $1; print}'
+}
+
+arc_lock_owner_file() {
+  printf '%s/%s\n' "$1" "$ARC_LOCK_OWNER_FILE"
+}
+
+arc_lock_dir_mtime() {
+  local lock_dir="$1"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    stat -f '%m' "$lock_dir"
+  else
+    stat -c '%Y' "$lock_dir"
+  fi
+}
+
+# Success only when no live process owns the lock. An ownerless directory gets a
+# small grace window so a contender cannot delete it between mkdir and the
+# owner-record publish. A record is stale only when its pid is gone or its
+# current start stamp differs from the recorded one; "cannot confirm" on a fresh
+# directory is never staleness. The legacy bare `pid` record is still read as a
+# fallback for one release so an in-flight older process is not misread.
+arc_lock_is_stale() {
+  local lock_dir="$1"
+  local owner_file owner_pid owner_start current_start lock_mtime now
+
+  owner_file="$(arc_lock_owner_file "$lock_dir")"
+  if [ ! -f "$owner_file" ]; then
+    if [ -f "$lock_dir/pid" ]; then
+      owner_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+      [ -n "$owner_pid" ] || return 0
+      kill -0 "$owner_pid" 2>/dev/null && return 1
+      return 0
+    fi
+    lock_mtime="$(arc_lock_dir_mtime "$lock_dir" 2>/dev/null || true)"
+    now="$(date +%s)"
+    [ -n "$lock_mtime" ] && [ $((now - lock_mtime)) -ge "$ARC_LOCK_EMPTY_GRACE_SECONDS" ]
+    return
+  fi
+
+  IFS=$'\t' read -r owner_pid owner_start < "$owner_file" || true
+  [[ "$owner_pid" =~ ^[0-9]+$ ]] || return 0
+  if ! kill -0 "$owner_pid" 2>/dev/null; then
+    return 0
+  fi
+
+  # An unavailable ps result is not proof that a live pid was reused.
+  [ -n "$owner_start" ] || return 1
+  current_start="$(arc_process_start_stamp "$owner_pid" || true)"
+  [ -n "$current_start" ] && [ "$current_start" != "$owner_start" ]
+}
+
+# Pin the directory before checking/removing its record. Another reclaimer may
+# remove this generation and a new owner may recreate the pathname while we
+# are paused; relative unlinks must still address the old generation.
+arc_recover_stale_lock() (
+  local lock_dir="$1"
+  case "$lock_dir" in
+    /*) ;;
+    *) lock_dir="$PWD/$lock_dir" ;;
+  esac
+
+  cd "$lock_dir" 2>/dev/null || return 1
+  arc_lock_is_stale . || return 1
+  rm -f "$ARC_LOCK_OWNER_FILE" pid 2>/dev/null || true
+  rmdir "$lock_dir" 2>/dev/null
+)
+
 arc_acquire_lock() {
   local lock_dir="$1"
   local timeout_seconds="${2:-600}"
-  local started now owner
+  local started now owner_start temp
+  case "$lock_dir" in
+    /*) ;;
+    *) lock_dir="$PWD/$lock_dir" ;;
+  esac
+  owner_start="$(arc_process_start_stamp "$$" || true)"
+  if [ -z "$owner_start" ]; then
+    echo "ERROR: cannot determine agent runtime lock owner start stamp" >&2
+    return 1
+  fi
   mkdir -p "$(dirname "$lock_dir")"
   started="$(date +%s)"
-  while ! mkdir "$lock_dir" 2>/dev/null; do
-    owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-      rm -rf "$lock_dir"
-      continue
+  while :; do
+    if mkdir "$lock_dir" 2>/dev/null; then
+      # Publish atomically: a contender must never read a half-written record.
+      # The temp file lives beside the lock directory, not inside it, so a
+      # crashed publish cannot leave the directory non-empty and defeat rmdir.
+      temp="$(dirname "$lock_dir")/.$(basename "$lock_dir").owner.$$"
+      printf '%s\t%s\n' "$$" "$owner_start" >"$temp"
+      # Pin this directory while publishing, too: a reclaimer's final rmdir
+      # may remove an empty generation, in which case publication must fail.
+      if (cd "$lock_dir" && mv -f "$temp" "./$ARC_LOCK_OWNER_FILE") 2>/dev/null; then
+        return 0
+      fi
+      rm -f "$temp" 2>/dev/null || true
+      # The directory vanished between mkdir and publish; retry.
+    elif arc_lock_is_stale "$lock_dir"; then
+      arc_recover_stale_lock "$lock_dir" && continue
     fi
     now="$(date +%s)"
     if [ $((now - started)) -ge "$timeout_seconds" ]; then
@@ -393,15 +494,24 @@ arc_acquire_lock() {
     fi
     sleep 0.1
   done
-  printf '%s\n' "$$" >"$lock_dir/pid"
 }
 
 arc_release_lock() {
   local lock_dir="$1"
   [ -d "$lock_dir" ] || return 0
-  local owner
-  owner="$(cat "$lock_dir/pid" 2>/dev/null || true)"
-  if [ -z "$owner" ] || [ "$owner" = "$$" ]; then
-    rm -rf "$lock_dir"
+  local owner_file owner_pid owner_start current_start
+  owner_file="$(arc_lock_owner_file "$lock_dir")"
+  if [ -f "$owner_file" ]; then
+    IFS=$'\t' read -r owner_pid owner_start < "$owner_file" || true
+    current_start="$(arc_process_start_stamp "$$")"
+    if [ "$owner_pid" != "$$" ] || [ -z "$owner_start" ] || [ "$owner_start" != "$current_start" ]; then
+      return 0
+    fi
+  else
+    # Legacy bare-pid record: release only when it names this process.
+    owner_pid="$(cat "$lock_dir/pid" 2>/dev/null || true)"
+    [ "$owner_pid" = "$$" ] || return 0
   fi
+  rm -f "$owner_file" "$lock_dir/pid" 2>/dev/null || true
+  rmdir "$lock_dir" 2>/dev/null || true
 }

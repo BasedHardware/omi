@@ -134,6 +134,7 @@ async def settled_admissions(tasks):
     # The test-first unbounded implementation holds all 50 in GCS.
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch):
     budget = configure(monkeypatch, LIMIT)

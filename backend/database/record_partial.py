@@ -11,7 +11,9 @@ from config.record_audio import record_identity, require_record_audio_barrier
 from database._client import run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreTransaction
-from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
+from utils.batch_pipeline.record_producer_proof import producer_tokens_dead, leases_would_release
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
 
 PAYER_REFUSALS = Counter('omi_record_audio_partial_byok_refusals_total', 'Partial finishes refused for BYOK')
 
@@ -28,6 +30,19 @@ def continuation_refusal(store, pending):
             return 'byok_refused'
         if job.get('state') != 'record_pending':
             return 'state_changed'
+        if job.get('lease_recovery'):
+            # A full projection of the old sealed inventory must settle before
+            # a partial fill, otherwise that older full pass could erase it.
+            content, original = record_identity(pending['owner_id'], pending['conversation_id'])
+            intake = tx.get('intakes', 'bp_' + content)
+            ledger = tx.get('content', f"{pending['owner_id']}/{content}")
+            if intake:
+                if ledger.get('status') != 'completed':
+                    return 'state_changed'
+            else:
+                previous = tx.get('jobs', original)
+                if previous and previous.get('state') != 'committed':
+                    return 'state_changed'
         return None
 
     return store.run(read)
@@ -45,11 +60,22 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
     _, segment = record_identity(uid, cid)
     row_ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
 
+    observation = {}
+
     @firestore.transactional
     def commit(raw):
+        observation.clear()
         tx = FirestoreTransaction(store.client, store.namespace, raw)
         row = tx.get('conversations', f'{uid}/{cid}')
+        selected_segment = segment
         job = tx.get('jobs', segment)
+        if row.get('record_audio_partial') and not job.get('partial_coordinator'):
+            from database.batch_pipeline_record_lease_recovery import recovery_segment
+
+            recovery = recovery_segment(uid, cid)
+            continuation = tx.get('jobs', recovery)
+            if continuation.get('partial_coordinator'):
+                selected_segment, job = recovery, continuation
         if not config.enabled():
             return 'disabled'
         if not proof or not proof.get('resource_version') or not producer_tokens_dead({}, proof):
@@ -71,7 +97,10 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
         finish = row.get('finished_at')
         if not isinstance(finish, datetime) or finish.tzinfo is None or now - finish.timestamp() < config.WAIT_SECONDS:
             return 'not_aged'
-        if row.get('record_upload_sessions') and not producer_tokens_dead(row['record_upload_sessions'], proof):
+        if row.get('record_upload_sessions') and not producer_tokens_dead(
+            row['record_upload_sessions'], proof, uid=uid, row=row, job=job
+        ):
+            observation['would'] = leases_would_release(row['record_upload_sessions'], proof, uid=uid, row=row, job=job)
             return 'upload_pending'
         if job and (job.get('state') not in {'record_pending', 'partial_retired'} or not job.get('record_content_id')):
             return 'not_pending'
@@ -112,13 +141,24 @@ def finish_partial(store, path, *, reason, proof, now, register=None, preview=Fa
             job['partial_run'] = {**job['partial_run'], 'next_inventory_at': now}
         if not producer_tokens_dead({}, proof):
             return 'state_changed'
-        tx.put('jobs', segment, job)
+        observation['expired'] = lease.token_lease_serving(uid) and leases_would_release(
+            row.get('record_upload_sessions'),
+            proof,
+            uid=uid,
+            row=row,
+            job=job,
+        )
+        tx.put('jobs', selected_segment, job)
         tx.flush()
         raw.update(row_ref, {'record_audio_closed': False, 'record_audio_partial': mark, 'record_upload_sessions': {}})
         return 'partial_finished'
 
     try:
         result = run_transactional(store.client, commit, transient=True)
+        if result == 'partial_finished' and observation.get('expired'):
+            lease_metrics.EXPIRED_SEALED.inc()
+        if result == 'upload_pending' and observation.get('would'):
+            lease_metrics.EXPIRED_WOULD.inc()
         if result == 'byok_refused':
             PAYER_REFUSALS.inc()
         return result

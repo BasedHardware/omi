@@ -14,7 +14,8 @@ import pytest
 from cachetools import TTLCache
 
 from database import _client, conversations as conversations_db, transcript_pointer as pointer
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
 from tests.unit.memory_import_isolation import make_database_client_stub
 from utils import encryption
 from utils.other import object_lake as lake, space_keys

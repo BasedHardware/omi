@@ -81,7 +81,7 @@ same producer series before max-by-leg aggregation; missing/stale samples are ow
 `omi-batch-timeliness-sample-stale` warning. The 24h-capped `omi_batch_record_pending_new_oldest_age_seconds` is
 not a source. Existing new-cohort 2h delivery semantics remain unchanged. The fourth indexed oldest-row read exports
 `omi_batch_projection_drain_oldest_age_seconds` for pending/persisted/ready only, so held-only stock never
-enables the stalled-drain warning. It shares timeliness sample freshness (900 seconds).
+enables the stalled-drain warning. It shares timeliness sample freshness (1200 seconds) and the newest-source identity join.
 
 ## Offline checks and operator admission
 

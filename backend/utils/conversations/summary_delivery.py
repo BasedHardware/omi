@@ -6,21 +6,25 @@ calendar events alone never discharge the summary obligation.
 
 from __future__ import annotations
 
+import math
 import time
 import os
 from copy import deepcopy
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, cast
 from utils.conversations import phase_shadow
 
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
+from config.policy import FirstSummaryPolicy
 from utils.conversations.minimum_derived import intentional_short_clip_minimum, waive_short_clip_summary_debt
 
 Row = dict[str, Any]
+PROJECTION_DEBT_ENV = 'SUMMARY_PROJECTION_DEBT_ENABLED'
 MAX_EMPTY_REARMS = 2
 EMPTY_BLOCKED_REASON = 'empty_output_exhausted'
 EMPTY_LIFETIME_BLOCKED_REASON = 'empty_output_lifetime_exhausted'
@@ -45,6 +49,10 @@ DEBT = Gauge('omi_summary_debt_overdue', 'Overdue summary debt in the bounded re
 OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary debt observed by repair')
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
 EXPIRED_SEEN = Gauge('omi_summary_debt_expired_seen', 'Rows skipped as expired in the last claimed repair tick')
+REPAIR = Counter('omi_summary_debt_repair_total', 'Summary debt repair tick outcomes', ['outcome'])
+NEAR_EXPIRY_ADMITTED = Gauge(
+    'omi_summary_debt_near_expiry_admitted', 'Successful urgent redrives in the last claimed repair tick'
+)
 
 
 PROCESS_CONTEXT: ContextVar[Row | None] = ContextVar('summary_process', default=None)
@@ -158,8 +166,121 @@ def prepare(data: Row, uid: str, *, now: float | None = None) -> None:
         data.setdefault('summary_lane', lane(data))
 
 
-@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
-def refusal(row: Row) -> str | None:
+def projection_debt_enabled() -> bool:
+    """Default on; false restores the pre-fix behavior for batch projections."""
+    return default_on(PROJECTION_DEBT_ENV)
+
+
+def _past_age_gate(created_at: Any, *, now: float) -> bool:
+    """Mirror ``utils.enrichment.age_gate.expired`` for the created-at clock.
+
+    Importing ``age_gate`` here would pull its lazy parking import into the
+    batch worker's static source closure, and that path reaches a testing-only
+    module the worker image does not ship. The cutoff and config are the same.
+    """
+    from config import enrichment as enrichment_config
+
+    try:
+        hours = float(enrichment_config.max_age_hours())
+        seconds = hours * 3600
+        if hours < 0 or not math.isfinite(seconds):
+            seconds = 72 * 3600
+    except ValueError:
+        seconds = 72 * 3600
+    if seconds == 0:
+        return False
+    cutoff = now - seconds
+    value = created_at
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        value = value.timestamp()
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            value = parsed.replace(tzinfo=timezone.utc).timestamp() if parsed.tzinfo is None else parsed.timestamp()
+        except ValueError:
+            return False
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+        and value < cutoff
+    )
+
+
+def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
+    """Stamp first-summary debt when a batch projection lands a transcript on an untitled row.
+
+    A batch row that completes with no title never passes through the
+    server-minimum intake path, so it carries no debt: Home hides it and the
+    repair refuses it as ``unknown_provenance``. The projection is the only
+    write that sees the transcript land, so it stamps the same obligation the
+    intake minimum would have. Rows that already carry debt or a summary,
+    curated rows, discards, below-floor clips, blocked rows and local-only rows
+    are untouched.
+
+    The stamp records the row-level ``summary_title_provenance`` only. It does
+    not write ``structured.title_provenance``: ``is_server_minimum`` gates
+    apps, goals, memories, folders and vectors, and a projection stamp must not
+    suppress those effects on a later reprocess. Home reads the row-level
+    provenance together with the debt clock.
+
+    A row whose ``created_at`` is already past the repair age gate gets the
+    provenance but no debt. That is an honest non-debt disposition: the repair
+    never sees it, so it cannot park it one-way, and Home hides it instead of
+    presenting "Writing notes" forever.
+    """
+    if not projection_debt_enabled():
+        return False
+    if write.get('status') != 'completed' or write.get('deleted') or write.get('discarded'):
+        return False
+    if write.get('terminal_no_derived_effects') or write.get('deferred'):
+        return False
+    if write.get('processing_state') == 'local_pending':
+        return False
+    if write.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
+        return False
+    if write.get('user_title') is not None or write.get('user_overview') is not None:
+        return False
+    if write.get('summary_completed_at') or write.get('summary_output_present'):
+        return False
+    if write.get('summary_due_at') is not None or write.get('summary_first_pending_at') is not None:
+        return False
+    blocked = write.get('summary_blocked_reason')
+    if blocked is not None:
+        # Every non-empty block is terminal for this write, including the
+        # below-floor, local-only and BYOK reasons that are not in the empty set.
+        return False
+    structured = write.get('structured')
+    if structured is None:
+        structured = {}
+    elif not isinstance(structured, dict):
+        # Preserve non-dict structured data; only a dict can carry provenance.
+        return False
+    if str(structured.get('title') or '').strip() or present(structured):
+        return False
+    current = time.time() if now is None else now
+    # Evaluate the exact eligibility the repair will use, with the provenance
+    # this stamp would add. The candidate keeps the write untouched on refusal.
+    candidate = {
+        **write,
+        'structured': {**structured, 'title_provenance': 'server_minimum'},
+        'summary_title_provenance': 'server_minimum',
+    }
+    if _refusal(candidate) is not None:
+        return False
+    write['summary_title_provenance'] = 'server_minimum'
+    if _past_age_gate(write.get('created_at'), now=current):
+        return False
+    write['summary_first_pending_at'] = current
+    write['summary_due_at'] = current + deadline_seconds()
+    write.setdefault('summary_lane', lane(write))
+    return True
+
+
+def _refusal(row: Row) -> str | None:
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -181,6 +302,37 @@ def refusal(row: Row) -> str | None:
     if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':
         return 'generation_owned'
     return None
+
+
+@phase_shadow.compare('summary_repair', accepts=lambda result: result is None)
+def refusal(row: Row) -> str | None:
+    return _refusal(row)
+
+
+def rearm_after_refusal_clear(existing: Row, restored: Row) -> float | None:
+    """Recover the original obligation inside the refusal-removal transaction.
+
+    Never restart the deadline at undo time, replace an armed due, or enroll
+    a row whose original acceptance is unknown or whose restored state refuses.
+    """
+    accepted = restored.get('summary_first_pending_at')
+    if (
+        existing.get('summary_due_at') is not None
+        or refusal(restored) is not None
+        or restored.get('summary_blocked_reason') == 'blocked_byok'
+        or restored.get('finalization_status') in {'queued', 'leased'}
+        or not isinstance(accepted, (int, float))
+        or isinstance(accepted, bool)
+        or not math.isfinite(accepted)
+    ):
+        return None
+    policy = restored.get('first_summary_policy')
+    deadline = (
+        FirstSummaryPolicy.from_dict(policy).first_summary_deadline_seconds
+        if policy is not None
+        else deadline_seconds()
+    )
+    return accepted + deadline
 
 
 def finalization_pending(row: Row, uid: str, job_id: str) -> bool:
@@ -256,11 +408,13 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
     obligation_open = (
         write.get('summary_title_provenance') == 'server_minimum'
         and not write.get('summary_completed_at')
+        and not existing.get('summary_output_present')
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
-    if existing.get('summary_completed_at'):
+    if existing.get('summary_completed_at') or existing.get('summary_output_present'):
+        write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
         # the whole write to protect it, which stranded completed results in
         # every lane without an outbox. Commit instead, but never let an empty
@@ -281,9 +435,10 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
                 if existing.get('user_overview'):
                     restored['overview'] = existing['user_overview']
                 write['structured'] = restored
-            write['summary_output_present'] = bool(banked)
+            write['summary_output_present'] = bool(banked) or bool(existing.get('summary_output_present'))
             write['summary_title_provenance'] = existing.get('summary_title_provenance') or 'generated'
-            write['summary_completed_at'] = existing['summary_completed_at']
+            if existing.get('summary_completed_at') is not None:
+                write['summary_completed_at'] = existing['summary_completed_at']
             write['summary_discard_receipted'] = existing.get('summary_discard_receipted', False)
             write['summary_processing_lease_until'] = 0
         return None

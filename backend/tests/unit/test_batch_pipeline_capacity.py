@@ -11,7 +11,8 @@ from utils.batch_pipeline.scheduler import Scheduler
 
 
 @pytest.mark.parametrize('reason', ['allowance_exhausted', 'privacy_blocked', None])
-def test_old_worker_refusal_cannot_turn_parked_requeue_into_capacity(reason):
+def test_old_worker_refusal_cannot_turn_parked_requeue_into_capacity(monkeypatch, reason):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     store = MemoryStore()
     scheduler = Scheduler(store)
     scheduler.enqueue(item('held'), 100)

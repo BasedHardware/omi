@@ -109,6 +109,9 @@ def probe_outcome(o):
 @pytest.fixture(autouse=True)
 def fail_fast_defaults(monkeypatch):
     monkeypatch.delenv('STT_PRERECORDED_VENDOR_FAIL_FAST', raising=False)
+    # This suite exercises the low-level Modulate behavior; the new replacement
+    # provider has its own dedicated failover suite.
+    monkeypatch.setenv('PRERECORDED_SONIOX_FAILOVER_ENABLED', 'false')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-test-key')
     reset_vendor_guard_for_tests()
     yield

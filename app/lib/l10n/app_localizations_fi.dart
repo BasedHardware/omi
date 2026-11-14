@@ -9174,6 +9174,24 @@ class AppLocalizationsFi extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
 
   @override
+  String get applyCodeToCurrentPlan => 'Käytä nykyiseen tilaukseen';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koodi käytettiin nykyiseen tilaukseesi.',
+        'refused': 'Koodia ei voi käyttää. Tarkista koodi ja vaadittu tilaus.',
+        'conflict': 'Koodi on jo käytetty tai tilauksessasi on jo alennus.',
+        'rateLimited': 'Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.',
+        'other': 'Koodia ei voitu käyttää. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Tarjouskoodi';
 
   @override
@@ -13657,6 +13675,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Luo muistiinpanot uudelleen';
+
+  @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
 
   @override
@@ -15381,6 +15402,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paymentDeclinedTitle => 'Korttisi hylättiin';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Päivitä kortti tai saa $plan takaisin hintaan $price kuukaudessa';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Päivitä kortti saadaksesi $plan takaisin';
   }
@@ -15405,4 +15431,31 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Vaihda kuukausimaksuun';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price kuukaudessa';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Korvaa maksamattoman $yearly vuosimaksun. Uusiutuu kuukausittain. Peru milloin tahansa.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksu hylättiin. Tilauksesi ei muuttunut.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Vaihto ei ole juuri nyt saatavilla. Päivitä kortti sen sijaan.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Maksat nyt kuukausittain';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price maksettu tänään. Uusiutuu kuukausittain.';
+  }
 }

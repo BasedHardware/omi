@@ -5,6 +5,7 @@ desktop/
 .git
 backend/charts
 **/.venv
+**/__pycache__
 omi/
 .hermes/
 backend/edge/target

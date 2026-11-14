@@ -53,3 +53,7 @@ class SyncCaptureManifestRequest(BaseModel):
 
 class SyncCaptureManifestResponse(BaseModel):
     manifest: str
+
+
+class SyncUploadHoldReleaseResponse(BaseModel):
+    accepted: bool

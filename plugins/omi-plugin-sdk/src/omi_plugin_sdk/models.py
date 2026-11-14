@@ -14,7 +14,15 @@ MeetingType = Literal[
 # Optional structured fields added for rich meeting notes are serialized only
 # when the producer actually set them: the flag-off note shape must stay
 # byte-identical in prompts, responses, and persisted documents.
-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance', 'salience')
+_OMIT_WHEN_UNSET = (
+    'meeting_type',
+    'participants',
+    'insights',
+    'note_claims',
+    'title_provenance',
+    'salience',
+    'gist',
+)
 
 
 def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
@@ -234,6 +242,10 @@ class Structured(BaseModel):
     title: str = Field(description="A title/name for this conversation", default="")
     overview: str = Field(
         description="A brief overview of the conversation, highlighting the key details from it",
+        default="",
+    )
+    gist: str = Field(
+        description="One line of at most 12 words saying what this conversation was about",
         default="",
     )
     # The neutral "nothing chose" default, matching backend models.conversation_emoji.NEUTRAL_EMOJI.

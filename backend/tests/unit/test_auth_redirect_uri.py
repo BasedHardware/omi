@@ -28,7 +28,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.testclient import TestClient
 
 # Backend modules expect ENCRYPTION_SECRET to be set at import time.
 os.environ.setdefault(
@@ -123,6 +125,7 @@ except ImportError:
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from routers import auth as auth_module  # noqa: E402
 from routers.auth import _validate_redirect_uri  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -239,6 +242,101 @@ from routers.auth import (  # noqa: E402
 
 _PKCE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 _PKCE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+class TestLegacyBrowserSignIn:
+    """Exercise real route validation/rendering; replace only session/provider I/O."""
+
+    @pytest.fixture
+    def client(self):
+        app = FastAPI()
+        app.include_router(auth_module.router)
+        with TestClient(app) as client:
+            yield client
+
+    @pytest.mark.parametrize("provider", ["google", "apple"])
+    def test_legacy_browser_gets_safe_recovery_without_starting_auth(self, client, provider):
+        with patch.object(auth_module, "set_auth_session") as session, patch.object(
+            auth_module, "set_auth_code"
+        ) as code, patch.object(auth_module, "_google_auth_redirect") as google, patch.object(
+            auth_module, "_apple_auth_redirect"
+        ) as apple:
+            response = client.get(
+                "/v1/auth/authorize",
+                params={
+                    "provider": provider,
+                    "redirect_uri": "omi://auth/callback",
+                    "state": '<script>private-state</script>',
+                },
+                headers={"Accept": "application/xhtml+xml, text/html, */*;q=0.8"},
+            )
+        assert response.status_code == 400
+        assert response.headers["content-type"].startswith("text/html")
+        assert 'href="https://macos.omi.me"' in response.text
+        assert "Start a new Omi sign-in" in response.text
+        assert "private-state" not in response.text
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["referrer-policy"] == "no-referrer"
+        assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+        assert response.headers["vary"] == "Accept"
+        assert "location" not in response.headers
+        assert not response.cookies
+        for dependency in (session, code, google, apple):
+            dependency.assert_not_called()
+
+    @pytest.mark.parametrize("accept", ["application/json", "*/*", "text/html;q=0"])
+    def test_api_missing_pkce_error_is_unchanged(self, client, accept):
+        response = client.get(
+            "/v1/auth/authorize",
+            params={"provider": "google", "redirect_uri": "omi://auth/callback"},
+            headers={"Accept": accept},
+        )
+        assert response.status_code == 400
+        assert response.json() == {"detail": "code_challenge is required"}
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"redirect_uri": "https://attacker.example/callback"},
+            {"redirect_uri": "omi-computer://auth/callback"},
+            {"provider": "unsupported"},
+            {"code_challenge": "short", "code_challenge_method": "S256"},
+            {"code_challenge": _PKCE_CHALLENGE, "code_challenge_method": "plain"},
+        ],
+    )
+    def test_other_invalid_requests_do_not_enter_recovery_path(self, client, overrides):
+        with patch.object(auth_module, "set_auth_session") as session:
+            response = client.get(
+                "/v1/auth/authorize",
+                params={"provider": "google", "redirect_uri": "omi://auth/callback", **overrides},
+                headers={"Accept": "text/html"},
+            )
+        assert response.status_code == 400
+        assert response.headers["content-type"].startswith("application/json")
+        session.assert_not_called()
+
+    def test_new_browser_sign_in_keeps_pkce_binding(self, client):
+        with patch.object(auth_module, "set_auth_session") as session, patch.object(
+            auth_module,
+            "_google_auth_redirect",
+            new_callable=AsyncMock,
+            return_value=RedirectResponse("https://accounts.google.com/test-only"),
+        ):
+            response = client.get(
+                "/v1/auth/authorize",
+                params={
+                    "provider": "google",
+                    "redirect_uri": "omi://auth/callback",
+                    "code_challenge": _PKCE_CHALLENGE,
+                    "code_challenge_method": "S256",
+                },
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+        assert response.status_code == 307
+        stored = session.call_args.args[1]
+        assert stored["code_challenge"] == _PKCE_CHALLENGE
+        assert stored["code_challenge_method"] == "S256"
 
 
 class TestPkceBinding:

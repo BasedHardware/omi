@@ -52,6 +52,39 @@ def fail(*args, **kwargs):
     raise AssertionError('unexpected IO')
 
 
+@pytest.mark.parametrize('plane', ['cells', 'directory'])
+@pytest.mark.parametrize('use_dsn', [False, True], ids=['iam', 'dsn'])
+@pytest.mark.parametrize('pool_size', [1, 2])
+def test_runtime_keeps_lazy_singleton_pool(monkeypatch, plane, use_dsn, pool_size):
+    module = cells_serving if plane == 'cells' else router
+    get_store = module.cell_store if plane == 'cells' else module.directory_store
+    prefix = 'CELLS' if plane == 'cells' else 'DIRECTORY'
+    dsn = 'postgresql://runtime-pooler/runtime-db' if use_dsn else ''
+    monkeypatch.setattr(module, '_store', None)
+    monkeypatch.setenv(f'{prefix}_PG_DSN', dsn)
+    monkeypatch.setenv(f'{prefix}_PG_HOST', 'runtime-pooler')
+    monkeypatch.setenv(f'{prefix}_PG_DATABASE', 'runtime-db')
+    monkeypatch.setenv(f'{prefix}_PG_USER', 'runtime-data-only@project.iam')
+    monkeypatch.setenv(f'{prefix}_PG_POOL_SIZE', str(pool_size))
+    dial = Mock(side_effect=AssertionError('runtime must not dial before pool checkout'))
+    connector = Mock(return_value=dial)
+    pool = Mock()
+    pool_factory = Mock(return_value=pool)
+    monkeypatch.setattr(module, 'iam_connector', connector)
+    monkeypatch.setattr(module, 'Pool', pool_factory)
+
+    store = get_store()
+
+    assert get_store() is store
+    assert store.pool is pool
+    pool_factory.assert_called_once_with(dsn, size=pool_size, connect=None if use_dsn else dial)
+    if use_dsn:
+        connector.assert_not_called()
+    else:
+        connector.assert_called_once_with('runtime-pooler', 'runtime-db', 'runtime-data-only@project.iam')
+    dial.assert_not_called()
+
+
 def test_off_has_no_io_even_with_cached_route(monkeypatch):
     monkeypatch.setenv('DIRECTORY_ROUTING_MODE', 'off')
     monkeypatch.setattr(router, 'Pool', fail)

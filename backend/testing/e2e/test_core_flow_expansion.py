@@ -7,6 +7,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from fakes.firestore import read_conversation, seed_conversation
 from fakes.stt import fake_suggested_transcript_event
@@ -224,7 +225,11 @@ def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_heade
     monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response, on_fenced=None: None)
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_router, "get_hard_restriction_status", lambda uid: (False, None))
-    monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
+    monkeypatch.setattr(
+        sync_router,
+        "resolve_transcription_allowance",
+        lambda uid: SimpleNamespace(managed=True, reason="plan_within_allowance"),
+    )
     monkeypatch.setattr(sync_router, "is_cloud_tasks_dispatch_enabled", lambda: False)
     monkeypatch.setattr(sync_router, "has_byok_keys", lambda: False)
     monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)

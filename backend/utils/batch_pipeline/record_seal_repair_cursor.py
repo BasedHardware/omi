@@ -13,12 +13,17 @@ PURPOSE = b'record-seal-repair-cursor-v1'
 
 
 class RepairCursor:
-    def __init__(self, client, secret, *, jobs=False):
+    def __init__(self, client, secret, *, jobs=False, urgent=False):
         if len(secret) < 32:
             raise ValueError('cursor key required')
         self.cipher = AESGCM(hmac.digest(secret, PURPOSE, 'sha256'))
-        self.jobs = jobs
-        name = 'record_seal_repair_jobs_cursor_v1' if jobs else 'record_seal_repair_cursor_v1'
+        self.jobs, self.urgent = jobs, urgent
+        # Separate namespaces prevent an ascending frontier from skipping work in descending order.
+        name = (
+            'record_seal_repair_urgent_cursor_v1'
+            if urgent
+            else 'record_seal_repair_jobs_cursor_v2' if jobs else 'record_seal_repair_cursor_v2'
+        )
         self.ref = client.collection('batch_pipeline_prod_maintenance').document(name)
 
     def read(self, budget):
@@ -43,10 +48,10 @@ class RepairCursor:
         if not valid or not all(parts):
             raise ValueError('invalid maintenance frontier')
         if self.jobs and 'enqueued_at' in value:
-            # Preserve the exact numeric Firestore cursor, without rounding
-            # epoch floats through datetime. Even skipped NaN/-inf clocks may
-            # be the last scanned row and must not prevent forward progress.
-            if type(value['enqueued_at']) not in (int, float) or 'horizon' not in value:
+            # Urgent cursors preserve raw scalar query positions even when a
+            # malformed deadline is ineligible. Ordinary enqueue clocks stay numeric.
+            allowed = (int, float, bool, str, type(None)) if self.urgent else (int, float)
+            if type(value['enqueued_at']) not in allowed or 'horizon' not in value:
                 raise ValueError('invalid maintenance frontier')
             cursor = {'path': path, 'enqueued_at': value['enqueued_at']}
         else:

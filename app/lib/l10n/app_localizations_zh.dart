@@ -9029,6 +9029,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
 
   @override
+  String get applyCodeToCurrentPlan => '应用于当前套餐';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '代码已应用于您当前的套餐。',
+        'refused': '无法应用此代码。请检查代码及其适用套餐。',
+        'conflict': '代码已使用，或您的套餐已有折扣。',
+        'rateLimited': '尝试次数过多。请稍后重试。',
+        'other': '无法应用此代码。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => '促销代码';
 
   @override
@@ -13444,6 +13462,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => '重新生成笔记';
+
+  @override
   String get attentionSummaryFailed => '无法总结这段对话';
 
   @override
@@ -15126,6 +15147,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '更新银行卡，或恢复使用 $plan，每月 $price';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
@@ -15150,4 +15176,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '改为按月付费';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan，每月 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '替代未支付的年费 $yearly。按月续订。可随时取消。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '付款被拒。你的计划没有变化。';
+
+  @override
+  String get monthlySwitchUnavailable => '目前无法切换。请改为更新银行卡。';
+
+  @override
+  String get monthlySwitchDoneTitle => '已改为按月付费';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '今日已支付 $price。按月续订。';
+  }
 }

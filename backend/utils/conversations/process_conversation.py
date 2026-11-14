@@ -81,10 +81,12 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
+from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
+from utils.conversations import l1_admission
 from utils.llm.notes_short_clip import quiet_minimum, has_explicit_reminder
 from utils.llm.notes_short_clip_policy import english_word_floor, selected_summary_app
 from utils.conversations.minimum_derived import is_server_minimum
@@ -1098,6 +1100,9 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         # Quote grounding and the L1 fingerprint must see this same owner-only
         # input. Never mutate the retained transcript or the notes/task input.
         conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
+    if l1_admission.skip(uid, conversation):
+        # Noise or short owner speech: nothing to remember, nothing written.
+        return
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -2603,6 +2608,7 @@ def process_conversation(
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    recovery_final_attempt: bool = True,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
@@ -2833,6 +2839,18 @@ def process_conversation(
             + '\n'
         )
         sys.stdout.flush()
+    structured, empty_structure_minimum_applied = apply_empty_structure_minimum(
+        uid,
+        trigger,
+        conversation,
+        structured,
+        discarded,
+        decisions,
+        app_id,
+        recovery_transcript_decoded,
+        recovery_minimum_fallback,
+        recovery_final_attempt,
+    )
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -2851,6 +2869,7 @@ def process_conversation(
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
         and not recovery_minimum_fallback
+        and not empty_structure_minimum_applied
     ):
         sys.stdout.write(
             json.dumps(
@@ -2921,7 +2940,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -2945,7 +2964,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded:
+    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,

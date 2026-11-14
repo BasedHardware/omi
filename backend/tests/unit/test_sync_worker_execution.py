@@ -475,7 +475,7 @@ async def test_worker_preflight_keeps_live_authority_and_privacy_shadow(executio
         return snapshot
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
-    live = metrics.CHECKS.labels('batch', 'live', 'account_deleted' if blocked else 'allow')
+    live = metrics.CHECKS.labels('batch', 'live', 'account_deleted' if blocked else 'allow', 'unattributed')
     shadow = metrics.SHADOW_CHECKS.labels('batch', 'match')
     mismatch = metrics.DECISION_MISMATCH.labels('batch', 'stale_allow')
     hits = metrics.MEMO_REQUESTS.labels('batch', 'hit')

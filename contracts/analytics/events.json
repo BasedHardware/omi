@@ -3,6 +3,37 @@
   "adopted_files": [],
   "events": [
     {
+      "id": "onDeviceTranscriptionUsed",
+      "wire_name": "On Device Transcription Used",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "route": {
+          "type": "enum",
+          "wire_name": "route",
+          "values": [
+            "allowance",
+            "custom",
+            "offline_batch"
+          ]
+        },
+        "audioMs": {
+          "type": "int",
+          "wire_name": "audio_ms"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        }
+      },
+      "consumers": [
+        "on-device-transcription-usage"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",
@@ -5063,6 +5094,68 @@
       "phase": "point",
       "intent": null,
       "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyShown",
+      "wire_name": "Subscription Payment Issue Monthly Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyTapped",
+      "wire_name": "Subscription Payment Issue Monthly Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlySwitched",
+      "wire_name": "Subscription Payment Issue Monthly Switched",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyFailed",
+      "wire_name": "Subscription Payment Issue Monthly Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "error"
+          ]
+        }
+      },
       "consumers": [
         "subscription-payment-recovery"
       ],

@@ -1,0 +1,16 @@
+{
+ "schema_version": 1,
+ "id": "FC-guard-keyed-on-call-site-misses-family-expansion",
+ "violated_contract": "A diff-scoped guard that keys a computed call site by its site and expression treats the site as the unit of disclosure. When the collection family the site reads is a literal namespace tuple, adding a member changes the set of collections the site can reach without changing the key, so the guard reports nothing and a new unbudgeted read surface ships. The same shape applies to any guard that grandfathers a site while the dependency that determines its blast radius can still grow.",
+ "canonical_prevention": "Compare the enumerable family, not only the site key, between the base revision and the change: resolve literal tuple/list sequences and the in-file bindings that draw from them, and require a reviewed budget or exemption for each member that first appears. Pin it with a fixture that holds the call site constant and expands the tuple, in both directions.",
+ "canonical_prevention_artifact": [
+  ".github/scripts/check_firestore_collection_budget.py",
+  ".github/scripts/test_check_firestore_collection_budget.py"
+ ],
+ "evidence_prs": [],
+ "scope_hints": [
+  ".github/scripts/check_firestore_collection_budget.py",
+  ".github/scripts/test_check_firestore_collection_budget.py"
+ ],
+ "status": "open"
+}

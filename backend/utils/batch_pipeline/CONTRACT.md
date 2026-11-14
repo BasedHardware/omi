@@ -196,6 +196,7 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:ready` | `J:Scheduler.enqueue_in_transaction`, `J:Scheduler.requeue_quarantined_in_transaction` | `J:Scheduler._pull_shard.commit` | none | T | T | No held-specific switch | Existing queue/ownership fences |
 | `batch:leased` | `J:Scheduler._pull_shard.commit` | `J:Scheduler.complete`, `J:Scheduler.recover` | `lease_until` | T | T | No held-specific switch | Token-fenced lease expiry |
 | `batch:retry` | `utils/batch_pipeline/scheduler.py:_defer`, `J:Scheduler.defer` | `J:Scheduler.recover`, then `J:Scheduler._pull_shard.commit` | `available_at` retry schedule; no total dwell deadline | T | T | No held-specific switch | Retain attempts and custody |
+| `batch:allowance_held` | `database/batch_pipeline_allowance_hold.py:park` via scheduler/migration | `utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick`, then normal admission | none; no expiry of held recording or obligation | `omi_batch_allowance_held_units` | Separate policy stock, never a late-work alarm | `BATCH_ALLOWANCE_PARK_ENABLED` | Off returns retained rows to legacy retry gradually; keep a new controller until drained. Effective plan/grant or usage-period changes trigger owner release. |
 | `batch:result_ready` | `J:Scheduler.complete`, `R:RecoveryStore.settle`, `V:ProviderSttStore.settle` | `M:OrderedMerge.commit_next` | none | T | T | No held-specific switch | Retain result, ordered merge |
 | `batch:vendor_held` | `V:ProviderSttStore.hold` | `V:ProviderSttStore.redrive` via `V:ProviderSttStage._held` | `vendor_hold.redrive_at` retry schedule | T; `omi_batch_pipeline_vendor_held_oldest_age_seconds` | T | `BATCH_VENDOR_HELD_REDRIVE_ENABLED` | False parks holds; rollback past vendor failover requires route-table removal and drain (see provider module); never put provider work on GPU ring |
 | `batch:quarantined` | `Q:quarantine_job`; provider `V:ProviderSttStore.settle`, `V:ProviderSttStore.terminal` | `R:RecoveryStore.prepare/start/settle`; dormant GPU expiry `R:expire_held_in_transaction` via `H:HeldDeadLetter.tick` | `held_deadline_at` for enabled GPU path; provider entry paths remain unstamped | T | T | `BATCH_HELD_DEAD_LETTER_ENABLED` | False stops new stamps/automatic GPU maintenance; manual requeue survives |
@@ -239,13 +240,44 @@ conversation `status`. The existing reconciler is
 ### record_audio custody and conversation
 
 These are field/reader views, not additional dead-letter shapes. Live producer
-tokens have **no TTL**. Neither a refusal-age metric nor a terminal conversation
-authorizes clearing them. Process-death repair needs scoped producer proof,
-archive/retained-tail evidence and the privacy transaction.
+tokens retain their original proof rules in `RECORD_TOKEN_LEASE_MODE=off` (default).
+In shadow, server-observed frame batches and custody appends stamp per-token
+`last_signal_at`, `lease_expires_at`, and `signal_source`; shadow cannot expire.
+Serve honors the `record-token-lease` uid cohort. A token is lease-dead only if
+its lease lapsed AND heartbeat missed AND no append since the last signal.
+Retained-tail/privacy proof remains mandatory for a complete seal. A late signal
+re-activates its producer fence before bytes. Custody uploads acquire a separate
+exact token before archive/staging; only durable acceptance bumps
+`record_upload_revision` and clears that token. Refusals/failures clear without a
+bump or late-append count; a crashed uploader remains fenced for its own lease.
+Only serve creates these podless custody tokens; their own lease remains an
+exit in off/shadow after rollback. Existing frame-token pod proof is unchanged
+in off. A custody upload accepted after rollback still revises and schedules
+recovery; the flag cannot revoke an already acquired custody obligation.
+Memoized waits do no token IO. Custody heartbeats renew at most once per lease/2
+per conversation, only on observed manifests or completed archive file appends.
+Serve-only frames revise and reopen the row. If original input has already been
+captured, both frames and accepted custody schedule the existing partial
+continuation, regardless of conversation status, preserving original immutable
+work. Uncaptured admission reads the current revision and validates it again
+after staging; a stale staged plan must retry. Late-append telemetry is emitted
+only after the durable frame window/object or accepted custody append commits.
+Intentionally disabled archives are not custody appends and preserve the route's
+original response, without a fence, revision bump or recovery job.
+Late WAL holes are retained create-only against actual sample coverage, so
+partial rows and interior gaps are processed without the tail-only gap-fill
+ramp. Partial results retain their partial marker; no completeness is invented.
+Off keeps old writes/decisions, and post-seal shadow frames only count.
+Raw audio is never deleted. Off/shadow restore original frame-token seal authority
+and retain the lease exit and accepted-byte recovery of existing custody tokens.
+The active repair CronJob exports its bounded age sample and folded child probe
+counters on its scraped metrics port; the idle worker scanner remains disabled.
 
 | Machine:state | Entry writer | Exit writer | Deadline field | Dwell metric | Alert | Flag / kill switch | Rollback behavior |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `record_audio:capturing` | `A:set_record_upload_pending` (exact token) | Same function on exact-token finish; conditional `A:abandon_record_upload_session.commit` after eviction worker/futures settle | none by design | none for all live producers | none | `PUSHER_ABANDON_EVICTED_TOKENS` for conditional abandonment | Off leaves tokens fenced for finish/proven-dead repair |
+| `record_token:capturing` | `A:set_record_upload_pending`; `A:renew_record_token_lease`; `record_custody_append.begin` | Exact-token finish clear; abandon attestation; computed lease lapse | nested `lease_expires_at` | `omi_record_token_lease_active` | `omi-record-token-lease-late-append` (page) | `RECORD_TOKEN_LEASE_MODE` | Off restores pod/abandon proof |
+| `record_token:lease_lapsed` (computed) | Three quiet lease clocks | **seal** via `apply_seals` (full retained tail); **partial finish** via `finish_partial` (clear map, hourly coordinator); **re-activated** via frame renewal or custody fence + durable `record_custody_append.finish` (revision bump) | computed, never persisted | `omi_record_token_lease_expired_would_total` | `omi-record-token-lease-late-append` (page) | Same mode/cohort | No migration or audio deletion |
 | `record_audio:seal_refused` | `A:seal_record_audio.commit` | `A:seal_record_audio` after producer finish | none; `record_seal_refused_at` is first-entry age only | `omi_record_seal_refused_age_seconds` (bounded job page, open rows only) | `omi-record-seal-refused-age` (agent, declaration) | `RECORD_SEAL_REFUSED_STAMP_ENABLED` | False stops stamps/observation, never seals or clears custody |
 | `record_audio:abandoned` | `A:abandon_record_upload_session.commit` | `utils/batch_pipeline/record_seal_sweeper.py:sweep` repair discovery | none; `abandoned_at` is proof/age anchor | none | none | `PUSHER_ABANDON_EVICTED_TOKENS` | Existing exact-token/repair path; no age-only exit |
 | `record_audio_orphan:capturing` | Derived proven-dead subset of `A:set_record_upload_pending` tokens | `utils/batch_pipeline/record_seal_sweeper.py:sweep` | none by design | none | none | No held-specific switch | Preserve producer and tail proof requirements |
@@ -623,3 +655,43 @@ extra queries. Neither uses `BATCH_HELD_DEAD_LETTER_ENABLED`.
 No enablement is included: the lead owns a separate canary and expansion
 proposal after review. Rollback: set each switch to `false`; logs stop and the
 companion series disappears on collection. No data migration or cleanup.
+
+## Terminal-only merge polling (dark)
+
+`BATCH_HELD_POLL_SKIP_ENABLED` defaults OFF. ON, `fresh_pending` and transactional
+`first_pending` exclude committed/dead/quarantined/privacy_blocked/partial_retired/provider_superseded.
+Unknown strings stay visible; missing/null state is excluded in Firestore, Postgres and simulator.
+**Before enabling: all four prod/dev poll indexes MUST be READY, real query plans MUST succeed,
+and `scripts.batch_pipeline_poll_state_census --project PROJECT` MUST PASS (0).** Run from backend
+with `.venv/bin/python -m`; on this host source `~/.local/bin/gcp-agent-env.sh ro-prod` first.
+The read-only tool COUNTs pending minus pending-in-full-lifecycle-inventory per prod/dev jobs collection,
+prints one combined PASS (0)/FAIL (n) line and exits 0/1; API errors propagate nonzero. No job reads/writes.
+Dead GPU expiry/privacy fencing can retain merge_pending; recovery remains unchanged while merge/scheduler
+head lookup can advance. Held ready/retry/vendor_held heads keep capture order/fresh waiting;
+`held_merge_owners` always uses OFF. Oldest, held SLA gauges and stale-vendor watchdog are untouched.
+Unavailable ON queries fall back to exact OFF; OFF errors propagate. Rollback: flag OFF restores old queries/reads.
+No flag is replaced. Savings are Firestore-only, exclude index-entry costs, and stay booked at zero pending settled SKU.
+
+The merge commit alone writes `results.fresh_capture = (job.fresh_capture is True)`;
+unstamped jobs become backlog (`False`), without backfilling old results or changing
+log/predecessor order. Its only new semantic reader is the fresh-delivery guard:
+the serving maintenance leader counts fresh results committed 10–20 minutes ago
+and the pending subset once a minute, publishing
+`omi_batch_pipeline_fresh_{committed_window_total,unprojected_window_total,unprojected_ratio}`
+and `omi_batch_pipeline_fresh_guard_sample_age_seconds`. Empty windows or failed
+queries have no ratio; stale counts/ratios expire at 120 s. The default-on
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED` kill switch suppresses queries and all guard
+gauges when off. Reader inventory and rollout proof requirements are recorded in
+`docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
+
+The projection acknowledge also stamps `jobs.delivered_at` and
+`jobs.delivered_in_target` in the transaction that sets
+`projection_state=completed`. The only semantic reader is the delivered-share
+sampler: the maintenance leader walks one bounded job-metadata page (admitted
+20 to 5 minutes ago, capped at 5,000 rows) every 300 s and publishes
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+per route and language. A unit is delivered in target when its first
+acknowledge is at most 300 s after `enqueued_at`; the stamp is sticky on replay.
+Missing or failed samples never publish a healthy ratio. The default-on
+`BATCH_PIPELINE_DELIVERED_SHARE_ENABLED` kill switch suppresses the page and all
+gauges. See `docs/listen_pusher_pipeline/changes/2026-11-14-delivered-share.md`.

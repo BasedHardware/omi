@@ -16,6 +16,7 @@ final class ConversationDisplayStateTests: XCTestCase {
   private func makeConversation(
     title: String = "",
     status: ConversationStatus = .completed,
+    homeStep: String? = nil,
     isLocked: Bool = false,
     segments: [TranscriptSegment] = [],
     deferred: Bool = false,
@@ -43,6 +44,7 @@ final class ConversationDisplayStateTests: XCTestCase {
       source: nil,
       language: nil,
       status: status,
+      homeStep: homeStep,
       discarded: false,
       deleted: false,
       isLocked: isLocked,
@@ -178,6 +180,44 @@ final class ConversationDisplayStateTests: XCTestCase {
   func test_deferredFlagIgnored_onceCompleted() {
     let conv = makeConversation(title: "Real title", status: .completed, deferred: true)
     XCTAssertEqual(conv.displayState, .titled("Real title"))
+  }
+
+  func test_homeProjectionChangeIsNotEqualToProcessingRow() {
+    let processing = makeConversation(status: .processing)
+    var failed = processing
+    failed.homeStep = "failed"
+    XCTAssertNotEqual(processing, failed)
+  }
+
+  func test_transcriptTimingCopyKeepsFailedHomeProjection() {
+    let failed = makeConversation(status: .processing, homeStep: "failed")
+    let retimed = failed.onAudioClock(segments: [], startedAt: Date(timeIntervalSince1970: 100))
+    XCTAssertEqual(retimed.homeStep, "failed")
+    XCTAssertEqual(retimed.displayState, .failed)
+  }
+
+  func test_failedHomeProjectionStopsAllLiveProcessingPresentation() {
+    for status in [ConversationStatus.processing, .merging, .inProgress] {
+      let conversation = makeConversation(status: status, homeStep: "failed")
+      XCTAssertEqual(conversation.displayState, .failed)
+      XCTAssertEqual(conversation.displayTitle, "Failed to process")
+      XCTAssertFalse(conversation.showsSummaryProcessing)
+      XCTAssertFalse(conversation.needsProcessingDetailRefresh)
+      XCTAssertTrue(conversation.canReprocess)
+    }
+  }
+
+  func test_failedHomeProjectionOverridesTranscriptionAndDeferredWaits() {
+    let transcription = makeConversation(title: "Transcribing…", status: .processing, homeStep: "failed")
+    XCTAssertFalse(transcription.isAwaitingTranscription)
+    XCTAssertEqual(transcription.displayState, .failed)
+    let deferred = makeConversation(status: .processing, homeStep: "failed", deferred: true)
+    XCTAssertEqual(deferred.displayState, .failed)
+    XCTAssertFalse(deferred.showsSummaryProcessing)
+    XCTAssertFalse(deferred.needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(status: .processing).needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(title: "Transcribing…", status: .processing).needsProcessingDetailRefresh)
+    XCTAssertTrue(makeConversation(deferred: true).needsProcessingDetailRefresh)
   }
 
   func test_processingStatus_returnsProcessing() {

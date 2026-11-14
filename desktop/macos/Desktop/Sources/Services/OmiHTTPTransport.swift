@@ -283,14 +283,15 @@ struct OmiHTTPTransport {
   }
 
   static func extractErrorDetail(from data: Data) -> String? {
-    if let payload = extractErrorPayload(from: data) {
-      return payload.preferredMessage
+    if let message = extractErrorPayload(from: data)?.preferredMessage {
+      return message
     }
     guard
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let detail = json["detail"] as? String
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return nil }
-    return detail
+    if let detail = json["detail"] as? String { return detail }
+    // The attention retry contract returns this confirmation without a detail field.
+    return json["state"] as? String == "not_retryable" ? "not_retryable" : nil
   }
 
   static func extractErrorPayload(from data: Data) -> APIErrorPayload? {
