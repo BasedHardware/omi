@@ -11,6 +11,7 @@ from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
+from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -84,10 +85,17 @@ def _delete_job(
         queue = queue_ref.get(transaction=transaction).to_dict() or {}
         # Segment IDs are globally unique; this needs only a single-field index.
         predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
+        hold_ref = client.collection(f'{namespace}_{ALLOWANCE_OWNERS}').document(key)
+        hold = hold_ref.get(transaction=transaction).to_dict() if job.get('state') == ALLOWANCE_HELD else None
         if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
             raise RuntimeError('batch queue ownership mismatch')
         touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
         touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
+        if hold:
+            hold['held_count'] = max(0, hold.get('held_count', 0) - 1)
+            hold['active'] = hold['held_count'] > 0
+            transaction.set(hold_ref, hold)
+            touched.append((ALLOWANCE_OWNERS, key))
         if queue.get('head') == snapshot.id:
             queue['head'] = job.get('next', '')
         if queue.get('tail') == snapshot.id:
@@ -212,6 +220,7 @@ def purge_batch_owner(
             'coalesce_groups',
             'coalesce_sources',
             'coalesce_heads',
+            'allowance_holds',
         ):
             after = None
             while True:

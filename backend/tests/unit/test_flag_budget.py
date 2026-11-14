@@ -220,6 +220,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
         'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
+        'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
