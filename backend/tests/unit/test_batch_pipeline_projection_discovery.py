@@ -293,8 +293,14 @@ def test_a_failed_recent_query_costs_only_that_half_page(monkeypatch):
         return real(**kw)
 
     scan.store.projection_page.side_effect = flaky
+    fallbacks = []
+    monkeypatch.setattr(projection_discovery, 'record_fallback', lambda **labels: fallbacks.append(labels))
     page = scan.next(100)
     assert page[0] == 'old000' and len(page) == 100 and scan.offered == {}
+    # The lost half page is recorded, not silent.
+    assert [(f['component'], f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [
+        ('firestore_read', 'recent_discovery', 'main_cursor', 'unavailable')
+    ]
 
 
 @pytest.mark.parametrize('striping', ['off', 'on'])
