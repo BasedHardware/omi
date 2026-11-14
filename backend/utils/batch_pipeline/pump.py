@@ -39,7 +39,7 @@ from utils.batch_pipeline.compute_client import from_env as compute_client_from_
 from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
-from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.scheduler import Scheduler, contention_operation_field
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import admission_executor, db_executor, run_blocking, sync_executor
 
@@ -132,6 +132,43 @@ def contention_retry_after(error: BaseException | None) -> float:
     The clamp is the drain lane's documented horizon (the max backoff step).
     """
     return _contention_storm_after(error, DRAIN_RETRY_MAX_SECONDS)
+
+
+def drain_backstop_report(error: BaseException, *, attempt: int, cap: int) -> tuple[int, str]:
+    """The honest terminal report for a contention loss that spent the lane.
+
+    The deferred publication-drain lane exists to converge an owner whose
+    ordered merge lost a contention race; when its whole attempt budget is
+    spent, convergence is deliberately handed to the durable maintenance
+    ready page — the designed backstop the lane documents itself in front
+    of. Losing the lane is that designed handoff, not a fault, so the
+    report leaves the ERROR fault channel: it logs WARNING
+    ``event=batch_merge_drain outcome=maintenance_backstop`` carrying the
+    spent attempt, the lane cap, the storm window the store's damper last
+    armed for the label (``retry_after_ms``, ``0`` when unstamped), the
+    losing store operation label when one was stamped and validates, and
+    the exception type. The storm and label fields ride the exception the
+    same way the pull lane's backoff report reads them, so a contention
+    storm in the batch ring books the retry engine's single
+    ``firestore_transaction_contention ... outcome=exhausted`` signal while
+    the lane's response and handoff stay observable at their honest
+    severities — the same reporting contract the pull lane already ships.
+    ``attempt`` and ``cap`` are caller-counted integers; the helpers read
+    only stamped attributes and never raise, so the report is total.
+
+    Failure-Class: FC-drain-cap-storm-handoff-booked-as-production-error
+    """
+    return (
+        logging.WARNING,
+        'event=batch_merge_drain outcome=maintenance_backstop attempt=%d cap=%d retry_after_ms=%d%s exception_type=%s'
+        % (
+            attempt,
+            cap,
+            round(contention_retry_after(error) * 1000),
+            contention_operation_field(error),
+            type(error).__name__,
+        ),
+    )
 
 
 # Bounded publication re-strike lane. A publication transition that exhausts
@@ -1135,13 +1172,19 @@ class Pump:
             # The transition is durable. Convergence is no longer left to an
             # incidental later drain: this pump re-offers the owner on the
             # bounded deferred lane, and the maintenance ready page stays the
-            # durable backstop behind it. Only a lane already at its attempt
-            # cap falls back to the historical error line.
+            # durable backstop behind it. A contention loss past the attempt
+            # cap is that designed handoff, so it reports the maintenance
+            # backstop on the honest channel; a non-contention fault keeps
+            # the historical error line byte-for-byte.
+            armed = self._deferred_drains.get(owner_id)
+            attempts = armed['attempts'] if armed else 0
             if self._defer_drain(owner_id, retry_after=contention_retry_after(error)):
                 logger.info(
                     'event=batch_merge_drain outcome=deferred exception_type=%s',
                     type(error).__name__,
                 )
+            elif publication_loss_is_contention(error):
+                logger.log(*drain_backstop_report(error, attempt=attempts, cap=DRAIN_RETRY_MAX_ATTEMPTS))
             else:
                 logger.error('event=batch_merge outcome=retry exception_type=%s', type(error).__name__)
 
@@ -1268,11 +1311,19 @@ class Pump:
                         attempt_no,
                     )
                 else:
-                    logger.error(
-                        'event=batch_merge outcome=retry exception_type=%s attempt=%d',
-                        type(error).__name__,
-                        attempt_no,
+                    cap = (
+                        DRAIN_BACKLOG_CONTINUATION_ATTEMPTS
+                        if armed is not None and armed['continuation']
+                        else DRAIN_RETRY_MAX_ATTEMPTS
                     )
+                    if publication_loss_is_contention(error):
+                        logger.log(*drain_backstop_report(error, attempt=attempt_no, cap=cap))
+                    else:
+                        logger.error(
+                            'event=batch_merge outcome=retry exception_type=%s attempt=%d',
+                            type(error).__name__,
+                            attempt_no,
+                        )
                 continue
             fresh = self._deferred_drains.get(owner_id)
             if fresh is entry:
@@ -1333,19 +1384,25 @@ class Pump:
         # re-offering through its own continuation budget (bounded, so an
         # endlessly-fed owner cannot pin shutdown), and a healthy drain ends
         # its episode inside drain_owner. A drain that raises is terminal for
-        # the flush: the owner is dropped with the historical error line and
-        # the durable maintenance sweep converges it after restart.
+        # the flush: a contention loss reports the same designed handoff the
+        # lane's other terminals report — the durable maintenance sweep
+        # converges the owner after restart — and a non-contention fault
+        # keeps the historical error line byte-for-byte.
         while self._deferred_drains:
             owner_id, entry = next(iter(self._deferred_drains.items()))
             try:
                 await self.drain_owner(owner_id)
             except Exception as error:
                 self._deferred_drains.pop(owner_id, None)
-                logger.error(
-                    'event=batch_merge outcome=retry exception_type=%s attempt=%d',
-                    type(error).__name__,
-                    entry['attempts'],
-                )
+                cap = DRAIN_BACKLOG_CONTINUATION_ATTEMPTS if entry['continuation'] else DRAIN_RETRY_MAX_ATTEMPTS
+                if publication_loss_is_contention(error):
+                    logger.log(*drain_backstop_report(error, attempt=entry['attempts'], cap=cap))
+                else:
+                    logger.error(
+                        'event=batch_merge outcome=retry exception_type=%s attempt=%d',
+                        type(error).__name__,
+                        entry['attempts'],
+                    )
         self._deferred_drains.clear()
 
     async def sample_metrics(self) -> None:

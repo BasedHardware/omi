@@ -35,9 +35,14 @@ Failure-Class: FC-publication-drain-contention-exhaustion-left-without-a-converg
 - Logging taxonomy: an armed deferral logs INFO
   `event=batch_merge_drain outcome=deferred exception_type=...`; a converged
   re-drain logs INFO `event=batch_merge_drain outcome=converged attempt=...`;
-  the historical ERROR `event=batch_merge outcome=retry exception_type=...`
-  line remains only when the attempt cap refuses to re-arm — the
-  maintenance-sweep backstop takes over from there.
+  when the attempt cap refuses to re-arm, the loss reports on its honest
+  channel: a contention loss — the storm-shaped case the lane exists to
+  absorb — logs WARNING
+  `event=batch_merge_drain outcome=maintenance_backstop attempt=... cap=...
+  retry_after_ms=...[ operation=...] exception_type=...` because the handoff
+  to the maintenance-sweep backstop is the designed recovery, not a fault;
+  a non-contention fault keeps the historical ERROR
+  `event=batch_merge outcome=retry exception_type=...` line byte-for-byte.
 - Storm-window alignment: when a drained chain loses to contention,
   `FirestoreStore.run` stamps the retry-after its storm damper actually
   armed for the drain's label onto the raised
@@ -52,10 +57,31 @@ Failure-Class: FC-publication-drain-contention-exhaustion-left-without-a-converg
   changes the budget or its ceiling: the retry-after is clamped to
   `DRAIN_RETRY_MAX_SECONDS`, a non-contention loss or a foreign exception
   keeps the legacy schedule, and a continuation re-offer whose drain lost
-  to contention aligns the same way (`event=batch_merge outcome=retry`
-  still fires only at the attempt cap).
+  to contention aligns the same way (the cap-exhausted contention handoff
+  reports `event=batch_merge_drain outcome=maintenance_backstop`; only a
+  non-contention fault still books the historical
+  `event=batch_merge outcome=retry` ERROR).
 
   Failure-Class: FC-deferred-drain-restrike-collides-inside-the-armed-storm-window
+
+## The cap-exhausted handoff reports on its honest channel
+
+Before this change a drain that spent its whole budget inside one storm
+booked the contention twice on the ERROR fault channel: the retry engine's
+`firestore_transaction_contention ... outcome=exhausted` signal when the
+chain died, and the lane's own `event=batch_merge outcome=retry` line at
+the cap. The pull lane's reporting already fixed the same double-booking
+for pull storms. The drain lane's cap terminal now reports the designed
+handoff at WARNING with the diagnostics the old line never carried: the
+spent attempt, the lane cap (6 re-drains, 4 for a continuation), the storm
+window the store's damper last armed (`retry_after_ms`), the losing store
+operation label when one was stamped and validates, and the exception
+type. The teardown flush's last re-offer follows the same split. A storm
+shifts WHEN convergence lands (the sweep), never whether it
+lands: the durable backstop is unchanged, no flag gates the report, and
+non-contention faults keep the historical ERROR line byte-for-byte.
+
+Failure-Class: FC-drain-cap-storm-handoff-booked-as-production-error
 
 ## What did not change
 

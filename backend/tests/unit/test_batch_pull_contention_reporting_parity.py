@@ -28,8 +28,8 @@ from database.firestore_transaction_retry import (
 from google.api_core.exceptions import Aborted as FirestoreAborted
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem
 from utils.batch_pipeline.scheduler import (
-    _contention_operation_field,
     Scheduler,
+    contention_operation_field,
 )
 
 FC = 'FC-pull-storm-response-and-lease-handoff-booked-as-production-errors'
@@ -407,46 +407,46 @@ def test_a_sibling_generation_bump_blocks_the_reset(monkeypatch):
 
 
 def test_field_for_a_valid_plain_label():
-    assert _contention_operation_field(exhaustion(operation='batch_fail')) == ' operation=batch_fail'
+    assert contention_operation_field(exhaustion(operation='batch_fail')) == ' operation=batch_fail'
 
 
 def test_field_for_a_valid_composite_label():
-    field = _contention_operation_field(exhaustion(operation='batch_pull shard=scheduler_42'))
+    field = contention_operation_field(exhaustion(operation='batch_pull shard=scheduler_42'))
     assert field == ' operation=batch_pull shard=scheduler_42'
 
 
 def test_field_for_a_missing_attribute():
-    assert _contention_operation_field(ValueError('foreign')) == ''
+    assert contention_operation_field(ValueError('foreign')) == ''
 
 
 def test_field_for_none():
-    assert _contention_operation_field(exhaustion()) == ''
+    assert contention_operation_field(exhaustion()) == ''
 
 
 def test_field_for_a_hostile_type():
     class _Hostile:
         operation = 12345
 
-    assert _contention_operation_field(_Hostile()) == ''
+    assert contention_operation_field(_Hostile()) == ''
 
 
 def test_field_for_a_bool():
     class _Hostile:
         operation = True
 
-    assert _contention_operation_field(_Hostile()) == ''
+    assert contention_operation_field(_Hostile()) == ''
 
 
 def test_field_for_an_invalid_label_text():
-    assert _contention_operation_field(exhaustion(operation='drop table jobs')) == ''
+    assert contention_operation_field(exhaustion(operation='drop table jobs')) == ''
 
 
 def test_field_for_an_out_of_range_shard():
-    assert _contention_operation_field(exhaustion(operation='batch_pull shard=scheduler_99')) == ''
+    assert contention_operation_field(exhaustion(operation='batch_pull shard=scheduler_99')) == ''
 
 
 def test_field_for_an_empty_label():
-    assert _contention_operation_field(exhaustion(operation='')) == ''
+    assert contention_operation_field(exhaustion(operation='')) == ''
 
 
 # --------------------------------------------------------------------------

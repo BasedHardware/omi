@@ -2033,7 +2033,7 @@ async def test_drain_after_publication_defers_and_arms_the_owner_lane(monkeypatc
     await pump.flush_deferred_drains()
 
 
-async def test_drain_after_publication_falls_back_to_the_retry_line_at_the_cap(monkeypatch, caplog):
+async def test_drain_after_publication_reports_the_backstop_at_the_cap(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
     continuation_env(monkeypatch, True)
     merge = ScriptMerge()
@@ -2052,9 +2052,16 @@ async def test_drain_after_publication_falls_back_to_the_retry_line_at_the_cap(m
             break
         await pump._drain_deferred_due()
     assert pump._deferred_drains == {}
+    backstop = [
+        r.getMessage()
+        for r in caplog.records
+        if 'event=batch_merge_drain outcome=maintenance_backstop' in r.getMessage()
+    ]
+    assert len(backstop) == 1
+    assert 'exception_type=FirestoreContentionExhausted' in backstop[0]
+    assert all(r.levelno == logging.WARNING for r in caplog.records if 'outcome=maintenance_backstop' in r.getMessage())
     retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
-    assert len(retry) == 1
-    assert 'exception_type=FirestoreContentionExhausted' in retry[0]
+    assert retry == []
     await pump.flush_deferred_drains()
 
 

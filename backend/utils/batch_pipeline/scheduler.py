@@ -72,7 +72,7 @@ PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
 
 
-def _contention_operation_field(error: BaseException) -> str:
+def contention_operation_field(error: BaseException) -> str:
     """The losing store label stamped on a contention exhaustion, log-ready.
 
     ``FirestoreStore.run`` stamps the label that burned the budget onto the
@@ -666,7 +666,7 @@ class Scheduler:
                         'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s%s',
                         contention_failures,
                         retry_after_ms,
-                        _contention_operation_field(error),
+                        contention_operation_field(error),
                         error_site_field(error),
                     )
                     break
@@ -686,7 +686,7 @@ class Scheduler:
                     'event=batch_pull outcome=partial leased=%d exception_type=%s%s%s',
                     len(result),
                     type(error).__name__,
-                    _contention_operation_field(error),
+                    contention_operation_field(error),
                     error_site_field(error),
                 )
                 break

@@ -11,8 +11,10 @@ any future budget reshape:
 - ``Pump._drain_after_publication``: an exhausted ordered drain arms the
   owner's bounded deferred drain lane (INFO ``event=batch_merge_drain
   outcome=deferred``), converges without waiting for an incidental later
-  drain, and falls back to the historical ``event=batch_merge outcome=retry``
-  error line only when the attempt cap refuses to re-arm.
+  drain, and at the attempt cap reports its designed handoff: a contention
+  loss logs WARNING ``event=batch_merge_drain outcome=maintenance_backstop``
+  while a non-contention fault keeps the historical
+  ``event=batch_merge outcome=retry`` error line.
 - Maintenance steps and the recover sweep keep their per-step / per-item
   continuation contracts under the real raise site.
 - Non-contention errors stay fail-noisy everywhere.
@@ -387,7 +389,7 @@ async def test_exhausted_ordered_drain_arms_the_deferred_lane_without_raising(ca
     assert pump._deferred_drains == {}
 
 
-async def test_deferred_lane_gives_up_at_the_attempt_cap_and_falls_back_to_the_error_line(caplog):
+async def test_deferred_lane_cap_contention_hands_off_to_the_maintenance_backstop(caplog):
     caplog.set_level(logging.INFO)
     pump = make_pump()
 
@@ -406,9 +408,41 @@ async def test_deferred_lane_gives_up_at_the_attempt_cap_and_falls_back_to_the_e
     assert pump._deferred_drains == {}
     deferred = [r.getMessage() for r in caplog.records if 'outcome=deferred' in r.getMessage()]
     assert len(deferred) == pump_module.DRAIN_RETRY_MAX_ATTEMPTS
+    backstop = [r for r in caplog.records if 'outcome=maintenance_backstop' in r.getMessage()]
+    assert len(backstop) == 1
+    assert backstop[0].levelno == logging.WARNING
+    line = backstop[0].getMessage()
+    assert 'exception_type=FirestoreContentionExhausted' in line
+    assert 'attempt=6' in line
+    assert 'cap=6' in line
+    assert 'retry_after_ms=0' in line
+    retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
+    assert retry == []
+    await pump.flush_deferred_drains()
+
+
+async def test_deferred_lane_cap_fault_keeps_the_historical_error_line(caplog):
+    caplog.set_level(logging.INFO)
+    pump = make_pump()
+
+    def always_broken(owner_id, now):
+        raise ValueError('revoked owner')
+
+    pump.merge.commit_next = always_broken
+    now = 1000.0
+    pump._monotonic = lambda: now
+    for _ in range(64):
+        now += 30.0
+        await pump._drain_after_publication('owner-1')
+        if not pump._deferred_drains:
+            break
+        await pump._drain_deferred_due()
+    assert pump._deferred_drains == {}
     retry = [r.getMessage() for r in caplog.records if 'event=batch_merge outcome=retry' in r.getMessage()]
     assert len(retry) == 1
-    assert 'exception_type=FirestoreContentionExhausted' in retry[0]
+    assert 'exception_type=ValueError' in retry[0]
+    backstop = [r.getMessage() for r in caplog.records if 'outcome=maintenance_backstop' in r.getMessage()]
+    assert backstop == []
     await pump.flush_deferred_drains()
 
 

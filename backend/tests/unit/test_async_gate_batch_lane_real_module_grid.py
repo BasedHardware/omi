@@ -229,8 +229,10 @@ def test_pump_async__drain_after_publication_fixed_is_clean() -> None:
 
 
 def test_pump_async__drain_after_publication_ablated_verdict() -> None:
-    """pump._drain_after_publication: with pure resolution ablated, flagged=False."""
-    assert fixture.finding_for(fixture.ABLATED, 'pump.py', '_drain_after_publication') is None
+    """pump._drain_after_publication: ablation flags the pure db classifier it now calls."""
+    finding = fixture.finding_for(fixture.ABLATED, 'pump.py', '_drain_after_publication')
+    assert finding is not None
+    assert any('is_transaction_contention' in call['call'] for call in finding['db_calls'])
 
 
 def test_pump_async__publish_flight_fixed_is_clean() -> None:
@@ -249,8 +251,10 @@ def test_pump_async__drain_deferred_due_fixed_is_clean() -> None:
 
 
 def test_pump_async__drain_deferred_due_ablated_verdict() -> None:
-    """pump._drain_deferred_due: with pure resolution ablated, flagged=False."""
-    assert fixture.finding_for(fixture.ABLATED, 'pump.py', '_drain_deferred_due') is None
+    """pump._drain_deferred_due: ablation flags the pure db classifier it now calls."""
+    finding = fixture.finding_for(fixture.ABLATED, 'pump.py', '_drain_deferred_due')
+    assert finding is not None
+    assert any('is_transaction_contention' in call['call'] for call in finding['db_calls'])
 
 
 def test_pump_async__deferred_drain_lane_fixed_is_clean() -> None:
@@ -269,8 +273,10 @@ def test_pump_async_flush_deferred_drains_fixed_is_clean() -> None:
 
 
 def test_pump_async_flush_deferred_drains_ablated_verdict() -> None:
-    """pump.flush_deferred_drains: with pure resolution ablated, flagged=False."""
-    assert fixture.finding_for(fixture.ABLATED, 'pump.py', 'flush_deferred_drains') is None
+    """pump.flush_deferred_drains: ablation flags the pure db classifier it now calls."""
+    finding = fixture.finding_for(fixture.ABLATED, 'pump.py', 'flush_deferred_drains')
+    assert finding is not None
+    assert any('is_transaction_contention' in call['call'] for call in finding['db_calls'])
 
 
 def test_pump_async_sample_metrics_fixed_is_clean() -> None:
@@ -2864,8 +2870,20 @@ def test_pump_db_import_with_batch_privacy_attempt_resolver_membership() -> None
 
 
 def test_restrike_publication_ablated_is_the_blackout_regression() -> None:
-    """Ablating the pure resolution re-flags exactly ['_restrike_publication']."""
-    assert fixture.ablated_flagged_functions() == ['_restrike_publication']
+    """Ablating the pure resolution re-flags exactly the pure-db-classifier callers.
+
+    The contention loss classification (``publication_loss_is_contention`` ->
+    ``is_transaction_contention``) is provably pure, so the fixed posture
+    keeps every caller clean; ablating that resolution flags exactly the
+    lane functions that classify a loss — the re-strike lane and the three
+    deferred-drain terminals that share its reporting posture.
+    """
+    assert fixture.ablated_flagged_functions() == [
+        '_drain_after_publication',
+        '_drain_deferred_due',
+        '_restrike_publication',
+        'flush_deferred_drains',
+    ]
 
 
 def test_fixed_scan_flagged_functions() -> None:

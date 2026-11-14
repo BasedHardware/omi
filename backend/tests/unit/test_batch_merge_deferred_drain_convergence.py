@@ -777,7 +777,7 @@ async def test_first_attempt_deferral_logs_no_error_line(caplog):
     await pump.flush_deferred_drains()
 
 
-async def test_cap_refusal_logs_the_historical_error_line(caplog):
+async def test_cap_refusal_reports_the_maintenance_backstop(caplog):
     records = capture_records(caplog)
     clock = Clock()
     merge = ScriptMerge()
@@ -795,12 +795,18 @@ async def test_cap_refusal_logs_the_historical_error_line(caplog):
     }
     clock.advance(30.0)
     await pump._drain_deferred_due()
+    backstop = [line for line in records if 'event=batch_merge_drain outcome=maintenance_backstop' in line]
+    assert len(backstop) == 1
+    assert 'exception_type=FirestoreContentionExhausted' in backstop[0]
+    assert 'attempt=6' in backstop[0]
+    assert 'cap=6' in backstop[0]
     retry = [line for line in records if 'event=batch_merge outcome=retry' in line]
-    assert len(retry) == 1
-    assert 'exception_type=FirestoreContentionExhausted' in retry[0]
+    assert retry == []
+    warning = [r for r in caplog.records if 'outcome=maintenance_backstop' in r.getMessage()]
+    assert all(r.levelno == logging.WARNING for r in warning)
 
 
-async def test_cap_refusal_at_the_publication_site_logs_the_error_line(caplog):
+async def test_cap_refusal_at_the_publication_site_reports_the_maintenance_backstop(caplog):
     records = capture_records(caplog)
     clock = Clock()
     merge = ScriptMerge()
@@ -817,8 +823,11 @@ async def test_cap_refusal_at_the_publication_site_logs_the_error_line(caplog):
         'continuation': False,
     }
     await pump._drain_after_publication('owner-1')
+    backstop = [line for line in records if 'event=batch_merge_drain outcome=maintenance_backstop' in line]
+    assert len(backstop) == 1
+    assert 'attempt=6' in backstop[0]
     retry = [line for line in records if 'event=batch_merge outcome=retry' in line]
-    assert len(retry) == 1
+    assert retry == []
 
 
 async def test_continuation_convergence_logs_the_converged_line(caplog):
@@ -833,7 +842,7 @@ async def test_continuation_convergence_logs_the_converged_line(caplog):
     await pump.flush_deferred_drains()
 
 
-async def test_flush_loss_logs_the_error_line_per_owner(caplog):
+async def test_flush_loss_reports_the_maintenance_backstop_per_owner(caplog):
     records = capture_records(caplog)
     clock = Clock()
     merge = ScriptMerge()
@@ -847,8 +856,13 @@ async def test_flush_loss_logs_the_error_line_per_owner(caplog):
     pump._defer_drain('a', attempts=2)
     pump._defer_drain('b', attempts=5)
     await pump.flush_deferred_drains()
+    backstop = [line for line in records if 'event=batch_merge_drain outcome=maintenance_backstop' in line]
+    assert len(backstop) == 2
+    assert any('attempt=3' in line for line in backstop)
+    assert any('attempt=6' in line for line in backstop)
+    assert all('cap=6' in line for line in backstop)
     retry = [line for line in records if 'event=batch_merge outcome=retry' in line]
-    assert len(retry) == 2
+    assert retry == []
 
 
 async def test_due_drain_failure_logs_the_deferred_info_line_with_the_attempt(caplog):
@@ -871,7 +885,7 @@ async def test_due_drain_failure_logs_the_deferred_info_line_with_the_attempt(ca
     assert 'exception_type=FirestoreContentionExhausted' in deferred[0]
 
 
-async def test_cap_refusal_at_due_logs_the_error_line_with_the_attempt(caplog):
+async def test_cap_refusal_at_due_reports_the_backstop_with_the_attempt(caplog):
     records = capture_records(caplog)
     clock = Clock()
     merge = ScriptMerge()
@@ -885,9 +899,11 @@ async def test_cap_refusal_at_due_logs_the_error_line_with_the_attempt(caplog):
     pump._defer_drain('owner-1', attempts=DRAIN_RETRY_MAX_ATTEMPTS - 1)
     clock.advance(30.0)
     await pump._drain_deferred_due()
+    backstop = [line for line in records if 'event=batch_merge_drain outcome=maintenance_backstop' in line]
+    assert len(backstop) == 1
+    assert f'attempt={DRAIN_RETRY_MAX_ATTEMPTS}' in backstop[0]
     retry = [line for line in records if 'event=batch_merge outcome=retry' in line]
-    assert len(retry) == 1
-    assert f'attempt={DRAIN_RETRY_MAX_ATTEMPTS}' in retry[0]
+    assert retry == []
 
 
 # ---------------------------------------------------------------------------
