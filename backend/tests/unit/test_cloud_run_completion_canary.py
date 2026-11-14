@@ -463,6 +463,50 @@ def test_aggregate_query_is_pinned_and_groups_resource_revision_and_route():
     assert all(c[1:3] == ('route_query', 3) for c in calls)
 
 
+@pytest.mark.parametrize('field', ['executionErrors', 'unreachable'])
+@pytest.mark.parametrize('invalid', [[{}], ['unreachable'], None, {}, '', False, 0])
+@pytest.mark.parametrize('page_number', [1, 2])
+@pytest.mark.parametrize('window', ['baseline', 'observation', 'idle'])
+def test_partial_or_malformed_monitoring_page_never_returns_evidence(field, invalid, page_number, window):
+    provider = fake_google()
+    calls = []
+    start, end = (0, 1800) if window == 'baseline' else (1800, 2700)
+
+    def request(*args):
+        calls.append(args)
+        page = {'timeSeries': [series('backend', 'backend-old', start, end, 900)]}
+        if len(calls) == page_number:
+            page[field] = invalid
+        else:
+            page['nextPageToken'] = 'page2'
+        return page
+
+    provider.request = request
+    with pytest.raises(gate.Refusal, match='aggregate_incomplete_evidence'):
+        provider.aggregate('backend', start, end, idle=window == 'idle')
+    assert len(calls) == page_number
+
+
+@pytest.mark.parametrize('page', [None, [], '', 0])
+def test_monitoring_response_must_be_an_object(page):
+    provider = fake_google()
+    provider.request = lambda *args: page
+    with pytest.raises(gate.Refusal, match='aggregate_response_schema'):
+        provider.aggregate('backend', 0, 1800)
+
+
+def test_explicit_empty_completeness_fields_preserve_counts_across_pages():
+    provider = fake_google()
+    pages = iter(
+        [
+            {'timeSeries': [1], 'nextPageToken': 'page2', 'executionErrors': [], 'unreachable': []},
+            {'timeSeries': [2], 'executionErrors': [], 'unreachable': []},
+        ]
+    )
+    provider.request = lambda *args: next(pages)
+    assert provider.aggregate('backend', 0, 1800) == [1, 2]
+
+
 def test_budgets_charge_failures_and_pages_before_io(monkeypatch):
     provider = fake_google()
     provider.budgets = gate.defaultdict(int)

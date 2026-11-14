@@ -278,6 +278,14 @@ class GoogleProvider:
                 params, doseq=True
             )
             page = self.request(service, 'idle' if idle else 'route_query', 1 if idle else 3, url)
+            # A 200 response may still carry only part of the requested
+            # evidence. Refuse before consuming any rows, on every page.
+            if not isinstance(page, dict):
+                raise Refusal('aggregate_response_schema')
+            for field in ('executionErrors', 'unreachable'):
+                incomplete = page.get(field, [])
+                if not isinstance(incomplete, list) or incomplete:
+                    raise Refusal('aggregate_incomplete_evidence')
             values = page.get('timeSeries', [])
             if not isinstance(values, list) or len(rows) + len(values) > 1024:
                 raise Refusal('aggregate_size_or_schema')
