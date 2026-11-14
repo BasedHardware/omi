@@ -15409,6 +15409,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'کارڈ اپ ڈیٹ کریں، یا $plan ماہانہ $price میں واپس حاصل کریں';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں';
   }
@@ -15433,4 +15438,31 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'ماہانہ پر منتقل کریں';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، ماہانہ $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly کی غیر ادا شدہ سالانہ فیس کی جگہ۔ ہر ماہ تجدید ہوتی ہے۔ کسی بھی وقت منسوخ کریں۔';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'ادائیگی مسترد ہو گئی۔ آپ کا پلان تبدیل نہیں ہوا۔';
+
+  @override
+  String get monthlySwitchUnavailable => 'اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔';
+
+  @override
+  String get monthlySwitchDoneTitle => 'اب آپ ماہانہ پلان پر ہیں';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'آج $price ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔';
+  }
 }

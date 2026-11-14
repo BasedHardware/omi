@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
     "referralClaimShort": "دریافت",
     "paymentDeclinedTitle": "کارت شما رد شد",
+    "paymentDeclinedMonthlyMessage": "کارت را به‌روزرسانی کنید یا {plan} را با ماهانه {price} برگردانید",
     "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید",
     "hasLinkedTasksLabel": "دارای کارهای مرتبط",
     "hasTasksFilter": "دارای کار",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "تغییر به ماهانه",
+    "monthlySwitchPlanValue": "{plan}، ماهانه {price}",
+    "monthlySwitchNote": "جایگزین هزینه سالانه پرداخت‌نشده {yearly} می‌شود. ماهانه تمدید می‌شود. هر زمان لغو کنید.",
+    "monthlySwitchDeclined": "پرداخت رد شد. طرح شما تغییری نکرد.",
+    "monthlySwitchUnavailable": "تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.",
+    "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
+    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود."
 }

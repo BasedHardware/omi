@@ -4735,11 +4735,19 @@
     "referralRewardSecondDetail": "Ha még 3 barátod vásárol",
     "referralClaimShort": "Beváltás",
     "paymentDeclinedTitle": "A kártyáját elutasították",
+    "paymentDeclinedMonthlyMessage": "Frissítse a kártyát, vagy kapja vissza a(z) {plan} csomagot havi {price} áron",
     "paymentDeclinedMessage": "Frissítse a kártyát a(z) {plan} visszaállításához",
     "hasLinkedTasksLabel": "Kapcsolódó feladatokat tartalmaz",
     "hasTasksFilter": "Feladatokkal",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Váltás havi fizetésre",
+    "monthlySwitchPlanValue": "{plan}, havi {price}",
+    "monthlySwitchNote": "A kifizetetlen {yearly} összegű éves díj helyett. Havonta megújul. Bármikor lemondható.",
+    "monthlySwitchDeclined": "A fizetést elutasították. A csomagja nem változott.",
+    "monthlySwitchUnavailable": "A váltás most nem érhető el. Inkább frissítse a kártyát.",
+    "monthlySwitchDoneTitle": "Mostantól havonta fizet",
+    "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul."
 }
