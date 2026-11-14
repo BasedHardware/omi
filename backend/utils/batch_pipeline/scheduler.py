@@ -10,7 +10,7 @@ from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.batch_pipeline_transaction_labels import store_operation
+from database.batch_pipeline_transaction_labels import require_operation_label, store_operation
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import (
     FRESH_CAPTURE_LAG_SECONDS,
@@ -70,6 +70,27 @@ HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
+
+
+def _contention_operation_field(error: BaseException) -> str:
+    """The losing store label stamped on a contention exhaustion, log-ready.
+
+    ``FirestoreStore.run`` stamps the label that burned the budget onto the
+    raised chain's ``operation`` (the same ride-along contract as
+    ``retry_after``), so the pull lane's own report names the exact shard
+    operation that lost instead of an anonymous chain. Anything the label
+    validator refuses — a foreign exception, a missing or hostile attribute
+    shape — reports nothing rather than interpolating unvalidated text into
+    a log line. Never raises.
+    """
+    label = getattr(error, "operation", None)
+    if not isinstance(label, str):
+        return ""
+    try:
+        require_operation_label(label)
+    except Exception:
+        return ""
+    return f" operation={label}"
 
 
 def pull_contention_storm_after(error: BaseException | None) -> float:
@@ -631,10 +652,21 @@ class Scheduler:
                         self._contention_generation += 1
                         contention_failures = self._contention_failures
                     contention_deferred = True
-                    logger.error(
-                        'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s',
+                    # The engine's ``outcome=exhausted`` line is the storm
+                    # signal; this line is the lane's designed response — a
+                    # counted, storm-aligned pause the next pull cycle clears
+                    # with no lost work. Booking the response as a second
+                    # production error doubled every pull storm into the
+                    # sensor and hid which shard lost, so the spacing reports
+                    # at INFO carrying the losing label the store stamped on
+                    # the exhaustion.
+                    #
+                    # Failure-Class: FC-pull-storm-response-and-lease-handoff-booked-as-production-errors
+                    logger.info(
+                        'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s%s',
                         contention_failures,
                         retry_after_ms,
+                        _contention_operation_field(error),
                         error_site_field(error),
                     )
                     break
@@ -642,11 +674,19 @@ class Scheduler:
                     raise
                 # Each earlier lease is its own committed transaction. Raising
                 # would strand them leased until LEASE_SECONDS expiry and
-                # charge a retry; hand them to the caller instead.
-                logger.error(
-                    'event=batch_pull outcome=partial leased=%d exception_type=%s%s',
+                # charge a retry; hand them to the caller instead. The
+                # handoff is the designed outcome for a later shard failure:
+                # the leases stay committed and the caller owns them, so the
+                # lane reports the handoff at WARNING — a production error
+                # channel would misbook every handed-off pull as a fault —
+                # naming the exception type, the site and the losing label.
+                #
+                # Failure-Class: FC-pull-storm-response-and-lease-handoff-booked-as-production-errors
+                logger.warning(
+                    'event=batch_pull outcome=partial leased=%d exception_type=%s%s%s',
                     len(result),
                     type(error).__name__,
+                    _contention_operation_field(error),
                     error_site_field(error),
                 )
                 break

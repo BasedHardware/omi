@@ -103,12 +103,25 @@ class FirestoreContentionExhausted(RuntimeError):
     when no damper was in scope), so a caller scheduling its own re-offer —
     the pump's deferred publication-drain lane — can land that re-offer after
     the armed window instead of colliding inside it on its fixed ladder.
+
+    The store also stamps the label that burned the budget onto ``operation``
+    (``None`` when the exhaustion was raised bare, outside a labeled store
+    run), so a caller reporting the loss names the exact operation that lost
+    instead of an anonymous chain.
     """
 
-    def __init__(self, message: str, *, reason: str = "attempts_exhausted", retry_after: float = 0.0) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str = "attempts_exhausted",
+        retry_after: float = 0.0,
+        operation: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.reason = reason
         self.retry_after = float(retry_after)
+        self.operation = operation
 
 
 def _is_expired_transaction(error: BaseException) -> bool:

@@ -1229,9 +1229,12 @@ class FirestoreStore:
             # The window the damper actually applied rides on the exception:
             # a caller that schedules its own re-offer (the pump's deferred
             # drain lane) lands it after the armed window instead of
-            # colliding inside it on a fixed ladder.
+            # colliding inside it on a fixed ladder. The label itself rides
+            # too, so a caller reporting the loss names the exact operation
+            # that burned the budget instead of an anonymous chain.
             if damper is not None:
                 error.retry_after = damper.arm(label, client=client)
+            error.operation = label
             raise
         if damper is not None:
             damper.note_success(label, latest_generation)
