@@ -408,11 +408,10 @@ environments:
         owner: backend/docs/runbooks/cap-hold-durability.md
       - name: batch-stock-census
         region: us-central1
-        # Ten-minute cadence: one pass is ~106 exact counts plus oldest-row
-        # projections (53 stocks, two stages for batch collections). Keep it
-        # below the alert's staleness budget so a missed run is visible, and
-        # above the cost of recomputing exact counts over multi-million-row
-        # collections.
+        # Ten-minute cadence: one pass is 54 exact counts plus oldest-row
+        # projections (stage-scoped stocks read prod and dev). Keep it below the
+        # alert's staleness budget so a missed run is visible, and above the cost
+        # of recomputing exact counts over multi-million-row collections.
         schedule: "*/10 * * * *"
         time_zone: UTC
         state: ENABLED
@@ -428,8 +427,10 @@ environments:
           max_doublings: 5
           max_retry: 0s
           min_backoff: 5s
-        # 53 stocks at a 60s per-RPC budget, four at a time: well inside this.
-        attempt_deadline: 600s
+        # 54 stocks x 2 RPCs at a 60s budget, four at a time bounds a
+        # pathological pass near 27 minutes; 1800s is the scheduler maximum, so
+        # a slow Firestore pass finishes instead of being killed and retried.
+        attempt_deadline: 1800s
         owner: backend/docs/runbooks/batch-stuck-census.md
       - name: error-class-alerts-sweep
         region: us-central1

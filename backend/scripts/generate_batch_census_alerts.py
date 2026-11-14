@@ -140,8 +140,16 @@ def _rule(entry: CensusEntry) -> dict:
     threshold = int(entry.age_alarm_seconds or 0)
     uid = rule_uid(entry)
     selector = _selector(entry)
-    age_expr = f'max(omi_batch_pipeline_census_state_oldest_age_seconds{selector}) or vector(0)'
-    stale_expr = f'(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{selector})) or vector(1e9)'
+    # Age and freshness must come from the same source, and only from the
+    # newest snapshot. `A and B` matches on the full label set, so a stale
+    # replica's retained age can never borrow a newer replica's observation
+    # (the failure the batch-timeliness rules already guard against).
+    age_expr = (
+        f'max((omi_batch_pipeline_census_state_oldest_age_seconds{selector}) and '
+        f'(omi_batch_pipeline_census_state_observed_at_seconds{selector} == scalar(max('
+        f'omi_batch_pipeline_census_state_observed_at_seconds{selector}))) and '
+        f'(time() - omi_batch_pipeline_census_state_observed_at_seconds{selector} < {FRESH_SECONDS})) or vector(0)'
+    )
     severity = entry.age_alarm_severity or 'warning'
     tier = 'page' if severity == 'critical' else 'agent'
     return {
@@ -150,12 +158,11 @@ def _rule(entry: CensusEntry) -> dict:
         'folderUID': FOLDER_UID,
         'ruleGroup': RULE_GROUP,
         'title': f'Batch {entry.machine} {entry.state}: oldest row older than {threshold}s',
-        'condition': 'D',
+        'condition': 'C',
         'data': [
             _query('A', age_expr),
-            _query('B', stale_expr),
-            _math('C', f'($A > {threshold}) && ($B < {FRESH_SECONDS})'),
-            _reduce('D', 'C'),
+            _math('B', f'$A > {threshold}'),
+            _reduce('C', 'B'),
         ],
         'updated': '2026-11-14T00:00:00Z',
         'noDataState': 'OK',
@@ -181,7 +188,7 @@ def _rule(entry: CensusEntry) -> dict:
             ),
             'dashboard_url': DASHBOARD_URL,
             'runbook': RUNBOOK,
-            'threshold': f'oldest age > {threshold}s with observation newer than {FRESH_SECONDS}s, for 10m',
+            'threshold': f'oldest age > {threshold}s from the newest, fresh (<{FRESH_SECONDS}s) census source, for 10m',
         },
         'labels': {
             'alert_identity': uid,

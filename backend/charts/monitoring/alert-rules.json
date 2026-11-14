@@ -33798,8 +33798,8 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
-    "title": "Batch batch record_pending: oldest row older than 86400s",
-    "condition": "D",
+    "title": "Batch batch record_pending: oldest row older than 1123200s",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -33814,7 +33814,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -33823,26 +33823,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -33854,15 +33834,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 1123200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -33881,7 +33861,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -33896,11 +33876,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -33911,167 +33891,17 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "The oldest batch record_pending row is older than 86400s with a fresh census sample.",
+      "summary": "The oldest batch record_pending row is older than 1123200s with a fresh census sample.",
       "user_impact": "A recorded unit is not progressing through the batch pipeline, so its conversation may never appear.",
-      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from record_dead_letter_deadline_at.",
+      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from enqueued_at.",
       "verification": "Open https://monitor.omi.me/d/omi-batch-stuck-census and read the batch:record_pending count and oldest age; confirm omi_batch_pipeline_census_state_observed_at_seconds for that state is newer than 1800s. A -1 age means rows exist but none carries an ageable clock.",
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 1123200s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-record_pending",
-      "component": "batch-census",
-      "impact": "product",
-      "severity": "critical",
-      "tier": "page",
-      "audience": "human",
-      "instatus_component": "speech-processing",
-      "owner": "batch-pipeline"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": [
-        "alertname"
-      ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
-      "mute_time_intervals": []
-    },
-    "record": null
-  },
-  {
-    "uid": "omi-census-age-b-leased",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Batch stuck-state census",
-    "title": "Batch batch leased: oldest row older than 3600s",
-    "condition": "D",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"leased\"}) or vector(0)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"leased\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "($A > 3600) && ($B < 1800)",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "math"
-        }
-      },
-      {
-        "refId": "D",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ],
-                "type": "query"
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "C",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "D",
-          "type": "reduce"
-        }
-      }
-    ],
-    "updated": "2026-11-14T00:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "KeepLast",
-    "for": "10m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "summary": "The oldest batch leased row is older than 3600s with a fresh census sample.",
-      "user_impact": "A recorded unit is not progressing through the batch pipeline, so its conversation may never appear.",
-      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from lease_until.",
-      "verification": "Open https://monitor.omi.me/d/omi-batch-stuck-census and read the batch:leased count and oldest age; confirm omi_batch_pipeline_census_state_observed_at_seconds for that state is newer than 1800s. A -1 age means rows exist but none carries an ageable clock.",
-      "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
-      "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
-      "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
-    },
-    "labels": {
-      "alert_identity": "omi-census-age-b-leased",
       "component": "batch-census",
       "impact": "product",
       "severity": "critical",
@@ -34099,7 +33929,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch retry: oldest row older than 21600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34114,7 +33944,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"retry\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"retry\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34123,26 +33953,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34154,15 +33964,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 21600) && ($B < 1800)",
+          "expression": "$A > 21600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34181,7 +33991,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34196,11 +34006,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34218,7 +34028,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 21600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 21600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-retry",
@@ -34249,7 +34059,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch result_ready: oldest row older than 7200s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34264,7 +34074,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"result_ready\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"result_ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34273,26 +34083,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34304,15 +34094,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200) && ($B < 1800)",
+          "expression": "$A > 7200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34331,7 +34121,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34346,11 +34136,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34368,7 +34158,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 7200s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 7200s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-result_ready",
@@ -34399,7 +34189,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch vendor_held: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34414,7 +34204,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"vendor_held\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"vendor_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34423,26 +34213,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34454,15 +34224,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34481,7 +34251,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34496,11 +34266,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34518,7 +34288,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-vendor_held",
@@ -34551,7 +34321,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch quarantined: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34566,7 +34336,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"quarantined\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"quarantined\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34575,26 +34345,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34606,15 +34356,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34633,7 +34383,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34648,11 +34398,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34665,12 +34415,12 @@
     "annotations": {
       "summary": "The oldest batch quarantined row is older than 86400s with a fresh census sample.",
       "user_impact": "A recorded unit is not progressing through the batch pipeline, so its conversation may never appear.",
-      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from held_deadline_at.",
+      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from enqueued_at.",
       "verification": "Open https://monitor.omi.me/d/omi-batch-stuck-census and read the batch:quarantined count and oldest age; confirm omi_batch_pipeline_census_state_observed_at_seconds for that state is newer than 1800s. A -1 age means rows exist but none carries an ageable clock.",
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-quarantined",
@@ -34703,7 +34453,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch privacy_blocked: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34718,7 +34468,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"privacy_blocked\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"privacy_blocked\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34727,26 +34477,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34758,15 +34488,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34785,7 +34515,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34800,11 +34530,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34822,7 +34552,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-privacy_blocked",
@@ -34855,7 +34585,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch provider_pending: oldest row older than 604800s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -34870,7 +34600,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -34879,26 +34609,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34910,15 +34620,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 604800) && ($B < 1800)",
+          "expression": "$A > 604800",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -34937,7 +34647,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -34952,11 +34662,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -34974,7 +34684,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 604800s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 604800s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-provider_pending",
@@ -35007,7 +34717,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch provider_running: oldest row older than 21600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35022,7 +34732,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_running\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35031,26 +34741,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35062,15 +34752,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 21600) && ($B < 1800)",
+          "expression": "$A > 21600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35089,7 +34779,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35104,11 +34794,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35126,7 +34816,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 21600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 21600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-provider_running",
@@ -35159,7 +34849,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch record_recovery_waiting: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35174,7 +34864,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35183,26 +34873,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35214,15 +34884,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35241,7 +34911,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35256,11 +34926,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35278,7 +34948,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-record_recovery_waiting",
@@ -35311,7 +34981,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_projection pending: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35326,7 +34996,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35335,26 +35005,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35366,15 +35016,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35393,7 +35043,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35408,11 +35058,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35430,7 +35080,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-p-pending",
@@ -35461,7 +35111,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_projection persisted: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35476,7 +35126,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"persisted\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"persisted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35485,26 +35135,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35516,15 +35146,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35543,7 +35173,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35558,11 +35188,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35580,7 +35210,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-p-persisted",
@@ -35611,7 +35241,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_projection ready: oldest row older than 7200s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35626,7 +35256,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"ready\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35635,26 +35265,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35666,15 +35276,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200) && ($B < 1800)",
+          "expression": "$A > 7200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35693,7 +35303,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35708,11 +35318,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35730,7 +35340,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 7200s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 7200s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-p-ready",
@@ -35761,7 +35371,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_projection quarantine_held: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35776,7 +35386,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35785,26 +35395,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35816,15 +35406,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35843,7 +35433,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -35858,11 +35448,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -35875,12 +35465,12 @@
     "annotations": {
       "summary": "The oldest batch_projection quarantine_held row is older than 86400s with a fresh census sample.",
       "user_impact": "A committed transcript has not been projected, so the user cannot see that conversation yet.",
-      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from held_deadline_at.",
+      "scope": "Exact count and one oldest-clock projection over the registered stock; no document content, transcript, audio reference, uid or email is read. Age is measured from committed_at.",
       "verification": "Open https://monitor.omi.me/d/omi-batch-stuck-census and read the batch_projection:quarantine_held count and oldest age; confirm omi_batch_pipeline_census_state_observed_at_seconds for that state is newer than 1800s. A -1 age means rows exist but none carries an ageable clock.",
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-p-quarantine_held",
@@ -35913,7 +35503,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_recovery held: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -35928,7 +35518,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"held\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -35937,26 +35527,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35968,15 +35538,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -35995,7 +35565,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36010,11 +35580,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36032,7 +35602,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-r-held",
@@ -36065,7 +35635,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_recovery prepared: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36080,7 +35650,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"prepared\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"prepared\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36089,26 +35659,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36120,15 +35670,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36147,7 +35697,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36162,11 +35712,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36184,7 +35734,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-r-prepared",
@@ -36217,7 +35767,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_recovery running: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36232,7 +35782,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"running\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36241,26 +35791,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36272,15 +35802,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36299,7 +35829,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36314,11 +35844,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36336,7 +35866,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-r-running",
@@ -36369,7 +35899,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch_recovery failed_held: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36384,7 +35914,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"failed_held\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"failed_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36393,26 +35923,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36424,15 +35934,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36451,7 +35961,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36466,11 +35976,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36488,7 +35998,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-r-failed_held",
@@ -36521,7 +36031,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch provider_outbox open: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36536,7 +36046,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"provider_outbox\",state=\"open\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"provider_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36545,26 +36055,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36576,15 +36066,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36603,7 +36093,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36618,11 +36108,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36640,7 +36130,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-po-open",
@@ -36673,7 +36163,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch memory_outbox pending: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36688,7 +36178,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36697,26 +36187,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36728,15 +36198,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36755,7 +36225,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36770,11 +36240,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36792,7 +36262,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-mo-pending",
@@ -36825,7 +36295,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch memory_outbox processing: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36840,7 +36310,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"processing\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"processing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -36849,26 +36319,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36880,15 +36330,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -36907,7 +36357,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -36922,11 +36372,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -36944,7 +36394,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-mo-processing",
@@ -36977,7 +36427,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch memory_outbox retryable_failure: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -36992,7 +36442,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37001,26 +36451,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37032,15 +36462,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37059,7 +36489,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37074,11 +36504,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37096,7 +36526,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-mo-retryable_failure",
@@ -37129,7 +36559,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch enrichment_outbox pending: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37144,7 +36574,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"enrichment_outbox\",state=\"pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"enrichment_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37153,26 +36583,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37184,15 +36594,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37211,7 +36621,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37226,11 +36636,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37248,7 +36658,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-eo-pending",
@@ -37281,7 +36691,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch speaker_outbox open: oldest row older than 21600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37296,7 +36706,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"open\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37305,26 +36715,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37336,15 +36726,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 21600) && ($B < 1800)",
+          "expression": "$A > 21600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37363,7 +36753,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37378,11 +36768,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37400,7 +36790,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 21600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 21600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-so-open",
@@ -37433,7 +36823,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch speaker_outbox terminal_pending: oldest row older than 86400s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37448,7 +36838,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37457,26 +36847,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37488,15 +36858,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 86400) && ($B < 1800)",
+          "expression": "$A > 86400",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37515,7 +36885,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37530,11 +36900,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37552,7 +36922,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 86400s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 86400s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-so-terminal_pending",
@@ -37585,7 +36955,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch cap_hold staging: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37600,7 +36970,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"staging\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"staging\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37609,26 +36979,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37640,15 +36990,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37667,7 +37017,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37682,11 +37032,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37704,7 +37054,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-ch-staging",
@@ -37737,7 +37087,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch cap_hold sealing: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37752,7 +37102,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"sealing\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"sealing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37761,26 +37111,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37792,15 +37122,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37819,7 +37149,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37834,11 +37164,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -37856,7 +37186,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-ch-sealing",
@@ -37889,7 +37219,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch pipeline_ledger capturing: oldest row older than 21600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -37904,7 +37234,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -37913,26 +37243,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37944,15 +37254,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 21600) && ($B < 1800)",
+          "expression": "$A > 21600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -37971,7 +37281,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -37986,11 +37296,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -38008,7 +37318,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 21600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 21600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-pl-capturing",
@@ -38039,7 +37349,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch pipeline_ledger sealed: oldest row older than 3600s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -38054,7 +37364,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -38063,26 +37373,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38094,15 +37384,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 3600) && ($B < 1800)",
+          "expression": "$A > 3600",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38121,7 +37411,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -38136,11 +37426,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -38158,7 +37448,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 3600s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 3600s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-pl-sealed",
@@ -38189,7 +37479,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch pipeline_ledger transcribed: oldest row older than 1800s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -38204,7 +37494,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -38213,26 +37503,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38244,15 +37514,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 1800) && ($B < 1800)",
+          "expression": "$A > 1800",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38271,7 +37541,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -38286,11 +37556,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -38308,7 +37578,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 1800s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 1800s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-pl-transcribed",
@@ -38339,7 +37609,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch pipeline_ledger noted: oldest row older than 1800s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -38354,7 +37624,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"noted\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"noted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -38363,26 +37633,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38394,15 +37644,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 1800) && ($B < 1800)",
+          "expression": "$A > 1800",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38421,7 +37671,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -38436,11 +37686,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -38458,7 +37708,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 1800s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 1800s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-pl-noted",
@@ -38489,7 +37739,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch committed_hidden: oldest row older than 7200s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -38504,7 +37754,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"committed_hidden\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"committed_hidden\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -38513,26 +37763,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38544,15 +37774,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200) && ($B < 1800)",
+          "expression": "$A > 7200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38571,7 +37801,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -38586,11 +37816,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -38608,7 +37838,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 7200s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 7200s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-committed_hidden",
@@ -38897,7 +38127,7 @@
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Batch stuck-state census",
     "title": "Batch batch ready_runnable: oldest row older than 7200s",
-    "condition": "D",
+    "condition": "C",
     "data": [
       {
         "refId": "A",
@@ -38912,7 +38142,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"ready_runnable\"}) or vector(0)",
+          "expr": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"ready_runnable\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} < 1800)) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -38921,26 +38151,6 @@
       },
       {
         "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(time() - max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"})) or vector(1e9)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38952,15 +38162,15 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200) && ($B < 1800)",
+          "expression": "$A > 7200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "C",
+          "refId": "B",
           "type": "math"
         }
       },
       {
-        "refId": "D",
+        "refId": "C",
         "queryType": "",
         "relativeTimeRange": {
           "from": 0,
@@ -38979,7 +38189,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "C"
                 ],
                 "type": "query"
               },
@@ -38994,11 +38204,11 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "C",
+          "expression": "B",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "reducer": "last",
-          "refId": "D",
+          "refId": "C",
           "type": "reduce"
         }
       }
@@ -39016,7 +38226,7 @@
       "safe_next_action": "Follow backend/docs/runbooks/batch-stuck-census.md for this state; never delete staged audio, held content or a lease by hand. Silence only a broken sample, never a real breach.",
       "dashboard_url": "https://monitor.omi.me/d/omi-batch-stuck-census",
       "runbook": "backend/docs/runbooks/batch-stuck-census.md",
-      "threshold": "oldest age > 7200s with observation newer than 1800s, for 10m"
+      "threshold": "oldest age > 7200s from the newest, fresh (<1800s) census source, for 10m"
     },
     "labels": {
       "alert_identity": "omi-census-age-b-ready_runnable",

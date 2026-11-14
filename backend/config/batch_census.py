@@ -321,6 +321,7 @@ def _simple(
     custody: Custody | None = None,
     ceiling: int | None = None,
     age_alarm_seconds: int | None = None,
+    note: str = '',
 ) -> CensusEntry:
     return CensusEntry(
         machine,
@@ -335,6 +336,7 @@ def _simple(
         owner=_OWNER,
         ceiling=ceiling,
         alarm=_CENSUS_ALARM,
+        note=note,
         age_alarm_seconds=age_alarm_seconds,
         age_alarm_severity='warning' if age_alarm_seconds is not None else None,
     )
@@ -348,12 +350,16 @@ def _simple(
 JOB_ENTRIES = (
     _job(
         'record_pending',
-        clock='record_dead_letter_deadline_at',
+        # Age is dwell since admission, never the stamped 14-day barrier
+        # deadline: `now - deadline` is negative for the whole legitimate wait
+        # and would read a healthy 0. The alarm is the barrier-approach page.
+        clock='enqueued_at',
         custody=_RECORD_CUSTODY,
         ceiling=50_000,
         alarm=_RECORD_ALARM,
-        age_alarm_seconds=86400,
+        age_alarm_seconds=13 * 86400,
         age_alarm_severity='critical',
+        note='dwell since admission; the 14-day record barrier stays in custody metadata',
     ),
     _job(
         'ready',
@@ -363,11 +369,13 @@ JOB_ENTRIES = (
     ),
     _job(
         'leased',
-        clock='lease_until',
+        # A leased row is owned; `lease_until` is a future deadline and would
+        # read 0 for every healthy lease. Read dwell and leave paging to the
+        # lease-recovery metrics.
+        clock='enqueued_at',
         ceiling=50_000,
         alarm=_UNPUBLISHED_ALARM,
-        age_alarm_seconds=3600,
-        age_alarm_severity='critical',
+        note='dwell since admission; a live lease is not a stuck row',
     ),
     _job(
         'retry',
@@ -396,13 +404,16 @@ JOB_ENTRIES = (
     ),
     _job(
         'quarantined',
-        clock='held_deadline_at',
+        # Dwell, not `held_deadline_at` (hold + 7 days, always future): the
+        # deadline clock reads 0 for a week of real quarantine.
+        clock='enqueued_at',
         custody=_HELD_CUSTODY,
         ceiling=50_000,
         alarm=_HELD_ALARM,
         reason_field='quarantine_reason',
         reasons=QUARANTINE_REASONS,
         age_alarm_seconds=86400,
+        note='dwell since admission; the 7-day held deadline stays in custody metadata',
     ),
     _job(
         'privacy_blocked',
@@ -420,7 +431,7 @@ JOB_ENTRIES = (
     ),
     _job(
         'dead',
-        clock='held_deadline_at',
+        clock='enqueued_at',
         custody=_HELD_CUSTODY,
         ceiling=100_000,
         reason_field='dead_letter_reason',
@@ -450,11 +461,13 @@ PROJECTION_ENTRIES = (
     ),
     _projection(
         'quarantine_held',
-        clock='held_deadline_at',
+        # Results carry committed_at; held_deadline_at is the future deadline.
+        clock='committed_at',
         custody=_HELD_CUSTODY,
         ceiling=50_000,
         alarm=_HELD_ALARM,
         age_alarm_seconds=86400,
+        note='dwell since commit; the 7-day held deadline stays in custody metadata',
     ),
     _projection('completed', ceiling=2_000_000),
     _projection('erased', clock=None, clock_verified=False, ceiling=100_000),
@@ -518,6 +531,7 @@ MEMORY_OUTBOX_ENTRIES = tuple(
         clock_verified=True,
         ceiling=ceiling,
         age_alarm_seconds=age_alarm_seconds,
+        note='available_at is a due/backoff clock: the reading is overdue-ness, not dwell',
     )
     for state, ceiling, age_alarm_seconds in (
         ('pending', 2_000_000, 86400),

@@ -301,16 +301,48 @@ def test_alert_uids_fit_grafana_and_name_their_identity():
         assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
 
 
-def test_age_alarms_require_a_fresh_observation_of_the_same_stock():
+def test_age_alarms_take_age_and_freshness_from_the_same_newest_source():
+    """A stale replica's retained age must not borrow a newer replica's observation.
+
+    The expression joins on the full label set (``A and B`` matches labels), then
+    keeps only the source whose observation is the fleet maximum, then requires
+    that source to be fresh. Bare ``max()`` of each gauge is the failure mode:
+    it can pin a page on a dead replica's last reading forever.
+    """
     module = _rendered_rules()
-    for rule in module.rules():
-        if rule['uid'] in {module.BLIND_UID, module.SNAPSHOT_BLIND_UID}:
+    rules = {rule['uid']: rule for rule in module.rules()}
+    for entry in ENTRIES:
+        if entry.age_alarm_seconds is None:
             continue
+        rule = rules[module.rule_uid(entry)]
         expr = rule['data'][0]['model']['expr']
-        stale = rule['data'][1]['model']['expr']
-        assert 'omi_batch_pipeline_census_state_oldest_age_seconds' in expr
-        assert stale.startswith('(time() - max(omi_batch_pipeline_census_state_observed_at_seconds')
-        assert f'< {module.FRESH_SECONDS}' in rule['data'][2]['model']['expression']
+        assert 'omi_batch_pipeline_census_state_oldest_age_seconds' in expr, entry.key
+        assert ' and ' in expr, entry.key
+        assert '== scalar(max(' in expr, entry.key
+        assert f'< {module.FRESH_SECONDS}' in expr, entry.key
+        assert rule['data'][1]['model']['expression'] == f'$A > {entry.age_alarm_seconds}', entry.key
+
+
+def test_alarmed_stocks_are_aged_from_an_acceptance_clock():
+    """A deadline clock reads 0 for the whole legitimate wait, so a stock aged
+    from one would show healthy while rows sit, and its alarm could only fire
+    after the deadline had already dead-lettered them."""
+    for entry in ENTRIES:
+        if entry.age_alarm_seconds is None:
+            continue
+        assert entry.clock, entry.key
+        assert not entry.clock.endswith(('_deadline_at', '_until')), entry.key
+
+
+def test_deadline_clocks_stay_in_custody_not_in_the_age_reading():
+    for key, deadline in (
+        ('batch:record_pending', 'record_dead_letter_deadline_at'),
+        ('batch:quarantined', 'held_deadline_at'),
+        ('batch_projection:quarantine_held', 'held_deadline_at'),
+    ):
+        entry = BY_KEY[key]
+        assert entry.clock != deadline, key
+        assert entry.custody is not None and entry.custody.clock == deadline, key
 
 
 def test_scheduler_declares_the_census_run_without_creating_it_in_code():
