@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from models.note_claims import current_note_claims
 from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
+from utils.conversations.owner_attribution import speaker_role_projection
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.model_text import (
@@ -127,7 +128,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
         return
 
     all_folders = folders_db.get_folders(uid)
-    folder_map: Dict[str, str] = {str(f['id']): str(f['name']) for f in all_folders}
+    folder_map: Dict[str, str] = {str(f.id): str(f.name) for f in all_folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')
@@ -199,6 +200,9 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv.pop('geolocation', None)
     # Server-computed capture badge stays on app views, outside the integration contract.
     conv.pop('capture_coverage', None)
+    # First-party speaker-exclusion state is not part of the public integration
+    # contract either; stays on app views (same §capture_coverage precedent).
+    conv.pop('excluded_speakers', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
     # Where the live receiver heard each segment is internal placement evidence, not transcript.
@@ -265,6 +269,12 @@ def conversations_to_string(
     user's timezone when this text is fed to the chat LLM so it reasons about times correctly.
     """
     result: List[str] = []
+    if conversations and speaker_role_projection(()) is not None:
+        result.append(
+            '[Attribution: titles, notes, tasks and events below are generated representations, not verbatim '
+            'speaker evidence. Preserve named subjects and uncertainty; an account-owned recording does not '
+            'mean its statements, experiences or commitments belong to the account owner.]'
+        )
     elapsed_timestamps_shown = False
     people_map: Dict[str, Person] = {p.id: p for p in people} if people else {}
     if clock is not None and tz is not None:

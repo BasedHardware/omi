@@ -45,6 +45,8 @@ def _load_playback(request):
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
+    storage_module.get_playback_failure_retry_epoch = MagicMock(return_value=None)
+    storage_module.is_playback_unavailable.return_value = False
     with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module
@@ -229,12 +231,10 @@ def test_urls_conversation_audio_unavailable_only_for_matching_fingerprint(monke
 
 
 def test_finalize_audio_file_group_duration_uses_32000_bytes_per_second():
-    # Source-structure assertion (database/conversations.py needs a live
-    # Firestore client to import): 320,000 bytes must be estimated as 10.0s,
-    # not the historical 20.0s from the /16000 (8kHz) constant.
-    source = (BACKEND / 'database' / 'conversations.py').read_text()
-    assert 'last_chunk_size / 32000.0' in source
-    assert 'last_chunk_size / 16000.0' not in source
+    audio_file = conversations_db._finalize_audio_file_group(
+        'uid', 'conversation', [{'timestamp': 1000.0, 'size': 320000}], []
+    )
+    assert audio_file.duration == 10.0
 
 
 def test_finalize_audio_file_group_handles_explicit_none_size():

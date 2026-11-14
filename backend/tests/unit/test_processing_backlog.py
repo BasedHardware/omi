@@ -23,6 +23,7 @@ from routers import users as route
 def no_cap_hold_reservations(monkeypatch):
     # Cap-hold batch reservations (lane 6) are covered by test_cap_hold_batch_debit.py; here none are open.
     monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 def allowance(remaining=130, managed=True):
@@ -50,6 +51,22 @@ def test_flags_off_add_no_reads_or_wire_fields(monkeypatch):
         data = client.get('/subscription').json()
     assert 'processing_backlog' not in data and 'held_audio' not in data
     assert data['phone_call_quota'] is None
+
+
+async def test_pending_deletion_owner_is_skipped_before_backlog_reads(monkeypatch):
+    calls = []
+
+    async def blocking(_executor, function, *args, **kwargs):
+        calls.append(function.__name__)
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: True)
+    monkeypatch.setattr(worker, 'recovery_cohort_admits', lambda _uid: True)
+    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda _uid: True)
+    monkeypatch.setattr(worker, 'run_blocking', blocking)
+
+    assert await worker.run('uid-pending') is None
+    assert calls == ['<lambda>']
 
 
 @pytest.mark.parametrize(
@@ -85,7 +102,7 @@ def test_estimated_percent_rounds_half_up_to_a_whole_number(monkeypatch):
     assert backlog.whole_percent(0) == 0
 
 
-def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypatch):
+def test_trial_grant_and_tap_both_accept_a_backlog_over_the_estimate(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
     monkeypatch.setattr(
@@ -97,8 +114,12 @@ def test_upgrade_over_estimate_asks_but_explicit_choice_accepts_partial(monkeypa
     )
     start = Mock(return_value={'token': 'new'})
     monkeypatch.setattr(worker.store, 'start', start)
-    assert backlog.choose('synthetic', request_key='synthetic-choice', automatic=True) is None
-    assert start.call_args.kwargs['begin'] is False
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
+    trial_start = datetime(2026, 2, 3, tzinfo=timezone.utc).timestamp()
+    chosen = backlog.choose('synthetic', request_key='trial-grant:sub', automatic=True, intent_at=trial_start)
+    # Newest first within the smaller of the trial grant and what this month still allows.
+    assert chosen['token'] == 'new' and start.call_args.kwargs['begin'] is True
+    assert start.call_args.kwargs['remaining'] == 130
     start.reset_mock()
     assert backlog.choose('synthetic', request_key='synthetic-choice')['token'] == 'new'
     assert start.call_args.kwargs['remaining'] == 130
@@ -304,17 +325,6 @@ def test_authenticated_process_endpoint_requires_replay_key_and_preserves_backen
     choice.assert_called_once_with('synthetic', request_key='synthetic-choice-uuid')
 
 
-def test_renewals_and_downgrades_do_not_create_upgrade_intent():
-    from models.users import PlanType
-
-    old = Subscription(plan=PlanType.plus, current_price_id='legacy-plus', current_period_end=1)
-    renewed = old.model_copy(update={'current_period_end': 2_000_000_000})
-    assert not backlog.allowance_increased(old, renewed)
-    basic = Subscription(plan=PlanType.basic)
-    assert not backlog.allowance_increased(old, basic)
-    assert backlog.allowance_increased(basic, renewed)
-
-
 def test_capped_empty_backlog_still_publishes_pause_state(monkeypatch):
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     result = backlog.snapshot('synthetic', allowance=allowance(0, False), audio={'count': 0, 'seconds': 0}, summary={})
@@ -397,7 +407,7 @@ def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch,
         ('malformed', False),
     ],
 )
-def test_late_first_upgrade_delivery_cannot_spend_new_month(monkeypatch, intent_at, accepted):
+def test_late_first_trial_delivery_cannot_spend_new_month(monkeypatch, intent_at, accepted):
     monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
     monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
     monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
@@ -410,7 +420,7 @@ def test_late_first_upgrade_delivery_cannot_spend_new_month(monkeypatch, intent_
     )
     start = Mock(return_value={'state': 'processing', 'period': '2026-02'})
     monkeypatch.setattr(worker.store, 'start', start)
-    result = backlog.choose('synthetic', request_key='upgrade-first-delivery', automatic=True, intent_at=intent_at)
+    result = backlog.choose('synthetic', request_key='trial-first-delivery', automatic=True, intent_at=intent_at)
     assert (result is not None) is accepted
     assert start.call_args.kwargs['begin'] is accepted
     assert start.call_args.kwargs['period'] == '2026-02'
@@ -491,7 +501,7 @@ def test_rollover_during_choice_never_stamps_old_intent_with_new_month(monkeypat
     monkeypatch.setattr(worker.store, 'start', start)
     result = backlog.choose(
         'synthetic',
-        request_key='rollover-upgrade',
+        request_key='rollover-trial',
         automatic=True,
         intent_at=datetime(2026, 1, 31, 23, 59, 59, tzinfo=timezone.utc).timestamp(),
     )
@@ -556,7 +566,7 @@ async def test_worker_dispatch_carries_expiring_month_consent(monkeypatch):
     assert funded.processing_allowed('synthetic')  # New capture has no expired job grant.
 
 
-@pytest.mark.parametrize('flag', ['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'STT_CAP_DISPATCH_ENFORCEMENT'])
+@pytest.mark.parametrize('flag', ['STT_CAP_DISPATCH_ENFORCEMENT'])
 @pytest.mark.parametrize('summary_switch', [None, 'false'])
 def test_funded_cap_denial_stores_summary_as_waiting_never_terminal_or_derived(monkeypatch, flag, summary_switch):
     from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
@@ -640,3 +650,86 @@ def test_budget_waiting_vector_writer_never_calls_provider_after_reset(monkeypat
     monkeypatch.setattr(funded, 'processing_allowed', lambda uid: True)
     assert pipeline.save_structured_vector('synthetic', waiting, update_only=update_only) is False
     forbidden.assert_not_called()
+
+
+def _choices(source, outcome):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_processing_backlog_choice_total', {'source': source, 'outcome': outcome})
+
+
+@pytest.mark.parametrize(
+    'automatic,state,intent_month,exceeds,outcome',
+    [
+        (False, 'waiting_choice', None, True, 'accepted'),
+        (False, 'capped', None, False, 'capped'),
+        (False, 'none', None, False, 'nothing_waiting'),
+        (True, 'waiting_choice', '2026-02', False, 'accepted'),
+        (True, 'waiting_choice', '2026-01', False, 'stale_intent'),
+        # An automatic release spends what fits, so a larger backlog still begins.
+        (True, 'waiting_choice', '2026-02', True, 'accepted'),
+        (True, 'capped', '2026-02', False, 'capped'),
+    ],
+)
+def test_backlog_choices_are_counted_by_source_and_outcome(
+    monkeypatch, automatic, state, intent_month, exceeds, outcome
+):
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(funded, 'period_id', lambda: '2026-02')
+    monkeypatch.setattr(funded, 'allowance', lambda uid: allowance())
+    monkeypatch.setattr(
+        backlog,
+        'snapshot',
+        lambda *a, **k: ProcessingBacklog(
+            state=state, remaining_units=130, estimated_units=10, exceeds_remaining=exceeds
+        ),
+    )
+    monkeypatch.setattr(worker.store, 'start', Mock(return_value={'token': 'run'}))
+    intent_at = (
+        datetime.strptime(f'{intent_month}-15', '%Y-%m-%d').replace(tzinfo=timezone.utc) if intent_month else None
+    )
+    source = 'conversion' if automatic else 'manual'
+    before = _choices(source, outcome)
+    backlog.choose('synthetic', request_key='synthetic-choice', automatic=automatic, intent_at=intent_at)
+    assert _choices(source, outcome) == before + 1
+
+
+def test_backlog_choice_errors_and_out_of_scope_404s_are_counted(monkeypatch):
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: True)
+    monkeypatch.setattr(funded, 'allowance', Mock(side_effect=OSError('synthetic allowance outage')))
+    before = _choices('conversion', 'error')
+    with pytest.raises(OSError):
+        backlog.choose('synthetic', request_key='synthetic-choice', automatic=True, intent_at=None)
+    assert _choices('conversion', 'error') == before + 1
+
+    monkeypatch.setattr(funded, 'enabled', lambda uid, lane=None: False)
+    monkeypatch.setattr(backlog, 'choose', Mock(side_effect=AssertionError('chose out of scope')))
+    app = FastAPI()
+    app.include_router(route.router)
+    app.dependency_overrides[route.auth.get_current_user_uid] = lambda: 'synthetic'
+    before = _choices('manual', 'out_of_scope')
+    with TestClient(app) as client:
+        response = client.post('/v1/users/processing-backlog/process', headers={'Idempotency-Key': 'synthetic-choice'})
+    assert response.status_code == 404
+    assert _choices('manual', 'out_of_scope') == before + 1
+
+
+def test_backlog_choice_counter_is_armed_and_never_carries_free_text():
+    from utils.observability import held_content
+
+    for source in ('manual', 'trial'):
+        for outcome in (
+            'accepted',
+            'out_of_scope',
+            'not_paid',
+            'capped',
+            'nothing_waiting',
+            'stale_intent',
+            'error',
+            'unknown',
+        ):
+            assert _choices(source, outcome) is not None
+    held_content.record_backlog_choice('synthetic-owner', 'accepted')
+    held_content.record_backlog_choice('manual', 'synthetic-owner')
+    assert _choices('synthetic-owner', 'accepted') is None
+    assert _choices('manual', 'synthetic-owner') is None

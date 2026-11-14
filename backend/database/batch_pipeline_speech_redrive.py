@@ -1,10 +1,10 @@
 """Explicit operator intents; a new recognizer preserves every spent paid token."""
 
 from copy import deepcopy
-from dataclasses import asdict
 from uuid import uuid4
 
 from config.policy import RecoveryPolicy
+from config.batch_paid_attempt import attempted, renewed, retryable
 from config.batch_language_recovery import (
     language_guarded,
     independent_attempted,
@@ -16,20 +16,60 @@ from database.batch_pipeline_policy import load_stage_policy, stage_in_transacti
 from database.batch_pipeline_terminal_empty import spent_canary
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
-from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_result_allowed
+from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_result_allowed, worker_vad_speech
 from utils.batch_pipeline.recovery_disposition import STAGES, REASONS, padded_skipped
 from utils.batch_pipeline.scheduler import owner_key
 
 PAID_EPOCH = 2
+ORDINARY_EMPTY_OPERATION = 'ordinary-empty-independent-recovery-v2'
+ORDINARY_EMPTY_MAX_UNITS = 2
+ORDINARY_EMPTY_MAX_DECODED_AUDIO_SECONDS = 47.6
 
 
 def independent_redrive(job):
     return language_guarded(job) and (job.get('recovery') or {}).get('provider') == 'modulate'
 
 
-def replaceable_modulate_intent(job, marker):
+def ordinary_empty_redrive(job):
+    """Explicit operator route for worker-empty units with a spent empty epoch2.
+
+    The original epoch1 and epoch2 stay immutable. A persisted Soniox route
+    checks its retained epoch2, so replay/reconciliation uses the same proof.
+    This predicate does not authorize a new cohort or bypass terminal/privacy
+    checks; the CLI and prepare() require those separately.
+    """
+    recovery = job.get('recovery') or {}
+    marker = job.get('speech_redrive') or {}
+    if marker.get('provider') == 'soniox' and marker.get('ordinary_empty_independent') is True:
+        marker = marker.get('prior_speech_redrive') or {}
+    failure = job.get('worker_failure') or {}
     return (
-        independent_redrive(job)
+        failure.get('stage') == 'assemble_words'
+        and failure.get('reason') == 'empty_asr'
+        and recovery.get('provider') == 'modulate'
+        and recovery.get('epoch') == 1
+        and bool(recovery.get('token'))
+        and bool(recovery.get('started_at'))
+        and bool(recovery.get('settled_at'))
+        and recovery.get('failure') == {'stage': 'response_validation', 'reason': 'empty_asr'}
+        and worker_vad_speech(job) is not None
+        and marker.get('provider') == 'modulate'
+        and marker.get('paid_epoch') == PAID_EPOCH
+        and marker.get('state') == 'failed_held'
+        and marker.get('failure') == {'stage': 'response_validation', 'reason': 'empty_asr'}
+        and bool(marker.get('started_at'))
+        and bool(marker.get('settled_at'))
+        and bool(marker.get('token'))
+        and marker.get('silent') is True
+        and marker.get('privacy_generation') == (job.get('projection_binding') or {}).get('privacy_generation')
+        and marker.get('prior_recovery') == recovery
+        and not independent_attempted(job)
+    )
+
+
+def replaceable_modulate_intent(job, marker, *, ordinary_empty=False):
+    return (
+        (independent_redrive(job) or ordinary_empty and ordinary_empty_redrive(job))
         and marker.get('provider') == 'modulate'
         and marker.get('paid_epoch') == 2
         and marker.get('state') == 'failed_held'
@@ -49,18 +89,44 @@ def expected_route(job, marker):
     """(paid epoch, provider) a marker must carry; the explicit repair is its own route."""
     if repair_intent(job, marker):
         return REPAIR_EPOCH, REPAIR_PROVIDER
+    if marker.get('ordinary_empty_independent') is True:
+        if not ordinary_empty_redrive(job):
+            raise ProjectionBlocked('ordinary empty route proof changed')
+        return 3, 'soniox'
     return (3, 'soniox') if independent_redrive(job) else (PAID_EPOCH, 'modulate')
 
 
 class SpeechRedriveStore:
-    def __init__(self, store, *, server_flags):
+    def __init__(self, store, *, server_flags, max_attempts=1):
         """Operator-only. `server_flags` is the serving role's live settings for an
         unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
         self.server_flags = server_flags
+        if max_attempts not in {1, 2}:
+            raise ValueError('bounded paid attempts required')
+        self.max_attempts = max_attempts
 
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
+
+    def observe_preflight(self, segment_id, owner_id, expected_recovery, now, seconds):
+        """Retain acoustic custody evidence without creating a paid intent."""
+
+        def commit(tx):
+            job, binding = self.checked(tx, segment_id)
+            result = tx.get('results', segment_id)
+            if (
+                binding.owner_id != owner_id
+                or job.get('recovery') != expected_recovery
+                or not self.terminal(job, result, now)
+            ):
+                raise ProjectionBlocked('terminal held obligation required')
+            measured = held_vad_census(job, seconds)
+            if job.get('measured_held_vad_speech_seconds') != measured:
+                job['measured_held_vad_speech_seconds'] = measured
+                tx.put('jobs', segment_id, job)
+
+        self.store.run(commit)
 
     @staticmethod
     def terminal(job, existing, now):
@@ -94,6 +160,7 @@ class SpeechRedriveStore:
         gpu_padded_retry_empty=False,
         silent=False,
         repair=False,
+        ordinary_empty_independent=False,
     ):
         candidates, observations = {}, []
         token = uuid4().hex
@@ -108,6 +175,8 @@ class SpeechRedriveStore:
                 not repair and not policy.speech_empty_multilingual and not independent_redrive(job)
             ):
                 raise ProjectionBlocked('speech redrive disabled')
+            if ordinary_empty_independent and (repair or not silent or not ordinary_empty_redrive(job)):
+                raise ProjectionBlocked('ordinary empty redrive not eligible')
             existing = tx.get('results', segment_id)
             marker = job.get('speech_redrive') or {}
             if repair and not words_repair_eligible(job):
@@ -115,7 +184,11 @@ class SpeechRedriveStore:
             epoch, provider = (
                 (REPAIR_EPOCH, REPAIR_PROVIDER)
                 if repair
-                else ((3, 'soniox') if independent_redrive(job) else (PAID_EPOCH, 'modulate'))
+                else (
+                    (3, 'soniox')
+                    if independent_redrive(job) or ordinary_empty_independent
+                    else (PAID_EPOCH, 'modulate')
+                )
             )
             if provider == 'soniox' and independent_attempted(job):
                 raise ProjectionBlocked('independent recognizer already attempted')
@@ -128,7 +201,7 @@ class SpeechRedriveStore:
             ):
                 raise ProjectionBlocked('speech redrive ownership changed')
             previous = None
-            if not repair and replaceable_modulate_intent(job, marker):
+            if not repair and replaceable_modulate_intent(job, marker, ordinary_empty=ordinary_empty_independent):
                 # A new digest explicitly buys a different recognizer. Preserve
                 # the spent epoch verbatim; never reset or replay its paid token.
                 if marker.get('plan_digest') == plan_digest:
@@ -145,6 +218,13 @@ class SpeechRedriveStore:
                     or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
+                if self.max_attempts == 2 and retryable(marker, marker.get('state')):
+                    if not self.terminal(job, existing, now):
+                        raise ProjectionBlocked('terminal held obligation required')
+                    marker = renewed(marker, token)
+                    marker['state'] = 'prepared'
+                    job['speech_redrive'] = marker
+                    tx.put('jobs', segment_id, job)
                 return job
             if not self.terminal(job, existing, now):
                 raise ProjectionBlocked('terminal held obligation required')
@@ -161,7 +241,10 @@ class SpeechRedriveStore:
                 'prepared_at': now,
                 'privacy_generation': binding.privacy_generation,
                 'prior_recovery': deepcopy(expected_recovery),
+                'max_attempts': self.max_attempts,
             }
+            if ordinary_empty_independent:
+                job['speech_redrive']['ordinary_empty_independent'] = True
             if previous:
                 job['speech_redrive']['prior_speech_redrive'] = previous
             tx.put('jobs', segment_id, job)
@@ -197,6 +280,7 @@ class SpeechRedriveStore:
             ):
                 return False
             marker.update(state='running', started_at=now)
+            attempted(marker)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -246,8 +330,8 @@ class SpeechRedriveStore:
             ):
                 return False
             if marker.get('state') == 'completed':
-                return isinstance(result_uri, str) and job.get('result') == asdict(
-                    WorkResult(segment_id, result_uri, outcome)
+                return isinstance(result_uri, str) and WorkResult(segment_id, result_uri, outcome).matches_persisted(
+                    job.get('result')
                 )
             if marker.get('state') != 'running' or not self.terminal(job, existing, now):
                 return False
@@ -271,7 +355,7 @@ class SpeechRedriveStore:
                     ready_at=now,
                     merge_pending=True,
                     recovery_state='recovered',
-                    result=asdict(WorkResult(segment_id, result_uri, outcome)),
+                    result=WorkResult(segment_id, result_uri, outcome).to_dict(),
                 )
                 tx.put('owners', owner_key(job['owner_id']), owner)
             else:

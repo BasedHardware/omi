@@ -81,6 +81,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/dream/runs',
     '/v1/episodes',
     '/v1/fair-use',
+    '/v1/flags',
     '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
@@ -125,6 +126,7 @@ APP_CLIENT_PREFIXES = (
     '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
+    '/v2/users/me/referral/campaign',
     '/v2/voice-message',
     '/v2/voice-messages',
     '/v3/memories',
@@ -137,6 +139,10 @@ AUDITED_PUBLIC_PREFIXES = (
     '/v1/conversations',
 )
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'POST',
+        '/v1/conversations/deletion-batch-purges/run',
+    ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',
     (
         'POST',
         '/v1/conversations/shared/chat',
@@ -153,6 +159,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'GET',
+        '/v1/conversations/hidden-noise-counts',
+    ): 'Firebase-authenticated first-party Home counts; not part of the Developer API key contract.',
     (
         'POST',
         '/v1/conversations/topic',
@@ -246,6 +256,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'GET',
+        '/v1/conversations/{conversation_id}/recording-speakers',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'PATCH',
+        '/v1/conversations/{conversation_id}/recording-speakers',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'POST',
         '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -317,6 +335,14 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'POST',
         '/v1/conversations/search',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/task-presence',
+    ): 'Firebase-authenticated first-party task membership metadata; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/with-tasks/page',
+    ): 'Firebase-authenticated first-party task-filtered conversation browse; not part of the Developer API key contract.',
     (
         'POST',
         '/v1/conversations/merge',

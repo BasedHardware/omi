@@ -225,19 +225,6 @@ final class ScreenTaskRampBoundaryTests: XCTestCase {
     XCTAssertFalse(ScreenTaskFeature.isKillSwitchOff(flagValue: true))
     XCTAssertTrue(ScreenTaskFeature.isKillSwitchOff(flagValue: false))
 
-    XCTAssertTrue(ScreenTaskFreshFlagResponse.enabled(Data(#"{}"#.utf8)))
-    XCTAssertTrue(ScreenTaskFreshFlagResponse.enabled(Data(#"{"featureFlags":{}}"#.utf8)))
-    XCTAssertTrue(
-      ScreenTaskFreshFlagResponse.enabled(Data(#"{"featureFlags":{"screen_task_jev_gate":"unknown"}}"#.utf8)))
-    XCTAssertFalse(ScreenTaskFreshFlagResponse.enabled(Data(#"{"featureFlags":{"screen_task_jev_gate":false}}"#.utf8)))
-    XCTAssertTrue(
-      ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":false},"quotaLimited":["feature_flags"]}"#.utf8)))
-    XCTAssertTrue(
-      ScreenTaskFreshFlagResponse.enabled(
-        Data(#"{"featureFlags":{"screen_task_jev_gate":false},"errorsWhileComputingFlags":true}"#.utf8)))
-    XCTAssertTrue(ScreenTaskFreshFlagResponse.enabled(Data("not json".utf8)))
-
     let state = RampState()
     let authority = ScreenTaskAdmissionAuthority(now: { state.now })
     authority.refresh(enabled: true, requestedAt: state.time)

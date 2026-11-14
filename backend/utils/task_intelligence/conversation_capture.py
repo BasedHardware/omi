@@ -8,6 +8,7 @@ harnesses one stable dependency seam.
 from collections.abc import Callable, Sequence
 from datetime import datetime
 import logging
+import hashlib
 import os
 from typing import Any
 
@@ -20,13 +21,14 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_action_items,
 )
 from utils.conversations.wake_word import find_wake_word_segment_ids
+from utils.conversations.action_item_extraction import filter_extracted_items
 from utils.llm.usage_tracker import Features, track_usage
 from utils.llm.wake_word_adjudication import (
     WakeWordAdjudication,
     adjudicate_wake_word_invocations,
 )
 from utils.metrics import TASK_INTELLIGENCE_ATTRIBUTION_TOTAL
-from utils.task_intelligence import candidate_service
+from utils.task_intelligence import candidate_service, reminder_policy
 from utils.task_intelligence.backend_capture import adapt_backend_capture
 from utils.task_intelligence.conversation_capture_policy import (
     WakeWordCaptureGate,
@@ -161,6 +163,7 @@ def _conversation_evidence_ref(
         kind=EvidenceKind.conversation,
         id=conversation_id,
         scope=EvidenceScope.canonical,
+        version=action_item.reminder_origin.input_revision if getattr(action_item, 'reminder_origin', None) else None,
         transcript_segment_ids=[segment.id for segment in supporting_segments],
         start_seconds=_evidence_seconds(min((segment.start for segment in supporting_segments), default=None)),
         end_seconds=_evidence_seconds(max((segment.end for segment in supporting_segments), default=None)),
@@ -178,6 +181,7 @@ def _capture_decision(
             description=action_item.description,
             owner=getattr(action_item, 'capture_owner', None) or TaskOwner.unknown,
             due_at=action_item.due_at,
+            due=action_item.due.model_dump(mode='python') if getattr(action_item, 'due', None) else None,
             due_confidence=1.0 if action_item.due_at else None,
         ),
         evidence_ref=_conversation_evidence_ref(action_item, conversation_id, transcript_segments),
@@ -225,6 +229,8 @@ def process_before_legacy(
     that it handled the extraction.
     """
 
+    if not conversation_id:
+        raise ValueError('extracted action items require conversation provenance')
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
@@ -242,12 +248,29 @@ def process_before_legacy(
         )
         for action_item, semantic_key, occurrence in occurrences
     ]
-    for _, semantic_key, occurrence, decision in decisions:
+    for action_item, semantic_key, occurrence, decision in decisions:
         proposal = decision.candidate
         if proposal is None:
             # The policy ignored this item, or named an update target that no
             # longer resolves. Drop this item alone and keep proposing the rest.
             continue
+        origin = getattr(action_item, 'reminder_origin', None)
+        if origin is not None:
+            if not reminder_policy.enabled():
+                continue
+            proposal = type(proposal).model_validate(
+                {**proposal.model_dump(mode='python'), 'reminder_origin': origin.model_dump(mode='python')}
+            )
+            semantic_key += (
+                ':'
+                + hashlib.sha256(
+                    (
+                        '|'.join(sorted(action_item.source_segment_ids))
+                        + origin.input_revision
+                        + origin.speaker_evidence_revision
+                    ).encode()
+                ).hexdigest()
+            )
         candidate_service.create_candidate(
             uid,
             proposal,
@@ -262,10 +285,20 @@ def process_conversation_before_legacy(
     conversation: Any,
     wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> bool:
+    if not conversation.id:
+        raise ValueError('extracted action items require conversation provenance')
+    # Revalidate exact source/identity at ingress, including cached notes and retries.
+    items = []
+    for item in filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation):
+        prepared = reminder_policy.prepare_reminder(
+            item, conversation=conversation, extracted_at=datetime.now().astimezone()
+        )
+        if prepared is not None:
+            items.append(prepared)
     return process_before_legacy(
         uid,
         conversation.id,
-        conversation.structured.action_items,
+        items,
         getattr(conversation, 'transcript_segments', ()) or (),
         wake_word_gate,
     )
@@ -317,6 +350,9 @@ def legacy_replacement_map(
 def _semantic_key(action_item: Any) -> str:
     due_at = getattr(action_item, 'due_at', None)
     due_value = due_at.isoformat() if isinstance(due_at, datetime) else ''
+    due = getattr(action_item, 'due', None)
+    if due is not None:
+        due_value = '|'.join((due.kind, due.date or '', due.timezone or '', due_value))
     owner = getattr(action_item, 'capture_owner', None) or TaskOwner.unknown
     owner_value = owner.value if isinstance(owner, TaskOwner) else str(owner)
     parts = (

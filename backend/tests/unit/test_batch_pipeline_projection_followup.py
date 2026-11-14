@@ -6,14 +6,62 @@ from dataclasses import asdict
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+import hashlib
+import logging
 
 import pytest
 
-from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
+from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.serving import Serving
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['projection', 'privacy', 'unknown_privacy', 'retry'])
+async def test_followup_failure_logs_correlate_without_source_or_exception_content(followup, caplog, kind):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    private = 'private-owner@example.test/private-recording-content'
+    errors = {
+        'projection': ProjectionBlocked(private),
+        'privacy': BatchPrivacyBlocked('account_deleted', conversation_id=private),
+        'unknown_privacy': BatchPrivacyBlocked(private, conversation_id=private),
+        'retry': RuntimeError(private),
+    }
+    error = errors[kind]
+    error.block_reason = private  # An unregistered reason must never enter a log.
+    followup.runner.read_persisted = Mock(side_effect=error)
+    with caplog.at_level(logging.INFO, logger=projection_followup.__name__):
+        await followup.runner.run(private)
+    messages = [r.getMessage() for r in caplog.records if r.name == projection_followup.__name__]
+    assert len(messages) == 1
+    message = messages[0]
+    assert f'unit={hashlib.sha256(private.encode()).hexdigest()[:16]}' in message
+    assert private not in message and 'private-owner' not in message
+    assert ' site=' in message
+    assert f'outcome={"retry" if kind == "retry" else "blocked"}' in message
+    if kind != 'retry':
+        assert 'block_reason=other' in message
+    if kind == 'privacy':
+        assert 'fence_reason=account_deleted' in message
+    if kind == 'unknown_privacy':
+        assert 'fence_reason=unknown' in message
+    assert not followup.owner_claim
+    followup.projector.store.mark_enrichment.assert_not_called()
+    followup.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_followup_timeout_uses_same_private_safe_unit_key(followup, monkeypatch, caplog):
+    segment = 'private-recording@example.test'
+    followup.runner._run = AsyncMock(side_effect=TimeoutError('private audio URI'))
+    with caplog.at_level(logging.WARNING, logger=projection_followup.__name__):
+        await followup.runner.run(segment)
+    assert f'outcome=timeout unit={hashlib.sha256(segment.encode()).hexdigest()[:16]}' in caplog.text
+    assert segment not in caplog.text and 'private audio URI' not in caplog.text
+    assert not followup.runner.closed
 
 
 @pytest.fixture
@@ -104,8 +152,8 @@ def followup(monkeypatch, owner_claim):
         side_effect=lambda **kw: (projector.store.store.projection_pending(), None)
     )
     projector.store.ref = Mock(
-        side_effect=lambda _, sid: SimpleNamespace(
-            get=lambda: SimpleNamespace(to_dict=lambda: {'projection': receipts[sid]})
+        side_effect=lambda table, sid: SimpleNamespace(
+            get=lambda: SimpleNamespace(to_dict=lambda: jobs[sid] if table == 'jobs' else {'projection': receipts[sid]})
         )
     )
     projector.complete_content = Mock()
@@ -167,6 +215,32 @@ async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(follo
     assert f.projector.store.mark_enrichment.call_count == 2
     f.projector.complete_content.assert_called_once_with('head', f.binding)
     f.projector.load_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_real_claim_released_across_run_blocking_leaves_never_fails_the_task(followup, monkeypatch):
+    # The follow-up enters the real advisory claim in one run_blocking leaf and
+    # releases it in a later leaf; each leaf runs in its own contextvars copy,
+    # so the claim's retry-deadline scope created its ContextVar token in a
+    # different Context than the one resetting it. Before the scope learned to
+    # tolerate that split, every release raised "Token was created in a
+    # different Context" and the background task was reported failed after its
+    # work had already committed. The stubbed owner_claim fixture hides this
+    # seam, so this test restores the real claim against a fake Redis.
+    import fakeredis
+
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    redis.eval('return 1', 0)  # Load the Lua emulator for the token-fenced release.
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    monkeypatch.setattr(projection_followup, 'projection_claim', claims.projection_claim)
+
+    f = followup
+    await asyncio.wait_for(f.runner.run('head'), 5)
+    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    # The release ran to completion: the advisory lease is gone, not left to its TTL.
+    assert not redis.keys('batch_projection:*')
 
 
 @pytest.mark.asyncio
@@ -243,6 +317,7 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
 @pytest.mark.asyncio
 async def test_partial_assignments_do_not_take_slots_and_failed_front_rotates(followup, monkeypatch):
     f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'false')
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
     f.projector.store.store.projection_pending.return_value = ['partial', 'head', 'later']
     f.projector.store.ref.side_effect = lambda _, sid: SimpleNamespace(
@@ -253,6 +328,284 @@ async def test_partial_assignments_do_not_take_slots_and_failed_front_rotates(fo
     while f.runner.tasks:
         await asyncio.gather(*list(f.runner.tasks.values()))
     assert [call.args[0] for call in f.runner.run.await_args_list] == ['head', 'later']
+
+
+@pytest.mark.asyncio
+async def test_finish_page_checks_pinned_sync_policy_before_any_side_effect(followup):
+    f = followup
+    f.jobs['head']['policy_parts']['projection'] = ProjectionPolicy(async_projection=False).to_dict()
+    await f.runner.run('head')
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+    assert not f.owner_claim
+
+
+@pytest.mark.asyncio
+async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(followup, monkeypatch):
+    # Immediate retry is the kill-switch path; desync retries after a bounded
+    # backoff (test_batch_pipeline_followup_desync.py).
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '0')
+    f = followup
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
+    f.receipts['head']['state'] = 'ready'
+    f.projector.store.store.projection_pending.return_value = ['head']
+    sibling_ready = False
+    completed = []
+
+    def complete(segment, binding):
+        if sibling_ready:
+            completed.append(segment)
+
+    f.projector.complete_content.side_effect = complete
+
+    async def pass_once():
+        await f.runner.schedule()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+
+    await pass_once()
+    assert not completed
+    # Nothing about head's receipt changes: only the external sibling does.
+    sibling_ready = True
+    await pass_once()
+    assert completed == ['head']
+    assert f.projector.complete_content.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled,expected_probes', [('true', 1), ('false', 100)])
+async def test_ready_backlog_scans_sibling_accounting_once_per_page(followup, monkeypatch, enabled, expected_probes):
+    from contextvars import ContextVar
+    from dataclasses import replace
+
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', enabled)
+    segments = tuple(f'synthetic-{index:03}' for index in range(100))
+    binding = replace(f.binding, segment_ids=segments + ('synthetic-blocker',))
+    for segment in segments:
+        f.jobs[segment] = {**f.jobs['head'], 'segment_id': segment}
+        f.receipts[segment] = {**f.receipts['head'], 'state': 'ready', 'speech_seconds': 1}
+    f.jobs['synthetic-blocker'] = {**f.jobs['head'], 'segment_id': 'synthetic-blocker'}
+    f.receipts['synthetic-blocker'] = {'state': 'persisted'}
+    f.projector.store.store.projection_pending.return_value = list(segments)
+    f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, binding)
+    f.projector.store.session.side_effect = lambda sid, *_: SimpleNamespace(
+        job=f.jobs[sid], entry={'projection': f.receipts[sid]}
+    )
+    probe_reads = ContextVar('synthetic_accounting_reads', default=None)
+
+    def ref(table, segment):
+        def get():
+            if probe_reads.get() is not None:
+                probe_reads.get().append(table)
+            row = f.jobs[segment] if table == 'jobs' else {'projection': f.receipts[segment]}
+            return SimpleNamespace(to_dict=lambda: row)
+
+        return SimpleNamespace(get=get)
+
+    f.projector.store.ref.side_effect = ref
+    accounting_reads = []
+
+    def complete(segment, binding):
+        reads = []
+        token = probe_reads.set(reads)
+        try:
+            assert ProjectionStore.prepare_accounting(f.projector.store, binding, 100) is None
+            accounting_reads.append(len(reads))
+        finally:
+            probe_reads.reset(token)
+
+    f.projector.complete_content.side_effect = complete
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert len(accounting_reads) == expected_probes
+    assert sum(accounting_reads) == 201 * expected_probes
+
+
+@pytest.mark.asyncio
+async def test_ready_probe_failure_does_not_suppress_next_queued_sibling(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    f.projector.complete_content.side_effect = [RuntimeError('synthetic retry'), None]
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('next_page', [[], ['head']])
+async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, next_page):
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    started, release = asyncio.Event(), asyncio.Event()
+    finish = f.runner.finish_part
+
+    async def delayed(item, *args, **kwargs):
+        if item.segment_id == 'later':
+            started.set()
+            await release.wait()
+        await finish(item, *args, **kwargs)
+
+    f.runner.finish_part = delayed
+    try:
+        await f.runner.schedule()
+        head = f.runner.tasks['head']
+        await asyncio.wait_for(started.wait(), 2)
+        await head
+        await asyncio.sleep(0)
+        assert f.projector.complete_content.call_count == 1
+        assert 'later' in f.runner.tasks
+        f.projector.store.store.projection_pending.return_value = next_page
+        await f.runner.schedule()
+        if next_page:
+            await f.runner.tasks['head']
+            await asyncio.sleep(0)
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        assert f.projector.complete_content.call_count == 1 + bool(next_page)
+        assert not f.runner.pages and not f.runner.completion_attempts
+    finally:
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+
+
+@pytest.mark.asyncio
+async def test_owed_row_also_discovered_still_probes_completion(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    await f.runner.schedule(tail=('later',))
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+    assert not f.runner.pages and not f.runner.completion_attempts
+
+
+@pytest.mark.asyncio
+async def test_owed_running_row_bypasses_its_existing_pages_probe(followup):
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    started, release = asyncio.Event(), asyncio.Event()
+    finish = f.runner.finish_part
+
+    async def delayed(item, *args, **kwargs):
+        if item.segment_id == 'later':
+            started.set()
+            await release.wait()
+        await finish(item, *args, **kwargs)
+
+    f.runner.finish_part = delayed
+    try:
+        await f.runner.schedule()
+        head = f.runner.tasks['head']
+        await asyncio.wait_for(started.wait(), 2)
+        await head
+        await asyncio.sleep(0)
+        assert f.projector.complete_content.call_count == 1
+        f.projector.store.store.projection_pending.return_value = []
+        await f.runner.schedule(tail=('later',))
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        assert f.projector.complete_content.call_count == 2
+        assert not f.runner.pages and not f.runner.completion_attempts
+    finally:
+        release.set()
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('wake', ['priority', 'owed'])
+async def test_recovery_wake_bypasses_same_page_ready_probe_hint(followup, wake):
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+
+    async def drain():
+        while f.runner.tasks:
+            await asyncio.gather(*list(f.runner.tasks.values()))
+        await asyncio.sleep(0)
+
+    await f.runner.schedule()
+    await drain()
+    assert f.projector.complete_content.call_count == 1
+    if wake == 'priority':
+        await f.runner.schedule(priority=('later',))
+    else:
+        f.projector.store.store.projection_pending.return_value = []
+        await f.runner.schedule(tail=('later',))
+    await drain()
+    assert f.projector.complete_content.call_count == 2
+    f.projector.complete_content.assert_called_with('later', f.binding)
+
+
+@pytest.mark.asyncio
+async def test_owner_only_recovery_clears_stale_page_marker_before_completion_probe(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'projection_followup_page_enabled', lambda: True)
+    f.receipts['later']['state'] = 'ready'
+    f.runner.pending.append('later')
+    f.runner.pages.update({'head': 1, 'later': 1})
+    f.runner.completion_attempts.add((1, f.binding))
+
+    await f.runner.schedule(priority=('later',), discover=False)
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+
+    assert 'later' not in f.runner.pages
+    assert (1, f.binding) in f.runner.completion_attempts
+    f.projector.complete_content.assert_called_once_with('later', f.binding)
+
+
+@pytest.mark.asyncio
+async def test_ready_completion_probes_do_not_coalesce_different_run_bindings(followup):
+    from dataclasses import replace
+
+    f = followup
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    later = replace(f.binding, run_token='synthetic-next', run_epoch=2)
+    f.projector.store.read.side_effect = lambda sid: (
+        f.jobs[sid],
+        {'projection': f.receipts[sid]},
+        later if sid == 'later' else f.binding,
+    )
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_persisted_sibling_unblocks_content_after_ready_probe_in_same_page(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    f.receipts['head']['state'] = 'ready'
+    completed = []
+
+    def complete(segment, binding):
+        if all(receipt['state'] == 'ready' for receipt in f.receipts.values()):
+            completed.append(segment)
+
+    f.projector.complete_content.side_effect = complete
+    f.projector.store.mark_enrichment.side_effect = lambda sid, *_args, **_kw: f.receipts[sid].update(state='ready')
+    await f.runner.schedule()
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    assert f.projector.complete_content.call_count == 2
+    assert completed == ['later']
 
 
 @pytest.mark.asyncio
@@ -284,6 +637,8 @@ async def test_followup_deadline_cancels_stuck_step_refills_and_retries_same_rec
     from utils.sync import bridge
 
     f = followup
+    # Kill-switch path: the timed-out row is rediscovered on the very next pass.
+    f.runner.backoff_ceiling, f.runner.seeded = 0, True
     f.binding = replace(f.binding, native_record=False)
     f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, f.binding)
     monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
@@ -475,3 +830,48 @@ async def test_split_rollover_followup_stores_playback_for_every_part(followup):
         None,
     )
     assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]
+
+
+@pytest.mark.asyncio
+async def test_source_deleted_followup_is_terminal_without_backoff_or_content_work(followup):
+    f = followup
+    f.receipts['head'].update(
+        state='ready',
+        disposition='source_deleted',
+        conversation_id=None,
+        audio_required=False,
+        enrichment_required=False,
+    )
+    f.projector.complete_content.return_value = {
+        'reason_code': 'source_deleted',
+        'new_memories': [],
+        'updated_memories': [],
+    }
+    f.runner.desync = True
+    f.runner.backoff['head'] = (float('inf'), 60)
+    counter = projection_followup.OUTCOMES.labels('source_deleted')._value.get()
+    await f.runner.run('head')
+    assert projection_followup.OUTCOMES.labels('source_deleted')._value.get() == counter + 1
+    assert 'head' not in f.runner.backoff
+    assert 'source_deleted' not in projection_followup.BACKOFF_OUTCOMES
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.load_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tail_handoff_waits_behind_discovery_and_reaches_complete_content(followup, monkeypatch):
+    f = followup
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    for receipt in f.receipts.values():
+        receipt['state'] = 'ready'
+    f.projector.followups = f.runner
+    f.projector.store.store.projection_pending.return_value = ['head']
+    f.projector.owe_followups(['later'])
+    f.projector.owe_followups(['later'])
+    assert f.projector.chain_followups == ['later']
+    await f.projector.start_followups()
+    while f.runner.tasks:
+        await asyncio.wait_for(asyncio.gather(*list(f.runner.tasks.values())), 2)
+    assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['head', 'later']
+    assert not f.runner.owed and not f.projector.chain_followups

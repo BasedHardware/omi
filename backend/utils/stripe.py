@@ -1,4 +1,6 @@
 import os
+import re
+from collections.abc import Mapping
 from typing import Any, Dict, Optional, cast
 from urllib.parse import urljoin
 
@@ -37,6 +39,143 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
+PROMOTION_ISSUANCE_METADATA_KEYS = (
+    'attribution_schema',
+    'attribution_source',
+    'shopify_shop',
+    'shopify_order_id',
+    'bundle_order_line_item_id',
+    'bundle_redemption_role',
+)
+PROMOTION_ATTRIBUTION_METADATA_KEYS = PROMOTION_ISSUANCE_METADATA_KEYS + ('bundle_promotion_code_id',)
+
+_PROMOTION_ID = re.compile(r'^promo_[A-Za-z0-9_-]{1,246}$')
+_SHOPIFY_SHOP = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$')
+_SHOPIFY_ORDER_ID = re.compile(r'^(?:[0-9]{1,32}|gid://shopify/Order/[0-9]{1,32})$')
+_SHOPIFY_LINE_ITEM_ID = re.compile(r'^(?:[0-9]{1,32}|gid://shopify/LineItem/[0-9]{1,32})$')
+
+
+def _object_dict(value: Any) -> Mapping[str, Any]:
+    if isinstance(value, Mapping):
+        return value
+    if hasattr(value, 'to_dict'):
+        converted = value.to_dict()
+        if isinstance(converted, Mapping):
+            return converted
+    return {}
+
+
+def _validated_issuance_metadata(metadata: Any) -> Optional[Dict[str, str]]:
+    """Return the complete issuer contract, or None for missing/invalid metadata."""
+    if not isinstance(metadata, Mapping) or not any(key in metadata for key in PROMOTION_ISSUANCE_METADATA_KEYS):
+        return None
+    values = {key: metadata.get(key) for key in PROMOTION_ISSUANCE_METADATA_KEYS}
+    if any(not isinstance(value, str) for value in values.values() if value is not None):
+        return None
+    if values['attribution_schema'] != '1' or values['attribution_source'] != 'shopify_bundle_code':
+        return None
+    if values['bundle_redemption_role'] not in ('self', 'gift', 'unknown'):
+        return None
+    if not _SHOPIFY_SHOP.fullmatch(values['shopify_shop'] or ''):
+        return None
+    if not _SHOPIFY_ORDER_ID.fullmatch(values['shopify_order_id'] or ''):
+        return None
+    line_item_id = values['bundle_order_line_item_id']
+    if line_item_id is not None and not _SHOPIFY_LINE_ITEM_ID.fullmatch(line_item_id):
+        return None
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def promotion_code_attribution(promotion_code: Any) -> Dict[str, str]:
+    """Validate optional, issuer-written Shopify provenance from a resolved PromotionCode.
+
+    No client fields, shared-coupon inference, or partially valid attribution are accepted. Invalid
+    or conflicting issuance metadata deliberately produces no attribution and never blocks billing.
+    """
+    promo = _object_dict(promotion_code)
+    promo_id = promo.get('id')
+    if not isinstance(promo_id, str) or not _PROMOTION_ID.fullmatch(promo_id):
+        return {}
+    # Only codes contractually constrained to one redemption are issuers of order
+    # evidence. A shared or reusable PromotionCode is not unique order provenance.
+    if isinstance(promo.get('max_redemptions'), bool) or promo.get('max_redemptions') != 1:
+        return {}
+    issuance = _validated_issuance_metadata(promo.get('metadata'))
+    if issuance is None:
+        return {}
+
+    promotion = promo.get('promotion')
+    coupon = promo.get('coupon') or (promotion.get('coupon') if isinstance(promotion, Mapping) else None)
+    coupon_metadata = coupon.get('metadata') if isinstance(coupon, Mapping) else None
+    if isinstance(coupon_metadata, Mapping) and any(key in coupon_metadata for key in PROMOTION_ISSUANCE_METADATA_KEYS):
+        # A shared Coupon is never a source of order provenance. If its issuer also
+        # stamps the full contract, it must agree exactly with the unique code.
+        if _validated_issuance_metadata(coupon_metadata) != issuance:
+            logger.warning('Ignoring conflicting promotion attribution metadata')
+            return {}
+    return {**issuance, 'bundle_promotion_code_id': promo_id}
+
+
+def checkout_promotion_code_ids(session: Any) -> list[str]:
+    """Extract only Stripe server-provided PromotionCode IDs from a completed Session."""
+    session_dict = _object_dict(session)
+    breakdown = (session_dict.get('total_details') or {}).get('breakdown') or {}
+    discounts = breakdown.get('discounts') or []
+    if not isinstance(discounts, list):
+        return []
+    promotion_ids = []
+    for entry in discounts:
+        discount = entry.get('discount') if isinstance(entry, Mapping) else None
+        promotion = discount.get('promotion_code') if isinstance(discount, Mapping) else None
+        if isinstance(promotion, str):
+            promotion_id = promotion
+        else:
+            promotion_id = _object_dict(promotion).get('id')
+        if (
+            isinstance(promotion_id, str)
+            and _PROMOTION_ID.fullmatch(promotion_id)
+            and promotion_id not in promotion_ids
+        ):
+            promotion_ids.append(promotion_id)
+    return promotion_ids
+
+
+def subscription_promotion_code_ids(subscription: Any) -> list[str]:
+    """Extract PromotionCode references from expanded Subscription discounts only."""
+    subscription_dict = _object_dict(subscription)
+    discounts = subscription_dict.get('discounts') or []
+    legacy_discount = subscription_dict.get('discount')
+    if legacy_discount:
+        discounts = [*discounts, legacy_discount]
+    promotion_ids = []
+    for discount in discounts:
+        promotion = discount.get('promotion_code') if isinstance(discount, Mapping) else None
+        if isinstance(promotion, str):
+            promotion_id = promotion
+        else:
+            promotion_id = _object_dict(promotion).get('id')
+        if (
+            isinstance(promotion_id, str)
+            and _PROMOTION_ID.fullmatch(promotion_id)
+            and promotion_id not in promotion_ids
+        ):
+            promotion_ids.append(promotion_id)
+    return promotion_ids
+
+
+def merge_promotion_attribution(
+    metadata: Optional[Mapping[str, Any]], attribution: Optional[Mapping[str, str]]
+) -> Dict[str, Any]:
+    """Merge deterministic provenance without ever replacing a conflicting historical order."""
+    merged = dict(metadata or {})
+    attribution = attribution or {}
+    if any(key in merged and merged[key] != value for key, value in attribution.items()):
+        logger.warning('Preserving conflicting existing subscription attribution')
+        return merged
+    merged.update(attribution)
+    return merged
+
+
 def create_subscription_checkout_session(
     uid: str,
     price_id: str,
@@ -44,6 +183,7 @@ def create_subscription_checkout_session(
     customer_id: Optional[str] = None,
     promotion_code_id: Optional[str] = None,
     trial_period_days: Optional[int] = None,
+    promotion_attribution: Optional[Mapping[str, str]] = None,
 ):
     """Create a Stripe Checkout session for a subscription.
 
@@ -53,6 +193,21 @@ def create_subscription_checkout_session(
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
         cancel_url = urljoin(base_url, 'v1/payments/cancel')  # type: ignore[reportArgumentType]  # base_url validated at runtime
+
+        # Pin the selected price's original currency as well as disabling FX.
+        # Multi-currency Prices can otherwise select a presentment currency by IP.
+        # Existing non-USD management/reactivation stays outside new Checkout.
+        price = stripe.Price.retrieve(price_id)
+        currency = price.currency.lower()
+
+        # Only the narrow, server-derived allowlist can cross this boundary. Authentication
+        # and plan ownership always win over attribution supplied by another internal caller.
+        attribution = {
+            key: promotion_attribution[key]
+            for key in PROMOTION_ATTRIBUTION_METADATA_KEYS
+            if promotion_attribution and key in promotion_attribution
+        }
+        metadata = {**attribution, 'uid': uid, 'sub_type': 'unlimited'}
 
         # session creation parameters
         session_params: Dict[str, Any] = {
@@ -65,18 +220,13 @@ def create_subscription_checkout_session(
                 },
             ],
             'mode': 'subscription',
+            'currency': currency,
+            # Language only; this does not choose or convert the currency.
+            'locale': 'auto',
             'success_url': success_url,
             'cancel_url': cancel_url,
-            'metadata': {
-                'uid': uid,
-                'sub_type': 'unlimited',
-            },
-            'subscription_data': {
-                'metadata': {
-                    'uid': uid,
-                    'sub_type': 'unlimited',
-                }
-            },
+            'metadata': dict(metadata),
+            'subscription_data': {'metadata': dict(metadata)},
             # Charge in the price's own currency, the one every paywall shows. With the
             # account's Adaptive Pricing on, a non-US buyer who saw a USD price card was
             # charged a converted local-currency amount; Google Play rejected Android
@@ -84,6 +234,11 @@ def create_subscription_checkout_session(
             # minimum_amount evaluated against the USD-authored price (issue #23299).
             'adaptive_pricing': {'enabled': False},
         }
+
+        if currency == 'usd':
+            # Stripe owns its currency glyphs. Keep USD explicit even where its
+            # hosted template uses a dollar glyph rather than the app's US$.
+            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
 
         if trial_period_days:
             session_params['subscription_data']['trial_period_days'] = trial_period_days

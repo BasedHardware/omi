@@ -26,6 +26,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => true;
 
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+
+  @override
   BtDevice? get connectedDevice => device;
 
   @override
@@ -44,7 +47,7 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
 
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
 
   @override
   Future<bool> findDevice() {

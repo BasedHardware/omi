@@ -1,3 +1,12 @@
+"""Plan entitlement policy: trial paywall, desktop access tiers, per-platform
+plan visibility, grandfathering, and the wire plan shapes clients decode.
+
+Plan definitions come only from config.plan_catalog (generated from
+config/plan_catalog.json; runtime never reads the JSON), and legacy-client
+adaptation keeps released apps decoding the catalog as it evolves
+(.github/agent-docs/plan-source-of-truth.md).
+"""
+
 from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
 from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
@@ -5,17 +14,14 @@ from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple, cast
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import HTTPException
-from firebase_admin import auth as firebase_auth
 import stripe
 from utils import screen_vector_entitlements
-from utils.observability.fallback import record_fallback
 
 import database.users as users_db
 import database.user_usage as user_usage_db
-from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
@@ -43,10 +49,6 @@ from config import ladder_v1 as ladder_policy
 from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
-
-
-def _get_user(uid: str) -> Any:
-    return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
 
 # Effective desktop tiers are used for Desktop-specific admission decisions.
@@ -100,17 +102,6 @@ def effective_desktop_access_tier(plan: PlanType, subscription: Optional[Subscri
     if plan_grants_desktop(plan, subscription):
         return DESKTOP_ACCESS_TIER_FULL
     return DESKTOP_ACCESS_TIER_FREE
-
-
-def desktop_trial_paywall_eligible(plan: PlanType, subscription: Optional[Subscription] = None) -> bool:
-    """Whether a plan can be blocked by the Desktop account-age trial paywall.
-
-    The account-age paywall is only for users on the Free tier. Neo is mapped
-    to the usable Free Desktop tier when it lacks full Desktop entitlement, but
-    it is still an active paid plan and must never be converted into zero audio,
-    chat, or realtime access.
-    """
-    return effective_desktop_access_tier(plan, subscription) == DESKTOP_ACCESS_TIER_FREE and plan not in PAID_PLAN_TYPES
 
 
 def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]:
@@ -182,43 +173,12 @@ def should_defer_desktop_processing(uid: str) -> bool:
         return False
 
 
-# Desktop-only 3-day trial paywall.
-#
-# Applies to desktop users without a desktop-entitled plan (basic OR Neo) once
-# their Firebase Auth account is older than TRIAL_LENGTH_SECONDS and they don't
-# have BYOK active. Mobile (ios / android), Omi devices, desktop-entitled plans
-# (Operator / Architect), BYOK users, and accounts inside the trial window are
-# exempt.
-TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
+# Released desktop clients decode this duration even though the trial never expires.
+TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60
 
-# Master switch for the desktop trial paywall. Default OFF: basic/Neo desktop users are
-# never locked out (no 402) AND the client never sees `trial_expired=True`, so the
-# "you've hit your monthly limit" upgrade popup does not fire just from account age — only
-# the actual chat-question quota (30/mo) gates them. The paywall is permanently off; the
-# paywalled branches below are retained pending removal. NOTE: this gate covers ONLY the
-# trial paywall — plan limits (Neo questions, data-intake caps) are untouched.
-TRIAL_PAYWALL_ENABLED = False
-
-# X-App-Platform header values that identify a desktop client. macOS and Windows
-# are the two desktop OSes; both get the desktop plan catalog, the desktop trial
-# paywall, and desktop entitlement treatment. This is the single source of truth
-# for "is this a desktop platform" — every desktop-vs-mobile gate below reads
-# from here so a new desktop OS is wired in one place.
+# Platform identifiers used for desktop plan catalogs and entitlement treatment.
 DESKTOP_PLATFORMS = {'macos', 'windows'}
-
-# Desktop typed chat consumes Anthropic BYOK, not an arbitrary enrolled LLM
-# key. Reporting and enforcement must project the same provider capability.
 DESKTOP_CHAT_BYOK_PROVIDER = 'anthropic'
-
-# Platform identifiers that count as desktop for paywall purposes. The desktop
-# clients send X-App-Platform: macos / windows and the listen WS uses
-# source=desktop. Anything else (ios, android, omi device, phone_call, unknown)
-# is exempt.
-_TRIAL_PAYWALL_DESKTOP_TOKENS = DESKTOP_PLATFORMS | {"desktop"}
-
-# Cache the (slow) Firebase Auth + Firestore lookup result for a few minutes
-# so chat-quota polling doesn't fan out to Firebase on every request.
-_TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
 
 
 def request_has_llm_byok_key() -> bool:
@@ -244,274 +204,14 @@ def request_has_byok_provider(provider: str) -> bool:
     return has_validated_byok_keys() and bool(get_byok_key(provider))
 
 
-def _is_trial_expired_uncached(
-    uid: str,
-    *,
-    firestore_client: Any | None = None,
-    provision: bool = True,
-    required_byok_provider: str | None = None,
-    byok_exempt: bool = True,
-    strict: bool = False,
-) -> bool:
-    """Is this user past their 3-day desktop trial?
-
-    The trial applies only to the Free Desktop tier. Neo may use that tier for
-    non-premium capabilities, but is paid and must never be reduced to zero
-    access. BYOK users are also bypassed unless ``byok_exempt`` is false for a
-    managed-credential surface. Returns False on any lookup error so a Firebase
-    blip never paywalls a paying user — unless ``strict``, the mode for a caller
-    that must fail closed (a billed socket): there, a lookup error or an
-    unreadable account record propagates, and a BYOK exemption needs a validated
-    key on this request, never a stored fingerprint alone.
-    """
-    try:
-        if byok_exempt and required_byok_provider and request_has_byok_provider(required_byok_provider):
-            return False
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        plan = subscription.plan if subscription else PlanType.basic
-        if not desktop_trial_paywall_eligible(plan, subscription):
-            return False
-        if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client):
-            if not required_byok_provider:
-                return False
-            # A stored fingerprint exempts ordinary callers; the strict caller
-            # already required the key on this request (checked first above).
-            if not strict:
-                fingerprints = users_db.get_byok_state(uid, firestore_client=firestore_client).get('fingerprints')
-                if isinstance(fingerprints, dict) and fingerprints.get(required_byok_provider):
-                    return False
-        user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
-        if not creation_ms:
-            if strict:
-                raise ValueError('account creation timestamp unavailable')
-            return False
-        age_seconds = time.time() - (creation_ms / 1000)
-        return age_seconds > TRIAL_LENGTH_SECONDS
-    except Exception as e:
-        if strict:
-            raise
-        logger.warning("trial paywall lookup failed for uid=%s: %s", uid, e)
-        return False
-
-
-def _is_trial_expired_cached(
-    uid: str,
-    *,
-    firestore_client: Any | None = None,
-    provision: bool = True,
-    required_byok_provider: str | None = None,
-    byok_exempt: bool = True,
-    strict: bool = False,
-) -> bool:
-    # Request-level escape hatch: a request carrying an enrolled LLM BYOK
-    # provider header is never paywalled, regardless of cached Firestore state.
-    # The cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
-    # so even a perfectly-configured BYOK user can transiently look stale to
-    # Firestore. Trust the live request.
-    if byok_exempt:
-        if required_byok_provider:
-            if request_has_byok_provider(required_byok_provider):
-                return False
-        elif _request_has_llm_byok_key():
-            return False
-
-    cache_key = (
-        f"trial_paywall:expired:{uid}:{required_byok_provider}"
-        if required_byok_provider
-        else f"trial_paywall:expired:{uid}"
-    )
-    if strict:
-        # Strict answers are computed under stricter rules (no fingerprint-only
-        # exemption, unreadable record is an error) and must never consume a
-        # False that an ordinary caller cached under the lenient ones.
-        cache_key = f"{cache_key}:strict"
-    if not byok_exempt:
-        # A managed-credential surface must not consume a permissive answer
-        # cached by a BYOK-funded surface for the same user.
-        cache_key = f"{cache_key}:managed"
-    cached = redis_db.get_generic_cache(cache_key)
-    if cached is not None:
-        # A cache entry may have been written before an entitlement correction
-        # or a plan migration. Revalidate a positive value so a paid Neo user
-        # is not left with a zero-access decision until this key's TTL expires.
-        if cached:
-            try:
-                subscription = users_db.get_user_valid_subscription(
-                    uid, firestore_client=firestore_client, provision=provision
-                )
-                plan = subscription.plan if subscription else PlanType.basic
-                if not desktop_trial_paywall_eligible(plan, subscription):
-                    clear_trial_paywall_cache(uid)
-                    record_fallback(
-                        component='other',
-                        from_mode='trial_paywall',
-                        to_mode=effective_desktop_access_tier(plan, subscription),
-                        reason='local_heal',
-                        outcome='recovered',
-                        log=logger,
-                    )
-                    return False
-            except Exception as e:
-                if strict:
-                    raise
-                # Match the uncached lookup's fail-open behavior. An
-                # entitlement lookup outage must not preserve a zero-access
-                # decision for a paid subscriber from stale cache state.
-                logger.warning("trial paywall cache revalidation failed for uid=%s: %s", uid, e)
-                record_fallback(
-                    component='other',
-                    from_mode='trial_paywall',
-                    to_mode='fail_open',
-                    reason='policy',
-                    outcome='degraded',
-                    log=logger,
-                )
-                return False
-        return bool(cached)
-    expired = _is_trial_expired_uncached(
-        uid,
-        firestore_client=firestore_client,
-        provision=provision,
-        required_byok_provider=required_byok_provider,
-        byok_exempt=byok_exempt,
-        strict=strict,
-    )
-    try:
-        redis_db.set_generic_cache(cache_key, expired, ttl=_TRIAL_PAYWALL_CACHE_TTL_SECONDS)
-    except Exception as e:
-        logger.debug("trial paywall cache set failed for uid=%s: %s", uid, e)
-    return expired
-
-
-def is_trial_paywalled(
-    uid: str,
-    platform: Optional[str],
-    *,
-    firestore_client: Any | None = None,
-    provision: bool = True,
-    required_byok_provider: str | None = None,
-    byok_exempt: bool = True,
-    strict: bool = False,
-) -> bool:
-    """True iff the request is from a desktop client AND the user has used
-    their full 3-day free trial without subscribing or an allowed BYOK exemption.
-
-    `platform` is the X-App-Platform header for HTTP requests or the
-    `source` query param for the listen WebSocket. Mobile (ios/android),
-    Omi devices, and any unknown/missing platform are never paywalled.
-
-    A lookup failure answers False (fail open: a Firebase blip never paywalls
-    a paying user) unless ``strict``, where it propagates to the caller, an
-    unreadable account record counts as a failure, and a BYOK exemption needs
-    a validated key on this request rather than a stored fingerprint.
-    ``byok_exempt=False`` makes BYOK irrelevant for surfaces that consume an Omi
-    managed credential.
-    """
-    if not TRIAL_PAYWALL_ENABLED:
-        return False  # trial paywall disabled — never block on account age
-    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
-        return False
-    return _is_trial_expired_cached(
-        uid,
-        firestore_client=firestore_client,
-        provision=provision,
-        required_byok_provider=required_byok_provider,
-        byok_exempt=byok_exempt,
-        strict=strict,
-    )
-
-
-def clear_trial_paywall_cache(uid: str) -> None:
-    # Every key `_is_trial_expired_cached` can write: the LLM providers, Deepgram
-    # (the transcription allowance's key) and that allowance's strict variant.
-    for provider in ("openrouter", "openai", "anthropic", "gemini", "deepgram"):
-        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}")
-        redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:{provider}:managed")
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict")
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:deepgram:strict:managed")
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}")
-    redis_db.delete_generic_cache(f"trial_paywall:expired:{uid}:managed")
-
-
 def get_trial_metadata(uid: str) -> TrialMetadata:
-    """Compute structured trial metadata for the given user.
-
-    Returns trial timing info regardless of platform — the client decides
-    whether to render the countdown UI. Paid-plan and BYOK users get
-    `trial_expired=False` with zeroed timing (trial is irrelevant to them).
-
-    This reuses the same Firebase Auth lookup path as `_is_trial_expired_uncached`
-    and benefits from the same Redis cache for the expensive bits.
-    """
-    try:
-        # Trial paywall disabled → there is no trial to expire. Report an always-active
-        # (non-expired) trial so the desktop client never renders the "trial expired /
-        # you've hit your monthly limit" upgrade popup from account age alone.
-        if not TRIAL_PAYWALL_ENABLED:
-            return TrialMetadata(
-                trial_expired=False,
-                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-                trial_features=TRIAL_FEATURES,
-                plan_after_trial=get_plan_display_name(PlanType.basic),
-            )
-
-        subscription = users_db.get_user_valid_subscription(uid)
-        plan = subscription.plan if subscription else PlanType.basic
-
-        # Any plan that is not eligible for the Free account-age trial, plus
-        # BYOK users, has usable Desktop access. In particular, Neo's Free
-        # Desktop tier is a floor, not a trial-only or zero-access state.
-        # Same request-level escape hatch as `_is_trial_expired_cached`: a request
-        # carrying an enrolled LLM BYOK provider header is treated as BYOK-active
-        # even if Firestore hasn't caught up yet.
-        if (
-            not desktop_trial_paywall_eligible(plan, subscription)
-            or users_db.is_byok_active(uid)
-            or _request_has_llm_byok_key()
-        ):
-            return TrialMetadata(
-                trial_expired=False,
-                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-                trial_features=TRIAL_FEATURES,
-                plan_after_trial=get_plan_display_name(PlanType.basic),
-            )
-
-        user_record = _get_user(uid)
-        creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
-        if not creation_ms:
-            # No creation timestamp — treat as active trial (fail-open).
-            return TrialMetadata(
-                trial_expired=False,
-                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-                trial_features=TRIAL_FEATURES,
-                plan_after_trial=get_plan_display_name(PlanType.basic),
-            )
-
-        creation_seconds = int(creation_ms / 1000)
-        trial_ends_at = creation_seconds + TRIAL_LENGTH_SECONDS
-        now = int(time.time())
-        remaining = max(0, trial_ends_at - now)
-        expired = remaining == 0
-
-        return TrialMetadata(
-            trial_started_at=creation_seconds,
-            trial_ends_at=trial_ends_at,
-            trial_remaining_seconds=remaining,
-            trial_expired=expired,
-            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-            trial_features=TRIAL_FEATURES,
-            plan_after_trial=get_plan_display_name(PlanType.basic),
-        )
-    except Exception as e:
-        logger.warning("get_trial_metadata failed for uid=%s: %s", uid, e)
-        # Fail-open: report as active trial so UI doesn't flash paywall.
-        return TrialMetadata(
-            trial_expired=False,
-            trial_duration_seconds=TRIAL_LENGTH_SECONDS,
-            trial_features=TRIAL_FEATURES,
-            plan_after_trial=get_plan_display_name(PlanType.basic),
-        )
+    """Retain the disabled trial's constant wire payload for released desktop clients."""
+    return TrialMetadata(
+        trial_expired=False,
+        trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+        trial_features=TRIAL_FEATURES,
+        plan_after_trial=get_plan_display_name(PlanType.basic),
+    )
 
 
 def is_paid_plan(plan: PlanType) -> bool:
@@ -581,7 +281,7 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
         {
             "plan_type": PlanType.unlimited_v2,
             "plan_id": "unlimited_v2",
-            "title": "Unlimited",
+            "title": "Omi Pro",
             "subtitle": "Unlimited transcription",
             "description": "Unlimited transcription — record all day.",
             "eyebrow": "Most popular",
@@ -1147,45 +847,10 @@ def get_chat_quota_snapshot(
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
 
-    `platform` (X-App-Platform header) gates the paywall test override — only
-    desktop callers can be paywalled; mobile callers fall through to the
-    real plan logic.
+    Platform is retained for callers; all platforms use the real plan quota.
     """
-    # Flagged quota display and admission share the same authority, including
-    # Free accounts whose older desktop trial status is exhausted.
-    enforcing = ladder_policy.budget_enforcement_enabled()
-    subscription = None
-    shared_budget = None
-    if enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
-
-    # Paywall test override — surface as exhausted Free-plan quota so the
-    # client renders the same over-limit popup it shows for normal users
-    # past 30/mo.
-    if shared_budget is None and is_trial_paywalled(
-        uid,
-        platform,
-        firestore_client=firestore_client,
-        provision=provision,
-        required_byok_provider=required_llm_provider,
-    ):
-        usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
-        free_chat_limit = _effective_chat_limit(PlanType.basic)
-        if free_chat_limit is None:
-            raise ValueError('basic.chat must declare a finite question allowance for trial paywalling')
-        return {
-            'plan': PlanType.basic,
-            'unit': 'questions',
-            'used': float(free_chat_limit),
-            'limit': float(free_chat_limit),
-            'allowed': False,
-            'reset_at': usage['reset_at'],
-        }
-
-    if not enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1275,36 +940,6 @@ def enforce_chat_quota(
         uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
     )
 
-    # Paywall test override — bypass BYOK + plan checks so the same 402
-    # surfaces that a free user past 30 questions would hit. Desktop only;
-    # mobile callers continue down the normal plan path.
-    if is_trial_paywalled(
-        uid,
-        platform,
-        firestore_client=firestore_client,
-        provision=provision,
-        required_byok_provider=required_llm_provider,
-    ):
-        snapshot = get_chat_quota_snapshot(
-            uid,
-            platform=platform,
-            firestore_client=firestore_client,
-            provision=provision,
-            required_llm_provider=required_llm_provider,
-        )
-        raise HTTPException(
-            status_code=402,
-            detail={
-                'error': 'quota_exceeded',
-                'plan': get_plan_display_name(PlanType.basic),
-                'plan_type': PlanType.basic.value,
-                'unit': snapshot['unit'],
-                'used': round(snapshot['used'], 4),
-                'limit': snapshot['limit'],
-                'reset_at': snapshot['reset_at'],
-            },
-        )
-
     # BYOK users pay their own LLM provider — no Omi-side cost to cap.
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
@@ -1363,33 +998,6 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok
         firestore_client=get_customer_firestore_client(),
         provision=False,
         required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
-        byok_exempt=byok_exempt,
-    )
-
-
-def is_desktop_trial_paywalled(
-    uid: str,
-    platform: Optional[str],
-    *,
-    required_byok_provider: str | None = None,
-    byok_exempt: bool = True,
-) -> bool:
-    """Desktop trial gate against the customer Firestore, never a compute-project shadow.
-
-    The decisions that need no Firestore run first: resolving the customer client
-    initializes credentials, so a disabled paywall or a non-desktop platform must
-    neither pay for that nor require ambient ADC to answer "not paywalled".
-    """
-    if not TRIAL_PAYWALL_ENABLED:
-        return False
-    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
-        return False
-    return is_trial_paywalled(
-        uid,
-        platform,
-        firestore_client=get_customer_firestore_client(),
-        provision=False,
-        required_byok_provider=required_byok_provider,
         byok_exempt=byok_exempt,
     )
 
@@ -1704,7 +1312,13 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     Returns:
         tuple: (can_pay: bool, reason: str)
     """
-    subscription = users_db.get_user_valid_subscription(uid)
+    from config.referral_campaign import campaign_enabled
+
+    subscription = (
+        users_db.get_user_valid_subscription(uid, provision=False, include_promotions=False)
+        if campaign_enabled()
+        else users_db.get_user_valid_subscription(uid)
+    )
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"
@@ -1894,52 +1508,32 @@ def resolve_transcription_allowance(
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
     ``source`` is the listen-WS ``source`` query param (``desktop``, ``omi``,
-    ``phone_call``, ...) or the HTTP ``X-App-Platform`` header. It gates only
-    the desktop trial paywall, so phone-call / Omi-device traffic for cohort
-    UIDs is unaffected.
+    ``phone_call``, ...) or the HTTP ``X-App-Platform`` header. It is retained
+    for callers; all sources use the same allowance authority.
 
     ``subscription`` / ``usage`` / ``byok_active`` let a caller that has
     already read the valid subscription (``None`` when there is none), the
     monthly usage and the BYOK enrolment pass them in, so the startup snapshot
-    and this answer come from the same reads. (The trial paywall keeps its own
-    cached reads; they are not shared.)
+    and this answer come from the same reads.
 
     Spend admission passes ``provision_subscription=False``: checking an
     allowance must not create a subscription or restore an erased user root.
 
-    Order: reviewer → paywall → BYOK → plan → unlimited → remaining. A
+    Order: reviewer → BYOK → plan → unlimited → remaining. A
     subscription the lookup calls invalid (an inactive basic account) has no
     managed minutes; an expired paid subscription is downgraded to a fresh
     basic one by that lookup and gets basic's minutes. Any dependency that
-    cannot be read — including the paywall's, which fails open for every
-    other caller — and any usage record that cannot be trusted, resolves to
+    cannot be read, and any usage record that cannot be trusted, resolves to
     the free local path rather than a billed socket.
     """
     known_limit_seconds: Optional[int] = 0
     try:
         # The reviewer identities the subscription snapshot already treats as
-        # unlimited; resolved first so the paywall cannot contradict that snapshot.
+        # unlimited in both the snapshot and admission.
         if is_marketplace_reviewer(uid):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
-        # The fixed non-human release-probe identity exercises the full terminal
-        # desktop path (utils/release_probe.py gate convention). Its Free-plan
-        # account never buys a plan or BYOK keys, so once live STT cap-dispatch
-        # admission covers the whole fleet the strict desktop trial paywall
-        # holds every probe packet and the pusher prod canary finalization
-        # probe times out with zero transcripts (run 40190728003). Resolved
-        # before the paywall for the same reason as marketplace reviewers.
         if uid == RELEASE_PROBE_UID:
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'release_probe', limit_seconds=None)
-        # A Deepgram BYOK request is exempt from the trial paywall, as it is
-        # from the quota: the user pays Deepgram directly. strict: a paywall
-        # lookup failure must not open a billed socket for a paywalled account,
-        # and only a validated key on this request (not a stored fingerprint)
-        # exempts.
-        paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
-        if not provision_subscription:
-            paywall_kwargs['provision'] = False
-        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
-            return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
         # BYOK with fake fingerprints and then omit x-byok-deepgram to ride Omi's key.
         if omi_funded:
@@ -2064,7 +1658,11 @@ def resolve_conversation_processing_allowance(
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
-        if byok_active and _request_has_llm_byok_key():
+        from utils.stt.allowance_watch import observe
+
+        customer_funded = bool(byok_active and _request_has_llm_byok_key())
+        observe(uid, 'processing', 'llm', customer_funded=customer_funded)
+        if customer_funded:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)
@@ -2153,7 +1751,7 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     """Managed transcription seconds left this month — a thin wrapper over the one resolver.
 
     ``None`` means unlimited (unlimited plans, BYOK, reviewers); ``0`` means
-    spent, inactive, paywalled or unresolvable. Used for the freemium switch to
+    spent, inactive or unresolvable. Used for the freemium switch to
     on-device transcription.
     """
     return resolve_transcription_allowance(uid, source).remaining_seconds
@@ -2164,10 +1762,13 @@ def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
     return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
 
 
-def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
+def reconcile_basic_plan_with_stripe(
+    uid: str, subscription: Subscription | None, *, stripe_snapshot: Optional[Dict[str, Any]] = None
+) -> Subscription | None:
     """
     If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
     active paid subscription, fix it once by reconciling with Stripe.
+    When requested, share the retrieved Stripe snapshot with the caller's recovery check.
     """
     if not subscription:
         return subscription
@@ -2189,6 +1790,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             stripe_sub_dict: Optional[Dict[str, Any]] = (
                 stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
             )
+            if stripe_snapshot is not None and stripe_sub_dict:
+                stripe_snapshot.update(stripe_sub_dict)
             if stripe_sub_dict:
                 items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
                 price_id: Optional[str] = None

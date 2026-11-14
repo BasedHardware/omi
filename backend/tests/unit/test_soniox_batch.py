@@ -102,7 +102,7 @@ def test_malformed_reply_never_counts_as_empty(payload):
 
 
 @pytest.mark.parametrize('failure', ['upload', 'create', 'poll', 'transcript'])
-def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, failure, caplog):
+def test_transient_refusal_is_bounded_content_free_and_cleans_known_resources(key, failure, caplog):
     calls = []
 
     def handler(request):
@@ -128,8 +128,10 @@ def test_failure_is_single_submit_content_free_and_cleans_known_resources(key, f
 
     with pytest.raises(module.SonioxBatchError, match='^soniox_batch_failed$'):
         module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
-    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) <= 1
-    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == 1
+    assert sum(m == 'POST' and p == '/v1/transcriptions' for m, p in calls) == (
+        0 if failure == 'upload' else 3 if failure == 'create' else 1
+    )
+    assert sum(m == 'POST' and p == '/v1/files' for m, p in calls) == (3 if failure == 'upload' else 1)
     if failure != 'upload':
         assert ('DELETE', f'/v1/files/{FILE}') in calls
     assert 'PRIVATE_SENTINEL' not in caplog.text
@@ -169,6 +171,31 @@ def test_missing_key_refuses_before_http(monkeypatch):
     factory.assert_not_called()
 
 
+@pytest.mark.parametrize('seconds', [0.5, 61, 7200])
+def test_second_chance_is_ship_on_and_separate_from_guarded_cap(key, monkeypatch, seconds):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    monkeypatch.delenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', raising=False)
+    assert module.authorization(seconds, second_chance=True)
+    with pytest.raises(module.SonioxBatchError):
+        module.authorization(seconds)
+
+
+@pytest.mark.parametrize('seconds', [0, -1, 7200.1, float('inf'), float('nan'), True])
+def test_second_chance_refuses_invalid_duration_before_http(key, seconds):
+    factory = Mock()
+    with pytest.raises(module.SonioxBatchError):
+        module.transcribe(b'synthetic', seconds, second_chance=True, client_factory=factory)
+    factory.assert_not_called()
+
+
+def test_second_chance_kill_switch_refuses_before_http(key, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'false')
+    factory = Mock()
+    with pytest.raises(module.SonioxBatchError):
+        module.transcribe(b'synthetic', 5, second_chance=True, client_factory=factory)
+    factory.assert_not_called()
+
+
 def test_provider_ids_cannot_escape_authenticated_path(key):
     calls = []
 
@@ -179,3 +206,42 @@ def test_provider_ids_cannot_escape_authenticated_path(key):
     with pytest.raises(module.SonioxBatchError):
         module.transcribe(b'synthetic', 5, client_factory=client(handler))
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('stage', ['upload', 'create', 'poll', 'transcript'])
+def test_prerecorded_failover_stops_at_first_rate_limit(key, stage):
+    calls = []
+
+    def handler(request):
+        if request.method == 'DELETE':
+            return httpx.Response(204)
+        operation = (
+            'upload'
+            if request.url.path == '/v1/files'
+            else (
+                'create'
+                if request.method == 'POST'
+                else 'transcript' if request.url.path.endswith('/transcript') else 'poll'
+            )
+        )
+        calls.append(operation)
+        if operation == stage:
+            return httpx.Response(429)
+        if operation == 'upload':
+            return httpx.Response(201, json={'id': FILE})
+        if operation == 'create':
+            return httpx.Response(201, json={'id': TRANSCRIPTION, 'status': 'queued'})
+        return httpx.Response(200, json={'status': 'completed'})
+
+    with pytest.raises(module.SonioxBatchError) as raised:
+        module.transcribe(
+            b'synthetic',
+            5,
+            language='en',
+            failover=True,
+            retry_rate_limits=False,
+            client_factory=client(handler),
+            sleep=lambda _: None,
+        )
+    assert raised.value.kind == 'rate_limited'
+    assert calls.count(stage) == 1

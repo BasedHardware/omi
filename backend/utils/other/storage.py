@@ -1,3 +1,12 @@
+"""GCS object storage: capture audio chunks with semaphored fan-out, speech
+profile samples, playback artifacts, and the per-user deletion sweep.
+
+The owner-scoped write gate is the one boundary that keeps every write under its
+owning user's prefix, and the local dev harness swaps in a filesystem adapter,
+so deployed code must not assume real bucket semantics
+(backend/utils/other/ARCHITECTURE.md).
+"""
+
 from utils.observability.sync_phases import sync_phase
 import datetime
 import hashlib
@@ -12,16 +21,24 @@ from itertools import chain
 from config import audio_archive
 from utils.other.audio_singleflight import coalesce_rebuild
 from utils.other.playback_cache import write_once, cached_manifest
+from utils.other.playback_identity import playback_manifest_recovery_enabled
 from config.repeat_work import playback_on_demand
 from utils.other.audio_archive_metrics import ARCHIVE_OBJECTS, ARCHIVE_BYTES, PCM_WRITES_AVOIDED
+from utils.other.audio_raw_read_metrics import log_failure
+from utils.other.pcm_frames import align_pcm16_frames
+from utils.other.audio_framed_projection import upload_projection
+from utils.other.audio_frame_table import has_frame_receipt, append_projection_entries
+from utils.other.audio_frame_playback import group_frame_jobs, read_frame_fragments
 from utils.other.raw_audio_read import (
     list_packs,
     read_pack,
     verified_pcm_paths,
     pcm_for_span,
+    pcm_for_projection,
     invalidate_pack_index,
-    uncovered_raw_packs,
+    finish_audio_listing,
     select_raw_pcm,
+    raw_chunks_for_listing,
 )
 from utils.other.raw_audio import provenance, filename_provenance, packet_provenance
 from pathlib import Path
@@ -43,10 +60,10 @@ from database.redis_db import (
 from database.legal_holds import external_write_fence, destructive_operation_gate
 from utils.other import audio_packs
 from database.account_deletion_operational_holds import delete_owner_bucket_prefix
-from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from database.audio_chunk_metadata import PRIVATE_CLOUD_EXTENSIONS, audio_chunk_entry
 from database.audio_timeline import (
     chunk_span,
     chunk_span_bounds,
@@ -56,23 +73,18 @@ from database.audio_timeline import (
     strip_extension as _strip_extension,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
+from utils.other.audio_chunk_replay import (
+    AudioChunkContentConflict,
+    RECONCILE_MAX_ATTEMPTS,
+    reconcile_committed_prefix,
+    frame_overlap_verifier,
+)
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db, conversation_tombstones
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-class AudioChunkContentConflict(ValueError):
-    """A v2 upload found different bytes at its content-addressed name.
-
-    Deterministic: retrying the same payload replays the same collision, so
-    the durable projection treats it as terminal instead of transient. Other
-    upload failures (including wrapped probe/read errors raised as plain
-    ``ValueError``) stay retryable.
-    """
 
 
 # Per-request fan-out limits for storage_executor (#7387)
@@ -96,7 +108,6 @@ OPUS_FRAME_SIZE = audio_opus.OPUS_FRAME_SIZE
 opuslib = audio_opus.opuslib
 
 # Valid private cloud sync extensions (longest first for correct matching)
-PRIVATE_CLOUD_EXTENSIONS = ['.batch.enc', '.batch.bin', '.opus.enc', '.opus', '.enc', '.bin']
 
 storage_client = None
 _storage_client_lock = threading.Lock()
@@ -878,7 +889,19 @@ def reconcile_audio_chunk_prefix(
         require_spans=require_spans,
         bucket=get_private_cloud_sync_bucket(),
         list_chunks=list_audio_chunks,
+        bucket_for=chunk_source_bucket,
     )
+
+
+def chunk_source_bucket(name: Optional[str]) -> Any:
+    """Bucket holding a listed chunk: entries without a ``bucket`` key live in the private bucket."""
+    return _get_storage_client().bucket(name or private_cloud_sync_bucket)
+
+
+def _chunk_bucket_names(primary: str) -> List[str]:
+    """``primary`` first, then every other bucket a chunk path can live in."""
+    others = (private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip())
+    return [primary, *dict.fromkeys(name for name in others if name and name != primary)]
 
 
 def upload_audio_chunks_batch(
@@ -943,13 +966,34 @@ def upload_audio_chunks_batch(
         data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
     )
 
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    private_bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    bucket_name = audio_archive.regional_chunk_bucket(uid, private_cloud_sync_bucket)
+    bucket = private_bucket if bucket_name == private_cloud_sync_bucket else _get_storage_client().bucket(bucket_name)
+
+    if all(chunk.get('custody_receipt') for chunk in sorted_chunks):
+        return upload_projection(
+            bucket,
+            private_bucket,
+            uid,
+            conversation_id,
+            sorted_chunks,
+            protection_level,
+            sample_rate,
+            owner_storage_write_gate,
+            archive_capture=None,
+            verify_overlap=(
+                frame_overlap_verifier(
+                    uid, conversation_id, sample_rate, private_bucket, list_audio_chunks, _get_storage_client().bucket
+                )
+                if reconcile_prefix
+                else None
+            ),
+        )
 
     if audio_archive.admitted(uid, 'STOP_PCM') and audio_archive.admitted(uid, 'READ'):
         try:
-            raw_paths = verified_pcm_paths(bucket, uid, conversation_id, sorted_chunks, sample_rate)
+            raw_paths = verified_pcm_paths(private_bucket, uid, conversation_id, sorted_chunks, sample_rate)
             if raw_paths:
-                _archive_pusher_capture(sorted_chunks, uid, conversation_id, protection_level, sample_rate)
                 PCM_WRITES_AVOIDED.inc()
                 return raw_paths
         except Exception:
@@ -981,7 +1025,6 @@ def upload_audio_chunks_batch(
                 uid, conversation_id, first_ts, payload, rate, require_spans=True
             )
             if verified >= len(payload):
-                _archive_pusher_capture(chunks, uid, conversation_id, protection_level, sample_rate)
                 return committed_paths + proven
             if verified > 0:
                 committed_paths += proven
@@ -1008,17 +1051,23 @@ def upload_audio_chunks_batch(
                 if span is not None:
                     payload = b''.join(chunk['data'] for chunk in sorted_chunks)
                     payload_digest = hashlib.sha256(payload)
-                    try:
-                        exists = blob.exists()
-                    except Exception as error:
-                        # A probe that errors cannot prove the object absent; treat it
-                        # exactly like an existing blob we cannot read — fail closed
-                        # rather than open the blob for write over unknown bytes.
-                        raise ValueError(f'v2 audio blob existence check failed at {path}') from error
-                    if exists:
-                        identical = False
+                    # The same key may already be committed in the other chunk
+                    # bucket (a replay across a regional ramp step): readers
+                    # resolve one object per path, so check every bucket.
+                    committed = False
+                    for candidate in _chunk_bucket_names(bucket_name):
+                        probe = blob if candidate == bucket_name else _get_storage_client().bucket(candidate).blob(path)
                         try:
-                            existing_bytes = blob.download_as_bytes()
+                            exists = probe.exists()
+                        except Exception as error:
+                            # A probe that errors cannot prove the object absent; treat it
+                            # exactly like an existing blob we cannot read — fail closed
+                            # rather than open the blob for write over unknown bytes.
+                            raise ValueError(f'v2 audio blob existence check failed at {path}') from error
+                        if not exists:
+                            continue
+                        try:
+                            existing_bytes = probe.download_as_bytes()
                             existing_plain = (
                                 encryption.decrypt_audio_file(existing_bytes, uid)
                                 if protection_level == 'enhanced'
@@ -1032,11 +1081,14 @@ def upload_audio_chunks_batch(
                             # An existing blob we cannot read cannot be proven
                             # identical; fail closed rather than overwrite it.
                             raise ValueError(f'v2 audio blob collision at {path}: existing blob unreadable') from error
-                        if identical:
-                            # Identical retry: never overwrite or double-write.
-                            # Exit the playback gate before the optional archive.
-                            break
-                        raise AudioChunkContentConflict(f'v2 audio blob content conflict at {path}')
+                        if not identical:
+                            raise AudioChunkContentConflict(f'v2 audio blob content conflict at {path}')
+                        # Keep scanning: a divergent copy in another bucket must still conflict.
+                        committed = True
+                    if committed:
+                        # Identical retry: never overwrite or double-write.
+                        # Exit the playback gate before the optional archive.
+                        break
                     blob.metadata = {
                         **(blob.metadata or {}),
                         **span_blob_metadata(span),
@@ -1061,8 +1113,6 @@ def upload_audio_chunks_batch(
                 raise
             continue
         break
-
-    _archive_pusher_capture(chunks, uid, conversation_id, protection_level, sample_rate)
     return committed_paths + [path]
 
 
@@ -1070,9 +1120,14 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
     """Delete audio chunks after they've been merged.
 
     Handles both single-chunk blobs (per-timestamp lookup) and batch blobs
-    (listed and matched by start timestamp).
+    (listed and matched by start timestamp). Sweeps every chunk bucket: a
+    regional-cohort owner's batches live in BUCKET_AUDIO_DERIVED.
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    for name in _chunk_bucket_names(private_cloud_sync_bucket):
+        _delete_audio_chunks_in(_get_storage_client().bucket(name), uid, conversation_id, timestamps)
+
+
+def _delete_audio_chunks_in(bucket: Any, uid: str, conversation_id: str, timestamps: List[float]) -> None:
     deleted_batch_paths: set[str] = set()
 
     for timestamp in timestamps:
@@ -1124,14 +1179,20 @@ def list_audio_chunks(
     max_count: Optional[int] = None,
     source_identity: bool = False,
     require_archive: bool = False,
+    include_raw: bool = False,
+    include_archive: bool = True,
+    client: Any = None,
+    source_metadata: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    List all audio chunks for a conversation. ``require_archive``: a failed raw-archive listing raises.
+    List conversation chunks; ``include_archive=False`` selects encoded inventory only.
+    ``require_archive``: a failed raw-archive listing raises.
 
     Returns:
         List of dicts with chunk info: {'timestamp': float, 'path': str, 'size': int}
     """
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    client = _get_storage_client() if client is None else client
+    bucket = client.bucket(private_cloud_sync_bucket)
     prefix = f'chunks/{uid}/{conversation_id}/'
     blobs = (
         bucket.list_blobs(prefix=prefix)
@@ -1141,7 +1202,7 @@ def list_audio_chunks(
 
     regional = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
     if regional and regional != private_cloud_sync_bucket:
-        derived_bucket = _get_storage_client().bucket(regional)
+        derived_bucket = client.bucket(regional)
         derived_blobs = (
             derived_bucket.list_blobs(prefix=prefix)
             if timeout is None
@@ -1155,64 +1216,30 @@ def list_audio_chunks(
             raise TimeoutError('speaker audio listing budget exhausted')
         if deadline is not None and (time.monotonic() >= deadline or index >= 10000):
             raise TimeoutError('speaker audio listing budget exhausted')
-        # Extract timestamp from filename
-        # Supports single-chunk: '1234567890.123.opus', '1234567890.123.opus.enc', etc.
-        # Supports batch: '1234567890.123-1234567900.123.batch.bin', '1234567890.123.batch.enc'
-        filename = blob.name.split('/')[-1]
-        has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
-        if has_valid_ext:
-            try:
-                timestamp_str = _strip_extension(filename)
-                is_batch = '.batch.' in filename
-
-                if is_batch and '-' in timestamp_str:
-                    # Batch blob with timestamp range: "first_ts-last_ts"
-                    first_ts_str, _ = timestamp_str.split('-', 1)
-                    timestamp = float(first_ts_str)
-                else:
-                    timestamp = float(timestamp_str)
-
-                chunk_entry = {
-                    'timestamp': timestamp,
-                    'path': blob.name,
-                    'size': blob.size,
-                    'is_batch': is_batch,
-                    'generation': getattr(blob, 'generation', None),
-                }
-                if source_identity or playback_on_demand():
-                    chunk_entry['md5_hash'] = getattr(blob, 'md5_hash', None)
-                    chunk_entry['crc32c'] = getattr(blob, 'crc32c', None)
-                blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
-                if blob_bucket != private_cloud_sync_bucket:
-                    chunk_entry['bucket'] = blob_bucket
-                span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
-                if span is not None:
-                    chunk_entry['span'] = span
-                chunks.append(chunk_entry)
-            except ValueError:
-                continue
+        entry = audio_chunk_entry(blob, source_identity=source_identity, primary_bucket=private_cloud_sync_bucket)
+        if entry is not None:
+            if source_metadata and hasattr(blob, 'metadata'):
+                entry['metadata'] = blob.metadata or {}
+                entry['metageneration'] = getattr(blob, 'metageneration', None)
+            append_projection_entries(chunks, bucket, blob, uid, entry, deadline, max_count, include_raw)
 
     if regional and regional != private_cloud_sync_bucket:
-        chunks = list({item['path']: item for item in chunks}.values())
-    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
-        try:
-            packs = list_packs(bucket, uid, conversation_id)
-            raw_chunks = uncovered_raw_packs(packs, chunks)
-            if raw_chunks:
-                for chunk in chunks:
-                    span = chunk.get('span')
-                    if span and span['start'] != chunk['timestamp']:
-                        # A rounded filename cannot identify sample-precision
-                        # raw fragments and a projected source at the same key.
-                        # Retain the old key only as a compatibility alias.
-                        chunk['legacy_timestamp'] = chunk['timestamp']
-                        chunk['timestamp'] = span['start']
-            chunks.extend(raw_chunks)
-        except Exception:
-            if require_archive:
-                raise
-            logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
-    return sorted(chunks, key=lambda x: x['timestamp'])
+        chunks = list({(item['path'], item.get('raw_offset_samples')): item for item in chunks}.values())
+    raw_chunks = raw_chunks_for_listing(
+        bucket,
+        uid,
+        conversation_id,
+        chunks,
+        include_raw=include_raw,
+        enabled=include_raw
+        or (include_archive and audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None),
+        timeout=timeout,
+        deadline=deadline,
+        max_count=max_count,
+        require_archive=require_archive,
+        list_raw=list_packs,
+    )
+    return finish_audio_listing(chunks, raw_chunks, source_identity)
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
@@ -1243,36 +1270,6 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
         invalidate_pack_index(bucket, uid, conversation_id)
 
 
-# PCM16 mono: one sample is 2 bytes. A chunk whose byte count is not a multiple
-# of this is truncated mid-sample.
-_PCM16_FRAME_BYTES = 2
-
-
-def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
-    """Drop a trailing partial PCM16 sample so decoded chunks stay frame-aligned.
-
-    A chunk stored truncated mid-sample (interrupted upload) makes every later
-    chunk in the merge byte-misaligned and leaves the merged buffer an odd byte
-    count, which pydub rejects with a deterministic ValueError. The audio-merge
-    Cloud Task retried that unretryable error to exhaustion and then marked
-    playback permanently unavailable, losing the artifact for the conversation.
-    Trimming the partial sample costs 1/32000s and keeps the merge buildable.
-    """
-    remainder = len(pcm_data) % _PCM16_FRAME_BYTES
-    if not remainder:
-        return pcm_data
-    record_fallback(
-        component='audio_merge',
-        from_mode='pcm16_frames',
-        to_mode='pcm16_frames_truncated',
-        reason='malformed_doc',
-        outcome='recovered',
-        log=logger,
-    )
-    logger.warning(f'audio chunk not PCM16 frame-aligned, trimming {remainder} trailing byte(s): {source}')
-    return pcm_data[:-remainder]
-
-
 def download_and_decode_chunk_blob(
     bucket: Any,
     path: str,
@@ -1297,12 +1294,21 @@ def download_and_decode_chunk_blob(
             blob = bucket.blob(path)
             blob.reload(**(download_kwargs or {}))
             span = parse_span_blob_metadata(blob.metadata)
-            raw_pcm = pcm_for_span(
-                _get_storage_client().bucket(private_cloud_sync_bucket),
-                uid,
-                path.split('/')[2],
-                span,
-                expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+            raw_pcm = (
+                pcm_for_projection(
+                    _get_storage_client().bucket(private_cloud_sync_bucket),
+                    uid,
+                    blob.metadata,
+                    sample_rate,
+                )
+                if has_frame_receipt(blob)
+                else pcm_for_span(
+                    _get_storage_client().bucket(private_cloud_sync_bucket),
+                    uid,
+                    path.split('/')[2],
+                    span,
+                    expected_sha256=(blob.metadata or {}).get('pcm_sha256'),
+                )
             )
             if raw_pcm is not None:
                 return raw_pcm
@@ -1322,7 +1328,12 @@ def download_and_decode_chunk_blob(
         chunk_data = bucket.blob(path).download_as_bytes(**(download_kwargs or {}))
     except NotFound:
         regional = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
-        if regional and path.startswith(f'chunks/{uid}/') and getattr(bucket, 'name', None) != regional:
+        if (
+            regional
+            and not (download_kwargs or {}).get('if_generation_match')
+            and path.startswith(f'chunks/{uid}/')
+            and getattr(bucket, 'name', None) != regional
+        ):
             return download_and_decode_chunk_blob(
                 _get_storage_client().bucket(regional),
                 path,
@@ -1335,23 +1346,17 @@ def download_and_decode_chunk_blob(
             on_failure('missing_blob')
         return None
 
+    failure_result = 'decrypt_error' if encrypted else 'decode_error'
     try:
-        if encrypted:
-            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-        else:
-            raw_data = chunk_data
-
-        if is_opus:
-            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-            del raw_data
-        else:
-            pcm_data = raw_data
-
-        return _align_pcm16_frames(pcm_data, path)
-    except Exception as e:
+        raw_data = encryption.decrypt_audio_file(chunk_data, uid) if encrypted else chunk_data
+        failure_result = 'decode_error'
+        pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate) if is_opus else raw_data
+        del raw_data
+        return align_pcm16_frames(pcm_data, path)
+    except Exception:
         if on_failure:
             on_failure('decode_failed')
-        logger.warning(f"Failed to decode/decrypt {path}: {e}")
+        log_failure(failure_result, 'opus' if is_opus else 'pcm16')
         return None
 
 
@@ -1370,6 +1375,7 @@ def download_audio_chunks_and_merge(
     *,
     listed_chunks: Optional[List[Dict[str, Any]]] = None,
     chunk_loader: Optional[Callable[[str], bytes | None]] = None,
+    strict_sources: bool = False,
 ) -> bytes:
     """Merge selected timestamps with main's format priority and gap semantics.
 
@@ -1380,6 +1386,10 @@ def download_audio_chunks_and_merge(
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
     actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
+    if strict_sources and (
+        listed_chunks is None or chunk_loader is not None or any(not c.get('generation') for c in actual_chunks)
+    ):
+        raise ValueError('strict playback requires generation-stamped sources')
 
     requested = set(timestamps)
     aliases = {
@@ -1389,7 +1399,9 @@ def download_audio_chunks_and_merge(
     }
     timestamps = [aliases.get(timestamp, timestamp) for timestamp in timestamps]
     raw_by_timestamp = {
-        chunk['timestamp']: chunk for chunk in actual_chunks if chunk['path'].startswith(f'raw-live/{uid}/')
+        chunk['timestamp']: chunk
+        for chunk in actual_chunks
+        if chunk['path'].startswith(f'raw-live/{uid}/') or 'raw_offset_samples' in chunk
     }
 
     batch_paths: Dict[str, Dict[str, Any]] = {}
@@ -1422,7 +1434,13 @@ def download_audio_chunks_and_merge(
             return chunk_loader(path)
         entry = next((item for item in actual_chunks if item['path'] == path), {})
         source = _get_storage_client().bucket(entry['bucket']) if entry.get('bucket') else bucket
-        return download_and_decode_chunk_blob(source, path, uid, sample_rate)
+        return download_and_decode_chunk_blob(
+            source,
+            path,
+            uid,
+            sample_rate,
+            download_kwargs={'if_generation_match': entry['generation']} if strict_sources else None,
+        )
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""
@@ -1433,49 +1451,33 @@ def download_audio_chunks_and_merge(
         formatted_timestamp = f'{timestamp:.3f}'
 
         extensions_to_try = [
-            ('opus.enc', True, True),  # (ext, encrypted, opus)
-            ('enc', True, False),
-            ('opus', False, True),
-            ('bin', False, False),
+            'opus.enc',
+            'enc',
+            'opus',
+            'bin',
         ]
 
-        for ext, encrypted, opus in extensions_to_try:
+        for ext in extensions_to_try:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             entry = next((item for item in actual_chunks if item['path'] == chunk_path), {})
-            source = _get_storage_client().bucket(entry['bucket']) if entry.get('bucket') else bucket
-            if chunk_loader is not None:
-                pcm_data = chunk_loader(chunk_path)
-                if pcm_data is not None:
-                    return timestamp, pcm_data
+            if strict_sources and entry and entry['timestamp'] != timestamp:
+                entry = {}
+            # A stamped or gap-fill (.6f) path need not round-trip through the sample clock.
+            entry = entry or next(
+                (
+                    item
+                    for item in actual_chunks
+                    if item['timestamp'] == timestamp
+                    and not item.get('is_batch')
+                    and _get_extension_for_path(item['path']) == ext
+                ),
+                {},
+            )
+            if strict_sources and not entry:
                 continue
-            if audio_archive.admitted(uid, 'READ'):
-                raw_pcm = download_and_decode_chunk_blob(source, chunk_path, uid, sample_rate)
-                if raw_pcm is not None:
-                    return timestamp, raw_pcm
-                continue
-            try:
-                chunk_data = source.blob(chunk_path).download_as_bytes()
-            except NotFound:
-                continue
-
-            try:
-                if encrypted:
-                    raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-                else:
-                    raw_data = chunk_data
-
-                if opus:
-                    pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                    del raw_data
-                else:
-                    pcm_data = raw_data
-
-                return (timestamp, _align_pcm16_frames(pcm_data, chunk_path))
-            except Exception as e:
-                logger.warning(
-                    f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
-                )
-                continue
+            pcm_data = _download_and_decode_blob(entry.get('path', chunk_path))
+            if pcm_data is not None:
+                return timestamp, pcm_data
 
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
@@ -1483,10 +1485,20 @@ def download_audio_chunks_and_merge(
     chunk_results: Dict[float, bytes] = {}
 
     individual_timestamps = [ts for ts in timestamps if ts in raw_by_timestamp or round(ts, 3) not in ts_to_batch_path]
+    individual_timestamps, frame_groups = group_frame_jobs(individual_timestamps, raw_by_timestamp)
     unique_batch_paths = list(set(ts_to_batch_path.values()))
 
     # Build unified job list: ('individual', ts) or ('batch', path)
-    jobs = [('individual', ts) for ts in individual_timestamps] + [('batch', p) for p in unique_batch_paths]
+    jobs = (
+        [('individual', ts) for ts in individual_timestamps]
+        + [('batch', p) for p in unique_batch_paths]
+        + [('framed', p) for p in frame_groups]
+    )
+
+    def download_stored_chunk(path):
+        if path in frame_groups:
+            return read_frame_fragments(path, frame_groups[path], sample_rate, _download_and_decode_blob)
+        return _download_and_decode_blob(path)
 
     def _submit_job(job: Tuple[str, Any]) -> Tuple[Any, str, Any]:
         kind, key = job
@@ -1498,7 +1510,7 @@ def download_audio_chunks_and_merge(
             if kind == 'individual':
                 f = storage_executor.submit(download_single_chunk, key)
             else:
-                f = storage_executor.submit(_download_and_decode_blob, key)
+                f = storage_executor.submit(download_stored_chunk, key)
             if chunk_loader is None:
                 f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
             return (f, kind, key)
@@ -1509,6 +1521,7 @@ def download_audio_chunks_and_merge(
 
     # Sliding window: at most _CHUNK_WINDOW_SIZE in-flight per call
     pending: Dict[Any, Tuple[Any, str, Any]] = {}
+    failed_download = False
     job_iter = iter(jobs)
     for job in job_iter:
         finfo = _submit_job(job)
@@ -1521,23 +1534,40 @@ def download_audio_chunks_and_merge(
         for future in done:
             _, kind, key = pending.pop(future)
             try:
-                if kind == 'individual':
+                if kind == 'framed':
+                    fragments = future.result()
+                    if fragments is None:
+                        failed_download = True
+                    else:
+                        chunk_results.update(fragments)
+                elif kind == 'individual':
                     timestamp, pcm_data = future.result()
                     if pcm_data is not None:
                         chunk_results[timestamp] = pcm_data
+                    else:
+                        failed_download = True
                 else:
                     pcm_data = future.result()
                     if pcm_data is not None:
                         batch_info = batch_paths[key]
                         chunk_results[batch_info['timestamp']] = pcm_data
+                    else:
+                        failed_download = True
             except Exception as e:
-                logger.warning(f"Chunk download failed ({kind}={key}): {e}")
+                failed_download = True
+                if kind == 'framed':
+                    log_failure('other')
+                else:
+                    logger.warning(f"Chunk download failed ({kind}={key}): {e}")
 
         for job in job_iter:
             finfo = _submit_job(job)
             pending[finfo[0]] = finfo
             if len(pending) >= _CHUNK_WINDOW_SIZE:
                 break
+
+    if strict_sources and failed_download:
+        raise RuntimeError('stamped playback source could not be read')
 
     # Merge chunks
     merged_data = bytearray()
@@ -1901,6 +1931,36 @@ def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) 
     return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
 
 
+def get_playback_failure_retry_epoch(
+    uid: str, conversation_id: str, audio_file_id: str | None = None, *, fingerprint: str | None = None
+) -> str | None:
+    """Allow an accessed failed merge one new task per marker generation.
+
+    Permanent missing/empty/source-changed verdicts stay terminal. A failed
+    retry writes a fresh marker and waits another 15 minutes, rather than
+    creating a task on every client poll or waiting for the 30-day lifecycle.
+    No marker or audio object is deleted. The marker's GCS generation also
+    escapes Cloud Tasks' tombstone for the original task name.
+    """
+    if not playback_manifest_recovery_enabled():
+        return None
+    blob = (
+        _playback_unavailable_blob(uid, conversation_id, audio_file_id)
+        if audio_file_id is not None
+        else _conversation_playback_unavailable_blob(uid, conversation_id)
+    )
+    try:
+        blob.reload()
+        updated = blob.updated
+        if not isinstance(updated, datetime.datetime) or time.time() - updated.timestamp() < 900 or not blob.generation:
+            return None
+        content = blob.download_as_bytes(if_generation_match=blob.generation).decode()
+    except (BlobNotFound, PreconditionFailed, UnicodeDecodeError):
+        return None
+    expected = f'{fingerprint}:merge_failed' if audio_file_id is None else 'merge_failed'
+    return f'mf{blob.generation}' if content == expected else None
+
+
 def enqueue_conversation_audio_merge(
     uid: str, conversation_id: str, audio_files: List[Dict[str, Any]], caller: str, *, playback_epoch: str | None = None
 ) -> None:
@@ -1926,6 +1986,7 @@ def enqueue_conversation_audio_merge(
                     'timestamps': timestamps,
                     **({'source_fingerprint': af['source_fingerprint']} if af.get('source_fingerprint') else {}),
                     'caller': caller,
+                    **({'recovery_epoch': af['_playback_retry_epoch']} if af.get('_playback_retry_epoch') else {}),
                     **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
                     **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
                 }
@@ -2038,7 +2099,13 @@ def get_conversation_playback_unavailable_fingerprint(uid: str, conversation_id:
 
 
 def enqueue_conversation_artifact_build(
-    uid: str, conversation_id: str, fingerprint: str, caller: str, *, playback_epoch: str | None = None
+    uid: str,
+    conversation_id: str,
+    fingerprint: str,
+    caller: str,
+    *,
+    playback_epoch: str | None = None,
+    recovery_epoch: str | None = None,
 ) -> None:
     """Enqueue the conversation-level artifact build (named-task deduped on the
     fingerprint). Failures are swallowed: the next /urls poll re-enqueues."""
@@ -2052,6 +2119,7 @@ def enqueue_conversation_artifact_build(
                 'conversation_id': conversation_id,
                 'fingerprint': fingerprint,
                 'caller': caller,
+                **({'recovery_epoch': recovery_epoch} if recovery_epoch else {}),
                 **({'playback_epoch': playback_epoch} if playback_epoch and not playback_on_demand() else {}),
                 **({'on_demand': True, 'requested_at': time.time()} if playback_on_demand() else {}),
             }
@@ -2450,6 +2518,7 @@ def archive_capture_bytes(
     metadata: Dict[str, Any],
     *,
     data_protection_level: Optional[str] = None,
+    manifest_identity: Optional[str] = None,
 ) -> str:
     """Shared canonical writer: plaintext identity, owner fencing, unchanged payload."""
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
@@ -2458,7 +2527,9 @@ def archive_capture_bytes(
     encrypted = protection == 'enhanced'
     payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
     suffix = '.enc' if encrypted else ''
-    path = f'{prefix}/{uid}/{name}/{digest}.bin{suffix}'
+    if manifest_identity is not None and (prefix != 'audio-outbox' or len(manifest_identity) != 64):
+        raise ValueError('invalid deterministic manifest identity')
+    path = f'{prefix}/{uid}/{name}/{manifest_identity or digest}.bin{suffix}'
     blob = bucket.blob(path)
     blob.metadata = provenance(raw, {**metadata, 'encrypted': str(encrypted).lower()})
     custody_conversation = (
@@ -2541,44 +2612,7 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optiona
                 data_protection_level=protection,
             )
         )
-        if mobile:
-            _archive_mobile_capture_forward(uid, path, raw, protection)
     return archived
-
-
-def _archive_mobile_capture_forward(uid: str, path: str, raw: bytes, protection: str | None) -> None:
-    """Preserve main's optional owner-pack archive after the primary commit."""
-    if not audio_packs.enabled():
-        return
-    try:
-        digest = hashlib.sha256(raw).hexdigest()
-        encrypted = protection == 'enhanced'
-        payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
-        canonical = get_canonical_audio_bucket()
-        with owner_storage_write_gate(uid, canonical):
-            audio_packs.archive_capture(
-                canonical,
-                uid,
-                payload,
-                format='encrypted-omi-wal-uint32le-opus-v1' if encrypted else 'omi-wal-uint32le-opus-v1',
-                provenance={
-                    'capture_day': datetime.datetime.fromtimestamp(
-                        parse_sync_filename_timestamp(path), datetime.timezone.utc
-                    )
-                    .date()
-                    .isoformat(),
-                    'capture_start': parse_sync_filename_timestamp(path),
-                    'producer': 'raw-mobile-batch',
-                    'filename': Path(path).name,
-                    'encrypted': encrypted,
-                    'plaintext_sha256': digest,
-                },
-                conversation_ranges=[],
-                identity=f'{Path(path).name}:{digest}',
-            )
-    except Exception:
-        logger.exception('optional canonical mobile archive failed')
-        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
 def link_archive_captures(uid: str, paths: List[str], conversation_ids: List[str]) -> None:
@@ -2636,49 +2670,6 @@ def get_canonical_audio_bucket() -> Any:
             raise RuntimeError('canonical archive requires soft delete off')
         _canonical_bucket_cache = (client, name, time.monotonic() + 300, bucket)
         return bucket
-
-
-def _archive_pusher_capture(chunks, uid, conversation_id, protection_level, sample_rate) -> None:
-    """Optional forward archive; primary playback is already durably committed."""
-    if not audio_packs.enabled():
-        return
-    try:
-        # Archive the PCM bytes supplied by pusher, before further renditions.
-        # This is today's desktop/pendant server intake, not device Opus.
-        raw = b''.join(c['data'] for c in sorted(chunks, key=lambda c: c['timestamp']))
-        protection = protection_level
-        encrypted = protection == 'enhanced'
-        canonical = get_canonical_audio_bucket()
-        if conversation_tombstones.is_deleted(uid, conversation_id):
-            if len(audio_packs.conversation_chain(canonical, uid, conversation_id)) == 1:
-                raise audio_packs.CaptureDeleted('canonical capture blocked by existing deletion intent')
-        with owner_storage_write_gate(uid, canonical):
-            audio_packs.archive_capture(
-                canonical,
-                uid,
-                encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw,
-                format='encrypted-pcm16le' if encrypted else 'pcm16le',
-                provenance={
-                    'capture_day': datetime.datetime.fromtimestamp(
-                        float(min(c['timestamp'] for c in chunks)), datetime.timezone.utc
-                    )
-                    .date()
-                    .isoformat(),
-                    'producer': 'pusher',
-                    'sample_rate': sample_rate,
-                    'encrypted': encrypted,
-                    'encryption_envelope': 'uint32be-nonce12-aes256gcm-hkdf-v1' if encrypted else None,
-                    'channels': 1,
-                    'bit_depth': 16,
-                    'plaintext_sha256': hashlib.sha256(raw).hexdigest(),
-                },
-                conversation_ranges=audio_packs.pcm_capture_ranges(chunks, conversation_id, sample_rate),
-                identity=hashlib.sha256(raw).hexdigest(),
-            )
-
-    except Exception:
-        logger.exception('optional canonical pusher archive failed')
-        record_fallback(component='pusher', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
 def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_ids: List[str] | None = None) -> None:

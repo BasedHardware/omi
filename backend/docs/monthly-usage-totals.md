@@ -63,11 +63,12 @@ shipped at **0** because an old instance can write hourly usage without
 maintaining totals. A mixed-writer rollout would undercount paid/Free allowance.
 This accounting risk requires writer qualification before adding reader scope.
 
-Current source declaration for the **2026-10-27 #23797 train**:
+Source declaration at preparation of the usage-month qualification PR (not live attestation):
 
 | Reader surface | Enable percent | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
 | --- | --- | --- |
-| Prod Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Prod Cloud Run backend, backend-sync-backfill, backend-integration | 0 (intentional WQ31 exclusions retained) | `c2fs_20261026_r1` (inactive) |
+| Prod Cloud Run backend-sync | 100 (sync-only restoration, `3eaf4ccf`) | `c2fs_20261026_r1` |
 | Base, listen/pusher in both environments, jobs, desktop backend, all dev services | 0 | `v1` (inactive) |
 
 The October 24 initial rollout schedule is superseded by this scope and sequence.
@@ -108,6 +109,89 @@ was initialized, keep readers off until all writers are upgraded **and change
 the epoch before re-enabling**. A new epoch forces a transactional rebuild on
 first use; simply toggling the lever back on is unsafe after an old-writer
 rollback. Malformed/empty epoch values disable total reads.
+
+## Offline qualification and pending expansion
+
+`python backend/scripts/qualify_usage_month.py [--evidence receipt.json]` reports
+`usage_month_cache` and `usage_month_total` qualification separately for backend,
+backend-integration and backend-sync-backfill. Exit 1 means at least one blocker;
+without evidence all six results are blocked. It reads local files only. A report
+never changes configuration or authorizes activation: **lead2 must rule**.
+
+The input is an operator attestation with links to the owning records. It must be
+refreshed against actual serving artifacts/traffic; this checker validates the
+declared gates, not the authenticity of external records. Do not treat local
+unit tests or this PR as writer qualification or live health evidence.
+
+JSON input fields (missing evidence fails closed):
+
+- `common_epoch`: the qualified production epoch, never `v1`.
+  `old_writers_since_initialization`: explicitly false only when established.
+  If true or unknown, `previous_epoch` must name the old epoch and differ from
+  the new common epoch. Requalify every writer and align readers at 0 before use.
+  The pending patch preserves the existing epoch; it cannot perform this repair.
+- `writers`: entries for `listen`, `pusher`, `backend`, `sync`, `backfill`,
+  `integration`, `desktop`, `operator`, `migration`. Each names `artifact`, `ref`,
+  `started_at`, `ended_at`, `valid_until` (timezone-aware ISO timestamps),
+  `old_revisions_jobs_drained: true`, and the relevant contract:
+  `maintains_totals: true` for total, `invalidates_cache: true` for cache. Writer
+  qualification/drain observations must end before the soak begins.
+- `services`: an entry for each target service plus the already-enabled
+  `backend-sync` reader. Attest its serving identity, traffic and observation
+  window, and confirm its epoch matches `common_epoch`; it needs no new-reader
+  soak. Each service names `artifact`, `source_sha`
+  (full Git SHA), `ref` (serving traffic receipt), `traffic_verified: true`, the
+  same observation-window fields and `epoch`. Each target service also needs
+  `cache_freshness_accepted: true` only after its admission scope accepts the
+  existing 60-second TTL.
+- Each target service's `soak` names that same `artifact`, `ref`, and observation-window
+  fields covering at least two hours of synthetic/loopback equivalence, entirely
+  within the verified serving-traffic window. Explicit
+  integer zeros are required for `mismatches`, `accounting_regressions`,
+  `free_allowance_regressions`, `http_5xx_regressions`, `live_p95_regressions`,
+  `contention_errors`; `origins_reviewed` and `fallback_rate_reviewed` must be true.
+- Each target service's `equivalence.cache` and `equivalence.total` names `source_sha`
+  matching the serving source, `ref` to the test receipt, and `junit` (a path or
+  list of paths relative to this JSON file). Use the existing suites below,
+  from that source/artifact;
+  the checker requires their existing equivalence test families and rejects
+  reports containing skips, failures or errors. It adds no usage comparator.
+
+Existing proof commands, run from the product root through the workspace's
+`bin/omi-heavy run --` (JUnit artifacts are local, never committed):
+
+```sh
+backend/.venv/bin/python -m pytest backend/tests/unit/test_fsr_s4_caches.py --junitxml=/path/to/cache.xml
+backend/.venv/bin/python -m pytest backend/tests/unit/test_monthly_usage_totals.py --junitxml=/path/to/total.xml
+# Loopback Firestore emulator required; absent emulator must not count as PASS.
+backend/.venv/bin/python -m pytest backend/tests/integration/test_monthly_usage_totals_firestore.py --junitxml=/path/to/transactional.xml
+```
+
+Use a separate pytest process for each file, per the backend test contract.
+For `cache`, supply `"junit": "cache.xml"`; for `total`, supply
+`"junit": ["total.xml", "transactional.xml"]`. The checker aggregates only their
+existing results; it does not rerun usage arithmetic. This is source equivalence
+evidence, separate from the service's two-hour soak receipt. Do not fabricate a
+PASS report to fill an unavailable proof.
+
+The single unapplied config change is
+`backend/deploy/runtime_env/pending/usage-month-enable-5.patch`. It changes only
+`usage_month_cache` and `usage_month_total` from 0 to **5** in the three production
+Cloud Run service literals, preserving every other lever and epoch and leaving
+backend-sync at 100/100. It is outside the composer's input files. After lead2's
+ruling and qualification, the lead may apply it and regenerate the manifest:
+
+```sh
+git apply --check backend/deploy/runtime_env/pending/usage-month-enable-5.patch
+git apply backend/deploy/runtime_env/pending/usage-month-enable-5.patch
+python backend/deploy/compose_runtime_env.py
+```
+
+Re-review against current main if the patch no longer applies. Activation is a
+separate reviewed config commit and release; neither is performed by this PR.
+The runbook's clean two-hour gate precedes any lead expansion from 5 to 100.
+Rollback changes only these six percentages back to 0 and recomposes, preserving
+epochs, backend-sync, and all other levers. No savings are claimed by qualification.
 
 ## Attribution and expected economics
 

@@ -217,7 +217,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     subscription = add('utils.subscription', AutoMockModule('utils.subscription'))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.request_has_llm_byok_key = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
@@ -249,6 +248,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.other.storage', AutoMockModule('utils.other.storage'))
     cloud_tasks = add('utils.cloud_tasks', AutoMockModule('utils.cloud_tasks'))
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
     add('utils.observability.fallback', AutoMockModule('utils.observability.fallback'))
     add('utils.observability.finalization', AutoMockModule('utils.observability.finalization'))
     add('utils.metrics', AutoMockModule('utils.metrics'))
@@ -276,7 +276,8 @@ def _build_fakes() -> dict[str, ModuleType]:
     retraction.retraction_can_be_skipped = MagicMock(return_value=False)
 
     task_intelligence = ModuleType('utils.task_intelligence')
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(_BACKEND / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add('utils.task_intelligence', task_intelligence)
     capture = AutoMockModule('utils.task_intelligence.conversation_capture')
     capture.capture_enabled = MagicMock(return_value=False)
@@ -459,7 +460,6 @@ def _spy_managed_effects(monkeypatch: pytest.MonkeyPatch, pc: Any) -> dict[str, 
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
-    monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
     return spies
 
 

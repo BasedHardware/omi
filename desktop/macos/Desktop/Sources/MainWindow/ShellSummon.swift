@@ -100,6 +100,15 @@ enum ShellSummonPlacement {
     return windowDisplayKey != cursorDisplayKey
   }
 
+  /// `recoverStrandedFrameIfNeeded` runs on `didChangeScreenParametersNotification`
+  /// as well as `didBecomeActiveNotification`. While Omi is inactive, display
+  /// reconfiguration may reposition the off-screen frame in place, but must not
+  /// call `makeKeyAndOrderFront` and pull the `.moveToActiveSpace` shell over the
+  /// application the user is working in (#24782).
+  static func shouldMakeKeyOnStrandedFrameRecovery(isAppActive: Bool) -> Bool {
+    isAppActive
+  }
+
   /// The stable per-display identity frames are filed under.
   ///
   /// `CGDirectDisplayID` rather than an index into `NSScreen.screens`, because that array reorders
@@ -426,7 +435,7 @@ enum ShellSummon {
   /// window whose controls exist off every screen, with no affordance to recover it (the sign-in
   /// window has no rail, no hotkey and no drag handle a user can reach). Automation presentations
   /// park deliberately and are exempt; `normal` mode is the user's window and must be reachable.
-  static func recoverStrandedFrameIfNeeded() {
+  static func recoverStrandedFrameIfNeeded(isAppActive: Bool = NSApp.isActive) {
     guard DesktopAutomationWindowPresentation.currentMode == .normal else { return }
     guard let window = shellWindow(), window.isVisible else { return }
     let visibleFrames = NSScreen.screens.map(\.visibleFrame)
@@ -435,7 +444,9 @@ enum ShellSummon {
     else { return }
     guard let screen = ActiveDisplay.screen() ?? NSScreen.main ?? NSScreen.screens.first else { return }
     window.setFrame(landingFrame(on: screen), display: true)
-    window.makeKeyAndOrderFront(nil)
+    if ShellSummonPlacement.shouldMakeKeyOnStrandedFrameRecovery(isAppActive: isAppActive) {
+      window.makeKeyAndOrderFront(nil)
+    }
     rememberFrame(of: window)
   }
 

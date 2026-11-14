@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import fcntl
+import uuid
+from dataclasses import dataclass
+import logging
 import os
 import shutil
 import threading
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 from urllib.parse import quote
 from utils.other.owned_paths import owned_scratch_path
 
@@ -127,6 +131,14 @@ class LocalBlob:
             raise PreconditionFailed('local storage create-only object exists') from error
         self.patch()
 
+    def _set_properties(self, properties):
+        self.metadata = properties.get('metadata')
+        self.content_type = properties.get('contentType')
+
+    def create_resumable_upload_session(self, *, content_type, size, if_generation_match, timeout, retry):
+        client: Any = self.bucket.client
+        return client._http.create(self, size, content_type, if_generation_match)
+
     def download_as_bytes(self, *_args, **_kwargs) -> bytes:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
@@ -169,7 +181,8 @@ class LocalBlob:
 
 
 class LocalBucket:
-    def __init__(self, root: Path, name: str):
+    def __init__(self, root: Path, name: str, client=None):
+        self.client = client if client is not None else LocalStorageClient(root)
         self.root = root
         self.name = _safe_relative_path(name, label='bucket name').as_posix()
         if '/' in self.name:
@@ -204,10 +217,111 @@ class LocalBucket:
         return destination
 
 
+@dataclass
+class _LocalSessionResponse:
+    status_code: int
+    properties: dict | None = None
+
+    def json(self):
+        return self.properties or {}
+
+    def close(self):
+        pass
+
+
+class _LocalSessionHTTP:
+    """Disk-backed sessions survive client/worker loss. Lock cancel against finalize.
+
+    Tests may install before_request/after_request hooks to stage remote races;
+    production lake code uses exactly the same session transport contract.
+    """
+
+    def __init__(self, client):
+        self.client = client
+        self.before_request: Callable[..., None] | None = None
+        self.after_request: Callable[..., None] | None = None
+
+    def create(self, blob, size, content_type, match):
+        sessions = self.client.root / '.sessions'
+        sessions.mkdir(parents=True, exist_ok=True)
+        token = uuid.uuid4().hex
+        state = {
+            'bucket': blob.bucket.name,
+            'key': blob.name,
+            'size': size,
+            'content_type': content_type,
+            'match': match,
+            'metadata': blob.metadata,
+            'http_status': 308,
+        }
+        with (sessions / token).open('x') as file:
+            json.dump(state, file)
+        return f'local-session://{token}'
+
+    def request(self, method, uri, *, data=b'', headers=None, **kwargs):
+        if self.before_request is not None:
+            self.before_request(method, uri, data, headers)
+        token = uri.removeprefix('local-session://')
+        if (
+            not uri.startswith('local-session://')
+            or len(token) != 32
+            or any(c not in '0123456789abcdef' for c in token)
+        ):
+            return _LocalSessionResponse(404)
+        try:
+            file = (self.client.root / '.sessions' / token).open('r+')
+        except FileNotFoundError:
+            return _LocalSessionResponse(404)
+        properties = None
+        with file:
+            fcntl.flock(file, fcntl.LOCK_EX)
+            state = json.load(file)
+            status = state['http_status']
+            if method == 'DELETE':
+                if status == 308:
+                    state['http_status'] = status = 499
+            elif method == 'PUT' and not str((headers or {}).get('Content-Range', '')).startswith('bytes */'):
+                if status == 308:
+                    expected = f"bytes 0-{state['size'] - 1}/{state['size']}"
+                    # GCS accepts one whole-object PUT with or without its full range.
+                    if len(data) != state['size'] or (headers or {}).get('Content-Range', expected) != expected:
+                        status = 400
+                    else:
+                        blob = self.client.bucket(state['bucket']).blob(state['key'])
+                        blob.metadata = state['metadata']
+                        try:
+                            blob.upload_from_string(
+                                data,
+                                content_type=state['content_type'],
+                                if_generation_match=state['match'],
+                                retry=None,
+                                **kwargs,
+                            )
+                            properties = {
+                                'generation': str(blob.generation),
+                                'size': str(blob.size),
+                                'metadata': blob.metadata,
+                                'contentType': blob.content_type,
+                            }
+                            state['http_status'] = status = 200
+                        except PreconditionFailed:
+                            state['http_status'] = status = 412
+                elif status == 200:
+                    status = 400  # A finalized capability cannot create again.
+            file.seek(0)
+            json.dump(state if state['http_status'] == 308 else {'http_status': state['http_status']}, file)
+            file.truncate()
+        response = _LocalSessionResponse(status, properties)
+        if self.after_request is not None:
+            self.after_request(method, uri, data, headers, response)
+        return response
+
+
 class LocalStorageClient:
     def __init__(self, root: Path):
         self.root = root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self._http = _LocalSessionHTTP(self)
 
     @classmethod
     def from_env(cls) -> 'LocalStorageClient | None':
@@ -215,7 +329,7 @@ class LocalStorageClient:
         return cls(root) if root is not None else None
 
     def bucket(self, name: str) -> LocalBucket:
-        return LocalBucket(self.root, name)
+        return LocalBucket(self.root, name, self)
 
     def get_bucket(self, name: str) -> LocalBucket:
         return self.bucket(name)
@@ -238,9 +352,45 @@ def create_storage_client():
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-        return storage.Client(credentials=credentials)
+        return _size_http_pool(storage.Client(credentials=credentials))
     project = storage_client_project()
-    return storage.Client(project=project) if project else storage.Client()
+    client = storage.Client(project=project) if project else storage.Client()
+    return _size_http_pool(client)
+
+
+def gcs_http_pool_maxsize() -> int:
+    """Connections per GCS host for one process's shared client (default 128).
+
+    urllib3's default pool keeps 10 connections per host, while one process's
+    storage executor runs 128 workers against the same client. The overflow
+    opened and discarded a connection per call ("Connection pool is full"), which
+    slowed pusher teardown drains past their bounds (2026-11-04 admission jam).
+    """
+    try:
+        value = int(os.getenv('GCS_HTTP_POOL_MAXSIZE', '128'))
+    except ValueError:
+        return 128
+    return max(10, min(value, 512))
+
+
+def _size_http_pool(client):
+    """Mount a pool sized to executor concurrency; keep the default on failure."""
+    try:
+        size = gcs_http_pool_maxsize()
+        session = client._http  # AuthorizedSession, created once per client
+        current = session.get_adapter('https://storage.googleapis.com/')
+        adapter_class = type(current)
+        # Only replace the plain default adapter (no `requests` import in utils);
+        # a subclass such as google-auth's mTLS adapter carries client-certificate
+        # state that must be kept.
+        if (adapter_class.__module__, adapter_class.__name__) != ('requests.adapters', 'HTTPAdapter'):
+            return client
+        session.mount('https://', adapter_class(pool_connections=4, pool_maxsize=size))
+    except Exception as error:  # an unsized pool is the previous behaviour, never a startup failure
+        logging.getLogger(__name__).warning(
+            'event=gcs_http_pool outcome=default exception_type=%s', type(error).__name__
+        )
+    return client
 
 
 _signing_token_lock = threading.Lock()

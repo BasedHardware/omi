@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -32,6 +33,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnected => false;
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+  @override
   bool get isConnecting => false;
   @override
   int get batteryLevel => 0;
@@ -40,7 +43,7 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get havingNewFirmware => false;
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -72,7 +75,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _Sync extends ChangeNotifier implements SyncProvider {
+class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync({this.wals = const [], this.state = const SyncState()});
   List<Wal> wals;
   SyncState state;

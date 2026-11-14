@@ -47,6 +47,111 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
 # Summary acceptance must agree on every finalization host.
 FINALIZATION_GATE_FLAGS = ('CLIENT_SUMMARIES_AT_CAP_ENABLED',)
 
+BATCH_FINAL_PASS_FLAG = 'BATCH_FINAL_PASS_ENABLED'
+BATCH_FINAL_PASS_HOSTS = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+
+
+HOSTED_DIARIZATION_URL_ENV = 'HOSTED_DIARIZATION_API_URL'
+
+
+def _host_env(platform: str, name: str, config: ConfigDict) -> ConfigDict:
+    services = config.get('gke', {}) if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+    return (services.get(name, {}) or {}).get('env', {}) or {}
+
+
+def _host_has_diarizer_url(platform: str, name: str, config: ConfigDict) -> bool:
+    """True when the host can call the batch diarizer.
+
+    A literal value decides. An unknown source (environment, secret, or any
+    other non-literal binding) counts as present, so the check errs toward
+    keeping the pass on.
+    """
+    env = _host_env(platform, name, config)
+    if HOSTED_DIARIZATION_URL_ENV in env:
+        return _binding_has_url(env[HOSTED_DIARIZATION_URL_ENV])
+    if platform == 'cloud_run':
+        services = config.get('cloud_run', {}).get('services', {})
+        secrets = (services.get(name, {}) or {}).get('secrets', {}) or {}
+        if HOSTED_DIARIZATION_URL_ENV in secrets:
+            return True
+    if platform == 'gke':
+        shared = (config.get('gke', {}).get('config_map', {}) or {}).get('entries', {}) or {}
+        if HOSTED_DIARIZATION_URL_ENV in shared:
+            return _binding_has_url(shared[HOSTED_DIARIZATION_URL_ENV])
+    return False
+
+
+def _binding_has_url(binding: object) -> bool:
+    if not isinstance(binding, dict):
+        return True
+    if 'value' not in binding:
+        return True  # Not a literal: unknown source, keep the pass on.
+    value = binding.get('value')
+    return value is not None and bool(str(value).strip())
+
+
+def validate_batch_final_pass_hosts(env: str, config: ConfigDict) -> list[ValidationError]:
+    """Independent serving roster: deleting a binding cannot hide a runtime.
+
+    Every production host needs an explicit true or false. A host without a
+    diarizer URL may be switched off on its own, since its pass can only fall
+    back. A host with the URL stays on unless every production host is off, which
+    keeps the full rollback valid.
+    """
+    if env != 'prod':
+        return []
+    errors, values = [], {}
+    gke = config.get('gke', {})
+    config_map = gke.get('config_map', {})
+    flag = BATCH_FINAL_PASS_FLAG
+    for platform, name in BATCH_FINAL_PASS_HOSTS:
+        services = gke if platform == 'gke' else config.get('cloud_run', {}).get('services', {})
+        entry = services.get(name, {}).get('env', {}).get(flag, {})
+        value = entry.get('value')
+        if platform == 'gke':
+            expected = {'name': config_map.get('name'), 'key': flag}
+            if entry.get('config_map') != expected or not expected['name']:
+                errors.append(ValidationError(f'{platform}/{name}', f'{flag} must use the shared ConfigMap'))
+            source = config_map.get('entries', {}).get(flag, {})
+            value = source.get('value') if source.get('source') == 'literal' else None
+        if value not in {'true', 'false'}:
+            errors.append(ValidationError(f'{platform}/{name}', f'{flag} needs an explicit true/false binding'))
+        else:
+            values[(platform, name)] = value
+    if len(values) == len(BATCH_FINAL_PASS_HOSTS) and all(v == 'false' for v in values.values()):
+        return errors  # Full rollback: every production host is off.
+    for (platform, name), value in values.items():
+        # GKE hosts share one ConfigMap entry, and their Helm values can carry the
+        # URL outside the manifest, so a GKE host is never exempt from the rule.
+        has_url = platform == 'gke' or _host_has_diarizer_url(platform, name, config)
+        if value == 'false' and has_url:
+            errors.append(
+                ValidationError(
+                    f'{platform}/{name}',
+                    f'{flag} must stay true on a host with {HOSTED_DIARIZATION_URL_ENV} unless every production host is off',
+                )
+            )
+        # An exempt Cloud Run host must also list the URL in forbidden_env, so the
+        # live service state is checked for it and an undeclared binding cannot hide.
+        if value == 'false' and platform == 'cloud_run' and not has_url:
+            forbidden = config.get('cloud_run', {}).get('services', {}).get(name, {}).get('forbidden_env') or []
+            if HOSTED_DIARIZATION_URL_ENV not in forbidden:
+                errors.append(
+                    ValidationError(
+                        f'{platform}/{name}',
+                        f'{flag}=false needs {HOSTED_DIARIZATION_URL_ENV} in forbidden_env so the live service is checked for it',
+                    )
+                )
+    return errors
+
+
 # The runtime resolves these flags with strip().casefold() against the truthy
 # set {'1','true','yes','on'}; anything else — including '' — is silently False.
 # Admission therefore only accepts that truthy set and its falsy counterparts,
@@ -244,19 +349,31 @@ SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
     ('cloud_run', 'backend-integration'),
 )
 _CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+# Cloud Run cannot resolve cluster DNS. Prod routes through the internal-ALB
+# shared gateway (gateway IP + /diarizer); the dev gateway VIP was deleted
+# 2026-11-02, so dev uses the documented rollback Ingress host. Admission
+# rejects any other literal, including a value that merely agrees across
+# Cloud Run hosts.
+_CLOUD_RUN_SPEAKER_EMBEDDING_URL = {
+    'dev': 'http://diarizer.omiapi.com:80',
+    'prod': 'http://172.16.160.20/diarizer',
+}
 
 
 def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Require the reachable diarizer ILB on every speaker-ID host.
+    """Require a reachable diarizer route on every speaker-ID host.
 
     Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
     ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
     voice matching there while the others keep working. Cloud Run cannot use
-    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    in-cluster DNS, so each Cloud Run host must use that environment's
+    approved internal-ALB route. GKE hosts share one route (ClusterIP service
+    DNS in prod, the legacy diarizer Ingress host in dev after the shared
+    internal gateway was removed).
     """
     errors: list[ValidationError] = []
-    seen_values: dict[str, str] = {}
-    listen_value: str | None = None
+    gke_values: dict[str, str] = {}
+    cloud_run_values: dict[str, str] = {}
     for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
         service_config = _service_config(env_config, platform, service_name)
         if service_config is None:
@@ -285,30 +402,38 @@ def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[V
                     f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
                 )
             )
-        seen_values[scope] = value
-        if platform == 'gke' and service_name == 'backend-listen':
-            listen_value = value
-
-    if listen_value:
-        for scope, value in seen_values.items():
-            if '/gke/backend-listen' in scope:
-                continue
-            if value != listen_value:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
-                    )
+        approved = _CLOUD_RUN_SPEAKER_EMBEDDING_URL.get(env) if platform == 'cloud_run' else None
+        if approved and value != approved:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the approved internal-ALB route {approved!r}',
                 )
+            )
+        (gke_values if platform == 'gke' else cloud_run_values)[scope] = value
+
+    for topology_values in (gke_values, cloud_run_values):
+        distinct = set(topology_values.values())
+        if len(distinct) > 1:
+            rendered = ', '.join(f'{scope}={value!r}' for scope, value in sorted(topology_values.items()))
+            errors.append(
+                ValidationError(
+                    f'{env}/speaker-embedding',
+                    f'{SPEAKER_EMBEDDING_ENV} disagrees across hosts: {rendered}',
+                )
+            )
     return errors
 
 
 __all__ = [
+    'BATCH_FINAL_PASS_FLAG',
+    'BATCH_FINAL_PASS_HOSTS',
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'FINALIZATION_GATE_FLAGS',
     'SPEAKER_EMBEDDING_ENV',
     'SPEAKER_EMBEDDING_HOSTS',
     'validate_conversation_finalization_capabilities',
+    'validate_batch_final_pass_hosts',
     'validate_speaker_embedding_hosts',
 ]

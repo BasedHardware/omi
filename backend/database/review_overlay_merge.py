@@ -1,8 +1,11 @@
 """Explicit conversation merge moves correction anchors and their Undo receipts atomically."""
 
+from database import transcript_pointer
+
 from copy import deepcopy
 from datetime import datetime, timezone
 from google.cloud import firestore
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database import review_store as store
 from utils.agent_capabilities.transcripts import original_fingerprint, apply_entries
 
@@ -30,7 +33,10 @@ def transfer(
     def commit(tx):
         from database.conversations import decode_transcript_segments_verified
 
-        if database.collection('account_deletions').document(uid).get(transaction=tx).exists:
+        deletion = database.collection('account_deletions').document(uid).get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
             raise store.ReviewConflict('Account deletion fences correction transfer')
         merge_ref = None
         if merge_job_id is not None:
@@ -158,4 +164,7 @@ def transfer(
         seal()
         return True
 
-    return commit(database.transaction())
+    try:
+        return transcript_pointer.run_preloaded_transactional(database, commit)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        raise store.ReviewConflict('Merged correction destination/source unavailable') from None

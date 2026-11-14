@@ -1,3 +1,5 @@
+from google.api_core.exceptions import NotFound
+
 """
 Daily Summaries database module
 
@@ -251,7 +253,7 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     summary_ref.set(payload)
 
 
-def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestore_client: Any = None) -> None:
+def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestore_client: Any = None) -> bool:
     """Record completed push handling independently of backfill/webhook work.
 
     Patch only delivery metadata, preserving concurrent edits to the recap.
@@ -259,7 +261,11 @@ def mark_daily_summary_delivery_completed(uid: str, summary_id: str, *, firestor
     """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     summary_ref = client.collection('users').document(uid).collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.update({'notification_delivery_completed': True})
+    try:
+        summary_ref.update({'notification_delivery_completed': True})
+        return True
+    except NotFound:
+        return False
 
 
 def delete_daily_summary(uid: str, summary_id: str) -> bool:
@@ -280,10 +286,15 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     return True
 
 
-def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
-    user_ref = db.collection('users').document(uid)
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str, *, firestore_client: Any = None) -> bool:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.update({'visibility': visibility})
+    try:
+        summary_ref.update({'visibility': visibility})
+        return True
+    except NotFound:
+        return False
 
 
 def get_summaries_count(uid: str) -> int:

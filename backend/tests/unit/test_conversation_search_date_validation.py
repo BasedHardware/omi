@@ -110,6 +110,7 @@ _stubs = [
     # package itself is omitted here. See package_submodule_stubs.
     *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
     'utils.observability.fallback',
+    'utils.cloud_tasks',
     'utils.executors',
     'utils.product_telemetry',
     'utils.llm.conversation_processing',
@@ -276,6 +277,7 @@ finally:
 conv.parse_exact_conversation_reference = MagicMock(return_value=None)
 conv.clamp_conversation_search_pagination = MagicMock(return_value=(1, 10))
 conv.conversation_matches_date_range = MagicMock(return_value=True)
+conv.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
 
 from utils.conversations.search import parse_search_date_range as _real_parse_search_date_range  # noqa: E402
 
@@ -296,6 +298,9 @@ conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
 conv.redact_conversations_for_list = MagicMock()
+# Presentation is covered by test_home_transcribing_hold; the module auto-stub
+# must preserve rows so this suite still exercises search/date/speaker behavior.
+conv.transcribing_hold.project = lambda row: row
 # Episode bookkeeping on the finalize routes is covered by test_episodes_finalize_paths.py.
 conv.episode_finalize = MagicMock()
 # `_get_valid_conversation_by_id` now 404s tombstones via is_soft_deleted. The

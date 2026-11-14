@@ -3,6 +3,7 @@
 import copy
 import json
 import runpy
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -142,6 +143,71 @@ def test_split_mismatch_duplicate_and_prod_only_fail_closed(provisioner, tmp_pat
 
 def test_actual_source_exports_match(provisioner):
     assert provisioner.load_rules(provisioner.RULES)
+
+
+def _source_tree(tmp_path, rules):
+    path = tmp_path / 'alert-rules.json'
+    (tmp_path / 'alerts').mkdir()
+    path.write_text(json.dumps(rules))
+    for item in rules:
+        (tmp_path / 'alerts' / f"{item['uid']}.json").write_text(json.dumps([item]))
+    return path
+
+
+@pytest.mark.parametrize(
+    'window',
+    [
+        {'from': 0, 'to': 0},
+        {'from': 900, 'to': 900},
+        {'from': 0, 'to': 900},
+        {'from': 900},
+        {},
+        None,
+        {'from': '900', 'to': 0},
+        {'from': True, 'to': 0},
+    ],
+)
+def test_datasource_query_with_an_empty_or_invalid_relative_range_fails_before_provisioning(
+    provisioner, tmp_path, window
+):
+    """Grafana rejects these windows with "invalid relative time range" (SCA-2055)."""
+    broken = {
+        **rule(),
+        'data': [
+            {'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': window},
+            {'refId': 'B', 'datasourceUid': '__expr__', 'relativeTimeRange': {'from': 0, 'to': 0}},
+        ],
+    }
+    with pytest.raises(ValueError, match='relative time range'):
+        provisioner.load_rules(_source_tree(tmp_path, [broken]))
+
+
+def test_expression_queries_keep_the_zero_window_and_datasource_queries_accept_a_past_window(provisioner, tmp_path):
+    valid = {
+        **rule(),
+        'data': [
+            {'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': {'from': 900, 'to': 0}},
+            {'refId': 'B', 'datasourceUid': 'gmp-cloud-run', 'relativeTimeRange': {'from': 300, 'to': 0}},
+            {'refId': 'C', 'datasourceUid': '__expr__', 'relativeTimeRange': {'from': 0, 'to': 0}},
+            {'refId': 'D', 'datasourceUid': '-100', 'relativeTimeRange': {'from': 0, 'to': 0}},
+        ],
+    }
+    assert list(provisioner.load_rules(_source_tree(tmp_path, [valid]))) == ['example']
+
+
+def test_invalid_window_fails_before_the_provisioner_touches_grafana(provisioner, tmp_path, monkeypatch):
+    broken = {
+        **rule(),
+        'data': [{'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': {'from': 0, 'to': 0}}],
+    }
+    path = _source_tree(tmp_path, [broken])
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError('provisioner reached Grafana')
+
+    monkeypatch.setattr(provisioner, 'Grafana', refuse)
+    monkeypatch.setattr(sys, 'argv', ['provision_monitoring_alerts.py', '--rules', str(path), '--lint'])
+    assert provisioner.main() == 1
 
 
 @pytest.mark.parametrize(
@@ -305,3 +371,21 @@ def test_readback_still_reports_semantic_changes(provisioner):
     assert provisioner.comparable(base) != provisioner.comparable(other)
     assert provisioner.duration_seconds('24h') == provisioner.duration_seconds('1d') == 86400
     assert provisioner.duration_seconds('5ms') == 0.005
+
+
+def test_regenerate_is_offline_preserves_order_and_rejects_duplicate_sources(provisioner, tmp_path):
+    path = tmp_path / 'alert-rules.json'
+    sources = tmp_path / 'alerts'
+    sources.mkdir()
+    path.write_text(json.dumps([rule('b'), rule('removed'), rule('a')]))
+    (sources / 'a.json').write_text(json.dumps([rule('a'), rule('new')]))
+    (sources / 'b.json').write_text(json.dumps([{**rule('b'), 'title': 'updated'}]))
+    provisioner.regenerate_export(path)
+    assert list(provisioner.load_rules(path)) == ['b', 'a', 'new']
+    first = path.read_bytes()
+    provisioner.regenerate_export(path)
+    assert path.read_bytes() == first
+    (sources / 'duplicate.json').write_text(json.dumps([rule('a')]))
+    with pytest.raises(ValueError, match='duplicate'):
+        provisioner.regenerate_export(path)
+    assert path.read_bytes() == first

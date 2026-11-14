@@ -1,8 +1,17 @@
+"""User-account HTTP surface: profile, onboarding, people/contacts, webhooks,
+tokens, geolocation, and the account-deletion wipe runner.
+
+The OIDC-posted wipe endpoint is the sole wipe executor in production (startup
+rejects inline or incomplete dispatch), so destructive-lifecycle invariants
+concentrate here even though most routes are plain users/{uid} CRUD.
+"""
+
 from __future__ import annotations
 
 import re
 import uuid
 from typing import Annotated, List, Dict, Any, Literal, Union, Optional
+import functools
 import hashlib
 import os
 import asyncio
@@ -20,13 +29,16 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
+    people as people_db,
     users as users_db,
 )
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import run_deletion_wipe_with_lease, start_account_deletion
+from services.users.account_deletion import run_deletion_wipe_with_lease
+from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversation_scan import conversation_scan_budget, people_stats_scan
@@ -49,6 +61,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.storefront_copy import format_money
 from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
@@ -56,11 +69,11 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import screen_vector_entitlements
+from utils import billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
-from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -97,6 +110,7 @@ from models.users import (
     LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
+from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_by_id
 from database.fsr_read_cache import fresh_cache_reads
 from utils.subscription import (
@@ -114,7 +128,6 @@ from utils.subscription import (
     plan_uses_overage,
     get_plan_features,
     get_monthly_usage_for_subscription,
-    is_trial_paywalled,
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
@@ -122,7 +135,6 @@ from utils.subscription import (
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
     legacy_plan_features,
-    clear_trial_paywall_cache,
     get_trial_metadata,
 )
 from database import user_usage as user_usage_db
@@ -131,8 +143,10 @@ from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
+    verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from utils.executors import db_executor, llm_executor, run_blocking
+from database import conversation_batch_purge_jobs
+from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -176,6 +190,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(account_deletion_router)
 
 
 class MigrationRequest(BaseModel):
@@ -306,23 +321,6 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     return profile
 
 
-class DeleteAccountRequest(BaseModel):
-    reason: Optional[str] = None
-    reason_details: Optional[str] = None
-
-
-@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
-def delete_account(
-    request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    try:
-        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
-    except Exception as e:
-        logger.info(f'delete_account {sanitize(str(e))}')
-        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
-
-
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
 # status codes drive queue retry/ack behavior.
 @router.post('/v1/users/account-deletion-wipes/run', include_in_schema=False)
@@ -399,6 +397,48 @@ async def run_account_deletion_wipe(
     finally:
         if release_lock:
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+# Rides the account-deletion queue and invoker identity; dispatched by the purge reconciler.
+# Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
+@router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
+async def run_conversation_batch_purge(
+    request: Request,
+    retry_count: int = Depends(verify_conversation_batch_purge_cloud_tasks_oidc),
+):
+    try:
+        payload = await request.json()
+        job_id = payload.get('job_id') if isinstance(payload, dict) else None
+        generation = payload.get('generation') if isinstance(payload, dict) else None
+        kind = payload.get('kind', 'batch_purge') if isinstance(payload, dict) else None
+        if not isinstance(job_id, str) or not job_id or not isinstance(generation, int) or generation < 1:
+            raise ValueError('job_id and a positive generation are required')
+        if kind not in {'batch_purge', 'erasure'}:
+            raise ValueError('unknown obligation kind')
+    except Exception as e:
+        logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    if kind == 'erasure':
+        # An accepted delete's cascade erasure; the eraser is the delete route's own cascade.
+        from routers.conversations import erase_accepted_conversation
+
+        run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
+    else:
+        run = conversation_batch_purge_jobs.run_job
+    try:
+        outcome = await run_blocking(cleanup_executor, run, job_id, generation)
+    except Exception as e:
+        # The obligation stays durable; the queue retries and the reconciler redrives.
+        logger.warning(
+            'conversation_batch_purge handler: attempt %d failed job=%s: %s',
+            retry_count + 1,
+            job_id,
+            type(e).__name__,
+        )
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
+    return JSONResponse(status_code=200, content={'status': 'done', 'outcome': outcome})
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
@@ -632,15 +672,14 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     if existing_person:
         return existing_person
 
-    # Create new person
+    # Create new person unless a concurrent or retried request with this name just did
     person_data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    result = create_person(uid, person_data)
-    return result
+    return people_db.get_or_create_person_by_name(uid, person_data).model_dump(exclude_unset=True)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
@@ -1075,7 +1114,11 @@ def set_preferred_app_for_user(
 
     app_id_to_set = app_id
 
-    selected_app = get_available_app_by_id(app_id_to_set, uid)
+    selected_app = (
+        default_summary_app()
+        if app_id_to_set == DEFAULT_SUMMARY_APP_ID
+        else get_available_app_by_id(app_id_to_set, uid)
+    )
     if not selected_app:
         raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
@@ -1206,7 +1249,6 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             )
     users_db.set_byok_active(uid, {p: peppered_fingerprint(fp) for p, fp in data.fingerprints.items()})
     invalidate_byok_state_cache(uid)
-    clear_trial_paywall_cache(uid)
     return {"active": True}
 
 
@@ -1215,7 +1257,6 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
-    clear_trial_paywall_cache(uid)
     return {"active": False}
 
 
@@ -1325,10 +1366,10 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
-        raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
 
+    if not processing_backlog.manual_choice_in_scope(uid):
+        raise HTTPException(status_code=404, detail='Not found')
     processing_backlog.choose(uid, request_key=idempotency_key)
     snapshot = processing_backlog.snapshot(uid)
     if snapshot is not None and snapshot.state == 'capped':
@@ -1416,8 +1457,10 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
     # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
+    is_mobile = x_app_platform in ('ios', 'android')
     raw_subscription = get_user_subscription(uid)
-    reconcile_basic_plan_with_stripe(uid, raw_subscription)
+    stripe_snapshot = {} if is_mobile else None
+    reconcile_basic_plan_with_stripe(uid, raw_subscription, stripe_snapshot=stripe_snapshot)
 
     # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
@@ -1445,7 +1488,6 @@ def _user_subscription_response(
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
-    is_mobile = x_app_platform in ('ios', 'android')
     subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
     new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
@@ -1490,8 +1532,7 @@ def _user_subscription_response(
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
 
-    # Build available plans. Version-gated: new clients see Operator + Architect,
-    # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
+    # Version-adapt identities, then filter retired plans from the purchase catalog.
     all_definitions = get_paid_plan_definitions()
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
@@ -1514,7 +1555,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Monthly",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description="Billed monthly. Cancel anytime.",
                     )
                 )
@@ -1536,7 +1577,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Annual",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description=definition["annual_description"],
                     )
                 )
@@ -1583,7 +1624,6 @@ def _user_subscription_response(
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
-    chat_allowed = chat_snapshot['allowed']
 
     # Grandfather is read from the true plan before the label is remapped for
     # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
@@ -1604,10 +1644,15 @@ def _user_subscription_response(
         chat_quota_used=round(chat_snapshot['used'], 4),
         chat_quota_unit=chat_snapshot['unit'],
         chat_quota_percent=chat_percent,
-        chat_quota_allowed=chat_allowed,
+        chat_quota_allowed=chat_snapshot['allowed'],
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
         desktop_grandfather_until=desktop_grandfather_until,
+        payment_issue=(
+            billing_recovery.payment_issue_for(uid, subscription, stripe_snapshot)
+            if is_mobile and show_subscription_ui
+            else None
+        ),
     )
 
 
@@ -1687,33 +1732,13 @@ def get_user_paywall_status(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     platform: Optional[str] = Query(None),
 ):
-    """Trial-paywall status for the calling user on the given platform.
-
-    Used by the Rust desktop-backend middleware to decide whether to proxy
-    paid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of
-    `is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth
-    account >3d old + platform in {macos, desktop}. Mobile platforms always
-    return `paywalled=false`.
-
-    Platform comes from `X-App-Platform` header (preferred) or `platform`
-    query param (fallback). Unknown / missing platforms are never paywalled.
-    """
-    resolved_platform = x_app_platform or platform
-    return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
+    """Released desktop middleware still reads this permanently disabled gate."""
+    return PaywallStatusResponse(paywalled=False)
 
 
 @router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
 def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
-    """Structured trial metadata for the calling user.
-
-    Returns trial timing info (start, end, remaining seconds, expired flag)
-    plus the list of features available during trial and the plan the user
-    falls to after trial expiry. Used by desktop clients to render countdown
-    banners and pre-expiry upgrade nudges.
-
-    Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
-    (trial is irrelevant to them — they have full access).
-    """
+    """Retain the disabled trial's constant metadata for released desktop decoders."""
     return get_trial_metadata(uid)
 
 
@@ -2323,6 +2348,14 @@ def get_shared_daily_summary(summary_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail='Daily summary not found')
 
+    try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Daily summary unavailable') from exc
+
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary or summary.get('visibility') != 'shared':
         raise HTTPException(status_code=404, detail='Daily summary not found')
@@ -2687,8 +2720,6 @@ async def synthesize_ai_profile(
 
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'memories')
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     synthesis = await run_blocking(
         llm_executor,
         lambda: ai_user_profile_llm.synthesize_ai_user_profile(

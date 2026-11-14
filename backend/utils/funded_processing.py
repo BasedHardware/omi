@@ -46,7 +46,6 @@ def backlog_consent(uid: str, period: str):
 
 def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, firestore_client: Any = None):
     # Admission callers short-circuit before loading database/provider dependencies.
-    from config import ladder_v1 as ladder_policy
     from database.funded_usage_session import budget_session
     from utils.transcription_allowance import TranscriptionAllowance
 
@@ -57,27 +56,7 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
                 from database import users as users_db
 
                 subscription = users_db.get_user_valid_subscription(uid, provision=False, **client_kwargs)
-            entitlement = (
-                ladder_policy.entitlements(subscription) if ladder_policy.budget_enforcement_enabled() else None
-            )
-            if entitlement is not None:
-                from utils import ladder_v1
-
-                # Use the actual projection and client, not a placeholder allowance.
-                # The same unit session serves direct chat budget_snapshot callers.
-                snapshot = ladder_v1.budget_snapshot(uid, subscription, session_cache=session.units, **client_kwargs)
-                if snapshot is None:
-                    raise ValueError('Missing enforced ladder budget')
-                exhausted = snapshot['budget_percent'] >= 100
-                result = TranscriptionAllowance(
-                    'on_device' if exhausted else 'managed',
-                    0 if exhausted else None,
-                    'usage_budget_exhausted' if exhausted else 'usage_budget_available',
-                    limit_seconds=None,
-                    remaining_units=max(0, snapshot['budget_units'] - snapshot['used_units']),
-                    budget_units=snapshot['budget_units'],
-                )
-            elif legacy_enabled():
+            if legacy_enabled():
                 from config.plan_catalog import allocation_limit
                 from utils.subscription import resolve_transcription_allowance
 
@@ -119,6 +98,25 @@ def allowance(uid: str, *, subscription: Any = _UNSET, usage: Any = _UNSET, fire
             )
             result = TranscriptionAllowance('on_device', 0, 'allowance_unavailable', limit_seconds=0)
     return result
+
+
+def paid_owner(uid: str) -> bool:
+    """Held-content recovery spends only for an owner on an active paid plan (David, 2026-11-01).
+
+    Read on every call, never cached, so a downgrade or lapse stops recovery at
+    the next decision. An unreadable entitlement fails closed: the audio stays held.
+    """
+    from database import users as users_db
+    from utils.subscription import is_paid_plan
+
+    try:
+        subscription = users_db.get_user_valid_subscription(uid, provision=False)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            'event=funded_processing outcome=entitlement_unavailable exception_type=%s', type(exc).__name__
+        )
+        return False
+    return subscription is not None and is_paid_plan(subscription.plan)
 
 
 def monthly_usage(uid: str) -> dict:

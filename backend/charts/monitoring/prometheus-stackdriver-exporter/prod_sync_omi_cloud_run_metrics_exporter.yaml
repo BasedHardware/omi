@@ -15,6 +15,7 @@ fullnameOverride: "prod-omi-cloud-run-sync-metrics-exporter"
 #   omi_journey_*, omi_client_journey_* journey SLO alerts, Core Features
 #   omi_owner_recognition_conversations owner-recognition alerts (surface="sync")
 #   omi_conversation_duration_seconds,
+#   omi_conversation_relevance_decision_total Core Features hourly discard share by service/trigger
 #   omi_conversation_summary_vector_upserts  Core Features
 #   omi_firestore_documents_per_operation    Firestore read-amplification alert
 #   omi_capture_finalization_*          resilience alert, Core Features
@@ -31,6 +32,35 @@ stackdriver:
     - "based-hardware"
   metrics:
     prefixes:
+      # Shared timeliness leader: batch-timeliness, held-backlog and drain alerts,
+      # plus over-SLA counts and staged-input clock diagnostics.
+      - 'prometheus.googleapis.com/omi_batch_timeliness_'
+      - 'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/'
+      - 'prometheus.googleapis.com/omi_finalization_pair_'
+      - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
+      # WP-C lifecycle dwell and observer health (closed labels).
+      - 'prometheus.googleapis.com/omi_batch_record_pending_'
+      # Retained held dead-letter stock/rate alert; serving maintenance emits these.
+      - 'prometheus.googleapis.com/omi_batch_held_expired_total/'
+      - 'prometheus.googleapis.com/omi_batch_held_expired_units/'
+      - 'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_total/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_units/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/'
+      # Terminal listen finalization dead-letters by bounded cause class. Consumer: the
+      # capture-reliability run (2026-11-12) dead-letter read; no dashboard tile reads it yet.
+      - 'prometheus.googleapis.com/omi_conversation_finalization_dead_letter_total/'
+      # Backlog alert family: also kept by deploy/cloud_run_gmp_sync.yaml before ingestion.
+      - 'prometheus.googleapis.com/omi_backlog_state_transitions_total/'
+      - 'prometheus.googleapis.com/omi_capture_retry_cap_total/'
+      - 'prometheus.googleapis.com/omi_record_seal_nojob_'
+      # Lease soak and the late-append invariant consume these bounded families.
+      - 'prometheus.googleapis.com/omi_record_token_lease_'
+      - 'prometheus.googleapis.com/omi_record_token_late_append_total/'
+      - 'prometheus.googleapis.com/omi_enrichment_obligation_'
+      - 'prometheus.googleapis.com/omi_finalization_byok_'
       # omi_sync_phase_* is deliberately absent: no in-cluster alert, dashboard
       # or adapter rule reads it (checked 2026-10-21), the rightsizing runbook
       # queries it from GMP, and both import paths (this sidecar copy per
@@ -45,6 +75,7 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_client_journey_'
       - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
       - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_conversation_relevance_decision_total/'
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_capture_finalization_'
@@ -55,6 +86,10 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
     interval: '10m'
     offset: '1m'
+
+# Descriptor discovery is stable; sample collection remains inline on every scrape.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
 
 serviceAccount:
   create: false

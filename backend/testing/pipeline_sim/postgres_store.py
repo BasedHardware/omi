@@ -3,7 +3,7 @@
 ``SimStore`` is an in-memory model; this subclass keeps its public surface (``rows``, ``jobs()``, ``mutate``,
 ``purge``, ``observers`` ...) but sends every transaction through ``database.jobstore.PostgresStore.run``,
 so the characterization goldens are produced by the production doc-mode code: its SQL, its jsonb round
-trip, its serialization-failure retry and its privacy flush. The privacy authority is the same real
+trip, its document locks and conflict retry, and its privacy flush. The privacy authority is the same real
 fence over ``CustomerData``. Only the harness's out-of-band edits (``apply`` / ``delete`` / ``mutate`` /
 ``purge``, models of non-simulated writers) bypass transactions, as they do in ``SimStore``.
 """
@@ -14,7 +14,8 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
-from database.jobstore.connection import Pool
+from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES
+from database.jobstore.connection import Pool, sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.store import CustomerData, SimStore
 
@@ -30,10 +31,18 @@ class PgRows(Mapping):
 
     def _all(self) -> dict[tuple[str, str], dict]:
         namespace = self._store.pg.namespace
-        sql = ' UNION ALL '.join(f"SELECT '{t}', key, doc FROM {t} WHERE namespace = %s" for t in _TYPED)
-        sql += ' UNION ALL SELECT tbl, key, doc FROM docs WHERE namespace = %s'
+        psycopg_sql = sql()
+        queries = [
+            psycopg_sql.SQL('SELECT {t_literal}, key, doc FROM {t_ident} WHERE namespace = %s').format(
+                t_literal=psycopg_sql.Literal(table), t_ident=psycopg_sql.Identifier(table)
+            )
+            for table in _TYPED
+        ]
+        query = psycopg_sql.SQL(' UNION ALL ').join(
+            [*queries, psycopg_sql.SQL('SELECT tbl, key, doc FROM docs WHERE namespace = %s')]
+        )
         with self._store.pg.pool.connection() as conn:
-            rows = conn.execute(sql, (namespace,) * (len(_TYPED) + 1)).fetchall()
+            rows = conn.execute(query, (namespace,) * (len(_TYPED) + 1)).fetchall()
         return {(table, key): doc for table, key, doc in rows}
 
     def __getitem__(self, address: tuple[str, str]) -> dict:
@@ -109,7 +118,8 @@ class PgSimStore(SimStore):
     def jobs_in_state(self, state: str) -> list[str]:
         with self.pg.pool.connection() as conn:
             rows = conn.execute(
-                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key', (self.pg.namespace, state)
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s ORDER BY key COLLATE "C"',
+                (self.pg.namespace, state),
             ).fetchall()
         return [row[0] for row in rows]
 
@@ -119,11 +129,22 @@ class PgSimStore(SimStore):
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return self.pg.oldest(priority, ready_only=ready_only)
 
+    def oldest_admissible_ready(self, priority: int, now: float) -> float | None:
+        return self.pg.oldest_admissible_ready(priority, now)
+
     def oldest_retry(self, priority: int) -> float | None:
         return self.pg.oldest_retry(priority)
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
-        return self.pg.control_candidate(priority, pool, now)
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        return self.pg.acquire_pull_claim(shard, token, now, ttl)
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def control_candidates(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', fanout: int | None = None
+    ) -> list[str]:
+        return self.pg.control_candidates(priority, pool, now, worker_id=worker_id, fanout=fanout)
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.pg.run(lambda tx: tx.first_pending(owner_key))
@@ -133,6 +154,31 @@ class PgSimStore(SimStore):
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.pg.run(lambda tx: tx.ready_predecessor(owner_key, priority, segment_id))
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return self.pg.ready_for_capacity(priority, now)
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        return self.pg.longest_ready_pending(owner_key)
+
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        return self.pg.fresh_pending(owner_key, limit)
+
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        return self.pg.held_merge_owners(limit, after=after)
+
+    def projection_page(
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+    ) -> tuple[list[str], Any]:
+        return self.pg.projection_page(limit, after=after, states=states, due_before=due_before)
+
+    def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
+        return self.pg.projection_successor(owner_key, previous)
 
     # -- transactions -----------------------------------------------------------------------------------
     def run(self, body: Callable[[Any], T]) -> T:  # type: ignore[override]
@@ -166,7 +212,11 @@ class PgSimStore(SimStore):
     def delete(self, table: str, key: str) -> None:
         with self.pg.pool.connection() as conn:
             if table in _TYPED:
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.pg.namespace, key))
+                psycopg_sql = sql()
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                    psycopg_sql.Identifier(table)
+                )
+                conn.execute(query, (self.pg.namespace, key))
             else:
                 conn.execute(
                     'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.pg.namespace, table, key)

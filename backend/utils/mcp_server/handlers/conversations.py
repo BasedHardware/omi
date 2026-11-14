@@ -20,6 +20,7 @@ from utils.conversations.mcp_transcript_search import (
 from utils.conversations.search import keyword_search_conversation_ids, conversation_matches_date_range
 from utils.observability.fallback import record_fallback
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations import transcribing_hold
 from utils.external_read_contract import utc_window
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_dates import local_date_window, localize_timestamps
@@ -117,7 +118,7 @@ def conversation_cards_page_core(
                 position={"ts": serialize_timestamp(last["created_at"]), "id": last["id"]},
                 filters=filters,
             )
-        return fetched[:limit], resume
+        return [transcribing_hold.project(row) for row in fetched[:limit]], resume
 
     try:
         page, resume = mcp_conversation_pages.get_mcp_conversation_cards_page(
@@ -140,7 +141,7 @@ def conversation_cards_page_core(
             position={"ts": serialize_timestamp(resume[0]), "id": resume[1]},
             filters=filters,
         )
-    return page, next_cursor
+    return [transcribing_hold.project(row) for row in page], next_cursor
 
 
 def is_safe_conversation_id(raw_id: Any) -> bool:
@@ -169,10 +170,10 @@ def fetch_conversation_for_detail(
         uid,
         [str(conversation_id)],
         include_transcript=True,
-        include_discarded=True,
+        include_discarded=False,
         extra_field_paths=extra_field_paths,
     )
-    return conversations[0] if conversations else None
+    return transcribing_hold.project(conversations[0]) if conversations else None
 
 
 def get_conversations(
@@ -257,7 +258,13 @@ def get_conversation_by_id(
         max_segments=max_segments,
         max_chars=max_chars,
     )
-    result = conversation_card(conversation)
+    try:
+        include_participants = parse_mcp_bool(
+            arguments.get("include_participants"), "include_participants", default=True
+        )
+    except ValueError as exc:
+        raise ToolExecutionError(str(exc), code=-32602) from exc
+    result = conversation_card(conversation, include_participants=include_participants)
     try:
         summary_only = parse_mcp_bool(arguments.get("summary_only"), "summary_only", default=False)
     except ValueError as exc:
@@ -297,9 +304,9 @@ def get_conversations_by_ids(
     arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
-    """Fetch up to twenty details with fair budgets and explicit omissions.
+    """Fetch up to twenty details with per-item bounds and explicit omissions.
 
-    The released nested detail and additive flat card share one projection.
+    Each item contains one nested detail, plus its stable id.
     Missing, locked, clipped and omitted records are accounted independently.
     """
     raw_ids = arguments.get("conversation_ids")
@@ -331,9 +338,9 @@ def get_conversations_by_ids(
         uid,
         conversation_ids,
         include_transcript=True,
-        include_discarded=True,
+        include_discarded=False,
     )
-    by_id = {str(conversation.get("id")): conversation for conversation in conversations}
+    by_id = {str(conversation.get("id")): transcribing_hold.project(conversation) for conversation in conversations}
     not_found = [conversation_id for conversation_id in conversation_ids if conversation_id not in by_id]
 
     filters = {
@@ -342,6 +349,7 @@ def get_conversations_by_ids(
         'max_chars': max_chars,
         'fields': arguments.get('fields'),
         'summary_only': arguments.get('summary_only', False),
+        'include_participants': arguments.get('include_participants', True),
     }
     offset = 0
     if arguments.get('cursor') is not None:
@@ -350,48 +358,36 @@ def get_conversations_by_ids(
         )
     try:
         summary_only = parse_mcp_bool(arguments.get('summary_only'), 'summary_only', default=False)
+        include_participants = parse_mcp_bool(
+            arguments.get('include_participants'), 'include_participants', default=True
+        )
     except ValueError as exc:
         raise ToolExecutionError(str(exc), code=-32602) from exc
     found_positions = [(pos, cid) for pos, cid in enumerate(conversation_ids) if pos >= offset and cid in by_id]
     found_ids = [cid for _pos, cid in found_positions]
 
-    def build_items(char_budget: int, segment_budget: int, card_budget: int) -> List[Dict[str, Any]]:
-        items = []
-        for cid in found_ids:
-            conversation = by_id[cid]
-            if conversation.get('is_locked', False):
-                items.append(
-                    {
-                        'id': cid,
-                        'error': {
-                            'code': 'paid_plan_required',
-                            'message': 'A paid plan is required to access this conversation.',
-                        },
-                    }
-                )
-                continue
-            card = conversation_card(conversation)
-            clipped_fields = []
-            for key, value in card['structured'].items():
-                if isinstance(value, str) and len(value) > card_budget:
-                    card['structured'][key] = value[:card_budget]
-                    clipped_fields.append('structured.' + key)
-            segments, clipped = bounded_transcript_segments(
-                conversation.get('transcript_segments'), max_segments=segment_budget, max_chars=char_budget
-            )
-            if not summary_only:
-                card['transcript_segments'] = segments
-            card = select_card_fields(card, arguments.get('fields'))
-            # Keep the released nested detail and add the same flat card as list/search.
-            items.append(
-                {
-                    **card,
-                    'conversation': card,
-                    'truncated': bool((clipped and not summary_only) or clipped_fields),
-                    'truncated_fields': clipped_fields,
-                }
-            )
-        return items
+    def build_item(cid: str) -> Dict[str, Any]:
+        conversation = by_id[cid]
+        if conversation.get('is_locked', False):
+            return {
+                'id': cid,
+                'error': {
+                    'code': 'paid_plan_required',
+                    'message': 'A paid plan is required to access this conversation.',
+                },
+            }
+        card = conversation_card(conversation, include_participants=include_participants)
+        segments, clipped = bounded_transcript_segments(
+            conversation.get('transcript_segments'), max_segments=max_segments, max_chars=max_chars
+        )
+        if not summary_only:
+            card['transcript_segments'] = segments
+        return {
+            'id': cid,
+            'conversation': select_card_fields(card, arguments.get('fields')),
+            'truncated': clipped and not summary_only,
+            'truncated_fields': [],
+        }
 
     def envelope(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         remaining = found_positions[len(items) :]
@@ -416,28 +412,21 @@ def get_conversations_by_ids(
             )
         return result
 
-    char_budget, segment_budget, card_budget = max_chars, max_segments, 4000
-    while True:
-        items = build_items(char_budget, segment_budget, card_budget)
-        result = envelope(items)
-        if tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
-            return result
-        if char_budget == segment_budget == card_budget == 1:
+    # Admit complete per-item projections in request order. Never spend the
+    # response budget by silently shrinking every transcript to a few characters.
+    items: List[Dict[str, Any]] = []
+    for cid in found_ids:
+        candidate = build_item(cid)
+        if tool_response_serialized_chars(envelope(items + [candidate])) > MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
+            if not items:
+                raise ToolExecutionError(
+                    'Conversation exceeds the 120000-character serialized response budget. '
+                    'Retry with include_participants=false, fewer fields, or smaller max_segments/max_chars.',
+                    code=-32602,
+                )
             break
-        char_budget = max(1, char_budget // 2)
-        segment_budget = max(1, segment_budget // 2)
-        card_budget = max(1, card_budget // 2)
-    # Pathological metadata (e.g. thousands of participants) can still exceed the
-    # bound. Account for every missing item, and bind continuation to this request.
-    while items and tool_response_serialized_chars(envelope(items)) > MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
-        items.pop()
-    result = envelope(items)
-    if not items and found_ids:
-        raise ToolExecutionError(
-            'Conversation metadata exceeds the response budget. Retry with fields=id,structured and summary_only=true.',
-            code=-32602,
-        )
-    return result
+        items.append(candidate)
+    return envelope(items)
 
 
 def search_conversations_core(
@@ -564,6 +553,7 @@ def search_conversations(
 
     results: List[Dict[str, Any]] = []
     for conv in conversations:
+        conv = transcribing_hold.project(conv)
         redact_conversation_for_list(conv)
         snippets: List[Dict[str, Any]] = []
         if not conv.get("is_locked", False):

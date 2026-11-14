@@ -23,6 +23,7 @@ from utils.batch_pipeline.contracts import PoolCapacity
 from utils.batch_pipeline.serving import Serving
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline import admission
 
 
 @pytest.fixture
@@ -119,6 +120,39 @@ def test_storage_cleanup_failure_does_not_stop_projection_or_lease_recovery():
     projector.sweep.assert_called_once()
 
 
+def test_authorize_http_returns_before_worker_timeout_with_blocked_reservation(api, monkeypatch):
+    client, store = api
+    row = store.rows['jobs', 'synthetic']
+    row['requires_compute_admission'] = True
+    row['projection_binding'] = {'job_id': 'bp_job', 'content_id': 'content'}
+    store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
+    (lease,) = Scheduler(store).pull(time.time())
+    release, finished = threading.Event(), threading.Event()
+
+    def blocked(*args):
+        try:
+            release.wait(6)
+            return SimpleNamespace(allowed=True)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(admission, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(admission, 'reserve_backfill_speech', blocked)
+    started = time.monotonic()
+    try:
+        response = client.post(
+            '/v2/batch-pipeline/authorize-compute',
+            json={'stage': 'dev', 'leases': [{'segment_id': 'synthetic', 'token': lease.token}]},
+        )
+        assert time.monotonic() - started < 4.8
+        assert response.status_code == 200
+        assert response.json() == {'allowed': [], 'retry_after': {'synthetic': 30}, 'held_reason': {}}
+    finally:
+        release.set()
+        assert finished.wait(2)
+    assert 'compute_admission_token' not in store.rows['jobs', 'synthetic']
+
+
 @pytest.mark.asyncio
 async def test_production_pump_lazily_composes_rpc_authorization_and_completes(api, monkeypatch):
     """The exact default Pump path used by B's runtime calls the backend seal."""
@@ -137,10 +171,14 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     store.rows['intakes', 'bp_job'] = {'total_audio_seconds': 30}
     monkeypatch.setattr(admission, 'reserve_backfill_speech', Mock(return_value=SimpleNamespace(allowed=True)))
     calls = []
+    budgets = []
+    deadline = admission.deadline_seconds
+    monkeypatch.setattr(admission, 'deadline_seconds', lambda value: budgets.append(value) or deadline(value))
 
     def send(request, timeout):
         calls.append(request.full_url)
-        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data))
+        headers = {'X-Omi-Admission-Seconds': request.get_header('X-omi-admission-seconds')}
+        response = client.post('/v2/batch-pipeline/authorize-compute', json=json.loads(request.data), headers=headers)
         assert response.status_code == 200
         return io.BytesIO(response.content)
 
@@ -158,6 +196,8 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     pump = pump_module.Pump(Scheduler(store), worker, capacity=lambda: PoolCapacity(time.time(), 1))
     assert await pump.run_once() == 1
     assert worker.calls == 1 and len(calls) == 1
+    # The worker's advertised deadline reaches the server's clamp.
+    assert budgets == ['8.0'] and deadline(budgets[0]) == 8.0
     assert store.rows['jobs', 'synthetic']['state'] == 'committed'
     assert store.rows['jobs', 'synthetic']['compute_admission_token'] == store.rows['jobs', 'synthetic']['token']
 
@@ -205,18 +245,14 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [('busy', 200), ('completed', 200)])
-@pytest.mark.parametrize('deadline', ['false', 'true'])
-async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
-    monkeypatch, caplog, status, code, deadline
-):
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
 
     async def run(executor, func, *args):
-        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        assert executor is module.postprocess_executor
         return func(*args)
 
     monkeypatch.setattr(module, 'run_blocking', run)
@@ -234,7 +270,6 @@ async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_
 async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
     from utils.sync import reprocess
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
     release = threading.Event()
@@ -371,6 +406,154 @@ def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(mo
     assert projector.sweep_held.call_count == 1
 
 
+def _held_partial_clock(monkeypatch, started=10_000.0):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': started}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    return serving_module, clock
+
+
+def _held_partial_lines(caplog):
+    return [record.getMessage() for record in caplog.records if 'batch_held_partial' in record.getMessage()]
+
+
+def test_held_partial_segment_lines_sum_into_one_pass_line_on_wrap(monkeypatch, caplog):
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    results = [
+        {'pages': 3, 'units': 96, 'partial': 1, 'waiting': 94, 'error': 1, 'reads': 480, 'more': 1},
+        {'pages': 2, 'units': 37, 'partial': 2, 'waiting': 35, 'error': 0, 'reads': 190, 'more': 0},
+    ]
+
+    def sweep(**_):
+        clock['monotonic'] += 5.0
+        return results.pop(0)
+
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=sweep)
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    clock['monotonic'] += 1.0
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    resumed_budget = (serving_module.HELD_PARTIAL_READS_PER_HOUR - 480) // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    # Two budget-resumed segments, one summed pass line when the scan wraps.
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=3 units=96 partial=1 waiting=94 error=1 reads=480 more=1 '
+        f'elapsed_ms=5000 budget_pages={budget}',
+        f'event=batch_held_partial action=segment pages=2 units=37 partial=2 waiting=35 error=0 reads=190 more=0 '
+        f'elapsed_ms=5000 budget_pages={resumed_budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=133 partial=3 waiting=129 '
+        'error=1 reads=670 pass_seconds=11.0',
+    ]
+
+
+def test_held_partial_governor_deferred_tick_logs_nothing_and_keeps_the_pass(monkeypatch, caplog):
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    results = [
+        {'pages': 4, 'units': 128, 'partial': 0, 'waiting': 128, 'error': 0, 'reads': 512, 'more': 1},
+        {'pages': 1, 'units': 2, 'partial': 0, 'waiting': 2, 'error': 0, 'reads': 2, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=lambda **_: results.pop(0))
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    # The hourly read governor is spent: the next tick defers with no sweep call
+    # and no new line, and the in-flight pass is not reset by it.
+    service.held_partial_reads.append((clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR))
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=4 units=128 partial=0 waiting=128 error=0 reads=512 more=1 '
+        f'elapsed_ms=0 budget_pages={budget}',
+    ]
+    # The window refills and the pass resumes where it stopped: the pass line
+    # spans the deferred gap instead of restarting at the resumed segment.
+    clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
+    service.reconcile()
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=4 units=128 partial=0 waiting=128 error=0 reads=512 more=1 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        f'event=batch_held_partial action=segment pages=1 units=2 partial=0 waiting=2 error=0 reads=2 more=0 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=130 partial=0 waiting=130 '
+        f'error=0 reads=514 pass_seconds={serving_module.HELD_PARTIAL_WINDOW_SECONDS:.1f}',
+    ]
+
+
+def test_single_page_held_pass_logs_one_segment_and_one_pass_line(monkeypatch, caplog):
+    serving_module, _ = _held_partial_clock(monkeypatch)
+    projector = Mock()
+    projector.sweep_held = Mock(
+        return_value={'pages': 1, 'units': 7, 'partial': 1, 'waiting': 6, 'error': 0, 'reads': 40, 'more': 0}
+    )
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=1 units=7 partial=1 waiting=6 error=0 reads=40 more=0 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=1 pages=1 units=7 partial=1 waiting=6 '
+        'error=0 reads=40 pass_seconds=0.0',
+    ]
+
+
+def test_held_partial_log_lines_carry_only_counts_never_ids(monkeypatch, caplog):
+    import re
+
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    steps = [
+        {'pages': 2, 'units': 64, 'partial': 1, 'waiting': 63, 'error': 0, 'reads': 320, 'more': 1},
+        TimeoutError('owner uid12345 content cid9876 segment seg0001'),
+        {'pages': 1, 'units': 1, 'partial': 0, 'waiting': 1, 'error': 0, 'reads': 16, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=steps)
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    clock['monotonic'] += 1.0
+    # A failed sweep keeps the existing error line and does not reset the pass;
+    # it waits out the interval before the pass can resume.
+    service.reconcile()
+    clock['monotonic'] += 400.0
+    service.reconcile()
+    messages = _held_partial_lines(caplog)
+    shapes = [
+        r'event=batch_held_partial action=segment pages=\d+ units=\d+ partial=\d+ waiting=\d+ error=\d+ reads=\d+ '
+        r'more=[01] elapsed_ms=\d+ budget_pages=\d+',
+        r'event=batch_held_partial action=pass outcome=completed segments=\d+ pages=\d+ units=\d+ partial=\d+ '
+        r'waiting=\d+ error=\d+ reads=\d+ pass_seconds=\d+\.\d',
+        r'event=batch_held_partial action=sweep outcome=retry exception_type=\w+',
+    ]
+    assert messages
+    for message in messages:
+        assert any(re.fullmatch(shape, message) for shape in shapes), message
+    joined = ' '.join(messages)
+    for token in ('uid12345', 'cid9876', 'seg0001'):
+        assert token not in joined
+    # The failed sweep's segment is not lost either: the pass closed two
+    # segments after it started, not one.
+    assert messages[-1] == (
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=3 units=65 partial=1 waiting=64 '
+        'error=0 reads=336 pass_seconds=401.0'
+    )
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 
@@ -457,43 +640,68 @@ def test_metrics_retains_legacy_drain_until_both_controls_are_on(api, monkeypatc
     service.metrics.refresh.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'scrape_flag,serving_flag', [(None, 'false'), ('true', 'false'), (None, 'true'), ('true', 'true')]
+)
+def test_pump_metrics_refreshes_without_reconcile_regardless_of_serving_controls(
+    api, monkeypatch, scrape_flag, serving_flag
+):
+    from unittest.mock import AsyncMock
+
+    client, store = api
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', serving_flag)
+    monkeypatch.delenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', raising=False)
+    if scrape_flag is not None:
+        monkeypatch.setenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', scrape_flag)
+    service = Serving(store, metrics=Mock(), leader=Mock())
+    service.reconcile_async = AsyncMock(side_effect=AssertionError('pump metrics must never reconcile'))
+    monkeypatch.setattr(module, 'serving_for_stage', lambda stage: service)
+
+    assert client.get('/v2/batch-pipeline/metrics').status_code == 200
+    service.metrics.refresh.assert_called_once()
+    assert service.metrics.refresh.call_args.args[0] is store
+    service.reconcile_async.assert_not_awaited()
+    service.leader.acquire.assert_not_called()
+
+
 @pytest.mark.asyncio
-async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch):
-    import asyncio
+async def test_recovery_request_awaits_paid_intent_before_response_and_projection(api, monkeypatch, caplog):
     from routers import batch_pipeline as routes
 
     _, store = api
+    caplog.set_level(logging.INFO, logger=routes.__name__)
     service = routes.serving_for_stage('dev')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
-    entered, release = asyncio.Event(), asyncio.Event()
+    events = []
 
     async def recover(segment, owner):
-        entered.set()
-        await release.wait()
+        events.append('recognition')
         return 'recovered'
+
+    async def reconcile(**kwargs):
+        events.append(('owner_reconcile', kwargs['owner_only']))
 
     service.recovery = Mock()
     from unittest.mock import AsyncMock
 
     service.recovery.recover_async = AsyncMock(side_effect=recover)
-    service.reconcile_async = AsyncMock()
-    task = asyncio.create_task(
-        routes.recover_quarantine(
-            routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
-        )
+    service.reconcile_async = AsyncMock(side_effect=reconcile)
+    result = await routes.recover_quarantine(
+        routes.RedriveRequest(stage='dev', segment_id='synthetic'), SimpleNamespace(headers={})
     )
-    try:
-        await asyncio.wait_for(entered.wait(), 2)
-        assert not task.done()  # The request stays active during the provider call.
-        service.reconcile_async.assert_not_awaited()
-    finally:
-        release.set()
-    assert await task == {'status': 'recovered'}
+    assert result == {'status': 'recovered'}
+    assert events == ['recognition', ('owner_reconcile', True)]
     service.reconcile_async.assert_awaited_once_with(
-        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic'
+        owner_id=store.rows['jobs', 'synthetic']['owner_id'], recovered='synthetic', owner_only=True
     )
     assert service.recovery.recover_async.await_args.args == ('synthetic', store.rows['jobs', 'synthetic']['owner_id'])
     service.recovery.recover.assert_not_called()
+    stages = [record.getMessage() for record in caplog.records if 'event=batch_recovery_stage ' in record.getMessage()]
+    assert len(stages) == 2
+    assert stages[0].startswith('event=batch_recovery_stage stage=recognition duration_seconds=')
+    assert stages[1].startswith('event=batch_recovery_stage stage=post_recovery duration_seconds=')
+    assert all('synthetic' not in line and store.rows['jobs', 'synthetic']['owner_id'] not in line for line in stages)
 
 
 def test_recovery_task_rejects_foreign_stage_and_missing_oidc(api, monkeypatch):
@@ -557,11 +765,7 @@ def _retry_count(reason):
 async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monkeypatch, caplog, kind):
     from utils.sync import reprocess
 
-    # Importing the real sync pipeline costs seconds; the identity check below
-    # pins its defining module and name instead.
-    SyncConversationPersistenceFenced = type(
-        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
-    )
+    from utils.enrichment.admission import SyncConversationPersistenceFenced
 
     class StaleSnapshot(SyncConversationPersistenceFenced):
         pass
@@ -681,9 +885,9 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
     async def reconcile_async(**kwargs):
         passes.set()
 
-    service = SimpleNamespace(store=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+    service = SimpleNamespace(store=Mock(), metrics=None, reconcile_async=reconcile_async, dispatch_recovery=Mock())
 
-    async def drain_recordings(store):
+    async def drain_recordings(store, **kwargs):
         return None
 
     monkeypatch.setattr(serving, 'current_stage', lambda: 'prod')
@@ -709,3 +913,152 @@ def test_serving_maintenance_fails_open_when_lease_store_errors():
     service = Serving(store, cleanup=Mock(), leader=LeaderLease(broken, SERVING_MAINTENANCE, ttl_seconds=60))
     service.reconcile(periodic=True)
     service.cleanup.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('blocked', ['reconcile', 'drain', None])
+async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, blocked):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    counts = {'reconcile': 0, 'drain': 0}
+    cancelled = asyncio.Event()
+    progressed = asyncio.Event()
+    stages = []
+    stage = 'dev'
+    original_wait_for = asyncio.wait_for
+
+    async def short_wait(awaitable, timeout):
+        return await original_wait_for(awaitable, timeout=0.01 if timeout == 5 else 0.001)
+
+    async def tick(kind):
+        nonlocal stage
+        counts[kind] += 1
+        if kind == blocked:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        elif counts[kind] >= 2 and (blocked is not None or min(counts.values()) >= 2):
+            progressed.set()
+        stage = 'prod'
+        if kind == 'drain':
+            raise RuntimeError('synthetic drain failure')
+
+    async def reconcile_async(**kwargs):
+        await tick('reconcile')
+
+    async def drain_recordings(store, **kwargs):
+        assert callable(kwargs['provider_outbox_factory'])
+        assert store is service.store
+        assert kwargs['metrics'] is service.metrics
+        await tick('drain')
+
+    service = SimpleNamespace(store=object(), metrics=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+
+    def resolve(selected):
+        stages.append(selected)
+        return service
+
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: stage)
+    monkeypatch.setattr(serving, 'serving_for_stage', resolve)
+    monkeypatch.setattr(serving, 'drain_recordings', drain_recordings)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', short_wait)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(progressed.wait(), timeout=1)
+    finally:
+        await serving.stop_serving(runtime)
+    assert runtime[1].done()
+    assert counts['reconcile'] >= (1 if blocked == 'reconcile' else 2)
+    assert counts['drain'] >= (1 if blocked == 'drain' else 2)
+    assert 'dev' in stages and 'prod' in stages
+    assert cancelled.is_set() is (blocked is not None)
+    stopped_counts = counts.copy()
+    await asyncio.sleep(0)
+    assert counts == stopped_counts
+
+
+async def _inline_serving_call(executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first_full', [True, False])
+async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatch, first_full):
+    from utils.batch_pipeline import serving
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', 'off')
+    calls, waits, yields = [], [], []
+    second = asyncio.Event()
+    original_wait_for, original_sleep = asyncio.wait_for, asyncio.sleep
+    drain_task = None
+
+    async def admission(store, **kwargs):
+        nonlocal drain_task
+        drain_task = asyncio.current_task()
+        calls.append(1)
+        if len(calls) == 2:
+            second.set()
+        return first_full if len(calls) == 1 else False
+
+    async def wait_for(awaitable, timeout):
+        if asyncio.current_task() is drain_task:
+            waits.append(len(calls))
+            assert timeout == 20
+            if len(calls) == 1:
+                awaitable.close()
+                raise asyncio.TimeoutError
+        return await original_wait_for(awaitable, timeout)
+
+    async def sleep(delay):
+        if asyncio.current_task() is drain_task:
+            yields.append((len(calls), delay))
+        await original_sleep(delay)
+
+    async def reconcile_async(**kwargs):
+        return None
+
+    service = SimpleNamespace(store=object(), metrics=None, reconcile_async=reconcile_async)
+    monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
+    monkeypatch.setattr(serving, 'drain_recordings', admission)
+    monkeypatch.setattr(serving.asyncio, 'wait_for', wait_for)
+    monkeypatch.setattr(serving.asyncio, 'sleep', sleep)
+    runtime = serving.start_serving_from_env()
+    try:
+        await original_wait_for(second.wait(), timeout=2)
+    finally:
+        await serving.stop_serving(runtime)
+    assert calls == [1, 1]
+    assert waits == ([2] if first_full else [1, 2])
+    assert yields == ([(1, 0)] if first_full else [])
+
+
+def test_stage_metrics_use_existing_lease_system_with_independent_bounded_role(monkeypatch):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
+
+    store = MemoryStore()
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'FirestoreStore', lambda namespace: store)
+    monkeypatch.setattr(serving, 'shadow_from_env', lambda value: value)
+    monkeypatch.setattr(serving, 'artifacts_for', lambda _: Mock())
+    monkeypatch.setattr(serving, 'Projector', Mock())
+    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
+    serving.serving_for_stage.cache_clear()
+    try:
+        service = serving.serving_for_stage('dev')
+        assert service.metrics is metrics
+        assert metrics.oldest_leader.store is store
+        assert metrics.oldest_leader.role == QUEUE_METRICS
+        assert metrics.oldest_leader.ttl_seconds == 20
+        assert service.leader.role == SERVING_MAINTENANCE
+        assert service.leader.ttl_seconds == 60
+    finally:
+        serving.serving_for_stage.cache_clear()

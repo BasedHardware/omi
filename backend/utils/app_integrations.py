@@ -39,7 +39,6 @@ from database.webhook_health import (
     disable_app_in_firestore,
 )
 from database.chat import add_app_message, get_app_messages
-from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -66,6 +65,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration, serialize_datetimes
 from utils.log_sanitizer import sanitize
 from utils.episodes.live import on_realtime_segments
@@ -234,6 +234,8 @@ async def trigger_external_integrations(
     instead of failing the conversation's fanout one final time.
     """
     if not conversation or conversation.discarded:
+        return []
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return []
     if conversation.is_locked:
         return []
@@ -415,6 +417,8 @@ async def trigger_realtime_integrations(
 ):
     logger.debug(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return {}
     return await _async_trigger_realtime_integrations(
         uid,
         segments,
@@ -427,6 +431,8 @@ async def trigger_realtime_integrations(
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.debug(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return {}
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
 
@@ -533,7 +539,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     ERROR level, which is the exact signature this guard used to emit for
     every no-notification webhook response in production.
     """
-    if not generated_compute_allowed(uid, 'app_integration'):
+    if account_deletion_blocks_user_work(uid) or not generated_compute_allowed(uid, 'app_integration'):
         return None
     if not app.has_capability("proactive_notification"):
         logger.error(f"App {app.id} lacks proactive_notification capability {uid}")
@@ -723,14 +729,6 @@ async def _async_trigger_realtime_integrations(
     *,
     client_kind: ClientKind = 'unknown',
 ) -> dict:
-    # Paywall: skip third-party proactive notifications when this
-    # transcription session belongs to a paywalled desktop user.
-    # Reactivates automatically when the user upgrades or activates BYOK.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
-        return {}
-
-    # Live episode moments (utils/episodes/live.py): buffers in process and
-    # schedules its own fail-open background update; never blocks this fan-out.
     await on_realtime_segments(uid, segments, conversation_id, source)
 
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)

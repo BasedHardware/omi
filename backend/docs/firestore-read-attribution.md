@@ -34,6 +34,38 @@ The separate Prometheus counter is `omi_firestore_billed_reads_total`. Do not ad
 `omi_firestore_document_reads_by_site_total` to it. Those answer different
 questions and would double-count.
 
+## Export parity and service identity
+
+The tier and caller counters increment by the same amount in `_record()`.
+Both Cloud Run GMP profiles must retain both names; retaining only
+`firestore_billed_reads_by_*_total` silently removes the tier counter on sync,
+backfill and integration services. `test_firestore_attribution_export.py`
+exercises SDK responses, counter exposition and the actual keep expressions.
+Tier resolution stays local and bounded; missing ownership is `unattributed`.
+
+GKE `DD_SERVICE` names the JSON ledger, not Prometheus samples. The workload
+charts set a static `service_name` pod label. GMP PodMonitoring and the
+in-cluster Prometheus scrape jobs copy that label onto their samples. Seal
+CronJobs carry their own pod identity for Alloy logs only; their pods are not
+scraped. The sync-backfill-worker pilot carries the label and GMP mapping for
+its future deployment.
+
+The checked-in production seal-worker values set `runtimeEnabled: false`.
+That worker serves its private metrics registry but performs no discovery or
+claims, so it need not expose any lazy read-counter children. Both read
+collectors are already registered there, and completed repair-child totals are
+folded into the parent. Absent read series alone do not establish a scrape bug.
+
+The probe observes snapshots consumed from the SDK, not every document the
+server might bill after a caller abandons a stream. It must not drain streams,
+enable Explain, or infer returned-document counts from a configured limit:
+those change reads or invent counts. Fully consumed stream/get/transaction,
+collection-group, limit and batch paths are covered by real SDK conversion
+tests with only the RPC replaced. A fleet coverage residual alone does not
+prove which of these paths lost documents. Processes that never install the
+probe and non-Python readers remain separate coverage boundaries; admin server
+reads, for example, emit their own log ledger rather than the Python counters.
+
 ## Kind and Cloud Monitoring type
 
 | `kind` | Cloud Monitoring `type` | What is counted |
@@ -60,6 +92,34 @@ the probe (`users/*/memory_items` becomes `users/memory_items`).
 ```promql
 sum(rate(omi_firestore_caller_label_overflow_total[30m]))
 ```
+
+The Grafana rule `omi-firestore-caller-overflow` (warning, agent tier) fires when
+the label set folds: either `omi_firestore_caller_label_overflow_total` moves or
+`omi_firestore_billed_reads_by_caller_total{caller="other"}` carries reads, held
+for five minutes. The second arm also catches a malformed or frame-less caller
+label, which folds to `other` without incrementing the overflow counter. Both
+queries run on the managed `gmp-cloud-run` datasource: the in-cluster Cloud Run
+bridge keeps only `omi_firestore_documents_per_operation` and
+`omi_firestore_read_operations_total`, so a rule on the local `prometheus`
+datasource would be blind to Cloud Run. The rule's enable selector is node D,
+`vector(1)`, enabled by default; flipping it to `vector(0)` and re-provisioning
+disables the alert, and restoring `vector(1)` re-enables it. The rule also ships
+`isPaused: false`; pausing it is the operational switch. No actuator flips
+either automatically. Fixtures that drive the real probe and evaluate the
+committed rule live in `backend/tests/unit/test_firestore_caller_overflow_alert.py`.
+
+An empty result on both arms is the expected healthy state: the
+`caller="other"` bucket is created only after a fold, so the series is normally
+absent. Absence is not a measured zero. When you run the verification query,
+record `no series` rather than `0`, and do not report an empty result as a clean
+live reading — the live attestation for this rule is a fresh consumed series from
+the running alert consumer after the approved roll, not an empty query.
+
+Custom-registry processes (the batch pipeline worker and the record-seal worker)
+serve `utils/observability/firestore_probe_export.py`'s `COLLECTORS`, not the
+default registry, so `omi_firestore_caller_label_overflow_total` is in that tuple
+and in `COUNTER_SAMPLES`. Without it the precise overflow arm is blind to the
+batch pipeline, which is the dominant reader.
 
 ## PromQL dashboard guidance (not the bill reconcile)
 

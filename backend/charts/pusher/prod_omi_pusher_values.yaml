@@ -53,7 +53,8 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  service_name: pusher
 
 podSecurityContext: {}
   # fsGroup: 2000
@@ -114,7 +115,52 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
+  - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
+    value: "g1"
+  # Default off. 512 MiB is a proposed canary size, not enabled here.
+  - name: PUSHER_STORAGE_PCM_BUDGET_MB
+    value: '0'
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
+  - name: CONVERSATION_TERMINAL_FAMILY_MODE
+    value: "on"
+  - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
+    value: "true"
+  - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
+    value: "7200"
+  - name: HOME_PROCESSING_MAX_AGE_SECONDS
+    value: "21600"
+  # lead2 88ba4d: pusher train, canary one pod before fleet expansion.
+  - name: PUSHER_MAX_CLOSED_RECORD_DRAINS
+    value: "64"
+  - name: PUSHER_ABANDON_EVICTED_TOKENS
+    value: "on"
+  # Bound detached abandonment coordinators independently of closed workers.
+  - name: PUSHER_MAX_ABANDON_RECORD_DRAINS
+    value: "4"
+  # Production retirement; false restores the old routes only after GPUs are ready.
+  - name: STT_GPU_FLEET_OFF
+    value: "true"
+  - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
+    value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
+  # Quiet-check empty exit; mirrors backend-listen (co-host env parity, lead2 9b4ffd).
+  - name: QUIET_EMPTY_EXIT_ENABLED
     value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
@@ -122,12 +168,6 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
-  - name: FIRST_SUMMARY_DEADLINE_ENABLED
-    value: "true"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "100"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -151,13 +191,7 @@ env:
   - name: DEMAND_PROCESSING_PERCENT
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
-    value: "false"
-  - name: REPEAT_WORK_REVISION_ENABLED
-    value: "false"
-  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
@@ -170,8 +204,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -180,8 +212,8 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: ""
+  - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
+    value: "0"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -202,10 +234,16 @@ env:
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
   - name: PROACTIVITY_V2_POSTHOG_HOST
     value: "https://us.posthog.com"
+  - name: OMI_FLAGS_FIRESTORE_PROJECT
+    value: "based-hardware"
+  - name: OMI_FLAGS_FIRESTORE_DATABASE
+    value: "omi-flags"
+  - name: OMI_FLAGS_SOURCE
+    value: "dual"
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":0}'
+    value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "0"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -221,7 +259,7 @@ env:
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
-    value: "60"
+    value: "55"
   - name: FSR_SERVING_CONFIG_TTL_SECONDS
     value: "60"
   - name: ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS
@@ -254,6 +292,11 @@ env:
         key: POSTHOG_PROJECT_API_KEY
   - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
     value: "true"
+  - name: BATCH_FINAL_PASS_ENABLED
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: BATCH_FINAL_PASS_ENABLED
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
@@ -290,10 +333,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
@@ -331,12 +370,20 @@ env:
     value: "10"
   - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-  - name: SPEAKER_GROUPING_MODE
-    value: "incumbent"
-  - name: SPEAKER_MATCH_SCORES_ENABLED
-    value: "true"
   - name: OMI_SHAPED_AGENT_MODE
     value: "on"
+  - name: BUCKET_OBJECT_LAKE
+    value: ""
+  - name: OBJECT_LAKE_KMS_KEY
+    value: ""
+  - name: OBJECT_LAKE_WRITE_ENABLED
+    value: "false"
+  - name: OBJECT_LAKE_WRITE_PERCENT
+    value: "0"
+  - name: OBJECT_LAKE_READ_ENABLED
+    value: "true"
+  - name: OBJECT_LAKE_INLINE_MAX_BYTES
+    value: "4096"
   - name: BUCKET_SCREEN_FRAMES
     value: "based-hardware-prod-screen-frames"
   - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
@@ -385,8 +432,10 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
+  # In-cluster callers reach diarizer by ClusterIP DNS; the internal-ALB
+  # route stays for Cloud Run callers (billed per GB inbound).
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://172.16.160.20/diarizer"
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -509,12 +558,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: HOSTED_LID_API_URL
+    value: ""
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_SERVICE_MODELS
-    value: "modulate-velma-2,soniox,parakeet"
+    value: "modulate-velma-2,soniox"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -648,6 +701,9 @@ strategy:
     maxUnavailable: 1
     maxSurge: 2
 
+# Endpoint removal at T+0; SIGTERM follows the 15s preStop sleep. Uvicorn's
+# 90s graceful budget reaches T+105: LB drain (60s) + background drain (30s)
+# fit before it, with 15s left inside the pod's 120s termination grace.
 terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
@@ -692,3 +748,21 @@ affinity:
               operator: In
               values:
                 - v3
+    # Soft preference only: n2rescue still carries the required labels above,
+    # so overflow capacity cannot regress. Without this term the scheduler
+    # spreads evenly across v3 and n2rescue, stranding half the fleet on
+    # n2rescue (9 of 16 nodes, 2026-10-29) even after load falls, because
+    # pusher pods never reschedule on their own.
+    # Deploy gate: pod-template change — per
+    # backend/docs/runbooks/audio-fleet.md, roll only in a verified
+    # traffic-free window or after a qualified admission drain; never onto
+    # active WS sessions (PDB 80% protects availability, not sessions).
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+                - pusher-pool-v3
+                - pusher-pool-v3-bc

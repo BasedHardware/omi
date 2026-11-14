@@ -530,7 +530,7 @@ packages:
     source: hosted
     version: "15.2.5"
   firebase_messaging_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: firebase_messaging_platform_interface
       sha256: "0bbea00680249595fc896e7313a2bd90bd55be6e0abbe8b9a39d81b6b306acb6"
@@ -1728,6 +1728,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.10.2"
+  qr:
+    dependency: transitive
+    description:
+      name: qr
+      sha256: "2c0189dca64a3ab08dda7acd7911c89af2374f08eb4eaded3e8ef4609f3b9c8b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.3"
+  qr_flutter:
+    dependency: "direct main"
+    description:
+      name: qr_flutter
+      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   quick_actions:
     dependency: "direct main"
     description:
@@ -1825,7 +1841,7 @@ packages:
     source: hosted
     version: "2.4.1"
   shared_preferences_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: shared_preferences_platform_interface
       sha256: "57cbf196c486bc2cf1f02b85784932c6094376284b3ad5779d1b1c6c6a816b80"

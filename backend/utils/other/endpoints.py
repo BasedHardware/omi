@@ -11,18 +11,21 @@ from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 
+from database.directory import router as directory_router
+from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
-from database.account_deletion_policy import account_deletion_blocks_access
+from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
     enforce_account_cutover_ws_access,
+    is_cutover_control_path,
 )
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -42,6 +45,26 @@ WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
+
+
+def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, signup_os=None) -> None:
+    if is_cutover_control_path(getattr(getattr(request, 'url', None), 'path', '')):
+        return
+    try:
+        if not directory_router.routing_active():
+            return
+        directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
+    except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
+        raise HTTPException(
+            status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}
+        ) from exc
+
+
+def _resolve_request_plane_ws(uid: str) -> None:
+    try:
+        _resolve_request_plane_or_503(uid)
+    except HTTPException as exc:
+        raise WebSocketException(code=1013, reason='directory_routing_unavailable') from exc
 
 
 def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
@@ -81,14 +104,16 @@ def _account_deletion_status(uid: str) -> str | None:
         ) from error
 
 
-def enforce_account_deletion_http_access(uid: str) -> None:
+def enforce_account_deletion_http_access(uid: str, *, allow_grace_erase_now: bool = False) -> None:
     bind_request_owner(uid)
     status = _account_deletion_status(uid)
+    if allow_grace_erase_now and status == ACCOUNT_DELETION_GRACE_STATUS:
+        return
     if account_deletion_blocks_access(status):
         raise HTTPException(
             status_code=403,
             detail={
-                'code': 'account_deletion_in_progress',
+                'code': 'account_pending_deletion' if status == 'pending_deletion' else 'account_deletion_in_progress',
                 'status': status,
                 'retryable': False,
             },
@@ -174,6 +199,36 @@ def verify_token(token: str) -> str:
         raise
 
 
+def get_current_user_uid_for_deletion_status(
+    authorization: str = Header(None),
+    _x_app_platform: str = Header(None, alias='X-App-Platform'),
+    _x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    _x_app_version: str = Header(None, alias='X-App-Version'),
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Authenticate the owner without opening ordinary account access.
+
+    Used by the account-deletion status, restore, and erase-now endpoints,
+    which must remain reachable while the normal auth fence blocks a
+    pending-deletion account. The optional client headers preserve the
+    released delete-account contract without running registration, device,
+    BYOK, or content-recovery side effects.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail='Authorization header not found')
+    if len(str(authorization).split(' ')) != 2:
+        raise HTTPException(status_code=401, detail='Invalid authorization token')
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+    try:
+        return verify_token(token)
+    except InvalidIdTokenError as error:
+        logger.error(error)
+        raise HTTPException(status_code=401, detail='Invalid authorization token') from error
+
+
 def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
     """Apply cutover fencing only when FastAPI injected a Request.
 
@@ -197,6 +252,20 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         from utils.locked_content_recovery import recover_locked_content
 
         recover_locked_content(uid)
+
+
+def get_current_user_uid_readonly(
+    authorization: str = Header(None),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Verify owner and security fences without device/platform/recovery writes."""
+    uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request)
+    validate_byok_request(uid)
+    return uid
 
 
 def get_current_user_uid(
@@ -225,6 +294,7 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
@@ -292,6 +362,7 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -424,6 +495,9 @@ async def get_current_user_uid_ws_listen(
             headers=websocket.headers,
         )
 
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
         validated_byok_keys, error = await run_critical_ws(
@@ -452,6 +526,8 @@ def get_current_user_uid_ws(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+
+    _resolve_request_plane_ws(uid)
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -524,6 +600,8 @@ async def get_current_user_uid_from_ws_message(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
     return uid
 
 

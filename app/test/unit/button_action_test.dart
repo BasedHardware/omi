@@ -92,9 +92,9 @@ void main() {
       await SharedPreferencesUtil.init();
     });
 
-    test('unset doubleTapAction defaults to mute (issue #2825)', () {
-      expect(SharedPreferencesUtil().doubleTapAction, 1);
-      expect(resolveDoubleTapAction(SharedPreferencesUtil().doubleTapAction), ButtonAction.toggleMute);
+    test('unset doubleTapAction preserves end conversation on upgrade', () {
+      expect(SharedPreferencesUtil().doubleTapAction, 0);
+      expect(resolveDoubleTapAction(SharedPreferencesUtil().doubleTapAction), ButtonAction.endConversation);
     });
 
     test('stored doubleTapAction 0 keeps end conversation', () {

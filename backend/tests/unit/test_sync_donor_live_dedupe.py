@@ -12,11 +12,14 @@ from tests.unit.test_committed_coverage import _envelope, ROOT, EPOCH, RATE
 from utils.conversations.smart_merge_policy import absorb_payloads
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk
+from tests.unit.test_sync_lineage_dedupe_replay import reworded
+from tests.unit.test_capture_repeat_evidence import receipt, sync_evidence
 from utils.sync import bridge_observation as observation_module
 from utils.sync import donor_dedupe
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.intake_completion import log_sync_lineage_append
 from utils.sync.live_speech_dedupe import speech_overlap_seconds
+from utils.sync.capture_repeat_evidence import capture_covered_indices
 from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor
 from utils.conversations.smart_merge_policy import rebase_donor_segments
 
@@ -451,13 +454,13 @@ def test_fresh_append_overlap_is_measurable_from_append_line(monkeypatch, caplog
     incoming = dict(
         chunk('fresh', 1007, 'New words survive though they overlap live speech.'), data_protection_level='standard'
     )
-    row, _, _ = db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
-    stats = row['_sync_lineage_dedupe']
-    assert stats['appended_seconds'] == 9.5
-    assert stats['appended_seconds_overlapping_live'] == 2.5
     with caplog.at_level(logging.INFO):
-        log_sync_lineage_append(stats)
-    assert any('appended_seconds_overlapping_live=2.5' in record.message for record in caplog.records)
+        row, _, _ = db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert '_sync_lineage_dedupe' not in row
+    lines = [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+    assert len(lines) == 1
+    assert 'appended_seconds=9.50 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=2.5' in lines[0]
 
 
 def test_append_line_marks_absent_overlap_measurement_unknown(caplog):
@@ -466,6 +469,102 @@ def test_append_line_marks_absent_overlap_measurement_unknown(caplog):
             dict(appended_seconds=2.0, dropped_as_repeat_seconds=0.0, alignment_method='none', repeat_only=False)
         )
     assert any('appended_seconds_overlapping_live=unknown' in record.message for record in caplog.records)
+
+
+@pytest.mark.parametrize('capture_mode', ['off', 'shadow', 'serve'])
+def test_fleet_on_cohort_uses_capture_lexical_contract_and_measures_novel_speech(monkeypatch, caplog, capture_mode):
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', capture_mode)
+    store = StrictFirestore()
+    live, _ = rows()
+    incoming = dict(chunk('fresh', 1000, reworded(WORDS)), data_protection_level='standard')
+    incoming['transcript_segments'].append(
+        dict(start=4, end=13.5, text=WORDS + ' tomorrow', speaker_id=0, is_user=False)
+    )
+    incoming['finished_at'] = incoming['started_at'] + timedelta(seconds=13.5)
+    for index, segment in enumerate(incoming['transcript_segments']):
+        segment['id'] = f'fresh-{index}'
+    incoming['capture_evidence'] = sync_evidence(
+        [
+            receipt('fresh-0', start_frame=0, end_frame=19, capture_root=ROOT, clock_epoch=EPOCH),
+            receipt('fresh-1', start_frame=8, end_frame=27, capture_root=ROOT, clock_epoch=EPOCH),
+        ]
+    )
+    live['capture_evidence'] = _envelope(range(28), wall0=1000)
+    assert capture_covered_indices(
+        incoming['transcript_segments'], incoming['capture_evidence'], live['capture_evidence']
+    ) == frozenset({0, 1})
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    with caplog.at_level(logging.INFO):
+        row, created, survivors = db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert not created
+    assert [s['text'] for s in survivors] == [WORDS + ' tomorrow']
+    stored = store.rows[('users', 'u', 'conversations', 'live')]
+    segments = db.decode_transcript_segments_verified(
+        'u', stored['transcript_segments'], stored.get('transcript_segments_compressed', False)
+    )
+    assert [s['text'] for s in segments] == [WORDS, WORDS + ' tomorrow']
+    lines = [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+    assert len(lines) == 1
+    assert 'appended_seconds=9.50 ' in lines[0]
+    assert 'dropped_as_repeat_seconds=9.50 ' in lines[0]
+    assert 'alignment_method=source_frame_lexical' in lines[0]
+    assert 'appended_seconds_overlapping_live=5.5' in lines[0]
+    assert 'lineage_admitted=true' in lines[0]
+    assert '_sync_lineage_dedupe' not in row
+
+
+def test_noncohort_fleet_dedupe_and_append_measurement_still_run(monkeypatch, caplog):
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'other')
+    store = StrictFirestore()
+    live, _ = rows()
+    second = 'the updated delivery schedule moves our weekly planning session to friday'
+    live['transcript_segments'].append(dict(start=10, end=19.5, text=second, speaker_id=0, is_user=False))
+    live['finished_at'] = live['started_at'] + timedelta(seconds=19.5)
+    incoming = dict(chunk('fresh', 1000, WORDS), data_protection_level='standard')
+    incoming['transcript_segments'].extend(
+        [
+            dict(start=10, end=19.5, text=second, speaker_id=0, is_user=False),
+            dict(start=8, end=12, text='This unrelated update is new.', speaker_id=0, is_user=False),
+        ]
+    )
+    incoming['finished_at'] = live['finished_at']
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    with caplog.at_level(logging.INFO):
+        _, _, survivors = db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert [s['text'] for s in survivors] == ['This unrelated update is new.']
+    lines = [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+    assert len(lines) == 1
+    assert 'appended_seconds=4.00 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=3.5' in lines[0]
+    assert 'lineage_admitted=false' in lines[0]
+
+
+@pytest.mark.parametrize('dropped', [False, True])
+def test_bridge_zero_length_donor_intervals_contribute_zero_without_invalidating(dropped):
+    live, donor = rows(donor_start=1000)
+    incoming = absolute(donor)
+    incoming.extend([dict(timestamp=1001, start=1, end=1), dict(timestamp=1002, start=2, end=2)])
+    kept = incoming[:1] if dropped else incoming
+    measured = observation_module.bridge_observation(
+        live, [(incoming, DonorDedupe(kept))], operation='assignment', target_kind='live'
+    )
+    assert measured['outcome'] == 'bridge_overlap'
+    assert measured['incomplete_reason'] == 'none'
+    assert measured['donor_seconds_in'] == measured['donor_seconds_retained'] == 9.5
+    assert measured['donor_seconds_dropped'] == 0
+    assert measured['donor_seconds_retained_overlapping_live'] == 9.5
+
+
+@pytest.mark.parametrize('start,end,timestamp', [(2, 1, 1000), (0, float('nan'), 1000), (1, 1, float('inf'))])
+def test_bridge_invalid_donor_intervals_remain_unknown(start, end, timestamp):
+    live, donor = rows()
+    incoming = [dict(start=start, end=end, timestamp=timestamp)]
+    measured = observation_module.bridge_observation(
+        live, [(incoming, DonorDedupe(incoming))], operation='assignment', target_kind='live'
+    )
+    assert measured['outcome'] == 'bridge_unknown' and measured['incomplete_reason'] == 'invalid_timing'
 
 
 @pytest.mark.parametrize('invalid', ['live', 'incoming', 'denominator_cap', 'malformed'])

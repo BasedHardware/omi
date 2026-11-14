@@ -6,11 +6,16 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from google.cloud import firestore
+from prometheus_client import Counter
 
-from config.firestore_read_levers import lever_enabled
+from config.batch_pipeline import (
+    projection_source_deleted_enabled,
+    batch_held_dead_letter_enabled,
+    HELD_DEAD_LETTER_SECONDS,
+)
+
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
-    BatchPrivacyMemo,
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
@@ -21,14 +26,22 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionReplay,
     normalized_binding,
 )
+from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
-from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
 if TYPE_CHECKING:
     from database.batch_pipeline_projection import ProjectionStore
+
+
+SOURCE_DELETED_JOBS = Counter(
+    'omi_batch_pipeline_projection_source_deleted_jobs_total',
+    'Projection jobs settled without content after source deletion without a tombstone or redirect',
+)
 
 
 class ProjectionSession:
@@ -61,6 +74,7 @@ class ProjectionSession:
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
         self._source_deletion_transaction = None
+        self._source_deleted = False
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._privacy_fence_ids: set[str] | None = None
@@ -72,32 +86,48 @@ class ProjectionSession:
         receipt = self.entry.get('projection') or {}
         return {} if receipt.get('privacy_control_only') else receipt
 
-    def write_receipt(self, transaction, receipt):
-        """Ready acknowledgment and summary share one result-keyed receipt."""
+    def write_receipt(self, transaction, receipt) -> bool:
+        """Write the receipt and return a sibling hold transition for post-commit logging."""
         if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
-            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
-            return
+            transaction.update(
+                self.result_ref,
+                {
+                    'projection': receipt,
+                    'projection_state': receipt['state'],
+                    **projection_finish_state_fields(receipt['state'], self.now),
+                },
+            )
+            return False
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
         summary = dict(self.entry.get('projection') or {})
         if summary and all(part.get('state') in {'ready', 'quarantined'} for part in parts.values()):
             if any(part.get('state') == 'quarantined' for part in parts.values()):
                 # A successful sibling's follow-up cannot acknowledge held text.
+                sibling_hold_changed = (
+                    summary.get('state') != 'quarantined' or self.entry.get('projection_state') != 'quarantine_held'
+                )
                 summary['state'] = 'quarantined'
-                changes.update(projection=summary, projection_state='quarantine_held')
+                changes.update(
+                    projection=summary,
+                    projection_state='quarantine_held',
+                    **projection_finish_state_fields('quarantine_held', self.now),
+                )
                 transaction.update(self.result_ref, changes)
-                return
+                return sibling_hold_changed
             summary['state'] = 'ready'
-            changes.update(projection=summary, projection_state='ready')
+            changes.update(
+                projection=summary,
+                projection_state='ready',
+                **projection_finish_state_fields('ready', self.now),
+            )
         transaction.update(self.result_ref, changes)
+        return False
 
     def guard(self, transaction, conversation_ids=()):
-        options = {}
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            options['memo'] = getattr(self, '_privacy_memo', None)
         snapshots: dict[str, Any] = {}
         try:
             return assert_batch_write_allowed(
@@ -107,7 +137,6 @@ class ProjectionSession:
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
                 snapshots=snapshots,
-                **options,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
@@ -140,7 +169,15 @@ class ProjectionSession:
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
-        settling_deletion = privacy_deleted or self.receipt().get('privacy_reason') == 'conversation_deleted'
+        settling_deletion = (
+            privacy_deleted
+            or self.receipt().get('privacy_reason') == 'conversation_deleted'
+            or bool(self.receipt())
+            and any(
+                part.get('disposition') == 'source_deleted'
+                for part in (self.entry.get('projection_parts') or {}).values()
+            )
+        )
 
         def source_tombstoned(error):
             # The guard supplies the exact refused ID, including a survivor
@@ -156,12 +193,34 @@ class ProjectionSession:
                 .exists
             )
 
+        def source_deletion_proven(error):
+            if source_tombstoned(error):
+                return True
+            # Only an original input may use this disposition. A deleted
+            # survivor reached through a redirect retains the old refusal.
+            if not projection_source_deleted_enabled() or error.conversation_id != ids[0]:
+                return False
+            row = (
+                self.client.collection('users')
+                .document(self.binding.owner_id)
+                .collection('conversations')
+                .document(error.conversation_id)
+                .get(transaction=transaction)
+                .to_dict()
+                or {}
+            )
+            target = row.get('sync_merged_into')
+            if not row.get('deleted') or (isinstance(target, str) and target):
+                return False
+            self._source_deleted = True
+            return True
+
         try:
             self.guard(transaction, ids)
         except BatchPrivacyBlocked as error:
             if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not settling_deletion:
                 raise
-            if not source_tombstoned(error):
+            if not source_deletion_proven(error):
                 raise ProjectionBlocked('privacy disposition requires a source deletion tombstone') from error
             # A no-text deletion receipt may advance the owner chain, but must
             # still pass the account/protection/generation fence. Ordinary
@@ -173,7 +232,7 @@ class ProjectionSession:
                 except BatchPrivacyBlocked as source_error:
                     if source_error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                         raise
-                    if not source_tombstoned(source_error):
+                    if not source_deletion_proven(source_error):
                         raise ProjectionBlocked(
                             'privacy disposition requires a source deletion tombstone'
                         ) from source_error
@@ -199,13 +258,8 @@ class ProjectionSession:
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._source_deletion_transaction = None
+        self._source_deleted = False
         self._privacy_fence_ids = set()
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            # A session may survive the pre-check and assignment retries. Only
-            # prepare and validate_plan within this attempt may share snapshots.
-            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
-        elif hasattr(self, '_privacy_memo'):
-            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -218,6 +272,8 @@ class ProjectionSession:
             or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
             or not (
                 self.entry.get('protocol_version') == 1
+                or self.entry.get('protocol_version') == 2
+                and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2
                 and checkpoint(self.entry)
                 or self.entry.get('protocol_version') == 2
@@ -282,6 +338,13 @@ class ProjectionSession:
                 raise ProjectionBlocked('earlier projection part must persist first')
         if self._privacy_replay_transaction is transaction:
             return
+        if self.entry.get('projection_redriven_at'):
+            # A released held unit re-enters projection behind the watermark:
+            # its hold already advanced the chain past it, so the erased-
+            # predecessor fence must not block the one sanctioned out-of-order
+            # re-assignment.
+            self.erased_predecessors = []
+            return
         from database.batch_pipeline_privacy import erased_predecessors
 
         erased = erased_predecessors(
@@ -304,6 +367,8 @@ class ProjectionSession:
         if self._privacy_refusal_transaction is transaction or self.entry.get('projection_privacy_refusal'):
             raise ProjectionBlocked('privacy hold cannot assign or acknowledge content')
         privacy_replay = self._privacy_replay_transaction is transaction
+        if self._source_deleted and (planned is not None or not privacy_deleted):
+            raise ProjectionBlocked('privacy disposition cannot assign content')
         if privacy_deleted and (
             planned is not None or not superseded or quarantined or self._source_deletion_transaction is not transaction
         ):
@@ -350,6 +415,10 @@ class ProjectionSession:
             receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
         if privacy_deleted:
             receipt['privacy_reason'] = 'conversation_deleted'
+            if self._source_deleted:
+                receipt['disposition'] = 'source_deleted'
+        if quarantined and batch_held_dead_letter_enabled():
+            receipt['held_deadline_at'] = self.now + HELD_DEAD_LETTER_SECONDS
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -369,22 +438,33 @@ class ProjectionSession:
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
             if privacy_replay:
-                changes['projection_state'] = 'pending'
+                changes.update(
+                    projection_state='pending',
+                    **projection_finish_state_fields('pending', self.now),
+                )
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
+                if batch_held_dead_letter_enabled():
+                    if self.entry.get('projection_state') == 'pending' and self.entry.get('held_expired_reason'):
+                        changes.update(held_expired_at=None, held_expired_reason=None)
+                    changes['held_deadline_at'] = (
+                        receipt['held_deadline_at']
+                        if self.entry.get('projection_state') == 'pending'
+                        else self.entry.get('held_deadline_at') or receipt['held_deadline_at']
+                    )
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
                 transaction.update(
                     self.store.ref('jobs', self.segment_id),
                     {'conversation_ids': firestore.ArrayUnion(output_ids)},
                 )
-            if self.part_index != self.part_count - 1:
+            if len(parts) != self.part_count:
                 transaction.update(self.result_ref, changes)
                 return receipt
             summary = {
-                **receipt,
+                **parts[str(self.part_count - 1)],
                 'state': 'ready' if all(part['state'] == 'ready' for part in parts.values()) else 'persisted',
                 'speech_seconds': max(
                     0.0,
@@ -404,19 +484,30 @@ class ProjectionSession:
                 summary['speech_seconds'] = sum(part.get('speech_seconds', 0.0) for part in parts.values())
                 summary['held_speech_seconds'] = sum(part.get('held_speech_seconds', 0.0) for part in parts.values())
                 summary['obligation_due_at'] = self.entry['committed_at'] + 900
-            if all(part.get('disposition') == 'superseded' for part in parts.values()):
-                summary.update(disposition='superseded', speech_seconds=0.0)
+            if all(part.get('disposition') in {'superseded', 'source_deleted'} for part in parts.values()):
+                summary.update(
+                    disposition=(
+                        'source_deleted'
+                        if any(part.get('disposition') == 'source_deleted' for part in parts.values())
+                        else 'superseded'
+                    ),
+                    speech_seconds=0.0,
+                )
+            # Proven parts still owe follow-ups after async assignment or a
+            # crash. Keep the outbox discoverable until they are ready.
+            summary_state = (
+                'quarantine_held'
+                if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
+                else 'persisted' if held else str(summary['state'])
+            )
             changes.update(
                 projection=summary,
-                # Proven parts still owe follow-ups after async assignment or
-                # a crash. Keep the outbox discoverable until they are ready.
-                projection_state=(
-                    'quarantine_held'
-                    if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
-                    else 'persisted' if held else summary['state']
-                ),
+                projection_state=summary_state,
+                **projection_finish_state_fields(summary_state, self.now),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
+            if not held and self.entry.get('projection_redriven_at'):
+                changes['projection_release_attempts'] = 0
             transaction.update(self.result_ref, changes)
         else:
             transaction.update(
@@ -424,12 +515,38 @@ class ProjectionSession:
                 {
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
+                    **projection_finish_state_fields('quarantine_held' if quarantined else receipt['state'], self.now),
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                    **(
+                        {
+                            'held_deadline_at': receipt['held_deadline_at'],
+                            **(
+                                {'held_expired_at': None, 'held_expired_reason': None}
+                                if self.entry.get('held_expired_reason')
+                                else {}
+                            ),
+                        }
+                        if quarantined and batch_held_dead_letter_enabled()
+                        else {}
+                    ),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
+                    **(
+                        {'projection_release_attempts': 0}
+                        if not held and self.entry.get('projection_redriven_at')
+                        else {}
+                    ),
                 },
             )
-        if not privacy_replay:
+        # A released held unit re-enters projection behind the watermark;
+        # re-advancing the chain onto it would stall on replaying terminal rows.
+        if not privacy_replay and not self.entry.get('projection_redriven_at'):
             transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        if held and not privacy_replay:
+            # A quarantined receipt is replay-fenced: nothing automatic will
+            # change this unit again. Hold the job in the same transaction so
+            # the held-partial scan and a reviewed redrive (for example after a
+            # discarded record is restored) own it; audio and result stay.
+            transaction.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
         for reference in self.erased_predecessors:
             transaction.update(
                 reference,
@@ -454,9 +571,10 @@ class ProjectionSession:
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction, privacy_deleted=privacy_deleted)
-            return self.persist(
+            receipt = self.persist(
                 transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
             )
+            return receipt
 
         try:
             return self.store.run(commit, policy=self.policy)

@@ -1,5 +1,6 @@
 from database.people_generation import bump_people_generation, write_person
 from database.person_speech_samples import add_sample_transaction
+from database.people_projection import project_people
 from config.refactor_modes import serving_for
 from utils.speakers.person_pool import (
     pool_profile,
@@ -24,7 +25,12 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
-from database.account_deletion_policy import deletion_billing_error_is_already_gone
+import database.account_deletion_grace as account_deletion_grace_db
+from database.account_deletion_policy import (
+    ACCOUNT_DELETION_GRACE_STATUS,
+    deletion_billing_error_is_already_gone,
+    deletion_wipe_retry_delay,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -42,7 +48,7 @@ from database.person_aliases import (
 from database.read_boundary import parse_payload_strict, parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
-from database import speaker_auto_enroll as auto_enroll_db
+from database import speaker_auto_enroll as auto_enroll_db, transcript_pointer
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -63,12 +69,6 @@ import logging
 logger = logging.getLogger(__name__)
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
-# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
-# re-selected by every reconciler tick on every pod. Without a delay that is one claim
-# transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
-DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
-DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
@@ -389,17 +389,21 @@ def clear_byok_active(uid: str):
 
 @cache_writer('deletion_marker_cache')
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
-    # Stored in a top-level collection so it survives the user record being deleted.
-    # Use merge=True so a retried delete request does not erase a durable wipe marker
-    # (pending/failed/retrying/deleting_auth) already written to the same document.
-    account_deletion_document(uid).set(
+    """Attach deletion feedback to an existing wipe marker. Never creates one.
+
+    The feedback fields used to be merge-written before the wipe intent. A failed
+    intent then left a marker with only feedback fields and no wipe_status, which
+    blocks sign-in with no restore path. Update-only fails when no marker exists,
+    so feedback can no longer create a marker. Callers run after the intent write
+    and treat a failure as best-effort.
+    """
+    account_deletion_document(uid).update(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        },
-        merge=True,
+        }
     )
 
 
@@ -699,20 +703,6 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
-def deletion_wipe_retry_delay(attempts: int) -> timedelta:
-    """How long a ``failed`` wipe waits before it is selected again.
-
-    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
-    failure still retries on the next tick, so a transient error costs nothing.
-    """
-    if attempts <= 1:
-        return timedelta(0)
-    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
-    # exponent past the cap is the same answer anyway.
-    doublings = min(attempts - 2, 20)
-    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
-
-
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -720,7 +710,9 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed,
+    Returns incomplete grace records whose immediate actions need retry and
+    due grace records whose window has elapsed, plus ``failed`` records whose
+    per-attempt backoff has elapsed,
     ``billing_failed`` records with historical already-gone billing errors,
     stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
@@ -768,6 +760,10 @@ def get_pending_deletion_wipes(
             data = doc.to_dict()
             if deletion_billing_error_is_already_gone(data.get('billing_error')):
                 result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        grace_docs = account_deletion_collection().where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
+        result.extend(account_deletion_grace_db.pending_grace_wipes(grace_docs, limit - len(result), now))
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -858,6 +854,8 @@ def _claim_deletion_wipe_txn(
             return None
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        return account_deletion_grace_db.claim_due_grace_txn(transaction, doc_ref, snapshot.id, data, now)
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -944,6 +942,9 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'completed'
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        if not account_deletion_grace_db.grace_wipe_is_due(data, now):
+            return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
         if running_at and running_at >= now - running_stale_after:
@@ -951,7 +952,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
     # only recovers historical already-gone billing errors, never an outage.
-    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed'):
+    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed', ACCOUNT_DELETION_GRACE_STATUS):
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
@@ -995,12 +996,8 @@ def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
     return project_person_learning(uid, person_data, firestore_client=db)
 
 
-def get_people(uid: str, *, include_dismissed: bool = False):
-    cache = {}
-    return [
-        project_person_learning(uid, person, firestore_client=db, projection_cache=cache)
-        for person in list_people(db, uid, include_dismissed=include_dismissed)
-    ]
+def get_people(uid: str, *, include_dismissed: bool = False, memoize: bool = False):
+    return project_people(db, uid, include_dismissed, memoize, list_people, project_person_learning)
 
 
 def count_people(uid: str, *, firestore_client: Any = None) -> int:
@@ -1154,8 +1151,9 @@ def replace_person_speech_profile(
         'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(
-        db.transaction(),
+    return transcript_pointer.run_preloaded_transactional(
+        db,
+        _replace_speech_profile_transaction,
         ref,
         expected_updated_at,
         profile,
@@ -1611,7 +1609,14 @@ def update_user_subscription(uid: str, subscription_data: dict):
     user_ref = db.collection('users').document(uid)
     invalidate_subscription(uid)
     try:
-        user_ref.update({'subscription': subscription_data_to_store})
+        from config.referral_campaign import campaign_enabled
+
+        if campaign_enabled():
+            from database.referral_campaign import write_commercial_subscription
+
+            write_commercial_subscription(uid, subscription_data_to_store, client=db)
+        else:
+            user_ref.update({'subscription': subscription_data_to_store})
     finally:
         invalidate_subscription(uid)
 
@@ -2028,7 +2033,7 @@ def set_user_training_data_opt_in(uid: str, status: str):
 
 
 def get_user_valid_subscription(
-    uid: str, *, firestore_client: Any | None = None, provision: bool = True
+    uid: str, *, firestore_client: Any | None = None, provision: bool = True, include_promotions: bool = True
 ) -> Optional[Subscription]:
     """
     Gets the user's subscription if it is currently valid for use.
@@ -2056,6 +2061,19 @@ def get_user_valid_subscription(
         subscription = get_existing_user_subscription(uid, firestore_client=firestore_client)
         if subscription is None:
             subscription = get_default_basic_subscription()
+
+    # Promotional access is separate authority; billing readers above keep the
+    # commercial subscription/price/version untouched. Expiry is checked on
+    # every admission, outside the commercial subscription cache.
+    from utils.referral_campaign import GRANT_FIELD, campaign_enabled, effective_subscription_payload
+
+    if include_promotions and campaign_enabled():
+        grant_doc = user_snapshot(uid, firestore_client or db, [GRANT_FIELD])
+        grant = (grant_doc.to_dict() or {}).get(GRANT_FIELD)
+        original = subscription.model_dump()
+        projected = effective_subscription_payload(original, grant)
+        if projected != original:
+            subscription = parse_payload_strict(Subscription, projected, document_path=f'users/{uid}')
 
     # Basic (free) plans are only valid if their status is active.
     if subscription.plan == PlanType.basic:

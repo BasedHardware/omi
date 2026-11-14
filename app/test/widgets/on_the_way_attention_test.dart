@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,10 +11,10 @@ import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 
-/// Option B: failures and refusals recover in the background. Neither On the Way nor its
-/// support details offers Retry or Delete; those stay on the Offline Sync page.
+/// Option B: failures and refusals recover in the background. On the Way offers no Retry or
+/// Delete; those stay on the Offline Sync page.
 
-class _FakeSync extends ChangeNotifier implements SyncProvider {
+class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _FakeSync(this.wals);
 
   final List<Wal> wals;
@@ -78,29 +79,17 @@ Future<_FakeSync> _pump(WidgetTester tester, List<Wal> wals) async {
   return sync;
 }
 
-/// A row's first line; intl separates the time from AM/PM with a narrow no-break space.
-Finder _row(String text) =>
-    find.byWidgetPredicate((w) => w is Text && w.data?.replaceAll('\u202f', ' ') == text, description: text);
-
-Future<void> _openSupport(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
-  await tester.pumpAndSettle();
-}
-
-/// No recovery gesture on either view, and the audio is never touched.
+/// No recovery gesture on the page, and the audio is never touched.
 Future<void> _expectNoActions(WidgetTester tester, _FakeSync sync, int walCount) async {
-  for (var view = 0; view < 2; view++) {
-    expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
-    if (view == 0) await _openSupport(tester);
-  }
+  expect(find.text('Try Again'), findsNothing);
+  expect(find.text('Delete'), findsNothing);
   expect(sync.retried, isEmpty);
   expect(sync.deleted, isEmpty);
   expect(sync.allWals, hasLength(walCount));
 }
 
 void main() {
-  testWidgets('deterministic refusals stay off the page and quiet in support', (tester) async {
+  testWidgets('deterministic refusals stay off the page', (tester) async {
     final sync = await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 8), 240, WalStatus.uploadRejected,
           rejectionReason: WalUploadRejection.invalidCaptureTime),
@@ -113,9 +102,6 @@ void main() {
     expect(find.byKey(const Key('on_the_way_user_action')), findsNothing,
         reason: 'the refusal aggregate says no user action can help');
     await _expectNoActions(tester, sync, 3);
-    // Support sees each refusal and its token.
-    expect(find.text('Invalid recording date'), findsOneWidget);
-    expect(find.textContaining('too_large'), findsOneWidget);
   });
 
   testWidgets('an exhausted transient failure is not a row and offers no action', (tester) async {
@@ -123,25 +109,11 @@ void main() {
         await _pump(tester, [_wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss)..retryCount = walMaxAutoRetries]);
     expect(find.text('Failed — tap Retry'), findsNothing);
     await _expectNoActions(tester, sync, 1);
-    expect(find.text('Failed — tap Retry'), findsOneWidget);
-    expect(find.text('failed'), findsOneWidget);
   });
 
   testWidgets('a recording that cannot be retried offers no Delete here either', (tester) async {
     final sync = await _pump(tester, [_wal(DateTime(2026, 10, 18, 7), 60, WalStatus.outsideRecoveryWindow)]);
     await _expectNoActions(tester, sync, 1);
-  });
-
-  testWidgets('a recording made of several WALs is one support row with its whole length', (tester) async {
-    // One 75-second-chunk recording the pendant handed over in three files:
-    // 7:56, 7:57:15, 7:58:30, each exhausted its transient retry budget.
-    final sync = await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 7, 58, 30), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
-      _wal(DateTime(2026, 10, 18, 7, 57, 15), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
-      _wal(DateTime(2026, 10, 18, 7, 56), 75, WalStatus.miss)..retryCount = walMaxAutoRetries,
-    ]);
-    await _expectNoActions(tester, sync, 3);
-    expect(_row('7:56 AM · 3m 45s'), findsOneWidget, reason: 'the row names the whole recording\'s length');
   });
 
   testWidgets('a block with one member still uploading keeps that part on the page', (tester) async {

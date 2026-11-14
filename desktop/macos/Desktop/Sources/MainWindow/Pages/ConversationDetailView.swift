@@ -1,3 +1,9 @@
+// The conversation detail page: summary/transcript panes over one conversation
+// with speaker labels, action items, and citations.
+//
+// Loads are generation-fenced (ConversationDetailRequestGate) so a response for
+// an older request can never overwrite the visible conversation after a fast
+// switch between items.
 import OmiSupport
 import OmiTheme
 import SwiftUI
@@ -400,7 +406,7 @@ struct ConversationDetailView: View {
 
       // All detail reads go through the repository. It can paint a complete
       // cached detail immediately, but always revalidates server-owned fields.
-      if requestedConversation.deferred || requestedConversation.status == .processing {
+      if requestedConversation.needsProcessingDetailRefresh {
         isEnrichingDeferred = true
         // Keep following the row for as long as it is open. A bounded loop
         // that silently stops leaves the banner promising a summary that no
@@ -414,7 +420,7 @@ struct ConversationDetailView: View {
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
           applyLoadedConversation(fetched)
-          if fetched.status != .processing { break }
+          if fetched.homeStep == "failed" || fetched.status != .processing { break }
           let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
           try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -799,7 +805,9 @@ struct ConversationDetailView: View {
 
   private var summaryPane: some View {
     ScrollView {
-      ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+      ConversationDetailProcessingLayout(
+        isProcessing: isEnrichingDeferred && displayConversation.showsSummaryProcessing
+      ) {
         deferredProcessingSection
       } content: {
         // Spacing 0: each section carries its own top inset, so one that renders nothing (or only

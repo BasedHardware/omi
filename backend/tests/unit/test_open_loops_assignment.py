@@ -32,7 +32,7 @@ def path(key):
 def seed(store, key, start, level, **extra):
     logical = dict(
         chunk(key, start),
-        structured={'title': 'Synthetic'},
+        structured={'title': 'Synthetic', 'title_provenance': 'server_minimum'},
         data_protection_level=level,
         sync_content_revision=1,
         **extra
@@ -223,7 +223,7 @@ def test_reprocess_without_fresh_extractions_preserves_stored_blob(monkeypatch, 
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *args: None)
     incoming = dict(
         chunk('existing', 1000),
-        structured={'title': 'Reprocessed'},
+        structured={'title': 'Reprocessed', 'overview': 'Reprocessed overview'},
         data_protection_level=level,
         sync_content_revision=1,
     )
@@ -243,7 +243,7 @@ def test_processor_output_reprotected_when_migration_wins(monkeypatch, source, t
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *args: None)
     incoming = dict(
         chunk('existing', 1000),
-        structured={'title': 'Reprocessed'},
+        structured={'title': 'Reprocessed', 'overview': 'Reprocessed overview'},
         data_protection_level=source,
         sync_content_revision=1,
         **{FIELD: EXTRACTIONS}

@@ -133,6 +133,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         'utils.llms': _package('utils.llms', BACKEND_DIR / 'utils' / 'llms'),
         'utils.conversations': _package('utils.conversations', BACKEND_DIR / 'utils' / 'conversations'),
         'database': _package('database', BACKEND_DIR / 'database'),
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         'models': _package('models', BACKEND_DIR / 'models'),
         'langchain_core': _package('langchain_core', BACKEND_DIR),
         'langchain_core.callbacks': _module(
@@ -235,7 +239,6 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         ),
         'utils.subscription': _module(
             'utils.subscription',
-            is_trial_paywalled=MagicMock(return_value=False),
         ),
         'utils.conversations.factory': _module(
             'utils.conversations.factory',
@@ -372,28 +375,6 @@ async def test_audio_app_lookup_uses_db_executor_without_blocking_loop(integrati
     lookup_call = next(call for call in calls if call[1] is blocking_get_apps)
     assert lookup_call[0] is app.db_executor
     assert lookup_call[2] == ('user-audio',)
-
-
-@pytest.mark.asyncio
-async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integration_harness):
-    app = integration_harness.app
-    calls = []
-
-    def failing_paywall(uid, source):
-        assert (uid, source) == ('user-paywall', 'desktop')
-        raise RuntimeError('paywall store unavailable')
-
-    async def tracking_run_blocking(executor, func, *args, **kwargs):
-        calls.append((executor, func, args, kwargs))
-        return func(*args, **kwargs)
-
-    with patch.object(app, 'run_blocking', tracking_run_blocking), patch.object(
-        app, 'is_trial_paywalled', failing_paywall
-    ):
-        with pytest.raises(RuntimeError, match='paywall store unavailable'):
-            await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
-
-    assert calls == [(app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {})]
 
 
 @pytest.mark.asyncio

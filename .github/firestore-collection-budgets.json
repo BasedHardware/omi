@@ -1,0 +1,59 @@
+{
+  "policy": {
+    "rule": "Every new Firestore collection that stores queue, job, lease, dispatch, retry, progress or recovery state must declare a read budget here in the same pull request that introduces it (M8, firestore-reads-program).",
+    "program": "omi-knowledge-base/projects/admin-omi-tv-dashboard/firestore-reads-program.md",
+    "guard": ".github/scripts/check_firestore_collection_budget.py",
+    "surfaces": "Python under backend/ (.collection, .collection_group) and TypeScript/JavaScript under web/ (db.collection, db.collectionGroup, collection(db, ...), doc(db, ...)).",
+    "kill_switch": "FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0 disables the guard for an approved rollback and requires FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON.",
+    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. A grandfathered computed site whose literal namespace tuple grows keeps its site::expression key, so the guard also compares the enumerable collection family between revisions and requires a budget or exemption for each new member. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces, for computed-family expansion, and for Python collection_group_id.",
+    "entry_fields": {
+      "collection": "Firestore collection id, snake_case or camelCase",
+      "owner": "lane that owns the collection and its budget",
+      "unit": "unit of work the per-unit budget divides by (job, batch unit, active user-day, ...)",
+      "reads_per_unit_budget": "positive integer, reads per unit of work",
+      "reads_per_day_budget": "positive integer, reads per day at the expected volume",
+      "basis": "measured (settled billing or a caller counter) or planning-bound (an estimate, never booked as a saving)",
+      "source": "where the number came from: query, dashboard, or document",
+      "reviewed": "YYYY-MM-DD date the budget was reviewed"
+    },
+    "dynamic_entry_fields": {
+      "site": "repository-relative path of the file that computes the name",
+      "expression": "the computed argument exactly as the scanner prints it (for example f'new_{stage}_jobs')",
+      "collection_pattern": "the collection family the expression can produce (for example new_*_jobs)",
+      "owner": "lane that owns the family and its budget",
+      "unit": "unit of work the per-unit budget divides by",
+      "reads_per_unit_budget": "positive integer, reads per unit of work for the whole family",
+      "reads_per_day_budget": "positive integer, reads per day for the whole family",
+      "basis": "measured or planning-bound",
+      "source": "where the number came from",
+      "reviewed": "YYYY-MM-DD date the budget was reviewed"
+    }
+  },
+  "budgets": [
+    {
+      "collection": "conversation_erasure_jobs",
+      "owner": "backend conversation deletion (accepted-delete erasure obligations)",
+      "unit": "conversation delete accepted behind a busy account gate",
+      "reads_per_unit_budget": 25,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
+      "reviewed": "2026-11-13"
+    }
+  ],
+  "dynamic": [
+    {
+      "site": "backend/database/batch_pipeline_fresh_guard.py",
+      "expression": "f'{namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline fresh-delivery guard",
+      "unit": "one maintenance-leader sample at up to 100,000 fresh results per window per environment",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 576000,
+      "basis": "planning-bound",
+      "source": "SCA-2012: two count aggregations per 60s per prod/dev leader; each costs max(1, ceil(index entries/1000)); 100,000 total and <=100,000 pending => 200/sample, 288,000/day/environment. Not a throughput cap; revisit budget if cohorts exceed this planning envelope. Normally empty/small windows cost 2/sample. Existing lease check adds <=1 metadata read per maintenance call outside this count budget.",
+      "reviewed": "2026-11-13"
+    }
+  ],
+  "exempt": []
+}

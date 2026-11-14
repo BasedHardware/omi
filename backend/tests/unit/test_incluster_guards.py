@@ -34,6 +34,9 @@ def values():
         refusal_baseline_ready_min=12,
         refusal_baseline_ready_max=12,
         refusal_baseline_coverage=1,
+        # 10 live requests at 2 per pod: the live load needs the fixture's 5 pods.
+        live_requests_max=10,
+        gpu_util_max=1,
     )
     return result
 
@@ -390,6 +393,34 @@ def test_reference_rollback_exact_and_atomic():
     assert old == before
 
 
+@pytest.mark.parametrize('cap', [1, 4, 6, 12])
+def test_capped_hpa_rollback_restores_capacity_atomically(cap):
+    old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
+    before = deepcopy(old)
+    assert guard.workload_only(old) == (cap < guard.ROLLBACK_REPLICAS)
+    patch = guard.build_rollback(old)
+    assert patch[0] == {'op': 'test', 'path': '/spec', 'value': before}
+    restored = deepcopy(old)
+    for operation in patch[1:]:
+        assert operation['op'] == 'replace'
+        restored[operation['path'].removeprefix('/spec/')] = operation['value']
+    assert restored['minReplicas'] == restored['maxReplicas'] == guard.ROLLBACK_REPLICAS
+    assert restored['metrics'] == [*before['metrics'], guard.LATENCY]
+    assert guard.rolled_back(restored)
+    assert not guard.workload_only(restored)
+    assert restored['behavior'] == before['behavior']
+    assert old == before
+
+
+@pytest.mark.parametrize('cap', [0, -1, 13, 6.0, True, None, '6'])
+def test_rollback_rejects_invalid_caps(cap):
+    old = objects()[0]['spec']
+    old['maxReplicas'] = cap
+    with pytest.raises(AssertionError, match='Unexpected cap'):
+        guard.build_rollback(old)
+
+
 def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
     chart = ROOT / 'backend/charts/parakeet'
     output = subprocess.check_output(
@@ -401,11 +432,12 @@ def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
             '-f',
             str(chart / 'prod_omi_parakeet_values.yaml'),
             '--set',
-            'image.tag=test',
+            'image.tag=test,fleetRetired=false,maintenanceMode=false',
         ],
         text=True,
     )
     old = next(obj['spec'] for obj in yaml.safe_load_all(output) if obj and obj['kind'] == 'HorizontalPodAutoscaler')
+    assert old['maxReplicas'] == guard.ROLLBACK_REPLICAS
     assert old['behavior']['scaleUp'] == guard.FAST_SCALE_UP
     patch = guard.build_rollback(old)
     assert patch[0] == {'op': 'test', 'path': '/spec', 'value': old}
@@ -423,8 +455,10 @@ def test_proposed_scale_up_drift_refuses(key, bad):
 
 
 @pytest.mark.parametrize('drift', ['cap', 'extra', 'duplicate', 'missing', 'requests', 'gpu', 'up', 'down'])
-def test_drift_refuses(drift):
+@pytest.mark.parametrize('cap', [4, 6, 12])
+def test_drift_refuses(drift, cap):
     old = objects()[0]['spec']
+    old.update(minReplicas=cap, maxReplicas=cap)
     if drift == 'cap':
         old['maxReplicas'] = 13
     if drift == 'extra':
@@ -498,27 +532,87 @@ def test_ready_and_scheduling():
     _, state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
     dep['status']['readyReplicas'] = 4
     assert guard.decide(hpa, dep, [], values(), state, 900)[0] == 'TRIP'
-    dep['status']['readyReplicas'] = 5
     event = {
         'reason': 'FailedScheduling',
         'involvedObject': {'kind': 'Pod', 'name': 'prod-omi-parakeet-x'},
         'lastTimestamp': '1970-01-01T00:15:00Z',
     }
-    assert guard.decide(hpa, dep, [event], values(), state, 900)[0] == 'TRIP'
+    verdict, _, reading = guard.decide(hpa, dep, [event], values(), state, 900)
+    assert verdict == 'TRIP' and 'FailedScheduling_in_15m' in reading['trips']
+    # Ready covers the live load: a Pending pod is surplus, not harm.
+    dep['status']['readyReplicas'] = 5
+    verdict, _, reading = guard.decide(hpa, dep, [event], values(), state, 900)
+    assert verdict == 'CLEAN' and reading['pending_beyond_load'] == 1
     assert not guard.scheduling_failures([event], 'other', 900)
     assert not guard.scheduling_failures([event], 'prod-omi-parakeet', 1801)
 
 
 @pytest.mark.parametrize('age', [1799, 1800, 1801])
 def test_batch_stuck_proxy_and_missing_projection_is_explicit(age):
-    reading = guard.evaluate_batch({'oldest_age': age, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0})
+    reading = guard.evaluate_batch(
+        {'age_incomplete': 0, 'retry_incomplete': 0, 'oldest_age': age, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
+    )
     assert reading['verdict'] == ('TRIP' if age > 1800 else 'PARTIAL')
     assert 'new_projection_obligations_unavailable' in reading['unknown']
     assert guard.evaluate_batch({})['verdict'] == 'BLIND'
     assert (
-        guard.evaluate_batch({'oldest_age': 9999, 'retry_age': 0, 'freshness': 121, 'scrape_age': 0})['verdict']
+        guard.evaluate_batch(
+            {
+                'age_incomplete': 0,
+                'retry_incomplete': 0,
+                'oldest_age': 9999,
+                'retry_age': 0,
+                'freshness': 121,
+                'scrape_age': 0,
+            }
+        )['verdict']
         == 'BLIND'
     )
+
+
+@pytest.mark.parametrize(
+    'signal,metric',
+    [
+        ('age_incomplete', 'omi_batch_pipeline_oldest_age_seconds'),
+        ('retry_incomplete', 'omi_batch_pipeline_retry_age_seconds'),
+    ],
+)
+def test_saturated_priority_is_blind_even_when_another_priority_has_finite_age(signal, metric):
+    values = {
+        'oldest_age': 0,
+        'age_incomplete': 0,
+        'retry_incomplete': 0,
+        'retry_age': 0,
+        'freshness': 0,
+        'scrape_age': 0,
+    }
+    values[signal] = 1
+    reading = guard.evaluate_batch(values)
+    assert reading['verdict'] == 'BLIND'
+    assert reading['metrics_blind']
+    assert not reading['trips']
+    selector = '{namespace="synthetic"}'
+    assert guard.batch_queries('synthetic')[signal] == (
+        f'(count({metric}{selector} != {metric}{selector}) or vector(0))'
+    )
+
+
+@pytest.mark.parametrize('signal', ['age_incomplete', 'retry_incomplete'])
+@pytest.mark.parametrize('freshness,verdict', [(0, 'TRIP'), (121, 'BLIND')])
+def test_incomplete_priority_preserves_a_known_fresh_breach(signal, freshness, verdict):
+    values = {
+        'oldest_age': 1801,
+        'age_incomplete': 0,
+        'retry_incomplete': 0,
+        'retry_age': 0,
+        'freshness': freshness,
+        'scrape_age': 0,
+    }
+    values[signal] = 1
+    reading = guard.evaluate_batch(values)
+    assert reading['verdict'] == verdict
+    assert reading['metrics_blind']
+    assert reading['trips'] == (['uncommitted_job_age_over_30m'] if verdict == 'TRIP' else [])
 
 
 class FakeClient:
@@ -535,7 +629,16 @@ class FakeClient:
 
     def sample(self, expr):
         return (
-            self.signals if 'first_p95' in expr else {'oldest_age': 0, 'retry_age': 0, 'freshness': 0, 'scrape_age': 0}
+            self.signals
+            if 'first_p95' in expr
+            else {
+                'age_incomplete': 0,
+                'retry_incomplete': 0,
+                'oldest_age': 0,
+                'retry_age': 0,
+                'freshness': 0,
+                'scrape_age': 0,
+            }
         )
 
     def kube(self, path, patch=None):
@@ -621,6 +724,54 @@ def test_floor_schedule_dry_run_and_cap_refusals(monkeypatch, caplog):
     assert guard.run(client, True, 24 * 3600) == 0  # lower 12 -> 8, kill switch first
     assert '"result": "dry_run"' in caplog.text
     assert all(path == 'state' for path, _ in client.patches)
+
+
+@pytest.mark.parametrize('cap', [4, 6])
+def test_capped_hpa_floor_schedule_respects_cap_and_arming(cap, caplog):
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    state = {'identity': guard.state_identity(client.hpa, client.dep), 'since': 0}
+    # An ordinary scheduled raise cannot undo the operator's cap.
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [cap + 1] * 24, 900, False)
+    assert not client.patches
+    assert 'refused_target_above_cap' in caplog.text
+    # A lower still requires a full window and usable current measurements.
+    target = cap - 1
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 899, False)
+    assert not client.patches
+    assert 'deferred_guard_not_armed' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {'blind': ['v2_p95']}, [target] * 24, 900, False)
+    assert not client.patches
+    assert 'deferred_guard_blind' in caplog.text
+    guard.apply_floor_schedule(client, client.hpa, client.dep, state, {}, [target] * 24, 900, False)
+    assert client.patches == [
+        (
+            'hpa',
+            [
+                {'op': 'test', 'path': '/spec', 'value': client.hpa['spec']},
+                {'op': 'replace', 'path': '/spec/minReplicas', 'value': target},
+            ],
+        )
+    ]  # The schedule changes only the floor, preserving maxReplicas=cap.
+
+
+@pytest.mark.parametrize('cap', [4, 6])
+@pytest.mark.parametrize('dry_run', [False, True])
+def test_capped_hpa_three_blind_v2_runs_reach_rollback(cap, dry_run, monkeypatch, caplog):
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [8] * 24)
+    client = FakeClient()
+    client.hpa['spec'].update(minReplicas=cap, maxReplicas=cap)
+    client.hpa['status']['desiredReplicas'] = cap
+    client.dep['status']['readyReplicas'] = cap
+    client.signals.update(v2_p95=float('nan'), live_requests_max=cap)
+    assert guard.run(client, dry_run, 0) == 0  # WARMUP, first blind reading
+    assert guard.run(client, dry_run, 300) == 0  # WARMUP retains cap, blind count 2
+    assert guard.run(client, dry_run, 900) == 1  # armed, blind count 3 -> TRIP
+    assert client.state['blind'] == 3
+    assert 'missing_or_nonfinite_v2_p95' in caplog.text
+    hpa_writes = [patch for path, patch in client.patches if path == 'hpa']
+    assert hpa_writes == ([] if dry_run else [guard.build_rollback(client.hpa['spec'])])
+    assert 'parakeet_rollback' in caplog.text
 
 
 def test_scheduled_lower_waits_for_armed_guard_not_a_fresh_warmup(monkeypatch, caplog):
@@ -737,7 +888,14 @@ def test_batch_safety_trips_are_isolated_evidence_not_job_failures(caplog):
     def sample(expr):
         if 'first_p95' in expr:
             return client.signals
-        return {'oldest_age': 94643.0, 'retry_age': 0.0, 'freshness': 0.0, 'scrape_age': 0.0}
+        return {
+            'age_incomplete': 0,
+            'retry_incomplete': 0,
+            'oldest_age': 94643.0,
+            'retry_age': 0.0,
+            'freshness': 0.0,
+            'scrape_age': 0.0,
+        }
 
     client.sample = sample
     assert guard.run(client, False, 0) == 0  # parakeet WARMUP/clean; batch TRIP isolated
@@ -751,7 +909,7 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    assert json.loads(prod['data']['floors.json']) == guard_yaml_hours()
+    assert 'floors.json' not in prod['data']
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -759,13 +917,11 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
     )
     assert 'floors.json' not in default['data']
     with pytest.raises(subprocess.CalledProcessError):
-        render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
+        render_docs(
+            'prod', '--set', 'parakeetSuspended=false,floorSchedule.enabled=true', '--set', 'floorSchedule.hours={1,2}'
+        )
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
-
-
-def guard_yaml_hours():
-    return yaml.safe_load((CHART / 'values.yaml').read_text())['floorSchedule']['hours']
 
 
 def render(environment='prod', *extra):
@@ -816,6 +972,8 @@ def test_helm_state_configmaps_keep_job_owned_fields_out_of_apply(environment, b
         environment,
         '--set',
         f'batch.enabled={str(batch_enabled).lower()}',
+        '--set',
+        f'batch.cloudRunRollbackEnabled={str(batch_enabled).lower()}',
         '--set',
         f'enabled={str(enabled).lower()}',
     )
@@ -890,7 +1048,7 @@ def test_helm_rbac_and_cpu_placement(environment):
             'apiGroups': ['autoscaling'],
             'resources': ['horizontalpodautoscalers'],
             'resourceNames': [f'{environment}-omi-parakeet'],
-            'verbs': ['get', 'patch'],
+            'verbs': ['get'] if environment == 'prod' else ['get', 'patch'],
         },
         {
             'apiGroups': ['apps'],
@@ -933,7 +1091,15 @@ def test_helm_rbac_and_cpu_placement(environment):
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.enabled=true', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+        render(
+            'prod',
+            '--set',
+            'batch.enabled=true',
+            '--set',
+            'batch.cloudRunRollbackEnabled=true',
+            '--set',
+            'batch.gcpServiceAccount=wrong@example.com',
+        )
     with pytest.raises(subprocess.CalledProcessError):
         render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
 
@@ -957,8 +1123,15 @@ def test_prod_overlay_defers_batch_guard_objects_until_deployer_rbac_and_produce
     assert not rendered & BATCH_GUARD_OBJECTS
     assert ('PodMonitor', 'prod-omi-incluster-guards-batch') in rendered  # Predates the batch guard; stays live.
     assert ('CronJob', 'prod-omi-incluster-guards') in rendered
-    # The default toggle stays on: re-enabling in prod needs only this flip.
-    reenabled = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')}
+    # Batch auto-rollback is removed (David, 2026-11-04): batch.enabled alone renders nothing.
+    enabled_only = {
+        (doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')
+    }
+    assert not enabled_only & BATCH_GUARD_OBJECTS
+    reenabled = {
+        (doc['kind'], doc['metadata']['name'])
+        for doc in render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
+    }
     assert BATCH_GUARD_OBJECTS <= reenabled
     # Default values alone render no batch objects, exactly as before the toggle.
     assert (
@@ -1101,8 +1274,137 @@ def test_autoscaling_does_not_restart_window_or_hide_ready_shortfall():
     hpa['status']['desiredReplicas'] = 8
     verdict, state, _ = guard.decide(hpa, dep, [], values(), state, 300)
     assert verdict == 'WARMUP' and state['since'] == 0
-    verdict, state, reading = guard.decide(hpa, dep, [], values(), state, 900)
+    verdict, state, reading = guard.decide(hpa, dep, [], dict(values(), live_requests_max=16), state, 900)
     assert verdict == 'TRIP' and 'ready_shortfall' in reading['trips']
+
+
+def failed_scheduling(count, at='1970-01-01T00:15:00Z'):
+    return [
+        {
+            'reason': 'FailedScheduling',
+            'involvedObject': {'kind': 'Pod', 'name': f'prod-omi-parakeet-p{i}'},
+            'lastTimestamp': at,
+        }
+        for i in range(count)
+    ]
+
+
+def stockout(desired, ready):
+    """A pool that holds `ready` L4 nodes while the HPA asks for `desired` pods."""
+    hpa, dep = objects()
+    hpa['status']['desiredReplicas'] = desired
+    dep['status']['readyReplicas'] = ready
+    _, state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
+    return hpa, dep, state
+
+
+def test_pending_pods_beyond_the_live_load_never_trip():
+    # 2026-10-30..11-02: 31 rollbacks, 28 on capacity signals alone. After
+    # each rollback expired and the schedule lowered the floor, the 900s
+    # scale-down window still held desired at 11-12 and the rollback's own
+    # 12th pod had left FailedScheduling events on a 10-node L4 pool, so the
+    # next run tripped again. Load needed 3-7 pods; ready was 10.
+    hpa, dep, state = stockout(desired=12, ready=10)
+    v = dict(values(), live_requests_max=14, gpu_util_max=11)  # needs max(7, ceil(10*11/35)=4)
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(7), v, state, 900)
+    assert verdict == 'CLEAN', reading
+    assert reading['load_need'] == 7 and reading['pending_beyond_load'] == 7
+
+
+def test_scale_up_waiting_for_a_node_is_not_harm_while_ready_covers_load():
+    # 10-31 07:40Z: desired 5, ready 4 for one new pod's node; the load needed 2.
+    hpa, dep, state = stockout(desired=5, ready=4)
+    verdict, _, _ = guard.decide(hpa, dep, failed_scheduling(1), dict(values(), live_requests_max=4), state, 900)
+    assert verdict == 'CLEAN'
+
+
+@pytest.mark.parametrize(
+    'requests,gpu,ready,trip',
+    [
+        (18, 1, 7, True),  # requests need 9 on a 7-node pool at peak: real stockout
+        (14, 1, 7, False),  # needs exactly 7
+        (2, 60, 7, True),  # GPU work 7 x 60% needs ceil(12) > 7
+        (2, 35, 7, False),  # 7 x 35% needs exactly 7
+        (0, 0, 0, True),  # nothing ready never passes as an idle fleet
+    ],
+)
+def test_ready_short_of_the_live_load_still_trips_with_its_scheduling_evidence(requests, gpu, ready, trip):
+    hpa, dep, state = stockout(desired=12, ready=ready)
+    v = dict(values(), live_requests_max=requests, gpu_util_max=gpu)
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(3), v, state, 900)
+    assert (verdict == 'TRIP') == trip, reading
+    if trip:
+        assert 'ready_shortfall' in reading['trips'] and 'FailedScheduling_in_15m' in reading['trips']
+
+
+def test_capacity_need_never_exceeds_what_the_hpa_asked_for():
+    # Load beyond desired is the HPA's job (scale-out is unchanged); ready ==
+    # desired is not a shortfall even if the 15-minute load max is higher.
+    hpa, dep, state = stockout(desired=6, ready=6)
+    assert guard.decide(hpa, dep, [], dict(values(), live_requests_max=20), state, 900)[0] == 'CLEAN'
+
+
+@pytest.mark.parametrize('key', ['live_requests_max', 'gpu_util_max'])
+def test_missing_live_load_is_blind_not_clean(key):
+    hpa, dep, state = stockout(desired=12, ready=10)
+    v = values()
+    del v[key]
+    verdict, _, reading = guard.decide(hpa, dep, failed_scheduling(2), v, state, 900)
+    assert verdict == 'BLIND' and f'missing_or_nonfinite_{key}' in reading['blind']
+
+
+def test_load_queries_read_the_hpa_inputs_over_the_lookback_window():
+    q = guard.queries('prod-omi-backend')
+    assert '[15m:1m]' in q['live_requests_max'] and 'parakeet_active_batch_requests' in q['live_requests_max']
+    assert 'parakeet_active_streams{namespace="prod-omi-backend",container="parakeet"}' in q['live_requests_max']
+    assert q['gpu_util_max'] == (
+        'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{namespace="prod-omi-backend",container="parakeet"}'
+        '[1m]))[15m:1m])'
+    )
+
+
+def test_rollback_holds_while_ready_is_short_of_the_live_load_then_expires(monkeypatch, caplog):
+    # A tripped floor returns to schedule only after one full window in which
+    # latency is clean AND ready covers the live load, so a real peak stockout
+    # cannot cycle rollback -> expiry -> lower -> trip every 50 minutes.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [4] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['spec']['metrics'].append(guard.LATENCY)
+    client.hpa['status']['desiredReplicas'] = 12
+    client.dep['status']['readyReplicas'] = 7
+    client.signals['live_requests_max'] = 18  # needs 9 of the 7 the pool holds
+    for now in (1000, 1300, 1600, 1900, 2200):
+        assert guard.run(client, False, now) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    client.signals['live_requests_max'] = 10  # load falls to 5 pods
+    for now in (2500, 2800, 3100):
+        guard.run(client, False, now)
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert guard.run(client, False, 3400) == 0  # 900s clean with ready >= load
+    assert 'parakeet_rollback_expired' in caplog.text
+
+
+def test_lowered_floor_does_not_retrip_on_its_own_rollback_residue(monkeypatch, caplog):
+    # The 11-01 sequence end to end: expiry, scheduled lower, then the next run
+    # still sees desired 11 (900s window) and the rollback's FailedScheduling.
+    monkeypatch.setattr(guard, 'load_floor_schedule', lambda: [4] * 24)
+    client = FakeClient()
+    client.hpa['spec']['minReplicas'] = 12
+    client.hpa['status']['desiredReplicas'] = 11
+    client.dep['status']['readyReplicas'] = 10
+    client.signals.update(live_requests_max=10, gpu_util_max=11)
+    events = {'items': failed_scheduling(6, at='1970-01-01T01:00:00Z')}
+    original = client.kube
+    client.kube = lambda path, patch=None: events if path == 'events' and patch is None else original(path, patch)
+    assert guard.run(client, False, 2700) == 0  # parked at 12: arming clock seeds
+    assert guard.run(client, False, 3600) == 0  # armed: the schedule lowers 12 -> 4
+    assert client.patches[-1][1][1] == {'op': 'replace', 'path': '/spec/minReplicas', 'value': 4}
+    client.hpa['spec']['minReplicas'] = 4
+    client.patches = []
+    assert guard.run(client, False, 3900) == 0
+    assert not any(path == 'hpa' for path, _ in client.patches)
+    assert '"parakeet_rollback"' not in caplog.text
 
 
 # Batch admission rollback shares this chart's registered behavioral suite.
@@ -1326,12 +1628,10 @@ def test_invalid_percent_refuses(bad):
     [
         'proven_terminal_loss_speech_seconds',
         'proven_failed_held_speech_seconds',
-        'since_t0_projection_obligations_over_15m',
-        'since_t0_stuck_jobs_over_30m',
         'custody',
     ],
 )
-def test_p90_three_trip_classes_only_after_full_new_window(field):
+def test_only_custody_and_proven_lost_speech_trip_after_full_new_window(field):
     data = sample()
     if field == 'custody':
         data['custody']['missing'] = 1
@@ -1341,6 +1641,47 @@ def test_p90_three_trip_classes_only_after_full_new_window(field):
     data['observed_at'] = data['read_completed_at'] = 1799
     assert batch.decision(data, 'id', 0, 1799)[0] == 'WARMUP'
     assert batch.decision(data, 'id', 0, 1800)[0] == 'TRIP'
+
+
+@pytest.mark.parametrize(
+    'field,reason',
+    [
+        ('since_t0_projection_obligations_over_15m', 'projection_wedge'),
+        ('since_t0_stuck_jobs_over_30m', 'stuck_jobs'),
+    ],
+)
+@pytest.mark.parametrize('value', [1, None, float('nan'), -1, True])
+def test_wedge_and_stuck_age_are_alert_only(field, reason, value):
+    data = sample()
+    data[field] = value
+    assert batch.decision(data, 'id', 0, 1800) == ('CLEAN', [])
+    assert any(alert.startswith(reason) for alert in batch.soft_alerts(data))
+    data['custody']['missing'] = 1
+    assert batch.decision(data, 'id', 0, 1800) == ('TRIP', ['custody_missing'])
+
+
+def test_soft_only_signal_never_creates_rollback_intent_or_cloud_write(tmp_path, monkeypatch):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    data = sample(kube.state['identity'])
+    data['since_t0_projection_obligations_over_15m'] = 10
+    data['since_t0_stuck_jobs_over_30m'] = 10
+    path.write_text(json.dumps(data))
+    assert batch.run(kube, cloud, path, now=1800) == 0
+    assert not cloud.writes
+    assert 'pending' not in kube.state
+
+
+@pytest.mark.parametrize('old_reasons', [None, ['projection_wedge'], ['stuck_jobs']])
+def test_pre_policy_pending_intent_cannot_resume_a_soft_rollback(tmp_path, monkeypatch, old_reasons):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    state = kube.state
+    state['pending'] = {key: dict(pin, candidate=key + '-old-intent') for key, pin in batch.snapshot(cloud).items()}
+    if old_reasons is not None:
+        state['pending_reasons'] = old_reasons
+    kube.cm['data']['state'] = json.dumps(state)
+    assert batch.run(kube, cloud, path, now=1800) == 1
+    assert not cloud.writes
+    assert kube.state == state  # Preserve the intent for lead reconciliation.
 
 
 @pytest.mark.parametrize('bad', [None, float('nan'), -1, True])
@@ -1521,7 +1862,7 @@ def test_identity_change_resets_window(tmp_path, monkeypatch):
 
 
 def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
-    docs = render_docs('prod', '--set', 'batch.enabled=true')
+    docs = render_docs('prod', '--set', 'batch.enabled=true', '--set', 'batch.cloudRunRollbackEnabled=true')
     resources = {d['kind']: d for d in docs if d and d['metadata']['name'] == 'prod-omi-incluster-guards-batch'}
     assert resources['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'

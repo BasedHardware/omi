@@ -26,7 +26,10 @@ import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -45,6 +48,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -59,7 +63,12 @@ import 'package:path_provider/path_provider.dart';
 
 import 'heavy_fixture.dart';
 import 'heavy_fixture_server.dart';
+import 'heavy_upload_fixture.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'heavy_frame_collector.dart';
+import 'heavy_live_preview.dart';
 import 'production_shell.dart';
 
 /// Profile-mode heavy-account perf harness (David 2026-10-25: "test perf more
@@ -74,6 +83,9 @@ import 'production_shell.dart';
 /// API call stays on the in-process loopback fixture. Frame numbers are
 /// comparable across builds on the same physical device only. Simulator debug
 /// is explicitly marked as scenario qualification, never profile acceptance.
+/// Windows in receipt order; perf_sim_report.py's SCENARIOS must match.
+const heavyScenarioCount = heavyUploadMode == 'accept' ? 10 : 9;
+
 void main() {
   final binding = HeavyProfileBinding();
   registerHeavyProcessExit(testsComplete: () => binding.allTestsPassed.isCompleted);
@@ -85,6 +97,7 @@ void main() {
   final collector = HeavyFrameCollector(
       onEmptyWindow: (scenario) => _rejectMeasurement(binding, 'no_engine_frames', scenario: scenario));
   final fixture = HeavyFixtureServer();
+  late HeavyUploadFixture uploadFixture;
   final results = <String, Map<String, Object?>>{};
   final operationMarks = <Map<String, Object?>>[];
   void mark(String operation) {
@@ -95,6 +108,10 @@ void main() {
   late WalService walService;
 
   testWidgets('heavy_profile_scenarios', (tester) async {
+    expect(['accept', 'refuse'], contains(heavyUploadMode));
+    expect(['on', 'off'], contains(heavySemantics));
+    expect(binding.semanticsEnabled, heavySemantics == 'on',
+        reason: 'Actual semantics state must match the measured dataset; disable device accessibility for off runs');
     Env.init(const _HeavyEnv());
     await hostReady.future.timeout(const Duration(seconds: 30));
     final lifecycleSnapshot = _readNativeInitialLifecycle(binding);
@@ -147,7 +164,8 @@ void main() {
 
     // 3. The real WAL machinery over the seeded 6.5k-record index: cold-start
     // load, flush ticks, admission pressure and lifecycle drains all run.
-    walService = WalService();
+    uploadFixture = HeavyUploadFixture();
+    walService = WalService(phoneUploadGate: uploadFixture.gate, phoneJobStatusFetcher: uploadFixture.fetchJob);
     var stopped = true;
     addTearDown(() async {
       if (!stopped) await walService.stop();
@@ -160,13 +178,21 @@ void main() {
     // (requestInitialLoad defaults true): request → empty server page →
     // cache restore of the full seeded history. That whole path, plus the
     // shell mount, is the cold-start window.
-    final entry = _HeavyHomeShell(conversationsProvider: conversations, walService: walService);
+    final entry =
+        _HeavyHomeShell(conversationsProvider: conversations, walService: walService, uploadGate: uploadFixture.gate);
 
     const timelineEnabled = bool.fromEnvironment('PERF_HEAVY_TIMELINE');
-    if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    if (timelineEnabled) {
+      // Attribution only (never a baseline): name each widget build in the trace so a slow first
+      // build (e.g. the first Tasks switch) points at the widget, not just at BUILD.
+      debugProfileBuildsEnabled = true;
+      debugProfileBuildsEnabledUserWidgets = true;
+      await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    }
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
+      final coldClock = Stopwatch()..start();
       collector.begin('cold_start');
       mark('cold_start.mount');
       walService.start();
@@ -177,18 +203,20 @@ void main() {
       await walService.syncs.phone.walReady;
       await globalNavigatorKey.currentContext!.read<SyncProvider>().initialized;
       await _awaitCondition(
-          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyWalCount,
-          timeout: const Duration(seconds: 15));
-      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyWalCount,
+          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyIndexWalCount,
+          timeout: const Duration(seconds: 60));
+      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyIndexWalCount,
           reason: 'Home must observe the real heavy WAL inventory');
       final settled = await _awaitCondition(
           () => conversations.conversations.length >= heavyConversationCount && !conversations.isLoadingConversations,
           timeout: const Duration(seconds: 30));
       expect(settled, isTrue, reason: 'Home must restore the complete synthetic conversation history');
       mark('cold_start.cache_ready');
+      final cacheReadyUs = coldClock.elapsedMicroseconds;
       await _idle(const Duration(seconds: 3));
       var summary = await collector.end();
       summary['restored_from_cache'] = settled;
+      summary['cache_ready_us'] = cacheReadyUs;
       results['cold_start'] = summary;
       debugPrint('HEAVY_STAGE cold_start complete');
 
@@ -261,9 +289,169 @@ void main() {
       }
       results['wal_sync_bg_fg'] = await collector.end();
       await sync;
+
+      // 9. Home with the live episode row while an on-device preview revises its newest line
+      //    several times a second over a ~1,000-segment session (LivePreviewCoverage on every
+      //    preview update and clock tick). Same Home list and history, live overlay on top.
+      final live = await HeavyLiveSession.start(walService);
+      addTearDown(live.dispose);
+      Widget withLive(Widget child) => MultiProvider(providers: [
+            ChangeNotifierProvider<EpisodeProvider>.value(value: live.episodes),
+            ChangeNotifierProvider<CaptureProvider>.value(value: live.capture),
+          ], child: child);
+      collector.begin('home_live_preview');
+      live.startUpdates();
+      mark('home_live_preview.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => withLive(Scaffold(
+              backgroundColor: Colors.black,
+              body: ConversationsPage(
+                  requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true))))));
+      await _idle(const Duration(seconds: 2));
+      final liveHome = find.descendant(
+          of: find.byType(ConversationsPage).last, matching: find.byKey(const Key('home_live_episode_preview')));
+      expect(liveHome, findsOneWidget, reason: 'Home must show the live row with preview words');
+      mark('home_live_preview.watch');
+      await _idle(const Duration(seconds: 5));
+      final liveList = await _verticalScrollable(tester, find.byType(ConversationsPage).last);
+      for (var i = 0; i < 6; i++) {
+        mark('home_live_preview.fling.$i');
+        await tester.fling(liveList, Offset(0, i < 3 ? -600 : 600), 2500);
+        await _settleScrolled();
+        await _idle(const Duration(milliseconds: 500));
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('home_live_preview.pop');
+      await _idle(const Duration(seconds: 1));
+      results['home_live_preview'] = {...await collector.end(), 'preview_updates': live.updates};
+      debugPrint('HEAVY_STAGE home_live_preview complete');
+
+      // 10. The live episode page over the same session: summary, then the live transcript
+      //     (finals plus the uncovered preview tail) scrolled while words keep arriving.
+      collector.begin('live_episode_page');
+      final updatesBefore = live.updates;
+      mark('live_episode_page.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => withLive(const LiveEpisodePage(
+              topConversationId: heavyLiveConversationId, initialTab: LiveEpisodeTab.transcript))));
+      await _idle(const Duration(seconds: 2));
+      expect(find.byKey(const Key('live_episode_page')), findsOneWidget,
+          reason: 'the live episode page must show the episode layout');
+      final liveTranscript = await _verticalScrollable(tester, find.byType(LiveEpisodePage));
+      for (var i = 0; i < 6; i++) {
+        mark('live_episode_page.fling.$i');
+        await tester.fling(liveTranscript, Offset(0, i < 3 ? 600 : -600), 2500);
+        await _settleScrolled();
+        await _idle(const Duration(milliseconds: 400));
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('live_episode_page.pop');
+      await _idle(const Duration(seconds: 1));
+      live.stopUpdates();
+      results['live_episode_page'] = {...await collector.end(), 'preview_updates': live.updates - updatesBefore};
+      debugPrint('HEAVY_STAGE live_episode_page complete');
+
+      // 11. Device Settings (Catching up over the 6.5k-WAL backlog) and On the Way (day-grouped
+      //     backlog), each opened and scrolled.
+      final device = HeavyConnectedDevice();
+      addTearDown(device.dispose);
+      collector.begin('device_settings_on_the_way');
+      mark('device_settings.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => ChangeNotifierProvider<DeviceProvider>.value(value: device, child: const DeviceSettings())));
+      await _idle(const Duration(seconds: 2));
+      final deviceList = await _verticalScrollable(tester, find.byType(DeviceSettings));
+      for (var i = 0; i < 4; i++) {
+        mark('device_settings.fling.$i');
+        await tester.fling(deviceList, Offset(0, i < 2 ? -600 : 600), 2500);
+        await _settleScrolled();
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('device_settings.pop');
+      await _idle(const Duration(seconds: 1));
+      mark('on_the_way.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => const OnTheWayPage()));
+      await _idle(const Duration(seconds: 2));
+      expect(find.byKey(const Key('on_the_way_days')), findsOneWidget,
+          reason: 'On the Way must group the pending backlog by day');
+      final onTheWayList = await _verticalScrollable(tester, find.byType(OnTheWayPage));
+      for (var i = 0; i < 6; i++) {
+        mark('on_the_way.fling.$i');
+        await tester.fling(onTheWayList, Offset(0, i < 3 ? -600 : 600), 2500);
+        await _settleScrolled();
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('on_the_way.pop');
+      await _idle(const Duration(seconds: 1));
+      results['device_settings_on_the_way'] = await collector.end();
+      debugPrint('HEAVY_STAGE device_settings_on_the_way complete');
+
+      // 12. Home left alone while sync refreshes the inventory, as every sync phase end and upload
+      //    callback does. No input and little to draw: what this window measures is main-isolate
+      //    stalls (the field watchdog's 'idle' lag), which frame timings cannot see.
+      collector.begin('home_idle_sync_refresh');
+      final syncForIdle = globalNavigatorKey.currentContext!.read<SyncProvider>();
+      for (var i = 0; i < 5; i++) {
+        mark('home_idle_sync_refresh.refresh.$i');
+        await syncForIdle.refreshWals();
+        await _idle(const Duration(seconds: 3));
+      }
+      results['home_idle_sync_refresh'] = await collector.end();
+      debugPrint('HEAVY_STAGE home_idle_sync_refresh complete');
+
+      if (heavyUploadMode == 'accept') {
+        // Preserve the existing windows. Only here, hold the rest of the heavy
+        // inventory for the user and fully drain N file-backed pending WALs.
+        // N<=18 fits one real poller's per-minute budget; no clock/backoff bypass.
+        final syncProvider = globalNavigatorKey.currentContext!.read<SyncProvider>();
+        final inventory = await walService.syncs.phone.getAllWals();
+        final selected =
+            inventory.where((w) => w.status == WalStatus.miss && w.filePath != null).take(heavyUploadWalCount).toList();
+        expect(selected.length, heavyUploadWalCount, reason: 'success window needs N real synthetic files');
+        final held =
+            inventory.where((w) => w.status == WalStatus.miss && !w.holdForUser && !selected.contains(w)).toList();
+        for (final w in held) {
+          w.holdForUser = true;
+        }
+        SyncRateLimiter.instance.clearRateLimit();
+        uploadFixture.accepting = true;
+        try {
+          // Flush synthetic admission setup through the owner's existing
+          // metadata persistence boundary before measuring real sync work.
+          // Otherwise the first upload would also save thousands of hold edits.
+          await walService.syncs.phone.persistRetryMetadata(selected.first);
+          await syncProvider.refreshWals();
+          await _idle(const Duration(seconds: 2));
+          collector.begin('wal_sync_upload_success');
+          mark('wal_sync_upload_success.sync');
+          await syncProvider.syncWals();
+          expect(uploadFixture.acceptedFiles, heavyUploadWalCount);
+          expect(selected.every((w) => w.status == WalStatus.uploaded), isTrue);
+          // Honor the production job poller's minimum 20-second defer.
+          await _idle(const Duration(seconds: 21));
+          mark('wal_sync_upload_success.reconnect_reconcile');
+          // Same admitted pass used on reconnect; server jobs complete through
+          // the injected fetch boundary and real WAL reconciliation/persistence.
+          await walService.syncs.phone.reconcileUploadedWals();
+          await syncProvider.refreshWals();
+          expect(selected.every((w) => w.status == WalStatus.synced), isTrue);
+          expect(uploadFixture.completedJobs, uploadFixture.acceptedJobs);
+          await _idle(const Duration(seconds: 3));
+          results['wal_sync_upload_success'] = {
+            ...await collector.end(),
+            'uploaded_wals': uploadFixture.acceptedFiles,
+            'completed_jobs': uploadFixture.completedJobs,
+          };
+        } finally {
+          for (final w in held) {
+            w.holdForUser = false;
+          }
+          await walService.syncs.phone.persistRetryMetadata(selected.first);
+        }
+      }
     })();
 
-    // 9. Receipt: engine frame statistics per scenario.
+    // 13. Receipt: engine frame statistics per scenario.
     final receipt = <String, Object?>{
       'schema': 'omi-mobile-perf-sim/v2',
       'frame_policy': 'framework-requested/v1',
@@ -280,17 +468,23 @@ void main() {
       'flavor': 'dev',
       'scenario_order': collector.windowOrder,
       'dataset': {
+        'semantics': heavySemantics,
+        'upload': heavyUploadMode,
+        if (heavyUploadMode == 'accept') 'upload_wals': heavyUploadWalCount,
         'conversations': heavyConversationCount,
         'detail_segments': heavyDetailSegments,
         'wals': heavyWalCount,
+        if (heavySyncedWalCount > 0) 'synced_wals': heavySyncedWalCount,
         'wal_files': walFileCount,
         'people': 40,
         'task_items': 50,
+        'live_final_segments': heavyLiveFinalSegments,
+        'live_preview_interval_ms': heavyLivePreviewInterval.inMilliseconds,
       },
       'fixture_requests': fixture.countsByKind,
       'operation_marks': operationMarks,
       'scenarios': results,
-      'complete': results.length == 5,
+      'complete': results.length == heavyScenarioCount,
     };
     binding.reportData = {...?binding.reportData, 'heavy_profile': receipt};
 
@@ -314,7 +508,7 @@ void main() {
     debugPrint('HEAVY_FIXTURE_STORAGE=${storage.path}');
     expect(results['cold_start']!['restored_from_cache'], isTrue,
         reason: 'Home must restore the seeded history from the conversations cache');
-  }, timeout: const Timeout(Duration(minutes: 12)));
+  }, semanticsEnabled: heavySemantics == 'on', timeout: const Timeout(Duration(minutes: 12)));
 }
 
 Map<String, Object?> _readNativeInitialLifecycle(IntegrationTestWidgetsFlutterBinding binding) {
@@ -439,10 +633,11 @@ Future<Finder> _verticalScrollable(WidgetTester tester, Finder scope) async {
 /// production switch shape ([HomeTabSwitcher] driving [HomeProvider], an
 /// [IndexedStack] whose slots stay stable, tickers gated to the selected tab).
 class _HeavyHomeShell extends StatelessWidget {
-  const _HeavyHomeShell({required this.conversationsProvider, required this.walService});
+  const _HeavyHomeShell({required this.conversationsProvider, required this.walService, required this.uploadGate});
 
   final ConversationProvider conversationsProvider;
   final WalService walService;
+  final SyncUploadGate uploadGate;
 
   @override
   Widget build(BuildContext context) {
@@ -467,6 +662,7 @@ class _HeavyHomeShell extends StatelessWidget {
         ChangeNotifierProvider(
             create: (_) => SyncProvider(
                   walService: walService,
+                  uploadGate: uploadGate,
                   startBackgroundSync: false,
                   keepAlive: SyncTransferKeepAlive(start: () async {}, stop: () async {}),
                 )),

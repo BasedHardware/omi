@@ -1,4 +1,5 @@
 from dataclasses import replace
+from types import SimpleNamespace
 import asyncio
 import json
 import logging
@@ -19,6 +20,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from utils.task_intelligence import reminder_policy
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -63,13 +65,14 @@ from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
     validate_rich_meeting_notes,
+    attach_notes_identity_context,
     validate_structured_source_segment_ids,
 )
 from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
-from utils.llm.notes_identity import notes_identity
+from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.notes_effort import bind_notes_effort
@@ -179,6 +182,12 @@ def should_discard_conversation(
     neighbor (a kept conversation within the boundary gap) is described by its
     gap and position only; none of its content enters the prompt.
     """
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if neighbor_gap_seconds is not None and occasion_relevance_enabled():
+        # Proximity is not proof of absorption. Preserve the continuation until
+        # the merge transaction transfers it and writes its absorbed receipt.
+        return False
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
     word_count = _word_count(transcript) if transcript and transcript.strip() else 0
@@ -478,6 +487,8 @@ def _get_shaped_conversation_notes(
     from utils.llm.action_item_v2 import instructions_for
 
     mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
+    if kwargs.get('task_intelligence_capture'):
+        mount = replace(mount, instructions=reminder_policy.instructions(mount.instructions))
     if open_loops_enabled():
         mount = replace(mount, instructions=mount.instructions + '\n\n' + OPEN_LOOP_EXTRACTION_RULES)
     evidence = [
@@ -537,6 +548,11 @@ def _get_shaped_conversation_notes(
             words=words,
             inputs=kwargs,
         )
+    # An agent may discover screen evidence before falling back. Use the final
+    # identity authority for both the prompt and output repair.
+    one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
+    one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
+    evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
     extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
@@ -590,6 +606,15 @@ def _finish_shaped_notes(
         user_tz = ZoneInfo(tz) if tz else timezone.utc
     except Exception:
         user_tz = timezone.utc
+    source = (inputs or {}).get('reminder_source')
+    if source is not None:
+        clock = SimpleNamespace(**source)
+        clock.transcript_segments = [SimpleNamespace(**row) for row in source.get('transcript_segments', ())]
+        structured.action_items = [
+            prepared
+            for item in structured.action_items
+            if (prepared := reminder_policy.prepare_reminder(item, conversation=clock, extracted_at=now)) is not None
+        ]
     for item in structured.action_items:
         if item.created_at is None:
             item.created_at = now
@@ -598,6 +623,19 @@ def _finish_shaped_notes(
         event.duration = min(event.duration, 180)
         event.created = False
     structured.overview = render_sections_markdown(structured.sections) or structured.overview
+    # Provisional meeting identities ride the parsed structure to the save seam
+    # as server-only context (outside the client/model schema): roster entries,
+    # screen-frame count and corroborated names, for the notes-identity stager.
+    roster = (inputs or {}).get('roster')
+    meeting_context = (inputs or {}).get('meeting_context')
+    evidence_frames = (inputs or {}).get('screen_frames') or ()
+    has_identity_evidence = bool(
+        evidence_frames
+        or 'SCREEN MOMENTS' in (meeting_context or '')
+        or (roster and any(e.kind != 'owner' for e in roster.entries))
+    )
+    if rich_mode and has_identity_evidence:
+        attach_notes_identity_context(structured, roster, len(evidence_frames), meeting_context or '')
     return structured
 
 

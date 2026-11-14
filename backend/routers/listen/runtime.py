@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import Operation
 from utils.conversations import quiet_finalization
 
 import asyncio
@@ -16,8 +17,8 @@ from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from config.ladder_v1 import enabled as ladder_enabled
-from config import ladder_v1 as ladder_policy
 from database import conversation_tombstones
+from database.privacy_check_metrics import with_session_census, flush_session_census, reset_session_census
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -32,12 +33,12 @@ from models.message_event import (
 )
 from models.users import PlanType, WebhookType
 from database.redis_db import user_webhook_status_db
-from utils.analytics import billable_transcription_seconds, record_usage
+from utils.analytics import billable_transcription_seconds, billable_transcription_window_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
-from routers.listen.local_preview import renew_local_preview
+from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -67,6 +68,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
+from utils.observability import soniox_idle_arm
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -102,7 +104,7 @@ from config.policy.listen import current_listen_policy, routing_mode_raw, listen
 from routers.listen.policy import initialize_session_policy
 from config.live_stt_recovery import current_recovery_enabled, recovery_enabled, session_recovery_enabled
 from utils.stt.language_policy import LiveLanguageObservations, LiveLanguageProfile
-from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
+from utils.subscription import get_remaining_transcription_seconds
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
     normalize_codec_frame,
@@ -182,6 +184,8 @@ class ListenSessionRuntime:
         self.persistence = ListenPersistence()
         self.state = ListenSessionState()
         self.session_id = str(uuid.uuid4())
+        self.allowance_operation = Operation(request.uid, 'live_open', operation=f'live:{self.session_id}', live=True)
+        self.allowance_operation.clock = self._allowance_billable_clock
         self.client_conversation_id = _normalize_client_conversation_id(request.client_conversation_id)
         self.recording_session_id = self.client_conversation_id or str(uuid.uuid4())
         self.recording_session_ids_by_conversation: Dict[str, str] = {}
@@ -459,6 +463,7 @@ class ListenSessionRuntime:
             return
         try:
             outcome = self._session_transcript_outcome()
+            soniox_idle_arm.note_outcome(self, outcome)
             record_live_session_transcript_outcome(
                 outcome=outcome,
                 demand_cohort=host_cohort(self),
@@ -536,13 +541,6 @@ class ListenSessionRuntime:
             # Check before bootstrap/registration so rejection has no session to tear down.
             # A create already past this point can still race a deletion commit.
             await self.request.websocket.close(code=1008, reason='Conversation was deleted')
-            return False
-        if await run_blocking(db_executor, is_trial_paywalled, self.request.uid, self.request.source):
-            await self.request.websocket.send_json(
-                FreemiumThresholdReachedEvent(remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT).to_json()
-            )
-            await self.wait(0.5)
-            await self.request.websocket.close(code=1008, reason='trial_expired')
             return False
         error = validate_audio_format(self.request.codec, self.request.sample_rate)
         if error:
@@ -637,6 +635,7 @@ class ListenSessionRuntime:
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         capture_demand_admission(self)
+        soniox_idle_arm.start_plan_pin(self, user_db.get_user_valid_subscription)
         demand_vendor_start = self._demand_cohort == 'admitted'
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
@@ -795,10 +794,27 @@ class ListenSessionRuntime:
             if await self.wait(10):
                 break
 
+    async def _allowance_watch(self) -> None:
+        scope = getattr(self, 'allowance_operation', None)
+        if scope is not None:
+            await scope.monitor()
+
+    def _allowance_billable_clock(self) -> float:
+        admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
+        return billable_transcription_window_seconds(
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            time.time(),
+            getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
+        )
+
     async def _record_usage_periodically(self) -> None:
+        await self.persistence.call(reset_session_census)
         while self.state.active:
             if await self.wait(60):
                 break
+            await self.persistence.call(flush_session_census)
             transcription_seconds = await self._flush_usage(final=False)
             if self.use_custom_stt:
                 continue
@@ -850,10 +866,7 @@ class ListenSessionRuntime:
         admission = getattr(getattr(self, 'receiver', None), 'cap_admission', None)
         now = time.time()
         subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
-        ladder_session = (
-            ladder_enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
-            and ladder_policy.entitlements(subscription) is not None
-        )
+        ladder_session = False
         invalidated = await self.persistence.call(check_credits_invalidation, self.request.uid)
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
@@ -923,6 +936,9 @@ class ListenSessionRuntime:
                     logger.error('Silent-user notification refresh failed type=%s', type(error).__name__)
 
     async def _flush_usage(self, *, final: bool) -> int:
+        scope = getattr(self, 'allowance_operation', None)
+        if scope is not None and final:
+            scope.closed = True
         if getattr(self, 'server_batch_only', False):
             return 0  # Batch projection owns transcription usage; no live provider ran.
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
@@ -947,6 +963,8 @@ class ListenSessionRuntime:
                 )
             return 0
         if not self.state.last_usage_record_timestamp:
+            if final and scope is not None:
+                await self.persistence.call(scope.billed, 0)
             return 0
         speech_seconds = 0
         speech_ms = 0
@@ -982,6 +1000,14 @@ class ListenSessionRuntime:
             held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
+        if seconds and getattr(self, 'allowance_operation', None) is None:
+            from utils.stt.allowance_watch import observe_async
+            from utils.stt_cap_dispatch import customer_funded
+
+            provider = getattr(self, 'stt_service', None)
+            await observe_async(
+                self.request.uid, 'live_billing', provider, seconds, customer_funded=customer_funded(provider)
+            )
         self.state.words_transcribed_since_last_record = 0
         usage_metadata: Dict[str, Any] = live_usage_metadata(self)
         if (
@@ -999,22 +1025,31 @@ class ListenSessionRuntime:
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
                 usage_metadata=usage_metadata,
+                **(
+                    {'allowance_operation': self.allowance_operation}
+                    if getattr(self, 'allowance_operation', None) is not None
+                    else {}
+                ),
             )
+        elif final and scope is not None:
+            await self.persistence.call(scope.billed, 0)
         if not final:
             self.state.last_usage_record_timestamp = now
+            if scope is not None and scope.reference is None and scope.provider != 'unknown':
+                await scope.reserve_async(scope.provider, customer_funded=scope.customer_funded)
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        was_local_preview = bool(getattr(self, 'local_preview_batch', False))
         if renew_local_preview(self):
-            # The local-preview lane owns its own admission (batch lane + private
-            # sync, pinned at session start). Integrations degrade by ruling.
+            # Local-preview admission is pinned; integrations degrade by ruling.
             self.mobile_standard_batch = True
             return
+        if was_local_preview:
+            restore_non_preview_path(self.receiver)
         if mobile_standard_batch_rollout_enabled():
             await warm_rollout_cohorts(self.request.uid)
-        # Conservatively retain live delivery for ANY enabled integration. This
-        # covers transcript consumers as well as audio consumers, and fails
-        # closed if their inventory cannot be read. Re-evaluate on reconnect.
+        # Keep live delivery for any enabled integration; inventory errors retain live.
         checked = getattr(self, '_mobile_batch_checked_at', -float('inf'))
         now = time.monotonic()
         if now - checked < 30:
@@ -1123,8 +1158,7 @@ class ListenSessionRuntime:
         terminal-failure path, which is why this reads `_serving_provider()` here rather
         than reusing a value from bootstrap.
 
-        Both fields are optional and dropped by `exclude_none=True`, so a client that does
-        not read them sees exactly the payload it sees today.
+        Optional fields use `exclude_none=True`, preserving the legacy payload when absent.
         """
         if self.use_custom_stt:
             # Custom-STT clients produce their own transcripts; no backend provider serves.
@@ -1135,6 +1169,7 @@ class ListenSessionRuntime:
                 status='ready',
                 mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
                 local_preview=True if getattr(self, 'local_preview_batch', False) else None,
+                server_batch_only=True if getattr(self, 'server_batch_only', False) else None,
             )
         serving = self.receiver._serving_provider()
         selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
@@ -1146,6 +1181,7 @@ class ListenSessionRuntime:
             reason=f'fallback_from_{selected}' if fell_back else None,
         )
 
+    @with_session_census('listen')
     async def run(self) -> None:
         if not isinstance(getattr(self, 'recovery_enabled', None), bool):
             self.recovery_enabled = session_recovery_enabled(self)
@@ -1216,6 +1252,10 @@ class ListenSessionRuntime:
                     *self.pusher_tasks,
                 ]
             )
+            if getattr(self, 'allowance_operation', None) is not None:
+                background.append(
+                    self.task_supervisor.create_lifetime_task(self._allowance_watch(), name='allowance_watch')
+                )
             if self.is_multi_channel:
                 self.state.speaker_id_done.set()
             else:
@@ -1261,6 +1301,10 @@ class ListenSessionRuntime:
                     except asyncio.CancelledError:
                         pass
             self.state.shutdown_event.set()
+            scope = getattr(self, 'allowance_operation', None)
+            if scope is not None:
+                scope.closed = True
+                scope.changed.set()
             if self.recovery_enabled:
                 await self.task_supervisor.drain_monitored(
                     timeout=self.limits.bg_drain_timeout, cancel=False, deadline=cast(float, close_bound)
@@ -1459,23 +1503,26 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Conversation disconnect finalization failed type=%s', type(error).__name__)
         try:
+            try:
+                if not owner_persistence_blocked:
+                    await self.receiver.flush_multi_channel_tail()
+            finally:
+                if self.pusher_close:
+                    try:
+                        await self.pusher_close()
+                    except Exception as error:
+                        logger.error('Pusher close failed type=%s', type(error).__name__)
+            if self.onboarding_handler:
+                self.onboarding_handler.cleanup()
+            if self.language_observations is not None:
+                await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
             if not owner_persistence_blocked:
-                await self.receiver.flush_multi_channel_tail()
+                await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         finally:
-            if self.pusher_close:
-                try:
-                    await self.pusher_close()
-                except Exception as error:
-                    logger.error('Pusher close failed type=%s', type(error).__name__)
-        if self.onboarding_handler:
-            self.onboarding_handler.cleanup()
-        if self.language_observations is not None:
-            await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
-        if not owner_persistence_blocked:
-            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        # After the transcript loop drained and before the matcher's maps clear:
-        # the ordinal ledger needs both the final segments and final naming.
-        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            # After the transcript loop drained and before the matcher's maps clear (also when
+            # cleanup failed): the ordinal ledger needs both the final segments and final naming.
+            speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            soniox_idle_arm.record_session(self, speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
@@ -1491,8 +1538,8 @@ async def run_listen_session(request: ListenRequest) -> None:
         runtime = ListenSessionRuntime(request)
         await runtime.run()
     finally:
+        soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
-                source=request.source,
-                platform=runtime.client_device_context.platform,
+                source=request.source, platform=runtime.client_device_context.platform, state=runtime.state
             )

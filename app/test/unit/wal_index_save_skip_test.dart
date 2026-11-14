@@ -162,7 +162,10 @@ void main() {
     final baseIndex = Wal.persistedIndexFingerprint([base]);
     for (final entry in _mutations.entries) {
       final mutated = _fullyPopulated();
+      var dirtySignals = 0;
+      mutated.addChangeListener((_) => dirtySignals++);
       entry.value(mutated);
+      expect(dirtySignals, greaterThan(0), reason: '${entry.key} must enter the dirty set without a full scan');
       expect(mutated.persistentFingerprint, isNot(basePrint),
           reason: 'a change to ${entry.key} must not read as an unchanged index');
     }

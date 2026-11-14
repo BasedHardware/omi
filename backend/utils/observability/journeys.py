@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from time import monotonic
 from typing import Literal, TypeVar, cast
 
+from prometheus_client import REGISTRY, Counter
 from starlette.requests import ClientDisconnect
 
 from utils.metrics import (
@@ -33,12 +34,40 @@ from utils.journey_metrics_contract import (
     bounded_client_kind,
     resolve_client_kind,
 )
+from utils.observability.reasons import ChatResponseFailureReason, ReasonFamily, reason_label
 
 JourneyName = Literal['chat_response', 'pusher_session', 'capture_finalization']
 JourneyOutcome = Literal['success', 'failure', 'cancelled', 'stale']
 ReconciliationOutcome = Literal['requeued', 'enqueue_failed']
 
 _JOURNEYS = frozenset({'chat_response', 'pusher_session', 'capture_finalization'})
+
+# Sibling of omi_journey_terminal_total, deliberately not a label on it (that label set is pinned
+# by the journey SLO and headline contracts). One increment per failure terminal.
+# Tests reload this module; reuse the registered collector instead of registering it twice.
+OMI_JOURNEY_FAILURE_REASON_TOTAL = cast(
+    Counter,
+    getattr(REGISTRY, '_names_to_collectors', {}).get('omi_journey_failure_reason_total')
+    or Counter(
+        'omi_journey_failure_reason_total',
+        'Failed real-traffic product journey terminals by closed journey name and closed failure reason',
+        ['journey', 'reason'],
+    ),
+)
+# Explicit members: every reason child exists at zero before the first failure.
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.UNKNOWN.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.IDLE_TIMEOUT.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.SETUP_TIMEOUT.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.TIMEOUT.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.PROVIDER_ERROR.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
+    journey='chat_response', reason=ChatResponseFailureReason.PROVIDER_REFUSAL.value
+)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.EMPTY_ANSWER.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(journey='chat_response', reason=ChatResponseFailureReason.STREAM_FAILURE.value)
+OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
+    journey='chat_response', reason=ChatResponseFailureReason.PERSISTENCE_FAILURE.value
+)
 _OUTCOMES = frozenset({'success', 'failure', 'cancelled', 'stale'})
 _RECONCILIATION_OUTCOMES = frozenset({'requeued', 'enqueue_failed'})
 
@@ -60,11 +89,29 @@ def record_journey_accepted(journey: JourneyName) -> None:
     OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey(journey)).inc()
 
 
-def record_journey_terminal(journey: JourneyName, outcome: JourneyOutcome, elapsed_seconds: float) -> None:
-    """Record exactly one terminal outcome and its elapsed time for one journey."""
+def record_journey_terminal(
+    journey: JourneyName,
+    outcome: JourneyOutcome,
+    elapsed_seconds: float,
+    *,
+    failure_reason: ChatResponseFailureReason | None = None,
+) -> None:
+    """Record exactly one terminal outcome and its elapsed time for one journey.
+
+    A failure terminal also counts its closed reason; a missing reason counts as ``unknown``.
+    """
     labels = {'journey': _journey(journey), 'outcome': _outcome(outcome)}
     OMI_JOURNEY_TERMINAL_TOTAL.labels(**labels).inc()
     OMI_JOURNEY_LATENCY_SECONDS.labels(**labels).observe(max(0.0, elapsed_seconds))
+    if labels['outcome'] == 'failure':
+        OMI_JOURNEY_FAILURE_REASON_TOTAL.labels(
+            journey=labels['journey'],
+            reason=reason_label(
+                ReasonFamily.JOURNEY_FAILURE,
+                failure_reason or ChatResponseFailureReason.UNKNOWN,
+                ChatResponseFailureReason,
+            ),
+        ).inc()
 
 
 class JourneyAttempt:
@@ -80,11 +127,28 @@ class JourneyAttempt:
     def finished(self) -> bool:
         return self._finished
 
-    def finish(self, outcome: JourneyOutcome) -> None:
+    def finish(
+        self,
+        outcome: JourneyOutcome,
+        *,
+        failure_reason: ChatResponseFailureReason | None = None,
+        error_type: str | None = None,
+    ) -> None:
         if self._finished:
             return
         self._finished = True
-        record_journey_terminal(self.journey, outcome, monotonic() - self.started_at)
+        record_journey_terminal(self.journey, outcome, monotonic() - self.started_at, failure_reason=failure_reason)
+        if outcome == 'failure' and self.journey == 'chat_response':
+            # One line per failure terminal: the closed reason and the exception class name only.
+            logger.warning(
+                'Chat response failed reason=%s error_type=%s',
+                reason_label(
+                    ReasonFamily.JOURNEY_FAILURE,
+                    failure_reason or ChatResponseFailureReason.UNKNOWN,
+                    ChatResponseFailureReason,
+                ),
+                error_type or 'none',
+            )
 
 
 _StreamItem = TypeVar('_StreamItem')
@@ -192,11 +256,17 @@ def record_client_journey_terminal(
         journey_label = bounded_client_journey(journey)
         client_kind_label = bounded_client_kind(client_kind)
         outcome_label = bounded_client_journey_outcome(outcome)
+        # Reuse the closed issue enum; never export raw exceptions or caller text.
         OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
             journey=journey_label,
             client_kind=client_kind_label,
             app_build='unknown',
             outcome=outcome_label,
+            reason=(
+                bounded_client_journey_issue_class(issue_class)
+                if outcome_label in {'failure', 'degraded', 'unknown'}
+                else 'none'
+            ),
         ).inc()
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(
             journey=journey_label,

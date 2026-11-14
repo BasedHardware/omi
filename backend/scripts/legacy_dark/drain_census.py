@@ -41,6 +41,9 @@ ENVIRONMENTS = {
 }
 MONITORING = 'https://monitoring.googleapis.com'
 ADMISSIONS_WINDOW = '30m'
+# database.cap_hold_redrive.PENDING_STATES (asserted equal in tests; not imported, to keep this script
+# free of the data-plane client import).
+CAP_HOLD_PENDING_STATES = ('held', 'staging', 'sealing', 'retained')
 
 
 def _count(query: Any) -> int:
@@ -149,15 +152,25 @@ def take_census(env: str, *, with_ledger: bool = False) -> tuple[DrainCensus, di
             'sequencer_active_owners',
         ),
         redrive_required=_safe(lambda: _count(client.collection('sync_redrive_required')), errors, 'redrive_required'),
-        cap_holds_awaiting_legacy=_safe(
-            lambda: _count(client.collection_group('stt_cap_holds')), errors, 'cap_holds_awaiting_legacy'
-        ),
         queue_depth_sync_jobs=depths['sync-jobs'],
         queue_depth_sync_jobs_fresh=depths['sync-jobs-fresh'],
         queue_depth_sync_backfill=depths['sync-backfill'],
         queue_depth_sync_backfill_fresh=depths['sync-backfill-fresh'],
         legacy_admissions_window=_legacy_admissions(session, project, errors),
     )
+    # Informational, never gates dark (DrainCensus docstring): pending holds through the state group index.
+    held: dict[str, str] = {}
+    census = replace(
+        census,
+        cap_holds_awaiting_legacy=_safe(
+            lambda: _count(
+                where(client.collection_group('stt_cap_holds'), 'state', 'in', list(CAP_HOLD_PENDING_STATES))
+            ),
+            held,
+            'cap_holds_awaiting_legacy',
+        ),
+    )
+    errors.update({f'informational:{key}': value for key, value in held.items()})
     if with_ledger:
         info: dict[str, str] = {}
         census = replace(

@@ -3,6 +3,17 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
+runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
+defaults to `true`; rollback sets it to `false` on those same hosts and charts.
+
+Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
+deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
+Keep it out of deployment defaults and use the
+[runtime ramp migration](../../docs/runbooks/batch-runtime-ramp.md) for the
+one-time zero seed, controller/guard cutover and rollback. Existing env values
+are fallback only, never evidence of effective admission after that seed.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
@@ -62,9 +73,9 @@ mixed identity cannot be established. No actual resource is configured here.
 ## Firestore read train (#23797, 2026-10-27)
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
-surfaces explicitly declare all 19 current keys. The three train changes are
-`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
-`people_scan_dedupe:100`; `finjob_candidate_queries` stays at 5.
+surfaces explicitly declare all 20 current keys. The guard flag-offs leave
+`memory_list_index_window:0`,
+`people_scan_dedupe:0`, and `finjob_candidate_queries:0`.
 
 Monthly-total enablement and epoch deliberately remain split:
 
@@ -100,3 +111,54 @@ with `usage_month_total:0` while leaving maintenance on; after any old writer,
 keep readers off until all writers qualify and a new common epoch is selected.
 Count net reads plus writes and seed scans in D+1 billing; this config alone
 establishes no realized savings.
+
+Batch worker control-loop settings are declared in the worker chart (including
+explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
+and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
+complete lever map, including `bpp_decision_cache:100`, and enables held-poll
+skip; its kill switch is setting `heldPollSkipEnabled` to false.
+Projection finish backoff remains at its code default, off (SCA-2024).
+The three control knobs
+also have matching base declarations on serving batch hosts; pusher does not run
+the batch scheduler/pump and the co-host contract classifies them listen-only.
+The retired WQ12 privacy lever is absent from worker and serving-role literals.
+Worker rollback: 64 / false / 2 / `{}` respectively. See
+[the worker runbook](../../docs/batch-pipeline-worker.md) for the lead's soak gates.
+
+
+## Generated read-lever evidence (M7)
+
+`python3 backend/deploy/generate_read_lever_manifest.py` (from the repository
+root) writes [`../firestore_read_levers_manifest.json`](../firestore_read_levers_manifest.json).
+Use `--check` for freshness and offline validation. It calls the existing
+`compose_runtime_env.compose_manifest()` in memory and reuses the compose YAML
+loader/merge and runtime validator's literal extraction. It records each source's
+explicit values, every inherited code default (including the implicit zero), and
+the effective values; it is not live-state evidence or authority to change a rollout.
+The existing backend unit selector runs these checks when any source changes.
+`check_runtime_env_compose.sh` continues to verify the runtime artifact itself.
+
+`firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
+map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
+`expires` date. Dates must be today through seven days out. Current approvals
+end on 2026-11-17; this is an expiry deadline, not permission to expand the rollout.
+Renewal requires an explicit reviewed source change. `base/` and `overlay/`
+identify raw input paths; `runtime/<env>/` identifies both the generated and
+in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
+`code/defaults` covers partial defaults even if an explicit literal overrides them.
+No broad exception grants expiry coverage to another surface or percentage.
+
+UNRESOLVED: chart-vs-CR `batch_timeliness_leader`: worker chart `{}` inherits
+100 from `DEFAULT_PERCENTAGES`; prod Cloud Run literals explicitly carry 0.
+The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
+worker surfaces and annotates the generated differences. It does not resolve them.
+
+UNRESOLVED: README-vs-base triple: `memory_list_index_window`,
+`people_scan_dedupe`, and `finjob_candidate_queries` are documented as 0 in the
+historical train text above, while `_base.yaml` carries 100. Both source claims
+are preserved pending a human ruling. The generator's `UNRESOLVED_NOTES` constant
+supplies the manifest notes; neither evidence structure lives in `_base.yaml`,
+whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline guard
+extracts each historical train claim and compares it with every base declaration.
+It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
+and a missing note while the sources disagree.

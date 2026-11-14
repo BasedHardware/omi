@@ -1,17 +1,25 @@
-{{/* Both deployments sample the same durable queue. Separate, pool-pinned HPAs
-keep one worker in each capacity class without strict topology spread, which
-GKE's cluster autoscaler does not support. The original name stays on OD. */}}
+{{/* Optional balanced-pool machinery divides the shared durable queue across
+pool-pinned HPAs. The production cutover is a single OD HPA and never depends
+on Spot capacity. */}}
 {{- define "batch-pipeline-worker.instances" -}}
 {{- $min := int .Values.autoscaling.minReplicas -}}
 {{- $max := int .Values.autoscaling.maxReplicas -}}
-{{- $target := int .Values.autoscaling.targetQueuedUnitsPerWorker -}}
-{{- if and .Values.autoscaling.enabled (lt $target 1) -}}
+{{- $readyTarget := int .Values.autoscaling.targetQueuedUnitsPerWorker -}}
+{{- $chainTarget := float64 .Values.autoscaling.targetChainBusyPerWorker -}}
+{{- $downStab := int .Values.autoscaling.scaleDownStabilizationSeconds -}}
+{{- if and .Values.autoscaling.balancedPools.enabled (or (eq .Values.stage "prod") (eq .Values.namespace "batch_pipeline_prod") (eq .Release.Namespace "prod-omi-backend")) -}}
+{{- fail "balancedPools is machinery-only outside production; production requires a single OD-pinned HPA" -}}
+{{- end -}}
+{{- if and .Values.autoscaling.enabled (lt $readyTarget 1) -}}
 {{- fail "a qualified positive targetQueuedUnitsPerWorker is required" -}}
+{{- end -}}
+{{- if and .Values.autoscaling.enabled (or (le $chainTarget 0.0) (gt $chainTarget 1.0)) -}}
+{{- fail "a qualified targetChainBusyPerWorker in (0,1] is required" -}}
 {{- end -}}
 {{- if and .Values.autoscaling.enabled (or (lt $min 1) (lt $max $min)) -}}
 {{- fail "queue sampling runs in workers: minReplicas must be >=1 and maxReplicas >= minReplicas; scale-to-zero needs an independent sampler" -}}
 {{- end -}}
-{{- $instances := list (dict "name" .Release.Name "nodeSelector" .Values.nodeSelector "minReplicas" $min "maxReplicas" $max "capacityTarget" $target) -}}
+{{- $instances := list (dict "name" .Release.Name "nodeSelector" .Values.nodeSelector "minReplicas" $min "maxReplicas" $max "capacityTarget" $readyTarget "chainTarget" $chainTarget "scaleDownStabilizationSeconds" $downStab) -}}
 {{- if .Values.autoscaling.balancedPools.enabled -}}
 {{- if or (not .Values.autoscaling.enabled) (lt $min 2) (ne (mod $min 2) 0) (ne (mod $max 2) 0) -}}
 {{- fail "balancedPools requires autoscaling and even total minReplicas >=2 / maxReplicas" -}}
@@ -19,9 +27,54 @@ GKE's cluster autoscaler does not support. The original name stays on OD. */}}
 {{- $od := required "balancedPools.onDemandNodePool required" .Values.autoscaling.balancedPools.onDemandNodePool -}}
 {{- $spot := required "balancedPools.spotNodePool required" .Values.autoscaling.balancedPools.spotNodePool -}}
 {{- if eq $od $spot -}}{{- fail "balancedPools requires distinct on-demand and Spot node pools" -}}{{- end -}}
+{{/* Both pool deployments export the same worker_release and one namespace's
+     chain metric covers the whole fleet, so balanced mode doubles both
+     per-worker targets: each pool HPA buys half of either demand instead of
+     buying it twice (same division the shared queue count needed). */}}
 {{- $instances = list
-    (dict "name" .Release.Name "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $od)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $target 2))
-    (dict "name" (printf "%s-spot" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $spot)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $target 2)) -}}
+    (dict "name" .Release.Name "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $od)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $readyTarget 2) "chainTarget" (mulf $chainTarget 2.0) "scaleDownStabilizationSeconds" $downStab)
+    (dict "name" (printf "%s-spot" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $spot)) "minReplicas" (div $min 2) "maxReplicas" (div $max 2) "capacityTarget" (mul $readyTarget 2) "chainTarget" (mulf $chainTarget 2.0) "scaleDownStabilizationSeconds" $downStab) -}}
+{{- end -}}
+{{/* L4 stockout fallback: a T4-pinned sibling with no HPA. It starts at
+t4Fallback.replicas and an operator scales it only while L4 workers are
+Pending; the primary instance keeps queue sampling and the HPA. */}}
+{{- if .Values.t4Fallback.enabled -}}
+{{- $t4 := required "t4Fallback.nodePool required" .Values.t4Fallback.nodePool -}}
+{{/* Validate the resolved topology: balanced mode overrides the base selector. */}}
+{{- range $instances -}}
+{{- if eq $t4 (index .nodeSelector "cloud.google.com/gke-nodepool") -}}{{- fail "t4Fallback.nodePool must differ from all primary pools" -}}{{- end -}}
+{{- end -}}
+{{- if lt (int .Values.t4Fallback.replicas) 0 -}}{{- fail "t4Fallback.replicas must be >= 0" -}}{{- end -}}
+{{- $instances = append $instances (dict "name" (printf "%s-t4" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $t4)) "fixedReplicas" (int .Values.t4Fallback.replicas) "processes" (int .Values.t4Fallback.processes) "pipelineDepth" (int .Values.t4Fallback.pipelineDepth)) -}}
+{{- end -}}
+{{- with .Values.borrowedNodePools -}}
+{{- if .enabled -}}
+{{- $own := index $.Values.nodeSelector "cloud.google.com/gke-nodepool" | default "" -}}
+{{- $pools := .pools | default list -}}
+{{- if or (not $.Values.autoscaling.enabled) $.Values.autoscaling.balancedPools.enabled (not $own) (empty $pools) -}}
+{{- fail "borrowedNodePools needs autoscaling, no balancedPools, a nodeSelector pool and a non-empty pools list" -}}
+{{- end -}}
+{{- range $pools -}}
+{{- if or (eq . $own) (contains "spot" .) -}}
+{{- fail "borrowedNodePools.pools must be other on-demand pools" -}}
+{{- end -}}
+{{- end -}}
+{{- $grace := int .terminationGracePeriodSeconds -}}
+{{- if or (lt $grace 1) (gt $grace 300) -}}
+{{- fail "borrowedNodePools.terminationGracePeriodSeconds must be in [1, 300] so the owner gets its node back fast" -}}
+{{- end -}}
+{{- $max := int .maxReplicas -}}
+{{- if lt $max 1 -}}{{- fail "borrowedNodePools.maxReplicas must be >= 1" -}}{{- end -}}
+{{- /* Its own HPA on the shared queue: at most maxReplicas extra workers,
+on nodes the owner left free. The OD instance above is unchanged. */ -}}
+{{- $instances = append $instances (dict
+    "name" (printf "%s-borrow" $.Release.Name)
+    "nodeSelector" (omit $.Values.nodeSelector "cloud.google.com/gke-nodepool" "service")
+    "borrowedPools" $pools
+    "terminationGracePeriodSeconds" $grace
+    "minReplicas" 1 "maxReplicas" $max "baselineReplicas" 1
+    "capacityTarget" $readyTarget "chainTarget" $chainTarget "scaleDownStabilizationSeconds" $downStab) -}}
+{{- end -}}
 {{- end -}}
 {{- toYaml $instances -}}
 {{- end -}}

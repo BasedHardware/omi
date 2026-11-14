@@ -466,7 +466,8 @@ class GetAppsWidgets extends StatelessWidget {
             if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
             // A failed processing pass can be retried the same way as a failed summary.
-            if (conversation.showsSummaryRetry ||
+            if (conversation.homeStep == 'failed' ||
+                conversation.showsSummaryRetry ||
                 (conversation.status == ConversationStatus.failed &&
                     !conversation.discarded &&
                     !conversation.isLocked)) {
@@ -510,7 +511,10 @@ class GetAppsWidgets extends StatelessWidget {
         child: _SummaryCallToAction(
           message: context.l10n.noSummaryForConversation,
           actionLabel: context.l10n.generateSummary,
-          onPressed: () => showSummarizedAppsSheet(context),
+          onPressed: () {
+            final provider = context.read<ConversationDetailProvider>();
+            return startSummary(provider, resolvedDefaultSummaryTemplateId(provider));
+          },
         ),
       ),
     );

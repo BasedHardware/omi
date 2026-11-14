@@ -23,6 +23,7 @@ class OmiDeviceConnection extends DeviceConnection {
   static const String settingsDimRatioCharacteristicUuid = '19b10011-e8f2-537e-4f6c-d104768a1214';
   static const String settingsMicGainCharacteristicUuid = '19b10012-e8f2-537e-4f6c-d104768a1214';
   static const String settingsChargingStatusCharacteristicUuid = '19b10013-e8f2-537e-4f6c-d104768a1214';
+  static const String settingsMuteCharacteristicUuid = '19b10015-e8f2-537e-4f6c-d104768a1214';
   static const String featuresServiceUuid = '19b10020-e8f2-537e-4f6c-d104768a1214';
   static const String featuresCharacteristicUuid = '19b10021-e8f2-537e-4f6c-d104768a1214';
 
@@ -70,13 +71,24 @@ class OmiDeviceConnection extends DeviceConnection {
     return completer.future;
   }
 
-  OmiDeviceConnection(super.device, super.transport, {PendantRingCustody? custody})
-      : _custody = custody ?? PendantRingCustody.shared {
+  OmiDeviceConnection(
+    super.device,
+    super.transport, {
+    PendantRingCustody? custody,
+    Duration enableAckTimeout = _defaultEnableAckTimeout,
+  })  : _custody = custody ?? PendantRingCustody.shared,
+        _enableAckTimeout = enableAckTimeout {
     final t = transport;
     if (t is NativeBleTransport) {
       t.beforeAudioResubscribe = (_) => _audioResubscribeGate();
     }
   }
+
+  /// How long the custody opt-in waits for the device ack before giving up
+  /// (live custody off, ring-id custody retained). Injected shorter by tests
+  /// over an in-memory transport; the default matches real hardware.
+  static const Duration _defaultEnableAckTimeout = Duration(seconds: 5);
+  final Duration _enableAckTimeout;
 
   int _audioSubscribers = 0;
   Completer<void>? _physicalReady = Completer<void>();
@@ -395,6 +407,9 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<StreamSubscription?> performGetBleButtonTapsListener({
     required void Function(List<int>) onTapsReceived,
   }) async {
+    // Native BLE creates a stream even when a characteristic is absent. Probe
+    // discovery first so legacy firmware never loses its button actions.
+    if (!transport.hasCharacteristic(buttonServiceUuid, buttonTapsCharacteristicUuid)) return null;
     try {
       final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTapsCharacteristicUuid);
       Logger.debug('Subscribed to button taps stream from Omi Device');
@@ -844,7 +859,7 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
 
         return await completer.future.timeout(
-          const Duration(seconds: 5),
+          _enableAckTimeout,
           onTimeout: () {
             Logger.debug('OmiDeviceConnection: custody enable timeout');
             return null;
@@ -951,7 +966,7 @@ class OmiDeviceConnection extends DeviceConnection {
   /// 1. Subscribe for notifications on the speaker PCM characteristic
   /// 2. Write a 4-byte little-endian length header
   /// 3. On each notify, write the next ≤400-byte PCM chunk
-  /// 4. When remaining length drops below 400, firmware plays the buffer
+  /// 4. Version 2 notifies drain completion; legacy firmware needs a fixed wait
   ///
   /// Long audio is split into [DeviceSpeakerPcm.maxMonoBytesPerCycle] frames
   /// because the firmware I2S block is only 10 KB of stereo samples.
@@ -964,6 +979,13 @@ class OmiDeviceConnection extends DeviceConnection {
     }
 
     final generation = ++_pcmSpeakerGeneration;
+    var reportsDrain = false;
+    try {
+      final protocol = await transport.readCharacteristic(omiServiceUuid, audioSpeakerPcmCharacteristicUuid);
+      reportsDrain = protocol.length == 1 && protocol[0] == 2;
+    } catch (_) {
+      // Legacy speaker firmware has a write-only characteristic.
+    }
     final frames = DeviceSpeakerPcm.frameForDevice(pcm16leMono8k);
     if (frames.isEmpty) return false;
 
@@ -975,19 +997,16 @@ class OmiDeviceConnection extends DeviceConnection {
 
       for (final frame in frames) {
         if (generation != _pcmSpeakerGeneration) return false;
-        final ok = await _streamOnePcmFrame(frame, notifyStream: notifyStream, onSubscribe: (sub) {
+        final ok =
+            await _streamOnePcmFrame(frame, reportsDrain: reportsDrain, notifyStream: notifyStream, onSubscribe: (sub) {
           notifySub?.cancel();
           notifySub = sub;
         });
         if (!ok) return false;
-        // Firmware `speak()` sleeps ~4s after the final write while I2S drains
-        // (`k_sleep(K_MSEC(4000))` in speaker.c). Each framed chunk is ≤5000
-        // mono bytes ≈ 0.3125s of 8 kHz audio, so this client wait makes a ~2s
-        // sentence (~7 frames) take ~30s wall-clock until firmware can drain
-        // without a completion signal. Keep in sync with that sleep; shorten
-        // only when firmware exposes drain-complete.
         if (generation != _pcmSpeakerGeneration) return false;
-        await Future<void>.delayed(const Duration(milliseconds: 4200));
+        // Version 2 completes only after DMA releases the block. Old firmware
+        // has no completion event and still needs its original safe delay.
+        if (!reportsDrain) await Future<void>.delayed(const Duration(milliseconds: 4200));
       }
       return true;
     } catch (e) {
@@ -1005,6 +1024,7 @@ class OmiDeviceConnection extends DeviceConnection {
 
   Future<bool> _streamOnePcmFrame(
     Uint8List frame, {
+    required bool reportsDrain,
     required Stream<List<int>> notifyStream,
     required void Function(StreamSubscription<List<int>> sub) onSubscribe,
   }) async {
@@ -1018,10 +1038,23 @@ class OmiDeviceConnection extends DeviceConnection {
     late final StreamSubscription<List<int>> sub;
     sub = notifyStream.listen((data) {
       if (finished) return;
+      if (reportsDrain && data.length == 1) {
+        if (data[0] == 3) {
+          finished = true;
+          if (!ready.isCompleted) ready.completeError(StateError('PCM speaker DMA failed'));
+        } else if (data[0] == 2 && offset >= total) {
+          finished = true;
+          if (!ready.isCompleted) ready.complete();
+        }
+        return;
+      }
+      // Flow-control notifications are a little-endian uint16 credit of 400.
+      if (data.length != 2 || data[0] != 0x90 || data[1] != 0x01) return;
       writeChain = writeChain.then((_) async {
         if (finished) return;
         try {
           if (offset >= total) {
+            if (reportsDrain) return;
             finished = true;
             if (!ready.isCompleted) ready.complete();
             return;
@@ -1034,7 +1067,7 @@ class OmiDeviceConnection extends DeviceConnection {
             audioSpeakerPcmCharacteristicUuid,
             chunk,
           );
-          if (offset >= total && !ready.isCompleted) {
+          if (!reportsDrain && offset >= total && !ready.isCompleted) {
             finished = true;
             ready.complete();
           }
@@ -1394,6 +1427,38 @@ class OmiDeviceConnection extends DeviceConnection {
       return null;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error getting mic gain: $e');
+      return null;
+    }
+  }
+
+  /// Write the persistent capture mute flag. Old firmware without the
+  /// characteristic / feature bit is a no-op (caller keeps the local pref).
+  Future<void> setCaptureMuted(bool muted) async {
+    // getFeatures() intentionally maps failed reads to legacy capabilities.
+    // A privacy mutation must distinguish unsupported firmware from a lost
+    // connection, otherwise a failed write can be reported as a successful pause.
+    final bytes = await transport.readCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
+    if (bytes.length < 4) throw StateError('Unable to confirm device mute capabilities');
+    final features = ByteData.sublistView(Uint8List.fromList(bytes)).getUint32(0, Endian.little);
+    if ((features & OmiFeatures.captureMute) == 0) return;
+    await transport.writeCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid, [muted ? 1 : 0]);
+    final confirmed = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
+    if (confirmed.length != 1 || confirmed.single != (muted ? 1 : 0)) {
+      throw StateError('Device did not confirm capture mute');
+    }
+  }
+
+  /// Read the pendant mute flag. Returns null when the characteristic is
+  /// missing (legacy firmware) so the app can fall back to local prefs.
+  Future<bool?> getCaptureMuted() async {
+    try {
+      final features = await getFeatures();
+      if ((features & OmiFeatures.captureMute) == 0) return null;
+      final value = await transport.readCharacteristic(settingsServiceUuid, settingsMuteCharacteristicUuid);
+      if (value.isEmpty) return null;
+      return value[0] != 0;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting capture mute: $e');
       return null;
     }
   }

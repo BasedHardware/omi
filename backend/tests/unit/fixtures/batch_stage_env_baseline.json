@@ -128,13 +128,6 @@
     },
     {
       "path": "utils/batch_pipeline/live.py",
-      "function": "_units",
-      "name": "BUCKET_AUDIO_DERIVED",
-      "count": 1,
-      "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/batch_pipeline/live.py",
       "function": "admit_recording",
       "name": "BUCKET_BATCH_PIPELINE",
       "count": 1,
@@ -212,28 +205,28 @@
     },
     {
       "path": "utils/enrichment/outbox.py",
-      "function": "_dispatch_binding",
+      "function": "dispatch_binding",
       "name": "SYNC_TASKS_HANDLER_URL",
       "count": 1,
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "utils/enrichment/outbox.py",
-      "function": "_dispatch_binding",
+      "function": "dispatch_binding",
       "name": "SYNC_TASKS_INVOKER_SA",
       "count": 1,
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "utils/enrichment/outbox.py",
-      "function": "_dispatch_binding",
+      "function": "dispatch_binding",
       "name": "SYNC_TASKS_OIDC_AUDIENCE",
       "count": 1,
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
     },
     {
       "path": "utils/enrichment/outbox.py",
-      "function": "_dispatch_binding",
+      "function": "dispatch_binding",
       "name": "SYNC_TASKS_QUEUE",
       "count": 1,
       "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."

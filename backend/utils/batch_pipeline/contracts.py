@@ -14,6 +14,12 @@ from utils.observability.reasons import WorkerValidationReason, WorkOutcome, rea
 
 MAX_PROJECTION_PARTS = 128
 
+# The worker's fetch_decode check admits decoded audio up to 0.1s longer than
+# the admitted capture, and its span edges ride that decoded sample clock, so
+# an EOF span may end past ``duration`` by the same metadata tolerance
+# ``validate_measured_vad`` accepts (one extra 16 kHz sample for rounding).
+VAD_EOF_OVERRUN_SECONDS = 0.1 + 1 / 16000
+
 
 def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, float]]:
     """Encrypted result contract: original sample-rounded, unpadded VAD union.
@@ -22,11 +28,15 @@ def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, fl
     ``worker_vad_word_spans`` only positions a bound worker VAD measure at word
     clocks; its total is that acoustic measure, never the ASR duration.
     Parts/receipts stay embedded in the original result document for erasure.
+    An EOF span that overruns ``duration`` within the decode tolerance is
+    clamped to it; ``speech_seconds`` counts the decoded-clock union, so the
+    accounting check compares the pre-clamp total.
     """
     raw = payload.get('speech_spans')
     if not isinstance(raw, list) or not raw:
         raise ValueError('original VAD speech_spans required')
     spans = []
+    union = 0.0
     previous_end = -1.0
     for span in raw:
         if not isinstance(span, dict):
@@ -41,14 +51,19 @@ def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, fl
             raise ValueError('numeric VAD span required')
         if not math.isfinite(start) or not math.isfinite(end):
             raise ValueError('finite VAD span required')
-        if not 0 <= start < end <= duration or start < previous_end:
+        if not 0 <= start < end or start < previous_end:
             raise ValueError('ordered nonoverlapping VAD spans required')
+        union += end - start
+        if end > duration:
+            if end - duration > VAD_EOF_OVERRUN_SECONDS or start >= duration:
+                raise ValueError('ordered nonoverlapping VAD spans required')
+            end = duration
         spans.append({'start': float(start), 'end': float(end)})
         previous_end = end
     speech = payload.get('speech_seconds')
     if not isinstance(speech, (int, float)) or isinstance(speech, bool) or not math.isfinite(speech):
         raise ValueError('validated speech_seconds required')
-    if abs(sum(span['end'] - span['start'] for span in spans) - speech) > 1 / 16000 + 1e-9:
+    if abs(union - speech) > 1 / 16000 + 1e-9:
         raise ValueError('VAD union disagrees with speech accounting')
     return spans
 
@@ -66,8 +81,22 @@ class WorkItem:
     privacy_generation: int | None = None
     requires_compute_admission: bool = False
     shadow: bool = False
+    # CPU admission provenance, never inferred from record-origin speaker scopes.
+    timing_store: str | None = None
+    language_receipt_enabled: bool | None = None
+
+    def to_dict(self):
+        """Serialize optional receipt state without widening legacy job documents."""
+        from dataclasses import asdict
+
+        value = asdict(self)
+        if self.language_receipt_enabled is None:
+            value.pop('language_receipt_enabled')
+        return value
 
     def __post_init__(self):
+        if self.timing_store not in {None, 'batch', 'sync'}:
+            raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
         if not self.owner_id or '/' in self.owner_id or len(self.owner_id.encode()) > 256:
@@ -90,6 +119,8 @@ class WorkItem:
             raise ValueError('requires_compute_admission must be boolean')
         if type(self.shadow) is not bool:
             raise ValueError('shadow must be boolean')
+        if self.language_receipt_enabled is not None and self.language_receipt_enabled is not True:
+            raise ValueError('language_receipt_enabled must be true or absent')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')
@@ -252,6 +283,7 @@ class WorkResult:
     segment_id: str
     result_uri: str
     outcome: str = 'success'
+    language_receipt: dict | None = field(default=None, compare=False)
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -260,6 +292,31 @@ class WorkResult:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
+        if self.language_receipt is not None:
+            from utils.batch_pipeline.language_receipt import validate
+
+            validate(self.language_receipt)
+
+    def to_dict(self):
+        from dataclasses import asdict
+
+        value = asdict(self)
+        # Preserve the persisted representation of pre-receipt workers and
+        # completed results, including idempotent retries across a rolling deploy.
+        if self.language_receipt is None:
+            value.pop('language_receipt')
+        return value
+
+    def matches_persisted(self, value):
+        """Compare core results while tolerating an absent optional rolling-deploy receipt."""
+        if not isinstance(value, dict):
+            return False
+        expected = self.to_dict()
+        existing = dict(value)
+        if expected.get('language_receipt') is None or existing.get('language_receipt') is None:
+            expected.pop('language_receipt', None)
+            existing.pop('language_receipt', None)
+        return existing == expected
 
 
 @dataclass(frozen=True)
@@ -358,6 +415,7 @@ class ProjectionBinding:
     language: str | None = None
     record_origin: bool = False
     native_record: bool = False
+    partial_record: bool = False
 
     def __post_init__(self):
         # Firestore caps transaction writes at 500; completion reads all siblings.

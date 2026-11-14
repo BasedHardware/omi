@@ -19,7 +19,24 @@ DEFAULT_OUTPUT = ROOT / 'backend/deploy/runtime_env.yaml'
 GENERATED_HEADER = '# generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py\n'
 
 ConfigDict = dict[str, Any]
-_SafeLoader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
+
+class _UniqueKeyLoader(getattr(yaml, 'CSafeLoader', yaml.SafeLoader)):
+    """Reject repeated mapping keys before YAML's last-value-wins can hide them."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = '<<' if key_node.tag == 'tag:yaml.org,2002:merge' else loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ValueError(f'duplicate YAML mapping key {key!r} at line {key_node.start_mark.line + 1}')
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+_UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
+
 ENVIRONMENTS = ('dev', 'prod')
 _CLOUD_RUN_SERVICE_ORDER = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
@@ -27,7 +44,7 @@ _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
 
 def _load_yaml(path: Path) -> ConfigDict:
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.load(handle, Loader=_SafeLoader)  # noqa: S506 - a SafeLoader (libyaml when available)
+        loaded = yaml.load(handle, Loader=_UniqueKeyLoader)  # noqa: S506 - a SafeLoader (libyaml when available)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
     return cast(ConfigDict, loaded)

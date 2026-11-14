@@ -2,7 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../../../omi/src/lib/core/features.h"
 #include "tap_sequence.h"
+
+_Static_assert(OMI_FEATURE_BUTTON_TAPS == (1 << 12), "button taps must match the app feature bit");
+_Static_assert((OMI_FEATURE_BUTTON_TAPS &
+                (OMI_FEATURE_DEVICE_NAME | OMI_FEATURE_CAPTURE_MUTE | OMI_FEATURE_POWER_CONTROL)) == 0,
+               "button taps must not alias existing firmware features");
 
 #define POLL_MS 40
 #define MAX_EVENTS 16
@@ -66,7 +72,7 @@ int main(void)
     reset(0);
     hold(true, 120);
     hold(false, 600);
-    expect_events("single tap reports the tap then the end", (int[]){TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_END, 1}, 2);
+    expect_events("single tap reports the tap then the end", (int[]) {TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_END, 1}, 2);
 
     reset(0);
     hold(true, 120);
@@ -74,7 +80,7 @@ int main(void)
     hold(true, 120);
     hold(false, 600);
     expect_events("double tap counts up and ends once",
-                  (int[]){TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_END, 2},
+                  (int[]) {TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_END, 2},
                   3);
 
     reset(0);
@@ -84,7 +90,7 @@ int main(void)
     }
     hold(false, 600);
     expect_events(
-        "triple tap", (int[]){TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_TAP, 3, TAP_SEQUENCE_END, 3}, 4);
+        "triple tap", (int[]) {TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_TAP, 3, TAP_SEQUENCE_END, 3}, 4);
 
     reset(0);
     hold(true, 120);
@@ -106,20 +112,21 @@ int main(void)
     hold(true, 1000);
     hold(false, 600);
     expect_events(
-        "a hold after a tap ends the sequence while still held", (int[]){TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_END, 1}, 2);
+        "a hold after a tap ends the sequence while still held", (int[]) {TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_END, 1}, 2);
 
     reset(0);
     hold(true, 1000);
     hold(false, 600);
-    expect_events("a hold on its own reports nothing", (int[]){0}, 0);
+    expect_events("a hold on its own reports nothing", (int[]) {0}, 0);
 
     reset(UINT32_MAX - 200);
     hold(true, 120);
     hold(false, 160);
     hold(true, 120);
     hold(false, 600);
-    expect_events(
-        "timing survives uptime wraparound", (int[]){TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_END, 2}, 3);
+    expect_events("timing survives uptime wraparound",
+                  (int[]) {TAP_SEQUENCE_TAP, 1, TAP_SEQUENCE_TAP, 2, TAP_SEQUENCE_END, 2},
+                  3);
 
     if (failures) {
         printf("%d failure(s)\n", failures);

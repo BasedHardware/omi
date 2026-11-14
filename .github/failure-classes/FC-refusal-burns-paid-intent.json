@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-refusal-burns-paid-intent",
+  "violated_contract": "An operator repair refusal or caught provider failure must not consume the only paid recovery route without a validated vendor result. Validated empty responses remain paid, terminal evidence, and uncertain running attempts must never be blindly repeated.",
+  "canonical_prevention": "Run local legality and budget checks before recording intent; distinguish attempted from spent, permit one explicit token-fenced retry of a caught provider failure, preserve receipts and custody, and bind the maximum attempts into approved spend budgets. Historical no-call claims require recorded exact-scope vendor evidence and cannot override validated paid receipts.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_paid_attempt.py",
+    "backend/tests/unit/test_batch_refused_attestation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/speech_redrive.py",
+    "backend/scripts/batch_pipeline_speech_redrive.py"
+  ],
+  "status": "open"
+}

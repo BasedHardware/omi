@@ -358,6 +358,70 @@ class GeneratedRetentionOfferResponse {
   }
 }
 
+class GeneratedYearlySwitchResponse {
+  final int? amountDueToday;
+  final String? currency;
+  final bool eligible;
+  final bool? firstBillingPeriod;
+  final int? monthlyAmount;
+  final String? planId;
+  final String? priceId;
+  final int? prorationDate;
+  final String reason;
+  final int? renewsAt;
+  final int? savingsAmount;
+  final int? yearlyAmount;
+
+  const GeneratedYearlySwitchResponse({
+    this.amountDueToday,
+    this.currency,
+    required this.eligible,
+    this.firstBillingPeriod,
+    this.monthlyAmount,
+    this.planId,
+    this.priceId,
+    this.prorationDate,
+    required this.reason,
+    this.renewsAt,
+    this.savingsAmount,
+    this.yearlyAmount,
+  });
+
+  factory GeneratedYearlySwitchResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedYearlySwitchResponse(
+      amountDueToday: _readFieldValue<int>(_readField(json, const ["amount_due_today"]), "amount_due_today", _readInt, requiredField: false, nullable: true),
+      currency: _readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: false, nullable: true),
+      eligible: _required(_readFieldValue<bool>(_readField(json, const ["eligible"]), "eligible", _readBool, requiredField: true, nullable: false), "eligible"),
+      firstBillingPeriod: _readFieldValue<bool>(_readField(json, const ["first_billing_period"]), "first_billing_period", _readBool, requiredField: false, nullable: true),
+      monthlyAmount: _readFieldValue<int>(_readField(json, const ["monthly_amount"]), "monthly_amount", _readInt, requiredField: false, nullable: true),
+      planId: _readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: false, nullable: true),
+      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
+      prorationDate: _readFieldValue<int>(_readField(json, const ["proration_date"]), "proration_date", _readInt, requiredField: false, nullable: true),
+      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
+      renewsAt: _readFieldValue<int>(_readField(json, const ["renews_at"]), "renews_at", _readInt, requiredField: false, nullable: true),
+      savingsAmount: _readFieldValue<int>(_readField(json, const ["savings_amount"]), "savings_amount", _readInt, requiredField: false, nullable: true),
+      yearlyAmount: _readFieldValue<int>(_readField(json, const ["yearly_amount"]), "yearly_amount", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'amount_due_today': amountDueToday,
+      'currency': currency,
+      'eligible': eligible,
+      'first_billing_period': firstBillingPeriod,
+      'monthly_amount': monthlyAmount,
+      'plan_id': planId,
+      'price_id': priceId,
+      'proration_date': prorationDate,
+      'reason': reason,
+      'renews_at': renewsAt,
+      'savings_amount': savingsAmount,
+      'yearly_amount': yearlyAmount,
+    };
+  }
+}
+
 class GeneratedPlanLimits {
   final double? chatCostUsdPerMonth;
   final int? chatQuestionsPerMonth;

@@ -1,6 +1,27 @@
 {
   "entries": [
     {
+      "path": "utils/sync/worker_runtime.py",
+      "function": "Runtime.execute",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Joined child-process exit observer, not detached pipeline work. The supervisor awaits it and kills its owned process group in finally, even if the root child already exited. SIGKILL of the entire pod leaves the durable owner and unchanged Redis silence fence for the existing Cloud Tasks redrive. test_sync_worker_execution.py proves lease loss and root crash stop the descendant before handoff."
+    },
+    {
+      "path": "utils/sync/worker_job.py",
+      "function": "execute",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Redis token renewal is scoped to one awaited pipeline and stopped/joined in finally. Renewal rejection cancels execution, retains the lock, and exits the isolated job process; the parent reaps every process-group member. Existing 1800s TTL and token-fenced pipeline writes prevent overlap with fallback. The cancelled-worker lock/custody and process-group death proofs are in test_sync_worker_execution.py."
+    },
+    {
+      "path": "utils/sync/worker_runtime.py",
+      "function": "create_app.lifespan",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Dedicated pull-process lifecycle, not post-response pipeline work. The poll loop is stopped and joined during lifespan shutdown. At S2 it executes no audio; an unexpected accepted lease is handed back. Losing the process at SIGKILL retains the durable sequencer reservation and named Cloud Tasks fallback, recovered through the unchanged 1800s owner lease. Empty authenticated pulls and interruptible shutdown are exercised by test_sync_worker_runtime.py."
+    },
+    {
       "path": "routers/sync.py",
       "function": "_run_sync_job_attempt",
       "kind": "start_background_task",
@@ -13,13 +34,6 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed safe: UID-sequencer lease heartbeat; stop.set() and awaited in finally before the response, so it never outlives the request"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "sync_local_files",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
     },
     {
       "path": "routers/sync.py",
@@ -78,6 +92,13 @@
       "why": "reviewed recoverable: unfinished follow-ups stay in the durable projection_pending query and are re-launched by the next serving pass after restart"
     },
     {
+      "path": "utils/batch_pipeline/projection_followup.py",
+      "function": "ProjectionFollowups.launch_targeted",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed recoverable: this is only a wakeup after the result receipt is persisted; process loss leaves the same receipt pending for the serving pass, and failed steps retry from that receipt. test_batch_pipeline_recovery_owner_only.py and test_batch_pipeline_projection_followup.py cover owner scope and retry custody"
+    },
+    {
       "path": "utils/batch_pipeline/projection_prefetch.py",
       "function": "ChainPrefetch._scout",
       "kind": "executor.submit",
@@ -102,7 +123,7 @@
       "path": "utils/batch_pipeline/shadow_intake.py",
       "function": "offer_upload",
       "kind": "start_background_task",
-      "count": 4,
+      "count": 3,
       "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory. #23748 adds one tracked pair-only qualification offer, which awaits its pair and cleanup internally: SIGKILL can lose a sample, never serving work, routing, projection or usage. Durable intents prevent repeat spend; occupied slots fail closed after a crash until verified operator drain/reset. Private copies remain only in that container's temp directory. No qualification completeness or automatic slot recovery is promised. Owner astrabatch2/batch lane; lead adfec6 accepts this one task, remove with the temporary qualification mode (review 2026-10-29)."
     },
     {
@@ -111,6 +132,20 @@
       "kind": "start_background_task",
       "count": 3,
       "why": "reviewed safe (#23003): shadow idle take, late-take drop and at-most-once recovery RPC; shadow work never projects, publishes or charges a user, so a loss at SIGKILL drops one sample. The reaper settles stale shadow jobs by created_at (active recovery by recovery_started_at) and paid reservations are counted before the call, so the spend cap stays conservative"
+    },
+    {
+      "path": "utils/batch_pipeline/vendor_health.py",
+      "function": "VendorHealthService._maybe_refresh",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: refreshes only a cached health snapshot so allows() never blocks on Redis; no paid call, no unit state. Its one write is an atomic WATCH/MULTI breaker update that the next refresh or settle recomputes from the shared buckets; if killed, allows() answers from the process-local twin until a later refresh succeeds"
+    },
+    {
+      "path": "utils/batch_pipeline/provider_drain.py",
+      "function": "OwnerDrainCoalescer._start",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Coalesced owner merge wake after a provider-STT settle (2026-11-13). It holds no obligation: the settled job row is already durable as result_ready, and the drain only asks the ordered merge to commit it. Losing the task at SIGKILL delays that owner until its next settle or the maintenance ready page, which was the only path before this change. Awaiting it in the request would hold a provider-stt queue slot through the 60 s head wait; a request-backed owner-wake task is the durable replacement once a queue for it exists."
     },
     {
       "path": "utils/conversations/action_item_refresh.py",
@@ -169,6 +204,20 @@
       "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
     },
     {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: the 45-second task only delays a derived episode note update; the original transcript remains in the conversation row and finalization replays segments that have no episode receipt if the pusher exits before the timer fires"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: the 45-second task only delays a derived episode note update; the original transcript remains in the conversation row and finalization replays segments that have no episode receipt if the pusher exits before the timer fires"
+    },
+    {
       "path": "utils/episodes/finalize.py",
       "function": "schedule_after_finalization",
       "kind": "submit_with_context",
@@ -188,13 +237,6 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "reviewed safe (Episodes sync intake): folds a just-persisted offline-sync clip into the live episode overlay so Home hides it under the live row; holds no conversation, task or memory authority and runs after intake committed the row. Lost at SIGKILL, the clip still joins at its sync_update finalize (on_conversation_finalized -> _attach_synced), so the only cost is the old minutes-late fold; awaiting it would put episode Firestore reads on every sync segment's hot path"
-    },
-    {
-      "path": "utils/episodes/live.py",
-      "function": "on_session_end",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
     },
     {
       "path": "utils/executors.py",
@@ -309,6 +351,13 @@
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
     },
     {
+      "path": "utils/sync/cap_hold_redrive.py",
+      "function": "_schedule_fleet_snapshot",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: fleet snapshot is telemetry only and owns no hold, lease, reservation, or provider work; SIGKILL can lose one gauge refresh, and a later sweep or process restart schedules a fresh sample"
+    },
+    {
       "path": "utils/sync/pipeline.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",
@@ -317,7 +366,7 @@
     },
     {
       "path": "utils/sync/pipeline.py",
-      "function": "_run_full_pipeline_background_async",
+      "function": "run_full_pipeline_background_async",
       "kind": "start_background_task",
       "count": 2,
       "why": "pre-existing; unreviewed; one site is the inline lease heartbeat (awaited in finally, safe); the other is the fair-use soft-cap classifier (advisory LLM)"

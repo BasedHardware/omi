@@ -1,10 +1,15 @@
 from pathlib import Path
+
+import pytest
 import subprocess
 
 from testing.shell import bash_command
 
 ROOT = Path(__file__).resolve().parents[3]
 CHANGED_FILES = ROOT / 'scripts/changed-files'
+
+
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
 
 
 def _git(repo: Path, *args: str) -> str:

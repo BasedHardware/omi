@@ -6,6 +6,7 @@ Verifies:
 """
 
 import importlib.util
+from contextlib import ExitStack
 import os
 import shutil as _shutil
 import sys
@@ -24,6 +25,9 @@ from starlette.websockets import WebSocketDisconnect
 # ``models.message_event`` can only build its models against the real
 # ``Conversation`` class.
 import utils.stt.live_failure  # noqa: F401  (import-order dependency)
+import utils.stt.allowance_session  # noqa: F401 - load real ledger before legacy google package stubs
+import utils.stt.allowance_watch  # noqa: F401 - retain metric owners across per-case module restoration
+import utils.stt_cap_dispatch  # noqa: F401 - retain metric owners across per-case module restoration
 
 # ---------------------------------------------------------------------------
 # Module-level stubs (same pattern as test_sync_transcription_prefs.py)
@@ -120,6 +124,24 @@ def _desktop_transcribe_isolation():
     # ``stub_modules`` teardown: evict new keys AND restore swapped values.
     _saved_modules = dict(_sys.modules)
     _saved_keys = set(_saved_modules)
+    # The real auth/timeit module now depends on directory routing. Keep this
+    # transcription-only harness off that persistence plane, just like its
+    # existing Firestore/provider collaborators.
+    directory = ModuleType('database.directory')
+    directory.__path__ = []
+    directory_router = ModuleType('database.directory.router')
+    directory_router.routing_active = lambda: False
+    directory_router.cached_plane = lambda _uid: 'firestore'
+    directory_router.DirectoryRoutingUnavailable = RuntimeError
+    directory_scope = ExitStack()
+    directory_scope.enter_context(
+        stub_modules(
+            {
+                'database.directory': directory,
+                'database.directory.router': directory_router,
+            }
+        )
+    )
     try:
         _restore_package_paths()
 
@@ -445,6 +467,7 @@ def _desktop_transcribe_isolation():
             _cur = _sys2.modules.get(_k)
             if _cur is not None and _cur is not _orig:
                 _sys2.modules[_k] = _orig
+        directory_scope.close()
 
 
 # ---------------------------------------------------------------------------
@@ -681,7 +704,6 @@ def _stub_router_deps():
     sys.modules['utils.voice_duration_limiter'] = limiter_stub
     subscription_stub = sys.modules.setdefault('utils.subscription', MagicMock())
     subscription_stub.enforce_chat_quota = MagicMock()
-    subscription_stub.is_trial_paywalled = MagicMock(return_value=False)
     # Ensure redis_db.check_rate_limit returns (True, 99, 0)
     rdb = sys.modules.get('database.redis_db')
     if rdb:

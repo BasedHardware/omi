@@ -6,6 +6,7 @@ import uuid
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
 
 def discard_blocked(document_id: str) -> bool:
@@ -94,6 +95,11 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         ):
             raise reprocess.FirstSummaryCallbackPending('canonical custody binding changed')
         pending = dict(previous)
+        if previous.get('dormant'):
+            pending.pop('merge_hold', None)
+            pending.pop('sync_hold_requested', None)
+        elif previous.get('sync_hold') and not previous.get('merge_hold'):
+            pending['sync_hold_requested'] = True
         prior_due = previous.get('due_at')
         pending.update(
             document_id=target_id,
@@ -108,6 +114,12 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             summary_repair=False,
             summary_expected_revision=None,
         )
+        if donor.get('sync_hold'):
+            pending['sync_hold'] = True
+            if donor.get('sync_hold_requested') or not donor.get('merge_hold'):
+                pending['sync_hold_requested'] = True
+            if donor.get('merge_hold'):
+                pending['merge_hold'] = True
         if donor.get('summary_deadline_at') is not None:
             prior_deadline = previous.get('summary_deadline_at')
             pending['summary_deadline_at'] = min(
@@ -116,7 +128,7 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             pending['due_at'] = min(pending['due_at'], pending['summary_deadline_at'])
         # A canonical empty-output budget remains terminal. Redirects cannot
         # reset it, nor can they grant another paid processing epoch.
-        if previous.get('summary_blocked_reason') == reprocess.EMPTY_BLOCKED_REASON:
+        if previous.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS:
             pending.update(dormant=True, due_at=None)
         else:
             pending.update(dormant=False, summary_seen=bool(previous.get('summary_seen')))

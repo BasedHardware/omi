@@ -15,13 +15,11 @@ import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
 /// Recordings on their way to becoming conversations, opened from the device's Catching up
-/// tile. A headline with how much is left and a thin progress bar, then one row per local day
-/// with that day's totals and a quiet status. Failures recover on their own and never appear
-/// as rows here; "Details for support" lists every recording with its reason tokens.
+/// tile. A line on how it gets there, then one row per local day with that day's totals and a
+/// quiet status. Failures recover on their own and never appear as rows here.
 class OnTheWayPage extends StatefulWidget {
   const OnTheWayPage({super.key, this.syncProvider, this.multiFileSync, this.clock, this.pendingWork});
 
@@ -42,7 +40,7 @@ class OnTheWayPage extends StatefulWidget {
   State<OnTheWayPage> createState() => _OnTheWayPageState();
 }
 
-/// Shared by the page and its support details: listens to server work and reads the inventory.
+/// Listens to server work and reads the inventory.
 mixin _PendingWorkListener<T extends StatefulWidget> on State<T> {
   PendingWorkStore get store;
 
@@ -82,12 +80,11 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
       builder: (context, sync, child) {
         final p = widget.syncProvider ?? sync;
         final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
-        final work = _PendingWork.collect(p, processing, store.pending, l, forSupport: false);
+        final work = _PendingWork.collect(p, processing, store.pending, l);
         // Recordings that failed or were refused recover without the user; they are not rows
         // here, but they keep the page from claiming everything is synced.
-        final quiet = p.allWals.any((w) => isAttentionSyncState(w.syncDisplayState)) ||
-            p.allWals.any((w) => w.status == WalStatus.uploadRejected);
-        final refusals = WalRefusalSummary.from(p.allWals);
+        final quiet = p.needsAttentionWalsCount > 0 || p.terminallyFailedWalsCount > 0;
+        final refusals = p.refusalSummary;
 
         final Widget body;
         if (work.isEmpty && !quiet) {
@@ -99,10 +96,21 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
           body = ListView(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
             children: [
-              if (work.recordings.isNotEmpty || work.status != null) ...[
-                _Header(work: work, online: online),
-                const SizedBox(height: OmiSpacing.lg),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+                child: Text(
+                  online ? l.onTheWayUploadsByItself : l.onTheWayUploadsWhenOnline,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
+              if (work.status != null) ...[
+                const SizedBox(height: OmiSpacing.xs),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+                  child: Text(work.status!.label, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ),
               ],
+              const SizedBox(height: OmiSpacing.lg),
               // Only something the user can actually fix earns a line, and only one.
               if (refusals.userActionCanHelp && refusals.count > 0) ...[
                 OmiSettingsGroup(children: [
@@ -140,40 +148,6 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
                   l.onTheWayFootnote,
                   key: const Key('on_the_way_footnote'),
                   style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                ),
-              ),
-              // A small quiet link, but a full 44pt target.
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: Semantics(
-                  button: true,
-                  child: InkWell(
-                    key: const Key('on_the_way_details_for_support'),
-                    borderRadius: OmiRadius.pillAll,
-                    onTap: () => routeToPage(
-                      context,
-                      _SupportDetailsPage(
-                        syncProvider: widget.syncProvider,
-                        multiFileSync: widget.multiFileSync,
-                        clock: widget.clock,
-                        store: store,
-                      ),
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-                        child: Text(
-                          l.onTheWayDetailsForSupport,
-                          style: OmiType.footnote.copyWith(
-                            color: OmiColors.textSecondary,
-                            decoration: TextDecoration.underline,
-                            decorationColor: OmiColors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -216,155 +190,19 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
   }
 }
 
-/// "8h 14m catching up", a thin bar for how much of it has uploaded, and one line on how it
-/// gets there.
-class _Header extends StatelessWidget {
-  const _Header({required this.work, required this.online});
-
-  final _PendingWork work;
-  final bool online;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.l10n;
-    final total = work.recordings.fold(0, (s, i) => s + i.seconds);
-    // Audio already on the server: everything past the upload step.
-    final landed = work.recordings.where((i) => i.step >= 2).fold(0, (s, i) => s + i.seconds);
-    final title = total > 0
-        ? l.onTheWayCatchingUp(OmiDuration.compact(total, l))
-        : work.status?.label ?? l.onTheWayRecordingCount(work.recordings.length);
-    return Padding(
-      key: const Key('on_the_way_header'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Semantics(header: true, child: Text(title, style: OmiType.title2)),
-          if (total > 0) ...[
-            const SizedBox(height: OmiSpacing.sm),
-            ClipRRect(
-              borderRadius: OmiRadius.pillAll,
-              child: LinearProgressIndicator(
-                key: const Key('on_the_way_progress'),
-                value: landed / total,
-                minHeight: 4,
-                color: OmiColors.accent,
-                backgroundColor: OmiColors.surface3,
-                semanticsLabel: title,
-              ),
-            ),
-          ],
-          const SizedBox(height: OmiSpacing.sm),
-          Text(
-            online ? l.onTheWayUploadsByItself : l.onTheWayUploadsWhenOnline,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Every recording with its stage and, where it has one, its reason tokens: the list support
-/// asks for. Read-only — refusals and retries are handled by the background policy.
-class _SupportDetailsPage extends StatefulWidget {
-  const _SupportDetailsPage({
-    required this.syncProvider,
-    required this.multiFileSync,
-    required this.clock,
-    required this.store,
-  });
-
-  final SyncProvider? syncProvider;
-  final bool? multiFileSync;
-  final DateTime Function()? clock;
-  final PendingWorkStore store;
-
-  @override
-  State<_SupportDetailsPage> createState() => _SupportDetailsPageState();
-}
-
-class _SupportDetailsPageState extends State<_SupportDetailsPage> with _PendingWorkListener {
-  @override
-  PendingWorkStore get store => widget.store;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.l10n;
-    return Consumer<SyncProvider>(
-      builder: (context, sync, child) {
-        final p = widget.syncProvider ?? sync;
-        final processing = context.watch<ConversationProvider?>()?.processingConversations ?? const [];
-        final work = _PendingWork.collect(p, processing, store.pending, l, forSupport: true);
-        final dates = dateFormat(context, widget.clock);
-        final days = _groupByDay(work.dated);
-        // What the Offline Sync page itself counts as attention: refusals recover quietly there too.
-        final attention = work.all.where((i) => i.needsAttention && !i.refused).length;
-        const gutter = EdgeInsets.symmetric(horizontal: OmiSpacing.md);
-        return Scaffold(
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(l.onTheWayDetailsForSupport)),
-          body: ListView(
-            padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: OmiSpacing.xxl),
-            children: [
-              if (work.undated.isNotEmpty)
-                Padding(
-                  padding: gutter,
-                  child: _Group(items: work.undated, dates: dates),
-                ),
-              for (final day in days)
-                Padding(
-                  padding: gutter,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.xxs, OmiSpacing.md, 0, OmiSpacing.xs),
-                        child: Semantics(
-                          header: true,
-                          child: Text(
-                            '${dates.dayHeader(day.day)} · ${_totals(day.items, l)}',
-                            key: Key('on_the_way_support_day_${_dayKey(day.day)}'),
-                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      ),
-                      _Group(items: day.items, dates: dates),
-                    ],
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, 0),
-                child: OmiSettingsGroup(children: [
-                  OmiSettingsRow(
-                    key: const Key('on_the_way_sync_details'),
-                    title: l.syncDetailsTitle,
-                    subtitle: attention > 0 ? l.syncCardNeedsAttention(attention) : null,
-                    onTap: () => openOfflineSyncDetails(context, p, multiFileSync: widget.multiFileSync),
-                  ),
-                ]),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
 /// What On the Way lists, split by whether a trustworthy day exists.
 class _PendingWork {
   _PendingWork(this.dated, this.undated);
 
   /// Builds the rows from the inventory, processing conversations and server work. The page
-  /// lists only work still moving; [forSupport] adds every failed and refused recording, grouped
-  /// with its moving fragments so a recording shows once, in its worst state.
+  /// lists only work still moving: a failed or refused recording recovers without the user and is
+  /// not a row.
   factory _PendingWork.collect(
     SyncProvider p,
     List<ServerConversation> processing,
     List<PendingWorkItem> serverWork,
-    AppLocalizations l, {
-    required bool forSupport,
-  }) {
+    AppLocalizations l,
+  ) {
     final processingIds = {for (final c in processing) c.id};
     final dated = <_PendingItem>[for (final c in processing) _PendingItem.processing(c, l)];
     // A live capture's uploaded audio carries the id of the conversation already listed as
@@ -376,11 +214,7 @@ class _PendingWork {
     // The lists partition by WAL status, so a fragment never repeats across them; a phone copy
     // and its wearable source can share an id, and dropping one would hide the state the block
     // must show.
-    final pending = [
-      ...inFlight,
-      if (forSupport) ...SyncPendingWork.attention(p),
-      if (forSupport) ...p.displaySortedWals.where((w) => w.status == WalStatus.uploadRejected),
-    ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    final pending = [...inFlight]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
     // Rows with no trustworthy time: server work the phone did not start, and recordings whose
     // device clock predates the plausibility floor.
     final undated = <_PendingItem>[];
@@ -427,11 +261,7 @@ class _PendingWork {
   final List<_PendingItem> dated;
   final List<_PendingItem> undated;
 
-  List<_PendingItem> get all => [...dated, ...undated];
-
-  /// Everything with audio behind it: what the headline totals.
-  List<_PendingItem> get recordings => all.where((i) => i.isRecording).toList();
-
+  /// Recordings with audio behind them that have no trustworthy day.
   List<_PendingItem> get undatedRecordings => undated.where((i) => i.isRecording).toList();
 
   /// The stage line shown when a sync runs with no recording listed yet.
@@ -456,8 +286,7 @@ class _PendingItem {
         step = 3,
         moving = false,
         isRecording = true,
-        refused = false,
-        tokens = null;
+        recordingCount = 1;
 
   /// A recording block's start, or null when no device clock value in the block
   /// is plausible: a never-set clock shows no time rather than a bogus one.
@@ -473,8 +302,7 @@ class _PendingItem {
         seconds = block.seconds,
         moving = block.state == WalSyncDisplayState.syncing,
         isRecording = true,
-        refused = block.state == WalSyncDisplayState.uploadRejected,
-        tokens = step == 0 ? _reasonTokens(block.representative) : null;
+        recordingCount = 1;
 
   /// A stage with no recording to name yet: only the label shows.
   const _PendingItem.status({required this.label, required this.step})
@@ -482,8 +310,7 @@ class _PendingItem {
         seconds = 0,
         moving = false,
         isRecording = false,
-        refused = false,
-        tokens = null;
+        recordingCount = 0;
 
   /// Server-reported work's start, or null when unreported or before the
   /// plausibility floor (a device clock that was never set).
@@ -502,20 +329,7 @@ class _PendingItem {
         step = work.state == 'summarizing' ? 3 : 2,
         moving = false,
         isRecording = true,
-        refused = false,
-        tokens = null;
-
-  /// The persisted state and refusal tokens support reads: "upload_rejected · invalid_capture_time
-  /// · 400 · reported". Machine tokens, deliberately not translated.
-  static String _reasonTokens(Wal wal) {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    return [
-      wal.syncDisplayState.name,
-      if (wal.uploadRejectionReason case final reason? when reason.isNotEmpty) reason,
-      if (wal.status == WalStatus.uploadRejected) '${wal.uploadRejectionStatusCode}',
-      if (wal.refusalReported(now)) 'reported',
-    ].join(' · ');
-  }
+        recordingCount = work.recordingCount;
 
   final DateTime? start;
   final int seconds;
@@ -526,12 +340,7 @@ class _PendingItem {
 
   /// False only for a bare stage line with no recording behind it.
   final bool isRecording;
-
-  /// Refused by the server: retried daily by the background policy, never user attention.
-  final bool refused;
-
-  /// Reason tokens for a failed or refused recording; null for work still moving.
-  final String? tokens;
+  final int recordingCount;
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: failed or refused.
   final int step;
@@ -565,7 +374,7 @@ String _dayKey(DateTime day) =>
 /// "9 recordings · 1h 12m"; just the count when no length is known yet (server work).
 String _totals(List<_PendingItem> items, AppLocalizations l) {
   final seconds = items.fold(0, (s, i) => s + i.seconds);
-  final count = l.onTheWayRecordingCount(items.length);
+  final count = l.onTheWayRecordingCount(items.fold(0, (count, item) => count + item.recordingCount));
   return seconds > 0 ? '$count · ${OmiDuration.compact(seconds, l)}' : count;
 }
 
@@ -606,107 +415,6 @@ class _DayRow extends StatelessWidget {
                 ]),
         ),
       ),
-    );
-  }
-}
-
-class _Group extends StatelessWidget {
-  const _Group({required this.items, required this.dates});
-
-  final List<_PendingItem> items;
-  final OmiDateFormat dates;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: OmiColors.surface1,
-      borderRadius: OmiRadius.xlAll,
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) Divider(height: 1, thickness: 1, indent: OmiSpacing.md, color: OmiColors.surface2),
-            _Row(item: items[i], dates: dates),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// One recording on the support list. The first line names when it started (when a plausible
-/// clock exists) and how long it is; the second names its stage or the short reason it failed;
-/// a failed or refused recording adds its tokens on a third line.
-class _Row extends StatelessWidget {
-  const _Row({required this.item, required this.dates});
-
-  final _PendingItem item;
-  final OmiDateFormat dates;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.l10n;
-    final headline = [
-      if (item.start != null) dates.time(item.start!),
-      if (item.seconds > 0) OmiDuration.compact(item.seconds, l),
-    ].join(' · ');
-    final secondary = OmiType.subhead.copyWith(color: OmiColors.textTertiary);
-    return MergeSemantics(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (headline.isEmpty)
-                      Text(item.label, style: OmiType.body)
-                    else ...[
-                      Text(headline, style: OmiType.body),
-                      const SizedBox(height: 3),
-                      Text(item.label, style: secondary),
-                    ],
-                    if (item.tokens != null) ...[
-                      const SizedBox(height: 3),
-                      Text(item.tokens!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-                    ],
-                  ],
-                ),
-              ),
-              if (!item.needsAttention) _Steps(step: item.step),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Three short bars: synced, transcribed, written.
-class _Steps extends StatelessWidget {
-  const _Steps({required this.step});
-
-  final int step;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 1; i <= 3; i++)
-          Container(
-            margin: const EdgeInsetsDirectional.only(start: 4),
-            width: 14,
-            height: 4,
-            decoration: BoxDecoration(
-              color: i <= step ? OmiColors.accent : OmiColors.surface3,
-              borderRadius: OmiRadius.pillAll,
-            ),
-          ),
-      ],
     );
   }
 }

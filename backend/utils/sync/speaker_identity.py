@@ -102,7 +102,7 @@ def build_person_embeddings_cache(
         return cache
     # Load paid non-owner candidates only after resolving the batch entitlement.
     try:
-        people = users_db.get_people(uid)
+        people = users_db.get_people(uid, memoize=True)
         enrollment_allowed = auto_enroll_db.context(uid) if any(p.get(POOL_FIELD) for p in people or []) else {}
     except Exception as error:
         logger.warning('sync person profile read failed type=%s', type(error).__name__)
@@ -291,21 +291,20 @@ def identify_speakers_for_segments(
                 else 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
             )
             try:
-                if match_scores.enabled():
-                    row = match_scores.summarize(
-                        speaker_id,
-                        voice_distances[speaker_id],
-                        decision,
-                        evidence_seconds,
-                        'sync',
-                        threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
-                        margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
-                        scope=best_seg.speaker_id_scope or '',
-                        outcome=outcome,
-                        accepted=accepted,
-                    )
-                    for segment in segments:
-                        segment.speaker_match_scores = row
+                row = match_scores.summarize(
+                    speaker_id,
+                    voice_distances[speaker_id],
+                    decision,
+                    evidence_seconds,
+                    'sync',
+                    threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                    margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                    scope=best_seg.speaker_id_scope or '',
+                    outcome=outcome,
+                    accepted=accepted,
+                )
+                for segment in segments:
+                    segment.speaker_match_scores = row
             except Exception:
                 match_scores.record_failure(logger)
             for segment in segments:

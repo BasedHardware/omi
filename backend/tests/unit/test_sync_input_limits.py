@@ -127,7 +127,8 @@ def test_legacy_pcm_names_and_mixed_codec_markers_use_actual_decoder_expansion(m
         limits.validate_backfill_uploads([uploaded(name=name)])
 
 
-def test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix(tmp_path, monkeypatch):
+@pytest.mark.parametrize('raw_frame_writes', ['1', '0'])
+def test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix(tmp_path, monkeypatch, raw_frame_writes):
     import errno
     import wave
 
@@ -143,17 +144,89 @@ def test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix(tm
     raw = tmp_path / 'audio.opus'
     raw.write_bytes((struct.pack('<I', 4) + b'abcd') * 3)
     wav_path = tmp_path / 'audio.wav'
-    real_writeframes = wave.Wave_write.writeframes
+    # writeframes() delegates to writeframesraw(), so this covers both SYNC_OPUS_RAW_FRAME_WRITES modes.
+    real_writeframesraw = wave.Wave_write.writeframesraw
     calls = {'n': 0}
 
-    def flaky_writeframes(self, data):
+    def flaky_writeframesraw(self, data):
         calls['n'] += 1
         if calls['n'] == 2:
             raise OSError(errno.ENOSPC, 'synthetic tmpfs full')
-        return real_writeframes(self, data)
+        return real_writeframesraw(self, data)
 
+    monkeypatch.setenv('SYNC_OPUS_RAW_FRAME_WRITES', raw_frame_writes)
     monkeypatch.setattr(files, 'Decoder', FakeDecoder)
-    monkeypatch.setattr(wave.Wave_write, 'writeframes', flaky_writeframes)
+    monkeypatch.setattr(wave.Wave_write, 'writeframesraw', flaky_writeframesraw)
+    with pytest.raises(limits.BackfillStoragePressure):
+        files.decode_opus_file_to_wav(str(raw), str(wav_path))
+    assert not wav_path.exists()
+    assert raw.exists()
+
+
+def test_opus_io_error_at_close_fails_closed_and_keeps_raw_upload(tmp_path, monkeypatch):
+    # A non-capacity write error is not a corrupt frame: the WAV on disk may be incomplete, so the
+    # decode fails closed (no WAV, raw upload retained for a retry) rather than keeping a prefix.
+    import errno
+    import wave
+
+    from utils.sync import files
+
+    class FakeDecoder:
+        def __init__(self, *args):
+            pass
+
+        def decode(self, data, frame_size):
+            return b'\0' * 320
+
+    raw = tmp_path / 'audio.opus'
+    raw.write_bytes((struct.pack('<I', 4) + b'abcd') * 3)
+    wav_path = tmp_path / 'audio.wav'
+    real_close = wave.Wave_write.close
+    raised = {'n': 0}
+
+    def eio_close(self):
+        real_close(self)
+        if not raised['n']:
+            raised['n'] += 1
+            raise OSError(errno.EIO, 'synthetic io error at flush')
+
+    monkeypatch.setenv('SYNC_OPUS_RAW_FRAME_WRITES', '1')
+    monkeypatch.setattr(files, 'Decoder', FakeDecoder)
+    monkeypatch.setattr(wave.Wave_write, 'close', eio_close)
+    assert files.decode_opus_file_to_wav(str(raw), str(wav_path)) is False
+    assert not wav_path.exists()
+    assert raw.exists()
+
+
+def test_opus_disk_full_at_close_raises_capacity_pressure_and_keeps_no_prefix(tmp_path, monkeypatch):
+    # Raw frame writes stay in the file buffer, so ENOSPC can first surface when close() flushes.
+    import errno
+    import wave
+
+    from utils.sync import files
+
+    class FakeDecoder:
+        def __init__(self, *args):
+            pass
+
+        def decode(self, data, frame_size):
+            return b'\0' * 320
+
+    raw = tmp_path / 'audio.opus'
+    raw.write_bytes((struct.pack('<I', 4) + b'abcd') * 3)
+    wav_path = tmp_path / 'audio.wav'
+    real_close = wave.Wave_write.close
+    raised = {'n': 0}
+
+    def full_close(self):
+        real_close(self)
+        if not raised['n']:  # __del__ closes again; fail only the context-manager close
+            raised['n'] += 1
+            raise OSError(errno.ENOSPC, 'synthetic tmpfs full at flush')
+
+    monkeypatch.setenv('SYNC_OPUS_RAW_FRAME_WRITES', '1')
+    monkeypatch.setattr(files, 'Decoder', FakeDecoder)
+    monkeypatch.setattr(wave.Wave_write, 'close', full_close)
     with pytest.raises(limits.BackfillStoragePressure):
         files.decode_opus_file_to_wav(str(raw), str(wav_path))
     assert not wav_path.exists()
@@ -251,5 +324,5 @@ def test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objec
 
     monkeypatch.setattr(pipeline, 'download_syncing_temporal_file', download)
     with pytest.raises(limits.BackfillStoragePressure):
-        pipeline._download_staged_files([str(first), str(second)], bounded_backfill=True)
+        pipeline.download_staged_files([str(first), str(second)], bounded_backfill=True)
     assert not first.exists()

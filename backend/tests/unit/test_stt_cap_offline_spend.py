@@ -130,8 +130,6 @@ def test_offline_allowance_reads_never_provision_or_restore_user_roots(monkeypat
     monkeypatch.setattr(users_db, 'lever_enabled', lambda *args, **kwargs: False)
     monkeypatch.setattr(users_db, 'writing', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda uid: root_kind == 'reviewer')
-    trial = Mock(return_value=False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', trial)
     monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
 
     allowance = dispatch.funded_allowance('synthetic', source='desktop', lane=lane)
@@ -142,16 +140,7 @@ def test_offline_allowance_reads_never_provision_or_restore_user_roots(monkeypat
     if root_kind == 'reviewer':
         assert allowance.reason == 'marketplace_reviewer'
         reference.get.assert_not_called()
-        trial.assert_not_called()
     else:
         reference.get.assert_called_once_with(['subscription'])
-        trial.assert_called_once_with(
-            'synthetic',
-            'desktop',
-            required_byok_provider='deepgram',
-            strict=True,
-            byok_exempt=False,
-            provision=False,
-        )
         if root_kind == 'paid_through':
             assert allowance.reason == 'plan_unlimited'

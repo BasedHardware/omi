@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from database import app_review_config
 from models.users import PlanType, Subscription
 from models.storefront import StorefrontUsage
 from routers import storefront as route
@@ -86,8 +87,8 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     plus = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
     assert plus.recommended and plus.cta_label == 'Get Plus'
     yearly = next(item for item in plus.prices if item.interval == 'year')
-    assert yearly.headline == '$16.66/month'
-    assert yearly.subline == '$199.90 billed yearly · 2 months free'
+    assert yearly.headline == 'US$16.66/month'
+    assert yearly.subline == 'US$199.90 billed yearly · 2 months free'
     assert yearly.months_free == 2
     pro = next(tier for tier in sheet.tiers if tier.plan_id == 'operator')
     assert pro.cta_label == 'Get Pro'
@@ -100,9 +101,9 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     operator = next(tier for tier in paid.tiers if tier.plan_id == 'operator')
     assert operator.cta_label is None and operator.bullets == []
     assert [item.interval for item in operator.prices] == ['year']
-    assert operator.prices[0].headline == '$49.99/month'
-    assert operator.prices[0].subline == '$499.90 billed yearly · 2 months free'
-    assert operator.prices[0].cta_label == 'Switch to yearly · save $99.98'
+    assert operator.prices[0].headline == 'US$49.99/month'
+    assert operator.prices[0].subline == 'US$499.90 billed yearly · 2 months free'
+    assert operator.prices[0].cta_label == 'Switch to yearly · save US$99.98'
     assert not any(tier.recommended for tier in paid.tiers)
 
 
@@ -135,8 +136,8 @@ def test_single_plan_storefront_builder_pins_golden(monkeypatch):
     assert tier.name == 'Unlimited' and tier.recommended and tier.is_current is False
     assert tier.action == 'checkout' and tier.cta_label == 'Get Unlimited'
     assert [item.price_id for item in tier.prices] == ['price_omi_pro_month', 'price_omi_pro_year']
-    assert tier.prices[0].headline == '$29.99/month'
-    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == '$269.91 billed yearly · 3 months free'
+    assert tier.prices[0].headline == 'US$29.99/month'
+    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == 'US$269.91 billed yearly · 3 months free'
     assert sheet.current.plan_id == 'basic' and sheet.current.line == "You're on Free"
     free_card = sheet.tiers[1]
     assert free_card.is_current and free_card.action == 'current' and free_card.bullets == []
@@ -252,6 +253,32 @@ def test_review_hidden_response_reads_no_subscription_price_or_usage(client, mon
     assert response.json()['show_subscription_ui'] is False
     assert response.json()['tiers'] == [] and response.json()['current'] is None
     read.assert_not_called()
+
+
+def test_android_review_config_document_hides_storefront(client, monkeypatch):
+    class InlineMemoryCache:
+        def get_or_fetch(self, key, fetch_fn, ttl=30):
+            assert key == 'app_review_config:android'
+            assert ttl == 60
+            return fetch_fn()
+
+    review_doc = Mock(exists=True)
+    review_doc.to_dict.return_value = {'hidden_versions': ['1.0.531'], 'reviewer_uids': []}
+    firestore = Mock()
+    firestore.collection.return_value.document.return_value.get.return_value = review_doc
+    monkeypatch.setattr(app_review_config, 'db', firestore)
+    monkeypatch.setattr(app_review_config, 'get_memory_cache', lambda: InlineMemoryCache())
+    monkeypatch.setattr(route, 'should_hide_subscription_ui', app_review_config.should_hide_subscription_ui)
+
+    response = client.get(
+        '/v2/payments/plans',
+        headers={'X-App-Platform': 'android', 'X-App-Version': '1.0.531+607'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['show_subscription_ui'] is False
+    assert response.json()['tiers'] == []
+    firestore.collection.return_value.document.assert_called_once_with('android')
 
 
 def test_every_surface_has_identical_presentation_and_read_only_subscription(client, monkeypatch):

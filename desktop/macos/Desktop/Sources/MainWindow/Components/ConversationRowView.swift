@@ -415,7 +415,7 @@ struct ConversationRowView: View {
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          // The locked badge already says "Saved and waiting"; the title slot
+          // The locked badge already says "Waiting"; the title slot
           // stays quiet so the pill isn't duplicated beside itself.
           if conversation.displayState != .locked {
             Text(conversation.displayTitle)

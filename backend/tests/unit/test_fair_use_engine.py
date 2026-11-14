@@ -33,6 +33,7 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_caps_for_user', lambda _uid: fair_use_mod.fair_use_caps_for_plan())
     # The record_fallback patch is applied per-test (see
     # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
     # it cannot leak into other test classes.
@@ -394,6 +395,7 @@ class TestEscalateEnforcement:
     def test_warning_stays_warning_with_insufficient_violations(self, _):
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
         _fair_use_db.get_violation_counts.return_value = {'violation_count_7d': 1, 'violation_count_30d': 1}
+        _fair_use_db.renew_fair_use_warning.return_value = ({'stage': 'warning'}, {'stage': 'warning'})
 
         triggered = [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8000000, 'threshold_ms': 7200000}]
         classifier = {'misuse_score': 0.9, 'usage_type': 'audiobook'}
@@ -472,7 +474,10 @@ class TestIsHardRestricted:
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
     def test_non_restricted_user_is_not_hard_restricted(self):
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'warning'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'warning',
+            'warning_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         assert fair_use_mod.is_hard_restricted('user1') is False
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', False)
@@ -512,7 +517,10 @@ class TestEnforcementCache:
 
     def test_falls_back_to_firestore_on_cache_miss(self):
         _mock_redis.get.return_value = None
-        _fair_use_db.get_fair_use_state.return_value = {'stage': 'throttle'}
+        _fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'throttle',
+            'throttle_until': datetime.now(timezone.utc) + timedelta(days=1),
+        }
         stage = fair_use_mod.get_enforcement_stage('user1')
         assert stage == 'throttle'
         _mock_redis.setex.assert_called_once()
@@ -529,9 +537,10 @@ class TestEnforcementCache:
         stage = fair_use_mod.get_enforcement_stage('user1')
 
         assert stage == 'throttle'
-        _fair_use_db.update_fair_use_state.assert_called_once_with(
-            'user1', {'stage': 'throttle', 'restrict_until': None}
-        )
+        updates = _fair_use_db.update_fair_use_state.call_args.args[1]
+        assert updates['stage'] == 'throttle'
+        assert updates['restrict_until'] is None
+        assert updates['throttle_until'] > datetime.now(timezone.utc)
         _mock_redis.setex.assert_called_once_with('fair_use:stage:user1', 60, 'throttle')
 
     def test_active_restriction_stays_restrict_on_cache_miss(self):
@@ -793,6 +802,11 @@ class TestNormalizeExpiredRestrictionState:
     """restrict_until expiry must always clear, even on malformed stored data."""
 
     NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.fixture(autouse=True)
+    def _legacy_behavior(self, monkeypatch):
+        # Preserve coverage of the exact pre-decay contract behind the kill switch.
+        monkeypatch.setattr(fair_use_mod, 'FAIR_USE_THROTTLE_DECAY_ENABLED', False)
 
     def setup_method(self):
         _fair_use_db.update_fair_use_state.reset_mock()

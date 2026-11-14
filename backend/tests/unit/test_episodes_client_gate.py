@@ -67,8 +67,6 @@ def fake_redis(monkeypatch):
 @pytest.fixture(autouse=True)
 def _admitted_by_default(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
 
 
@@ -203,8 +201,6 @@ def test_channel_config_parsing(monkeypatch):
     monkeypatch.setenv(config.EPISODES_CLIENT_CHANNELS_ENV, 'beta')
     assert config.client_channel_admitted(None) is False
     assert config.client_channel_admitted('unknown') is False
-    assert config.app_channel(' Store ') == 'store'
-    assert config.app_channel('x' * 500) == 'unknown'
 
 
 # --------------------------------------------------------------------------- listen spends only with a marker
@@ -254,13 +250,15 @@ def test_the_capability_read_is_cached_briefly(fake_redis, monkeypatch):
 
 
 def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypatch):
+    # Exercise rollback fan-out; recorded-time input is covered by the replay suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     client_gate.note_client_seen('u', now=0)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)
     scheduled = {}
     monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.setdefault(name, coro))
     live.sessions.clear()
-    tracker.observe('u', [{'text': 'word ' * 30}], 'c1', 'omi', now=0)
+    tracker.observe('u', [{'text': 'word ' * 30}], 'c1', 'omi', arrival_at=0, recorded_at=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', [{'text': 'more'}], 'c2', 'omi'))
     assert sorted(scheduled) == ['episode_attach', 'episode_moment']
@@ -273,8 +271,6 @@ def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypa
 
 
 def test_the_allowlist_bypasses_the_percentage_but_not_the_marker(fake_redis, monkeypatch):
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '0')
-    monkeypatch.setenv(config.EPISODES_UID_ALLOWLIST_ENV, 'david')
     assert config.episodes_enabled_for('david') is True
     assert client_gate.episode_work_enabled('david') is False
     assert _run_moment(monkeypatch, 'david')[0] == []

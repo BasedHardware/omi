@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -51,6 +53,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  Future<void>? _subscriptionReady;
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
@@ -72,6 +75,13 @@ class _AppShellState extends State<AppShell> {
   static const Set<String> _appLinkRoutes = {'action-items', 'capture', 'conversation', 'conversations', 'settings'};
 
   void openAppLink(Uri uri) async {
+    final auth = context.read<AuthenticationProvider>();
+    if (auth.isSignedIn()) {
+      final owner = SharedPreferencesUtil().uid;
+      final deletion = await auth.checkAccountDeletion();
+      if (!mounted || SharedPreferencesUtil().uid != owner) return;
+      if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) return;
+    }
     final externalHapticResult = await runExternalHapticTrigger(
       uri,
       deviceId: SharedPreferencesUtil().btDevice.id,
@@ -145,6 +155,9 @@ class _AppShellState extends State<AppShell> {
         _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
+      // This destination needs the server's paid-surface policy, rather than
+      // support identity readiness. Other links need only hydrated caches.
+      await _subscriptionReady;
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
         final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
@@ -396,19 +409,24 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _initializeProviders();
+      final ready = await _initializeProviders();
       // Start deep link handling AFTER providers are ready,
       // so getInitialLink() doesn't race against cache loading (#4763)
-      if (mounted) {
+      if (mounted && ready) {
         initDeepLinks();
       }
     });
   }
 
-  Future<void> _initializeProviders() async {
-    if (!mounted) return;
+  Future<bool> _initializeProviders() async {
+    if (!mounted) return false;
     final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
     if (isSignedIn) {
+      final auth = context.read<AuthenticationProvider>();
+      final owner = SharedPreferencesUtil().uid;
+      final deletion = await auth.checkAccountDeletion();
+      if (!mounted || SharedPreferencesUtil().uid != owner) return false;
+      if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) return false;
       final homeProvider = context.read<HomeProvider>();
       homeProvider.setupHasSpeakerProfile();
       // Not awaited: the picker must not open on the bundled list while the
@@ -422,11 +440,11 @@ class _AppShellState extends State<AppShell> {
         Logger.debug('Failed to login to Intercom: $e');
       }
 
-      if (!mounted) return;
+      if (!mounted) return false;
       context.read<MessageProvider>().setMessagesFromCache();
       context.read<AppProvider>().setAppsFromCache();
       context.read<MessageProvider>().refreshMessages();
-      context.read<UsageProvider>().fetchSubscription();
+      _subscriptionReady = context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
       // Same fire-and-forget as task integrations: chat/settings must not
       // treat an empty in-memory map as "not connected" after process death.
@@ -437,9 +455,10 @@ class _AppShellState extends State<AppShell> {
       if (!PlatformManager.instance.isAnalyticsSupported) {
         await PlatformManager.instance.intercom.loginUnidentifiedUser();
       }
-      if (!mounted) return;
+      if (!mounted) return false;
     }
     PlatformManager.instance.intercom.setUserAttributes();
+    return true;
   }
 
   @override

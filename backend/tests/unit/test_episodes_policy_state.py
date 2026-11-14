@@ -6,7 +6,7 @@ import pytest
 
 from config import episodes as config
 from utils.episodes import policy
-from utils.episodes.state import InvalidUpdate, apply_update, parse_update, render_state
+from utils.episodes.state import InvalidUpdate, apply_update, clean_text, parse_update, render_state
 
 T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 
@@ -19,7 +19,6 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
     [(None, True), ('', True), ('true', True), ('on', True), ('off', False), ('of', False), ('false', False)],
 )
 def test_kill_switch_defaults_on_and_a_typo_turns_it_off(monkeypatch, raw, expected):
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     if raw is None:
         monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     else:
@@ -28,36 +27,10 @@ def test_kill_switch_defaults_on_and_a_typo_turns_it_off(monkeypatch, raw, expec
     assert config.episodes_enabled_for('uid-1') is expected
 
 
-def test_ramp_cohort_admits_allowlist_and_bucket(monkeypatch):
-    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '0')
-    monkeypatch.setenv(config.EPISODES_UID_ALLOWLIST_ENV, 'david, other')
-    assert config.episodes_enabled_for('david') is True
-    assert config.episodes_enabled_for('someone-else') is False
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '100')
-    assert config.episodes_enabled_for('someone-else') is True
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, 'not-a-number')
-    assert config.episodes_enabled_for('someone-else') is False
-    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
-    assert config.episodes_enabled_for('david') is False
-    assert config.episodes_enabled_for('') is False
-
-
 def test_unset_percent_admits_everyone_by_default(monkeypatch):
     # Client gating (utils/episodes/client_gate.py) makes admission free, so the code default is 100.
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
     assert all(config.episodes_enabled_for(f'user-{i}') for i in range(2000))
-
-
-def test_five_percent_cohort_is_stable_and_near_five_percent(monkeypatch):
-    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '5')
-    admitted = [config.episodes_enabled_for(f'user-{i}') for i in range(4000)]
-    assert 0.03 < sum(admitted) / len(admitted) < 0.07
-    assert admitted == [config.episodes_enabled_for(f'user-{i}') for i in range(4000)]
 
 
 # --------------------------------------------------------------------------- state
@@ -156,7 +129,8 @@ def _moment(conversation_id='c2', *, start_minutes=11.0, end_minutes=12.0, sourc
     )
 
 
-def test_boundary_rules():
+def test_boundary_rules(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
     assert policy.boundary(None, _moment()).action == 'new'
     assert policy.boundary(_episode(status='closed'), _moment()).action == 'new'
     assert policy.boundary(_episode(), _moment('c1', start_minutes=10.5)).action == 'continue'
@@ -173,9 +147,20 @@ def test_boundary_rules():
     assert parallel.action == 'continue' and parallel.parallel
     assert policy.boundary(_episode(), _moment(start_minutes=41)).reason == 'gap'
     assert policy.boundary(_episode(calendar_identity='evt-a'), _moment(calendar='evt-b')).reason == 'calendar_boundary'
-    assert policy.boundary(_episode(), _moment(start_minutes=170, end_minutes=181)).reason == 'hard_cap'
+    assert policy.boundary(_episode(), _moment(start_minutes=240, end_minutes=240)).reason == 'hard_cap'
+    assert policy.boundary(_episode(), _moment(start_minutes=230, end_minutes=241)).reason == 'hard_cap'
     full = _episode(moments=[{'id': str(i)} for i in range(config.MAX_MOMENTS)])
-    assert policy.boundary(full, _moment()).reason == 'hard_cap'
+    assert policy.boundary(full, _moment()).action == 'continue'
+
+
+def test_hard_cap_kill_switch_restores_the_legacy_moment_end_boundary(monkeypatch):
+    episode = _episode(last_activity_at=T0 + timedelta(minutes=179))
+    at_cap = _moment('c1', start_minutes=239, end_minutes=240)
+    assert policy.boundary(episode, at_cap).reason == 'hard_cap'
+    monkeypatch.setenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, 'off')
+    assert policy.boundary(episode, at_cap).action == 'continue'
+    after_cap = _moment('c1', start_minutes=239, end_minutes=240.1)
+    assert policy.boundary(episode, after_cap).reason == 'hard_cap'
 
 
 def test_resolve_ask_with_and_without_jev():
@@ -214,3 +199,19 @@ def test_match_saved_tasks_is_one_to_one_and_threshold_bound():
     ]
     assert policy.match_saved_tasks(items, saved) == {'p1': 't1', 'p2': 't2', 'p3': None}
     assert policy.match_saved_tasks(items[:1], []) == {'p1': None}
+
+
+def test_a_long_note_ends_on_a_whole_sentence_or_word():
+    sentence = 'The release moves to Thursday. ' + 'so the review has a little more slack than before ' * 5
+    assert clean_text(sentence, 40).endswith('Thursday.')
+    words = 'checklist ' * 30
+    trimmed = clean_text(words, 44)
+    assert trimmed.endswith('…') and len(trimmed) <= 44 and trimmed[:-1].split()[-1] == 'checklist'
+    assert clean_text('短' * 60, 20) == '短' * 19 + '…'
+    assert clean_text('fits', 40) == 'fits'
+
+
+def test_generated_prose_loses_lettered_and_numbered_speaker_labels():
+    assert clean_text('Speaker C asked Speaker 4 about the speaker series.', 80) == (
+        'a speaker asked a speaker about the speaker series.'
+    )

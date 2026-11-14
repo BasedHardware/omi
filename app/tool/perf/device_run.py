@@ -52,6 +52,29 @@ def detect(platform):
     return candidates[0]
 
 
+def ios_transport(device, listing=None):
+    """devicectl's transport for one device: 'wired', 'localNetwork', or None when unlisted."""
+    if listing is None:
+        result = subprocess.run(['xcrun', 'devicectl', 'list', 'devices', '--json-output', '/dev/stdout'],
+                                check=True, capture_output=True, text=True, timeout=60)
+        listing = result.stdout[result.stdout.index('{'):]
+    for entry in json.loads(listing).get('result', {}).get('devices', []):
+        if entry.get('hardwareProperties', {}).get('udid') == device:
+            return entry.get('connectionProperties', {}).get('transportType')
+    return None
+
+
+def preflight(platform, device):
+    """Fail in seconds, before a multi-minute build, on setups that cannot produce a receipt."""
+    if platform != 'ios' or not device:
+        return
+    transport = ios_transport(device)
+    if transport != 'wired':
+        raise ValueError(f'{device} is not connected over USB (devicectl transport: {transport}). The USB '
+                         'runner needs a wired data connection: use a data cable directly into the Mac, '
+                         'unlock the phone and accept Trust / Allow accessory prompts.')
+
+
 def stop(process):
     if process.poll() is None:
         os.killpg(process.pid, signal.SIGTERM)
@@ -70,6 +93,20 @@ def process_start(pid):
     return subprocess.run(['ps', '-p', str(pid), '-o', 'lstart='], check=True,
                           capture_output=True, text=True, timeout=5,
                           env={**os.environ, 'LC_ALL': 'C', 'TZ': 'UTC'}).stdout.strip()
+
+
+def profile_command(spec, device):
+    command = [spec['heavy'], 'run', '--', 'nice', '-n', '19', 'bash',
+               str(APP / 'tool/perf_sim_profile.sh'), '--platform', spec['platform'],
+               '--device', device, '--runs', str(spec['runs']), '--out', spec['out'],
+               '--upload', spec.get('upload', 'refuse'),
+               '--semantics', spec.get('semantics', 'off'),
+               '--upload-wals', str(spec.get('upload_wals', 12))]
+    if spec['timeline']:
+        command.append('--timeline')
+    if spec.get('synced_wals'):
+        command += ['--synced-wals', str(spec['synced_wals'])]
+    return command
 
 
 def worker(spec_path):
@@ -119,11 +156,7 @@ def worker(spec_path):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with (out / 'runner.log').open('w') as log:
             device = spec['device'] or detect(spec['platform'])
-            command = [spec['heavy'], 'run', '--', 'nice', '-n', '19', 'bash',
-                       str(APP / 'tool/perf_sim_profile.sh'), '--platform', spec['platform'],
-                       '--device', device, '--runs', str(spec['runs']), '--out', str(out)]
-            if spec['timeline']:
-                command.append('--timeline')
+            command = profile_command(spec, device)
             log.write('COMMAND ' + shlex.join(command) + '\n')
             log.flush()
             process = subprocess.Popen(command, cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
@@ -168,8 +201,8 @@ def run(args):
     spec = dict(out=str(out), artifact_root=str(artifact_root), heavy=str(heavy),
                 parent_pid=os.getpid(),
                 parent_start=process_start(os.getpid()), launch_expires_at=time.time() + 300,
-                device=args.device, platform=args.platform, runs=args.runs, timeline=args.timeline,
-                aqua_app=args.aqua_app,
+                device=args.device, platform=args.platform, runs=args.runs, timeline=args.timeline, synced_wals=args.synced_wals,
+                aqua_app=args.aqua_app, upload=args.upload, semantics=args.semantics, upload_wals=args.upload_wals,
                 baseline=str(Path(args.baseline).expanduser().resolve()) if args.baseline else None,
                 accept_baseline=args.accept_baseline,
                 env={key: os.environ[key] for key in ENV_KEYS if key in os.environ})
@@ -178,6 +211,9 @@ def run(args):
         return 0
     if args.runs < 3 and not args.timeline:
         raise ValueError('baseline requires at least three runs')
+    if not 0 <= args.synced_wals <= 80000:
+        raise ValueError('--synced-wals must be 0..80000')
+    preflight(args.platform, args.device)
     if not heavy.is_file() or not os.access(heavy, os.X_OK):
         raise ValueError('set OMI_HEAVY_BIN to the workspace omi-heavy executable')
     if out.exists() and any(out.iterdir()):
@@ -249,6 +285,14 @@ def main():
     parser.add_argument('--baseline', help='accepted baseline directory; otherwise use artifact root last-accepted pointer')
     parser.add_argument('--accept-baseline', action='store_true', help='publish a pointer only after profile variance passes')
     parser.add_argument('--timeline', action='store_true', help='attribution diagnostic; never baseline acceptance')
+    parser.add_argument('--upload-wals', type=int, choices=range(1, 19), default=12,
+                        help='file-backed pending WALs to finish in success window (1..18)')
+    parser.add_argument('--upload', choices=('refuse', 'accept'), default='refuse',
+                        help='hermetic upload/job completion in the appended success window')
+    parser.add_argument('--semantics', choices=('off', 'on'), default='off',
+                        help='measure accessibility semantics separately (default off)')
+    parser.add_argument('--synced-wals', type=int, default=0,
+                        help='field-shaped diagnostic: add N synced WAL records (0..80000); never baseline acceptance')
     parser.add_argument('--dry-run', action='store_true', help='show plan without launching, building or installing')
     try:
         args = parser.parse_args()

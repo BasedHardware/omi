@@ -3,8 +3,57 @@ package com.friend.ios.ble
 import org.junit.Assert.*
 import org.junit.Test
 import org.json.JSONArray
+import org.json.JSONObject
+import android.app.Activity
+import android.app.Application
+import android.content.Context
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGattCallback
+import android.os.SystemClock
+import org.junit.runner.RunWith
+import org.robolectric.Robolectric
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 class DeviceDiagnosticsContractTest {
+    @Test fun `read outcomes do not fabricate an attempt or parse success`() {
+        for (outcome in FirmwareReadOutcome.entries) {
+            val status = firmwareReadDiagnosticStatus(JSONObject(), outcome, null, 100)
+            assertEquals(outcome.name.lowercase(), status.getString("outcome"))
+            assertEquals("not_attempted", status.getString("parse_outcome"))
+            assertEquals(outcome != FirmwareReadOutcome.ATTEMPTED, status.isNull("attempted_at_ms"))
+        }
+        val attempted = firmwareReadDiagnosticStatus(JSONObject(), FirmwareReadOutcome.ATTEMPTED, null, 100)
+        val timedOut = firmwareReadDiagnosticStatus(attempted, FirmwareReadOutcome.TIMEOUT, null, 110)
+        val skipped = firmwareReadDiagnosticStatus(timedOut, FirmwareReadOutcome.SKIPPED, "throttled", 120)
+        assertEquals(100L, skipped.getLong("attempted_at_ms"))
+        assertEquals("throttled", skipped.getString("skip_reason"))
+        assertEquals("timeout", skipped.getString("last_attempt_outcome"))
+        assertFalse(skipped.toString().contains("payload"))
+    }
+    @Test fun `audio age is generation scoped and remains unknown without a notification`() {
+        val samples = GenerationAudioAge<Any>()
+        val old = Any()
+        val current = Any()
+        assertNull(samples.ageMs("device", old, 100))
+        samples.begin("device", old)
+        samples.record("device", old, 100)
+        assertEquals(50L, samples.ageMs("device", old, 150))
+        assertNull(samples.ageMs("device", current, 150))
+        samples.forget("device")
+        assertNull(samples.ageMs("device", old, 150))
+        samples.begin("device", current)
+        samples.record("device", current, 200)
+        samples.record("device", old, 220)
+        assertEquals(50L, samples.ageMs("device", current, 250))
+        assertNull(samples.ageMs("device", current, 199))
+        samples.forget("device")
+        samples.record("device", current, 300)
+        assertNull(samples.ageMs("device", current, 300))
+        samples.clear()
+        assertNull(samples.ageMs("device", current, 300))
+    }
     @Test fun `CCCD timeout retains retry and exhausted recovery reasons`() {
         val status = OmiBleManager.CCCD_TIMEOUT_STATUS
         assertEquals("cccd_timeout", BleDisconnectReason.connectionErrorFromStatus(status, true))
@@ -139,5 +188,65 @@ class DeviceDiagnosticsContractTest {
         assertEquals("fading", BleRssiDiagnostics.trend(fading, now))
         assertEquals(1_000L, BleRssiDiagnostics.ageMs(fading, now))
         assertEquals(-1L, BleRssiDiagnostics.ageMs(emptyList(), now))
+    }
+}
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [35])
+class FeedbackDiagnosticsServiceParityTest {
+    @Test fun `a callback captured before retirement cannot record in the next identity`() {
+        val app = RuntimeEnvironment.getApplication()
+        OmiBleManager.initialize(app)
+        val manager = OmiBleManager.instance
+        val address = "00:11:22:33:44:55"
+        val gatt = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address)
+            .connectGatt(app, false, object : BluetoothGattCallback() {}) ?: error("Robolectric GATT unavailable")
+        manager.connectedGatts[address] = gatt
+        DeviceHealthPersistence.setPolicy(app, true, 7, true)
+        manager.recordAudioNotification(address, gatt, 7, SystemClock.elapsedRealtime())
+        assertNotNull(manager.lastAudioNotificationAgeMs(address))
+        // The callback already captured epoch 7, then waited behind retirement.
+        lateinit var delayed: Thread
+        synchronized(DeviceHealthPersistence) {
+            delayed = Thread { manager.recordAudioNotification(address, gatt, 7, SystemClock.elapsedRealtime()) }
+            delayed.start()
+            DeviceHealthPersistence.setPolicy(app, true, 8, true)
+        }
+        delayed.join(5000)
+        assertFalse(delayed.isAlive)
+        assertNull(manager.lastAudioNotificationAgeMs(address))
+        manager.recordAudioNotification(address, gatt, 8, SystemClock.elapsedRealtime())
+        assertNotNull(manager.lastAudioNotificationAgeMs(address))
+        manager.closeGatt(address)
+        manager.recordAudioNotification(address, gatt, 8, SystemClock.elapsedRealtime())
+        assertNull(manager.lastAudioNotificationAgeMs(address))
+        DeviceHealthPersistence.setPolicy(app, false, 9, true)
+    }
+
+    @Test fun `persisted feedback evidence exports with service present and absent and obeys retirement`() {
+        val app = RuntimeEnvironment.getApplication()
+        OmiBleManager.initialize(app)
+        DeviceHealthPersistence.setPolicy(app, true, 7, true)
+        val prefs = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        val service = Robolectric.buildService(OmiBleForegroundService::class.java).get()
+        val activity = Robolectric.buildActivity(Activity::class.java).get()
+        val host = BleHostApiImpl { activity }
+        for (populated in listOf(false, true)) {
+            if (populated) prefs.edit()
+                .putString("firmware_read_DEVICE", "{\"outcome\":\"timeout\",\"parse_outcome\":\"not_attempted\"}")
+                .putString("process_exit_collection", "{\"outcome\":\"empty\",\"records\":[]}")
+                .putString("previous_run_exit", "{\"legacy_run_open\":true,\"match\":\"unknown\",\"exit\":null}").commit()
+            val present = JSONObject(service.getExtendedDeviceDiagnostics("device"))
+            var absent = JSONObject()
+            host.getExtendedDeviceDiagnostics("device") { absent = JSONObject(it.getOrThrow()) }
+            for (field in listOf("firmware_diagnostics_read", "process_exit_collection", "previous_run_exit", "battery_history_v2", "disconnect_history_v2")) {
+                assertEquals(field, present.get(field).toString(), absent.get(field).toString())
+                if (!populated && field.endsWith("collection")) assertTrue(present.isNull(field))
+            }
+        }
+        DeviceHealthPersistence.setPolicy(app, false, 8, true)
+        assertEquals("{}", service.getExtendedDeviceDiagnostics("device"))
+        host.getExtendedDeviceDiagnostics("device") { assertEquals("{}", it.getOrThrow()) }
+        assertFalse(prefs.contains("process_exit_collection"))
     }
 }

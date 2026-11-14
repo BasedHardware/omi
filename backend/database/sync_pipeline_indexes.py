@@ -29,7 +29,6 @@ _BATCH_PIPELINE_INDEXES = tuple(
         ('recovery', (_asc('owner_id'), _asc('recovery_state'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),
-        ('result_ready', (_asc('state'), _asc('enqueued_at'))),
         ('predecessor', (_asc('next'), _asc('state'))),
         ('ready_age', (_asc('priority'), _asc('state'), _asc('enqueued_at'))),
         ('retry_age', (_asc('priority'), _asc('retry_started_at'))),
@@ -43,6 +42,19 @@ _BATCH_PROJECTION_INDEXES = tuple(
         f'{namespace}_results',
         'COLLECTION',
         (_asc('projection_state'), _asc('committed_at'), _asc('__name__')),
+    )
+    for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
+)
+
+# Dark finish backoff: the finish page ranges over the row's next-attempt clock,
+# which therefore leads the ordering (Firestore serves a range filter on the
+# first ordered field only), then the committed log and the key.
+_BATCH_PROJECTION_FINISH_INDEXES = tuple(
+    FirestoreIndexRequirement(
+        f'{namespace}_projection_finish',
+        f'{namespace}_results',
+        'COLLECTION',
+        (_asc('projection_state'), _asc('projection_finish_due_at'), _asc('committed_at'), _asc('__name__')),
     )
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
 )
@@ -89,5 +101,6 @@ SYNC_PIPELINE_INDEX_REQUIREMENTS = (
     ),
     *_BATCH_PIPELINE_INDEXES,
     *_BATCH_PROJECTION_INDEXES,
+    *_BATCH_PROJECTION_FINISH_INDEXES,
     *_BATCH_CONTROL_INDEXES,
 )

@@ -1,4 +1,6 @@
 enabled: true
+podLabels:
+  service_name: batch-pipeline-worker
 image:
   repository: gcr.io/based-hardware-dev/batch-pipeline-worker
   digest: ""
@@ -26,5 +28,17 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
+  servingMetricsMinRefreshSeconds: 30
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false
+  # Matches the dev backend hosts (deploy contract reader-split invariant).
+  parakeetWindowAllocationPercent: '1'
+recordSealSweeper:
+  # Producer identity proof is scoped to prod; dev validation is hermetic, no ambient writes.
+  enabled: false
+recordSealRepair:
+  enabled: false
+recordSealWorker:
+  enabled: false

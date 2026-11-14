@@ -12,6 +12,7 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 from google.cloud.firestore_v1.transaction import _Transactional
 import pytest
 
+from database import batch_pipeline_store
 from database import firestore_transaction_retry
 from utils.batch_pipeline import retention
 from utils.batch_pipeline.projection import error_site_field, error_type
@@ -183,3 +184,122 @@ def test_expire_completed_segment_runs_through_the_bounded_retry(monkeypatch):
     store = Mock(namespace='batch_pipeline_test_contention')
     assert retention.expire_completed_segment(store, 'synthetic-owner', 'segment', 0.0) == 'ran'
     assert calls == [store.client]
+
+
+class SuccessfulTransaction(AlwaysAbortedTransaction):
+    def _commit(self):
+        self.commits += 1
+        return []
+
+
+def test_batch_store_retries_with_fresh_single_attempt_transactions(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    actual = batch_pipeline_store.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        batch_pipeline_store,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    transactions = []
+
+    def new_transaction(max_attempts=5):
+        transaction = AlwaysAbortedTransaction() if not transactions else SuccessfulTransaction()
+        transaction._max_attempts = max_attempts
+        transactions.append(transaction)
+        return transaction
+
+    client = Mock()
+    client.transaction.side_effect = new_transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+    body_calls = []
+
+    assert store.run(lambda tx: body_calls.append(tx) or True) is True
+    assert len(body_calls) == 2
+    assert [tx._max_attempts for tx in transactions] == [1, 1]
+    assert [tx.commits for tx in transactions] == [1, 1]
+
+
+def test_batch_store_kill_switch_restores_single_legacy_attempt(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client = Mock()
+    transaction = AlwaysAbortedTransaction()
+    client.transaction.return_value = transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+
+    with pytest.raises(ValueError) as caught:
+        store.run(lambda _tx: True)
+
+    assert isinstance(caught.value.__cause__, Aborted)
+    client.transaction.assert_called_once_with()
+    assert transaction.commits == 5
+
+
+def test_exhausted_batch_store_contention_names_the_tables_never_the_keys(monkeypatch, caplog):
+    # The admission drain logged only "FirestoreContentionExhausted": nothing said which
+    # shared document (owner scheduler row, conversation, ledger) kept aborting the commit.
+    monkeypatch.delenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    actual = batch_pipeline_store.run_with_transaction_contention_retry
+    monkeypatch.setattr(
+        batch_pipeline_store,
+        'run_with_transaction_contention_retry',
+        lambda *args, **kwargs: actual(*args, **kwargs, sleep=lambda _: None),
+    )
+    monkeypatch.setattr(batch_pipeline_store.FirestoreTransaction, 'flush', lambda self: None)
+
+    def new_transaction(max_attempts=5):
+        transaction = AlwaysAbortedTransaction()
+        transaction._max_attempts = max_attempts
+        return transaction
+
+    client = Mock()
+    client.transaction.side_effect = new_transaction
+    store = batch_pipeline_store.FirestoreStore('batch_pipeline_dev', firestore_client=client)
+
+    def body(tx):
+        tx.cache[('owners', 'owner-secret')] = {}
+        tx.cache[('conversations', 'uid-secret/conv-secret')] = {}
+        tx.writes[('jobs', 'segment-secret')] = {}
+        tx.patches[('conversations', 'uid-secret/conv-secret')] = {}
+        # A scheduler query reads through the raw transaction, never the cache.
+        tx.direct_reads.add('jobs_query')
+        return True
+
+    with caplog.at_level('WARNING', logger=batch_pipeline_store.logger.name):
+        with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted) as caught:
+            store.run(body)
+
+    assert caught.value.store_tables == 'read=conversations,jobs_query,owners wrote=conversations,jobs,privacy_fence'
+    line = next(r.getMessage() for r in caplog.records if 'event=batch_store_contention' in r.getMessage())
+    assert 'read_tables=conversations,jobs_query,owners' in line
+    assert 'write_tables=conversations,jobs,privacy_fence' in line
+    assert 'secret' not in line and 'secret' not in caught.value.store_tables
+
+
+def test_contention_tables_reports_none_and_external_writes_sorted():
+    view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
+    view.external[object()] = (object(), {})
+    view.writes[('jobs', 'segment')] = {}
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'external,jobs')
+
+
+def test_direct_transaction_reads_are_named(monkeypatch):
+    # Queries and privacy checks read through the raw transaction, not the view cache.
+    monkeypatch.setattr(batch_pipeline_store, 'first_pending', lambda *a, **k: None)
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **k: 0.0)
+    monkeypatch.setattr(batch_pipeline_store, 'assert_batch_write_allowed', lambda *a, **k: 1)
+    view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
+    batch_pipeline_store._note_direct_reads(view)
+    assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
+    view.first_pending('owner')
+    view.service_frontier(0)
+    view.check_privacy('uid')
+    # Default: the frontier is a hint read outside the transaction, so it is not a contended read.
+    assert batch_pipeline_store.contention_tables(view) == ('jobs_query,privacy', 'none')
+    # With admission_frontier_hint off, the transactional frontier query is named again.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"admission_frontier_hint": 0}')
+    view.service_frontier(0)
+    assert batch_pipeline_store.contention_tables(view) == ('control_query,jobs_query,privacy', 'none')

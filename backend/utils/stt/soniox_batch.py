@@ -13,7 +13,8 @@ import time
 from uuid import UUID
 
 import httpx
-from config.batch_language_recovery import allowed
+from config.batch_language_recovery import MAX_AUDIO_SECONDS, allowed
+from config.batch_pipeline import second_multilingual_enabled
 from config.prerecorded_stt import SONIOX_HELD_RECOVERY_MODEL, require_provider_environment
 from utils.http_client import get_stt_client, get_stt_semaphore
 
@@ -28,11 +29,91 @@ logger = logging.getLogger(__name__)
 BASE_URL = 'https://api.soniox.com/v1'
 MODEL = SONIOX_HELD_RECOVERY_MODEL
 DEADLINE_SECONDS = 120
+MAX_HTTP_ATTEMPTS = 3
+
+
+ERROR_KINDS = frozenset(
+    {'error', 'refused', 'credit_refusal', 'rate_limited', 'error_5xx', 'timeout', 'invalid_response'}
+)
 
 
 class SonioxBatchError(ValueError):
-    def __init__(self):
+    """Fixed message; ``kind`` is a closed class and ``submitted`` says a paid transcription exists.
+
+    The provider-STT failover stage reads both to type the attempt (unbilled refusals do not spend
+    the vendor). Bodies, audio and tokens never reach either field.
+    """
+
+    def __init__(self, kind: str = 'error', *, submitted: bool = False, status_code: int | None = None):
+        self.kind = kind if kind in ERROR_KINDS else 'error'
+        self.submitted = submitted
+        self.status_code = status_code if type(status_code) is int and 100 <= status_code <= 599 else None
         super().__init__('soniox_batch_failed')
+
+
+def _status_kind(status_code: int) -> str:
+    if status_code == 402:
+        return 'credit_refusal'  # organization_balance_exhausted (09-19, 09-28)
+    if status_code == 429:
+        return 'rate_limited'
+    if 500 <= status_code <= 599:
+        return 'error_5xx'
+    return 'error'
+
+
+def _typed(error: BaseException, submitted: bool) -> SonioxBatchError:
+    if isinstance(error, SonioxBatchError):
+        return SonioxBatchError(error.kind, submitted=submitted, status_code=error.status_code)
+    if isinstance(error, (httpx.TimeoutException, TimeoutError)):
+        return SonioxBatchError('timeout', submitted=submitted)
+    if isinstance(error, (KeyError, TypeError, ValueError)):
+        return SonioxBatchError('invalid_response', submitted=submitted)
+    return SonioxBatchError('error', submitted=submitted)
+
+
+def request_retry_delay(error, method, path, attempt, remaining):
+    """Retry explicit transient refusals or safe reads, never an uncertain paid POST."""
+    transient = (
+        isinstance(error, SonioxBatchError)
+        and (
+            error.kind == 'rate_limited' or error.kind == 'error_5xx' and (method, path) != ('POST', '/transcriptions')
+        )
+        or isinstance(error, (httpx.TransportError, TimeoutError))
+        and (method, path) != ('POST', '/transcriptions')
+    )
+    delay = min(2 ** (attempt - 1), remaining) if transient and attempt < MAX_HTTP_ATTEMPTS and remaining > 0 else None
+    operation = (
+        'upload'
+        if path == '/files'
+        else 'create' if method == 'POST' else 'transcript' if path.endswith('/transcript') else 'poll'
+    )
+    failure = _typed(error, False)
+    try:
+        logger.warning(
+            'event=soniox_batch_request_failure operation=%s kind=%s http_status=%s attempt=%s retry=%s',
+            operation,
+            failure.kind,
+            failure.status_code,
+            attempt,
+            delay is not None,
+        )
+    except Exception:
+        pass
+    return delay
+
+
+def final_failure(error, submitted):
+    failure = _typed(error, submitted)
+    try:
+        logger.warning(
+            'event=soniox_batch_failure kind=%s http_status=%s submitted=%s',
+            failure.kind,
+            failure.status_code,
+            failure.submitted,
+        )
+    except Exception:
+        pass
+    return failure
 
 
 def resource_id(value):
@@ -40,11 +121,11 @@ def resource_id(value):
     return str(UUID(value))
 
 
-def transcription_body(file_id, language):
+def transcription_body(file_id, language, *, diarize=True):
     body: dict[str, object] = {
         'model': MODEL,
         'file_id': file_id,
-        'enable_speaker_diarization': True,
+        'enable_speaker_diarization': diarize,
         'enable_language_identification': True,
     }
     hint = normalized_stt_language(language)
@@ -54,37 +135,69 @@ def transcription_body(file_id, language):
     return body
 
 
-def authorization(duration):
-    if not allowed(duration) or not provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY):
-        raise SonioxBatchError()
+def _bounded_unit(duration):
+    return type(duration) in (int, float) and math.isfinite(duration) and 0 < duration <= 7200
+
+
+def takeover_admitted(duration, max_seconds):
+    """A sealed operator take-over: above the runtime one-minute bound, up to the plan's scoped bound."""
+    return (
+        _bounded_unit(duration)
+        and type(max_seconds) in (int, float)
+        and math.isfinite(max_seconds)
+        and MAX_AUDIO_SECONDS < duration <= max_seconds
+        and provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    )
+
+
+def authorization(duration, *, second_chance=False, failover=False, takeover_max_seconds=None):
+    # The ordinary second chance is bounded by the admitted unit (max two
+    # hours), independently of the guarded path's opt-in one-minute budget.
+    # Batch provider-STT failover is bounded the same way, but is admitted by
+    # the prerecorded surface and the stage's paid-once attempt record instead.
+    if failover:
+        admitted = _bounded_unit(duration) and provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    elif takeover_max_seconds is not None:
+        admitted = takeover_admitted(duration, takeover_max_seconds)
+    else:
+        admitted = (
+            _bounded_unit(duration) and second_multilingual_enabled() if second_chance else allowed(duration)
+        ) and provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
+    if not admitted:
+        raise SonioxBatchError('refused')
     require_provider_environment('soniox')
     return {'Authorization': 'Bearer ' + os.environ['SONIOX_API_KEY']}
 
 
-def transcript_words(payload, duration):
-    """Join subword tokens, retaining their original capture-axis timestamps."""
+def transcript_words(payload, duration, *, mark_fallback=False):
+    """Join subword tokens, retaining their original capture-axis timestamps.
+
+    ``mark_fallback`` flags every word ``speaker_fallback`` when any token lacked a
+    real vendor speaker, so a caller never treats the default label as diarization.
+    """
     if not isinstance(payload, dict) or not isinstance(payload.get('tokens'), list):
-        raise SonioxBatchError()
-    words, language, previous, boundary = [], 'multi', -1.0, True
+        raise SonioxBatchError('invalid_response')
+    words, language, previous, boundary, fallback = [], 'multi', -1.0, True, False
     for token in payload['tokens']:
         text = token['text']
         if not isinstance(text, str):
-            raise SonioxBatchError()
+            raise SonioxBatchError('invalid_response')
         if token.get('is_final') is False or token.get('translation_status') == 'translation':
-            raise SonioxBatchError()
+            raise SonioxBatchError('invalid_response')
         if text in {'<end>', '<fin>'} or not text.strip():
             boundary = True
             continue
         start, end = token['start_ms'], token['end_ms']
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
-            raise SonioxBatchError()
+            raise SonioxBatchError('invalid_response')
         start, end = start / 1000, end / 1000
         if not 0 <= start <= end <= duration + 0.01 or start < previous:
-            raise SonioxBatchError()
+            raise SonioxBatchError('invalid_response')
         previous = start
         raw_speaker = token.get('speaker')
         if raw_speaker is not None and (not str(raw_speaker).isdigit() or len(str(raw_speaker)) > 4):
-            raise SonioxBatchError()
+            raise SonioxBatchError('invalid_response')
+        fallback = fallback or raw_speaker is None or int(raw_speaker) < 1
         speaker = f'SPEAKER_{max(int(raw_speaker) - 1, 0) if raw_speaker is not None else 0:02d}'
         detected = token.get('language')
         if isinstance(detected, str) and detected:
@@ -97,29 +210,72 @@ def transcript_words(payload, duration):
         boundary = text[-1].isspace()
     # A nonempty transcript with missing tokens is malformed, never empty evidence.
     if not isinstance(payload.get('text'), str) or (payload['text'].strip() and not words):
-        raise SonioxBatchError()
+        raise SonioxBatchError('invalid_response')
+    if mark_fallback and fallback:
+        words = [{**word, 'speaker_fallback': True} for word in words]
     return words, language
 
 
-def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, clock=time.monotonic, sleep=time.sleep):
-    headers = authorization(duration)
-    file_id, transcription_id = None, None
+def transcribe(
+    audio,
+    duration,
+    *,
+    language=None,
+    second_chance=False,
+    failover=False,
+    diarize=True,
+    retry_rate_limits=True,
+    takeover_max_seconds=None,
+    client_factory=httpx.Client,
+    clock=time.monotonic,
+    sleep=time.sleep,
+):
+    headers = authorization(
+        duration,
+        second_chance=second_chance,
+        failover=failover,
+        takeover_max_seconds=takeover_max_seconds,
+    )
+    file_id, transcription_id, submitted = None, None, False
     deadline = clock() + DEADLINE_SECONDS
-    # HTTP transport defaults to zero retries. Each paid POST occurs once.
+    # The transport has no implicit retries; an accepted paid POST occurs once.
     with client_factory(headers=headers, timeout=20, follow_redirects=False) as client:
 
         def request(method, path, **kwargs):
-            remaining = deadline - clock()
-            if remaining <= 0:
-                raise SonioxBatchError()
-            response = client.request(method, BASE_URL + path, timeout=min(20, remaining), **kwargs)
-            if not 200 <= response.status_code < 300:
-                raise SonioxBatchError()
-            return response.json()
+            nonlocal submitted
+            for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
+                remaining = deadline - clock()
+                if remaining <= 0:
+                    raise SonioxBatchError('timeout')
+                try:
+                    try:
+                        response = client.request(method, BASE_URL + path, timeout=min(20, remaining), **kwargs)
+                    except Exception:
+                        if (method, path) == ('POST', '/transcriptions'):
+                            submitted = True
+                        raise
+                    if not 200 <= response.status_code < 300:
+                        if (method, path) == ('POST', '/transcriptions') and response.status_code >= 500:
+                            submitted = True  # A server failure cannot prove the paid side effect did not happen.
+                        raise SonioxBatchError(_status_kind(response.status_code), status_code=response.status_code)
+                    if (method, path) == ('POST', '/transcriptions'):
+                        submitted = True
+                    return response.json()
+                except Exception as error:
+                    if not retry_rate_limits and isinstance(error, SonioxBatchError) and error.kind == 'rate_limited':
+                        raise
+                    delay = request_retry_delay(error, method, path, attempt, deadline - clock())
+                    if delay is None:
+                        raise
+                    sleep(delay)
+            raise SonioxBatchError()
 
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
-            body = transcription_body(file_id, language)
+            body = transcription_body(file_id, language, diarize=diarize)
+            from utils.stt.allowance_watch import observe_request
+
+            observe_request('prerecorded', 'soniox', duration)
             created = request('POST', '/transcriptions', json=body)
             transcription_id = resource_id(created['id'])
             state = created
@@ -128,16 +284,16 @@ def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, c
                 if status == 'completed':
                     return transcript_words(request('GET', f'/transcriptions/{transcription_id}/transcript'), duration)
                 if status not in {'queued', 'processing'}:
-                    raise SonioxBatchError()
+                    raise SonioxBatchError('error_5xx' if status == 'error' else 'invalid_response')
                 remaining = deadline - clock()
                 if remaining <= 0:
-                    raise SonioxBatchError()
+                    raise SonioxBatchError('timeout')
                 sleep(min(2, remaining))
                 state = request('GET', f'/transcriptions/{transcription_id}')
-            raise SonioxBatchError()
-        except Exception:
+            raise SonioxBatchError('timeout')
+        except Exception as error:
             # Provider bodies, audio and tokens never become exception messages.
-            raise SonioxBatchError() from None
+            raise final_failure(error, submitted) from None
         finally:
             # Remove only this call's temporary vendor resources. Original Omi
             # artifacts stay in custody. Cleanup cannot authorize another POST.
@@ -155,56 +311,104 @@ def transcribe(audio, duration, *, language=None, client_factory=httpx.Client, c
 
 
 async def transcribe_async(
-    audio, duration, *, language=None, client=None, semaphore=None, clock=time.monotonic, sleep=asyncio.sleep
+    audio,
+    duration,
+    *,
+    language=None,
+    second_chance=False,
+    failover=False,
+    client=None,
+    semaphore=None,
+    clock=time.monotonic,
+    sleep=asyncio.sleep,
+    mark_fallback=False,
 ):
-    """Serving path: individual requests borrow a shared async HTTP permit only."""
-    headers = authorization(duration)
+    """Serving path: individual requests borrow a shared async HTTP permit only.
+
+    Failures are typed ``SonioxBatchError`` kinds; ``submitted`` is set once ``POST
+    /transcriptions`` left this process without a non-2xx answer (the paid step).
+    """
+    headers = authorization(duration, second_chance=second_chance, failover=failover)
     client = get_stt_client() if client is None else client
     semaphore = get_stt_semaphore() if semaphore is None else semaphore
-    deadline, file_id, transcription_id = clock() + DEADLINE_SECONDS, None, None
+    deadline, file_id, transcription_id, submitted = clock() + DEADLINE_SECONDS, None, None, False
 
     async def request(method, path, **kwargs):
-        remaining = deadline - clock()
-        if remaining <= 0:
-            raise SonioxBatchError()
-        async with asyncio.timeout(remaining):
-            async with semaphore:
-                remaining = deadline - clock()
-                if remaining <= 0:
-                    raise SonioxBatchError()
-                response = await client.request(
-                    method,
-                    BASE_URL + path,
-                    headers=headers,
-                    timeout=min(20, remaining),
-                    follow_redirects=False,
-                    **kwargs,
-                )
-        if not 200 <= response.status_code < 300:
-            raise SonioxBatchError()
-        return response.json()
+        nonlocal submitted
+        for attempt in range(1, MAX_HTTP_ATTEMPTS + 1):
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise SonioxBatchError('timeout')
+            try:
+                try:
+                    async with asyncio.timeout(remaining):
+                        async with semaphore:
+                            remaining = deadline - clock()
+                            if remaining <= 0:
+                                raise SonioxBatchError('timeout')
+                            response = await client.request(
+                                method,
+                                BASE_URL + path,
+                                headers=headers,
+                                timeout=min(20, remaining),
+                                follow_redirects=False,
+                                **kwargs,
+                            )
+                except Exception:
+                    if (method, path) == ('POST', '/transcriptions'):
+                        submitted = True
+                    raise
+                if not 200 <= response.status_code < 300:
+                    if (method, path) == ('POST', '/transcriptions') and response.status_code >= 500:
+                        submitted = True
+                    raise SonioxBatchError(_status_kind(response.status_code), status_code=response.status_code)
+                if (method, path) == ('POST', '/transcriptions'):
+                    submitted = True
+                return response.json()
+            except Exception as error:
+                delay = request_retry_delay(error, method, path, attempt, deadline - clock())
+                if delay is None:
+                    raise
+                await sleep(delay)
+        raise SonioxBatchError()
 
     try:
         file_id = resource_id(
             (await request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')}))['id']
         )
-        state = await request('POST', '/transcriptions', json=transcription_body(file_id, language))
+        body = transcription_body(file_id, language)
+        try:
+            from utils.stt.allowance_watch import observe_async
+            from utils.byok import get_byok_uid
+
+            await observe_async(get_byok_uid(), 'prerecorded', 'soniox', duration)
+            state = await request('POST', '/transcriptions', json=body)
+        except SonioxBatchError:
+            # request() preserves paid uncertainty on 5xx; explicit 429 refusals
+            # may retry, but accepted or uncertain paid submissions never do.
+            raise
+        except Exception:
+            submitted = True
+            raise
+        submitted = True
         transcription_id = resource_id(state['id'])
         for _ in range(60):
             if state['status'] == 'completed':
                 return transcript_words(
-                    await request('GET', f'/transcriptions/{transcription_id}/transcript'), duration
+                    await request('GET', f'/transcriptions/{transcription_id}/transcript'),
+                    duration,
+                    mark_fallback=mark_fallback,
                 )
             if state['status'] not in {'queued', 'processing'}:
-                raise SonioxBatchError()
+                raise SonioxBatchError('error_5xx' if state['status'] == 'error' else 'invalid_response')
             remaining = deadline - clock()
             if remaining <= 0:
-                raise SonioxBatchError()
+                raise SonioxBatchError('timeout')
             await sleep(min(2, remaining))
             state = await request('GET', f'/transcriptions/{transcription_id}')
-        raise SonioxBatchError()
-    except Exception:
-        raise SonioxBatchError() from None
+        raise SonioxBatchError('timeout')
+    except Exception as error:
+        raise final_failure(error, submitted) from None
     finally:
         for path in (
             f'/transcriptions/{transcription_id}' if transcription_id else None,

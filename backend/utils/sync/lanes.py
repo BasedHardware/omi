@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Iterable, Optional
 
 from utils.request_validation import parse_sync_filename_timestamp
-from utils.sync.capture_clock import maximum_future_skew_seconds
+from utils.sync.capture_clock import maximum_future_skew_seconds, early_capture_clamp_enabled, is_early_capture_time
 
 __all__ = [
     'CaptureTimeTrust',
@@ -94,6 +94,9 @@ def classify_sync_lane(
         )
 
     effective_now = time.time() if now is None else now
+    early_clamped = early_capture_clamp_enabled() and any(is_early_capture_time(value) for value in capture_times)
+    if early_clamped:
+        capture_times = [effective_now if is_early_capture_time(value) else value for value in capture_times]
     oldest = min(capture_times)
     newest = max(capture_times)
     maximum_age = max(0, int(effective_now - oldest))
@@ -124,6 +127,17 @@ def classify_sync_lane(
             newest_capture_at=newest,
             maximum_age_seconds=maximum_age,
             automatic_recovery_allowed=False,
+        )
+    if early_clamped:
+        # A reset clock proves no age: retain backfill pacing, never a fresh
+        # trust upgrade. Valid historical siblings still obey lookback above.
+        return SyncLaneDecision(
+            lane=SyncLane.BACKFILL,
+            trust=CaptureTimeTrust.UNTRUSTED,
+            reason='early_capture_clamped',
+            oldest_capture_at=oldest,
+            newest_capture_at=newest,
+            maximum_age_seconds=None,
         )
     if not client_device_id:
         return SyncLaneDecision(

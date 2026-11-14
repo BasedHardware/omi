@@ -23,8 +23,8 @@ from utils.conversations.screen_frame_evidence import (
     ScreenFrameEvidence,
     frame_evidence_duration_minutes,
     frame_evidence_started_at,
+    load_capture_group_frame_evidence,
     load_notes_frame_images,
-    load_screen_frame_evidence,
     screen_frame_agent_names,
     screen_frame_names,
     screen_moment_lines,
@@ -40,8 +40,9 @@ def meeting_context_sources() -> Any:
 
 
 def _screen_frame_evidence(uid: str, conversation: Any) -> Tuple[ScreenFrameEvidence, ...]:
-    # Only already-approved, retained frame evidence can enter the notes prompt.
-    return load_screen_frame_evidence(uid, getattr(conversation, 'id', None))
+    # Only already-approved, retained frame evidence can enter the notes prompt;
+    # for a capture-group row that includes the desktop members' meeting frames.
+    return load_capture_group_frame_evidence(uid, conversation)
 
 
 def _rich_meeting_roster(
@@ -59,8 +60,7 @@ def _rich_meeting_roster(
     frame_evidence)`` so the notes path can reuse the people and frame reads
     and every shared-prefix caller can pass the desktop flag through.
 
-    Names the frame judge read off call tiles join the roster (as
-    ``screen_activity`` participants) only where no better source named them.
+    Approved frames remain notes evidence; their tile names never alter the roster.
     """
     source_value = getattr(getattr(conversation, 'source', None), 'value', getattr(conversation, 'source', None))
     external_data = getattr(conversation, 'external_data', None) or {}
@@ -92,6 +92,7 @@ def _rich_meeting_roster(
             owner_name,
             owner_emails,
             people_docs,
+            exact_people_match=True,
         )
         return roster, people_docs, desktop_capture, evidence
     except Exception as exc:  # noqa: BLE001 - rich roster is best effort

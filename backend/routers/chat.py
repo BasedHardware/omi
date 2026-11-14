@@ -1,3 +1,13 @@
+"""Chat surface: /v2/messages agentic chat with SSE streaming, voice-message
+transcription, chat files, ratings, shares, and device-tool result intake.
+
+The route's real responsibility is stream discipline -- setup/first-event
+deadlines, heartbeats, the typed failure protocol for opted-in clients, and
+bounded provider retries -- while prompt assembly and tool loops live in
+utils.chat_turn (backend/docs/chat-system.md).
+"""
+
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.chat_turn import (
     run_chat_turn,
     TurnOptions,
@@ -43,6 +53,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.notifications as notification_db
 from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
@@ -92,7 +103,7 @@ from utils.chat_rating_triage import extract_rating_triage_fields
 from utils.feedback import record_chat_message_feedback
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.llm.gateway_client import CHAT_AGENT_ROUTE_DIRECT, get_chat_agent_route
-from utils.subscription import enforce_chat_quota, is_trial_paywalled
+from utils.subscription import enforce_chat_quota
 from utils import share_links
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool, UnsupportedChatFileError, safe_file_chats
@@ -557,6 +568,7 @@ def create_voice_message_stream(
         504: {"model": TranscriptionErrorResponse, "description": "Provider timeout"},
     },
 )
+@allowance_operation('ptt', live=False)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
@@ -570,12 +582,6 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
-    # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
-    # Narrow to trial-only on purpose — full enforce_chat_quota here would
-    # change mobile behavior for users past their existing 30/mo chat cap.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
-
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -663,6 +669,9 @@ async def transcribe_voice_message(
             del audio_bytes
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.seconds = duration_ms / 1000
         attempt = TranscriptionAttempt(
             route='voice_rest_pcm',
             provider=stt_provider,
@@ -673,7 +682,7 @@ async def transcribe_voice_message(
             audio_seconds=duration_ms / 1000 if encoding == 'linear16' else None,
         )
         try:
-            transcript, detected_language = await run_blocking(
+            transcription_result = await run_blocking(
                 sync_executor,
                 transcribe_pcm_bytes,
                 audio_bytes,
@@ -683,7 +692,14 @@ async def transcribe_voice_message(
                 sample_rate=sample_rate,
                 channels=channels,
                 keywords=context_keywords,
+                return_provider=True,
             )
+            # Legacy transcription adapters return (text, language). Provider
+            # metadata is optional; retain the selected provider when absent.
+            if len(transcription_result) == 4:
+                transcript, detected_language, stt_provider, stt_model = transcription_result
+            else:
+                transcript, detected_language = transcription_result
             outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
             parity_capture.observe(
                 "inbound",
@@ -702,6 +718,8 @@ async def transcribe_voice_message(
         finally:
             if not attempt.finished:
                 attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+            if scope is not None:
+                await run_blocking(db_executor, scope.billed, duration_ms / 1000, daily_ptt=True)
             parity_capture.persist()
             del audio_bytes
 
@@ -732,6 +750,7 @@ async def transcribe_voice_message(
     transcripts = []
     detected_languages = []
     attempt: TranscriptionAttempt | None = None
+    daily_budget_seconds = None
 
     def _record_multipart_preparation_failure(failure: TranscriptionFailure) -> None:
         """Emit a typed terminal result for rejected multipart audio."""
@@ -793,6 +812,10 @@ async def transcribe_voice_message(
         if not allowed:
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
+        daily_budget_seconds = total_duration_ms / 1000
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.seconds = daily_budget_seconds
         is_multi = resolved_language == 'multi'
         attempt = TranscriptionAttempt(
             route='voice_rest_multipart',
@@ -801,9 +824,21 @@ async def transcribe_voice_message(
             audio_seconds=measured_duration_ms / 1000,
         )
         for wav_path in wav_paths:
-            transcript, detected_language = await run_blocking(
-                sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
+            transcription_result = await run_blocking(
+                sync_executor,
+                transcribe_voice_message_segment,
+                wav_path,
+                uid,
+                language=resolved_language,
+                return_provider=True,
             )
+            if len(transcription_result) == 4:
+                transcript, detected_language, segment_provider, segment_model = transcription_result
+                # A multipart response must disclose Soniox if any segment used it.
+                if stt_provider != 'soniox':
+                    stt_provider, stt_model = segment_provider, segment_model
+            else:
+                transcript, detected_language = transcription_result
             if transcript:
                 transcripts.append(transcript)
             if is_multi and detected_language:
@@ -860,6 +895,9 @@ async def transcribe_voice_message(
     finally:
         if attempt is not None and not attempt.finished:
             attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+        scope = current_allowance_operation.get()
+        if scope is not None and daily_budget_seconds is not None:
+            await run_blocking(db_executor, scope.billed, daily_budget_seconds, daily_ptt=True)
         # retrieve_file_paths and conversion can both allocate uid-scoped
         # inputs. Clean every path even when preprocessing fails before the
         # previous provider-only try/finally boundary.
@@ -889,6 +927,7 @@ class _PTTStreamSession:
 
 
 @router.websocket("/v2/voice-message/transcribe-stream")
+@allowance_operation('ptt', live=True)
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
     uid: str = Depends(auth.get_current_user_uid_ws_listen),
@@ -937,12 +976,6 @@ async def transcribe_voice_message_stream(
     )
 
     await websocket.accept()
-
-    # Paywalled desktop users — close before opening a provider connection for
-    # a PTT stream that would not be allowed to chat anyway.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, x_app_platform):
-        await websocket.close(code=1008, reason='trial_expired')
-        return
 
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
@@ -998,6 +1031,9 @@ async def transcribe_voice_message_stream(
     usage_recorded = False
     # 30ms flush threshold for the live-STT transport (16-bit PCM = 2 bytes per sample per channel).
     bytes_per_second = sample_rate * channels * 2
+    allowance_scope = current_allowance_operation.get()
+    if allowance_scope is not None:
+        allowance_scope.clock = lambda: compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels) / 1000
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
     # Providers that already died for this session; the failover chain excludes
     # them so a rebuild never lands on the provider that just failed.
@@ -1229,7 +1265,7 @@ async def transcribe_voice_message_stream(
         await close_stt_failure('send_failed')
         return False
 
-    def record_stt_usage_once() -> None:
+    async def record_stt_usage_once() -> None:
         """Settle the connect-time reservation after a successful provider drain."""
         nonlocal usage_recorded
         if usage_recorded or bytes_per_second <= 0:
@@ -1243,14 +1279,30 @@ async def transcribe_voice_message_stream(
             # Fail-open path never reserved; keep force-record tracking.
             record_actual_duration(uid, actual_duration_ms)
         usage_recorded = True
+        from utils.stt.allowance_watch import observe_async
+        from utils.stt_cap_dispatch import customer_funded
 
-    def refund_reservation_once() -> None:
+        provider = serving_provider()
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            await run_blocking(db_executor, scope.billed, actual_duration_ms / 1000, daily_ptt=True)
+        else:
+            await observe_async(
+                uid, 'ptt', provider, actual_duration_ms / 1000, customer_funded=customer_funded(provider)
+            )
+
+    async def refund_reservation_once() -> None:
         """Release an unused reservation when the session never drained successfully."""
         nonlocal usage_recorded
-        if usage_recorded or budget_reserved_ms <= 0:
+        if usage_recorded:
             return
-        settle_reserved_duration(uid, budget_reserved_ms, 0)
+        if budget_reserved_ms > 0:
+            settle_reserved_duration(uid, budget_reserved_ms, 0)
         usage_recorded = True
+        scope = current_allowance_operation.get()
+        if scope is not None:
+            scope.closed = True
+            await run_blocking(db_executor, scope.billed, 0)
 
     async def drain_stt_or_close() -> bool:
         """Finalize and await the selected provider's tail before sender teardown."""
@@ -1357,7 +1409,7 @@ async def transcribe_voice_message_stream(
                         accepted_audio_bytes += len(stt_audio_buffer)
                         stt_audio_buffer.clear()
                     if await drain_stt_or_close():
-                        record_stt_usage_once()
+                        await record_stt_usage_once()
                     else:
                         break
                 continue
@@ -1417,19 +1469,25 @@ async def transcribe_voice_message_stream(
         # Await a healthy provider's final tail before stopping the segment sender.
         # A rejected send still gets a best-effort close but no final transcript or usage charge.
         if dg_socket and not stt_send_failed and await drain_stt_or_close():
-            record_stt_usage_once()
-        else:
-            # Provider never drained successfully — refund the connect-time reservation.
-            refund_reservation_once()
+            await record_stt_usage_once()
 
-        if dg_socket and not stt_drained:
-            try:
-                await drain_stt_socket(dg_socket)
-            except Exception:
+        # Close the failed provider before the optional shadow settlement can
+        # yield. The peer has already received its terminal close and may
+        # cancel the route while that observer is waiting on its executor.
+        try:
+            if dg_socket and not stt_drained:
                 try:
-                    dg_socket.finish()
+                    await drain_stt_socket(dg_socket)
                 except Exception:
-                    pass
+                    try:
+                        dg_socket.finish()
+                    except Exception:
+                        pass
+        finally:
+            if not stt_drained:
+                # The synchronous daily refund must also survive cancellation
+                # during the failed provider's asynchronous close.
+                await refund_reservation_once()
 
         # Signal sender task to drain and stop, then wait for it
         loop.call_soon_threadsafe(segment_queue.put_nowait, _SENTINEL)
@@ -1781,6 +1839,14 @@ def get_shared_chat_messages(token: str):
 
     sender_uid = share_data['uid']
     message_ids = share_data['message_ids']
+
+    try:
+        if account_deletion_blocks_user_work(sender_uid):
+            raise HTTPException(status_code=404, detail='Share link expired or not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared chat unavailable') from exc
 
     messages = []
     for mid in message_ids:

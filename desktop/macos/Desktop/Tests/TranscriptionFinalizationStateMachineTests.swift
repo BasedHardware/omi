@@ -9,7 +9,7 @@ private struct FinalizationRecoveryRequest {
   let body: Data?
 }
 
-private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendable {
+private final class FinalizationRecoveryURLStub: URLProtocol {
   private static let lock = NSLock()
   private nonisolated(unsafe) static var _requests: [FinalizationRecoveryRequest] = []
   private nonisolated(unsafe) static var _finalizationStatusBodies: [Data] = []
@@ -1343,6 +1343,32 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertEqual(diagnostics.sessionDurationSeconds, 60)
     XCTAssertTrue(diagnostics.localFallbackAvailable)
     XCTAssertEqual(diagnostics.localFallbackRetriesRemaining, 3)
+  }
+
+  func testLocalClientConversationIdNeverUploadsABlankStoredId() {
+    let started = Date(timeIntervalSince1970: 1_774_646_400)
+    func session(_ clientConversationId: String?) -> TranscriptionSessionRecord {
+      TranscriptionSessionRecord(
+        startedAt: started,
+        source: "desktop",
+        clientConversationId: clientConversationId)
+    }
+
+    // A blank persisted id must fall back to the derived id instead of reaching
+    // the wire: from-segments rejects a blank session id, and the chunked upload
+    // requires one outright (BasedHardware/omi#15500).
+    XCTAssertEqual(
+      ConversationFinalizationService.localClientConversationId(session: session(nil), sessionId: 42),
+      "macos-local-42-1774646400000")
+    XCTAssertEqual(
+      ConversationFinalizationService.localClientConversationId(session: session(""), sessionId: 42),
+      "macos-local-42-1774646400000")
+    XCTAssertEqual(
+      ConversationFinalizationService.localClientConversationId(session: session("  \t "), sessionId: 42),
+      "macos-local-42-1774646400000")
+    XCTAssertEqual(
+      ConversationFinalizationService.localClientConversationId(session: session(" stored-id "), sessionId: 42),
+      "stored-id")
   }
 
   func testCompactsOversizedLocalUploadWithoutDroppingText() {

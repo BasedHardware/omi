@@ -24,12 +24,29 @@ def is_text_line(panel):
 
 
 class WallV2Contract(unittest.TestCase):
-    def test_checked_in_wall_matches_builder(self):
-        from build_wall_dashboard import build_wall_board
+    def test_funnel_row_is_its_own_board_that_fills_the_screen(self):
+        from build_wall_dashboard import WALL_H
+        board = load("omi-tv-funnel")
+        self.assertEqual(board["uid"], "omi-tv-funnel")
+        row = board["panels"]
+        self.assertEqual({p["gridPos"]["y"] for p in row}, {0})
+        self.assertEqual({p["gridPos"]["h"] for p in row}, {WALL_H})  # fills 1920×1080, no scroll
+        self.assertEqual(sum(p["gridPos"]["w"] for p in row), 24)
+        self.assertEqual({p["targets"][0]["root_selector"] for p in row},
+                         {"frames.funnel", "frames.funnelWeekly", "frames.funnelPlatforms"})
+
+    def test_wall_board_has_no_funnel_row(self):
+        board = load("omi-tv-v2")
+        self.assertFalse(any(p["targets"][0]["root_selector"].startswith("frames.funnel")
+                             for p in board["panels"] if p.get("targets")))
+
+    def test_checked_in_boards_match_builder(self):
+        from build_wall_dashboard import build_funnel_board, build_wall_board
         self.assertEqual(load("omi-tv-v2"), build_wall_board())
+        self.assertEqual(load("omi-tv-funnel"), build_funnel_board())
 
     def test_wall_columns_plugins_and_utc(self):
-        from build_wall_dashboard import BASE, COLUMNS, GEOMETRY
+        from build_wall_dashboard import BASE, COLUMNS, GEOMETRY, UPTIME_URL
         board = load("omi-tv-v2")
         self.assertEqual(board["uid"], "omi-tv-v2")  # provisioning + embed links
         self.assertEqual(board["timezone"], "utc")
@@ -39,6 +56,9 @@ class WallV2Contract(unittest.TestCase):
         for panel in board["panels"]:
             self.assertLessEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], 24)
             for target in panel["targets"]:
+                if target["url"] == UPTIME_URL:  # the sidecar's fixed-PromQL route
+                    self.assertEqual(target["root_selector"].split(".")[0], "frames")
+                    continue
                 self.assertTrue(target["url"].startswith(BASE + "/"))
                 self.assertIn(target["url"].rsplit("/", 1)[1], names)
                 self.assertEqual(target["datasource"]["uid"], "omi-admin-api")
@@ -51,7 +71,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         for name in COLUMNS:
             x, w = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             self.assertEqual(column[0]["type"], "stat")
             self.assertTrue(column[0]["title"].startswith(name), column[0]["title"])
             self.assertEqual(column[0]["gridPos"]["y"], 0)
@@ -85,12 +106,12 @@ class WallV2Contract(unittest.TestCase):
         self.assertTrue(all("people" not in n.lower() for n in names), names)
         headline = [t["root_selector"] for p in stats.values() for t in p["targets"]]
         for key in ["wau", "dau", "mau", "activation", "capture", "retained", "established",
-                    "mrr", "arpmau", "hardware", "netCost", "costPerMau"]:
+                    "mrr", "arpmau", "hardware", "netCost"]:
             self.assertIn(f"frames.{key}", headline)
 
     def test_each_stat_has_an_api_delta_strip_in_field_order(self):
         import re
-        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H
+        from build_wall_dashboard import BAD_MARK, COLUMNS, GEOMETRY, GOOD_MARK, STAT_H, WALL_H
         board = load("omi-tv-v2")
         source = (HERE.parent / "lib/wall-series.ts").read_text()
         block = re.search(r"DELTA_STRIPS[^=]*= \{(.*?)\};", source, re.S).group(1)
@@ -99,14 +120,18 @@ class WallV2Contract(unittest.TestCase):
         self.assertIn('BAD_MARK = "\\u2060"', source)
         for name in COLUMNS:
             x, _ = GEOMETRY[name]
-            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x), key=lambda p: p["gridPos"]["y"])
+            column = sorted((p for p in board["panels"] if p["gridPos"]["x"] == x and p["gridPos"]["y"] < WALL_H),
+                            key=lambda p: p["gridPos"]["y"])
             head, strip = column[0], column[1]
             self.assertTrue(is_strip(strip))
             self.assertFalse(head["options"]["showPercentChange"])  # native change is relative only
             self.assertEqual(strip["gridPos"]["y"], STAT_H)
-            keys = [t["root_selector"].split(".")[-1] for t in head["targets"]]
-            self.assertEqual(keys, api[name.lower()])
+            keys = [t["root_selector"].split(".")[-1] for t in head["targets"] if "/wall/series/" in t["url"]]
+            self.assertEqual(keys, api[name.lower()][:len(keys)])
             self.assertEqual([c["selector"] for c in strip["targets"][0]["columns"]], keys)
+            if len(keys) < len(head["targets"]):  # Uptime brings its own change
+                self.assertEqual(strip["targets"][1]["root_selector"], "frames.strip")
+                self.assertEqual(strip["targets"][1]["columns"][0]["selector"], "uptime")
             colors = {m["options"]["pattern"]: m["options"]["result"]["color"]
                       for m in strip["fieldConfig"]["defaults"]["mappings"]}
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
@@ -133,6 +158,9 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn(name, styled)
             self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
+        # Under the plot, never beside it: Health is a narrow column, and a right
+        # legend squeezed the 35-day stack and revenue line into a sliver.
+        self.assertEqual(cost["options"]["legend"]["placement"], "bottom")
         self.assertIn("Soniox console", cost["description"])
         self.assertIn("measured SaaS (Mercury)", cost["description"])
         self.assertIn("Modulate modelled", cost["description"])
@@ -205,22 +233,35 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn("band", panel["description"])
             self.assertNotIn("Oct 24", panel["description"])  # cohorts roll daily: no release date
 
-    def test_unit_economics_is_daily_and_breaks_on_missing_days(self):
+    def test_uptime_by_journey_replaces_unit_economics(self):
+        from build_wall_dashboard import PLATFORM, UPTIME_URL
         board = load("omi-tv-v2")
-        panel = next(p for p in board["panels"] if p["title"] == "Unit economics")
+        titles = {p["title"] for p in board["panels"]}
+        self.assertNotIn("Unit economics", titles)  # redundant with Cost vs revenue (David 2026-11-06)
+        panel = next(p for p in board["panels"] if p["title"] == "Uptime by journey")
+        self.assertEqual(panel["gridPos"]["x"], 20)
+        target = panel["targets"][0]
+        self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
+        fields = [c["selector"] for c in target["columns"]]
+        self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
+        # the sidecar emits the UTC day as epoch milliseconds; a plain "timestamp" column parses
+        # that to null and the panel reads "Data outside time range"
+        date_col = next(c for c in target["columns"] if c["selector"] == "date")
+        self.assertEqual(date_col["type"], "timestamp_epoch")
         custom = panel["fieldConfig"]["defaults"]["custom"]
-        self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
-        self.assertFalse(custom["spanNulls"])  # a gap is drawn as a gap
-        self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
-        self.assertIn("one point per day", panel["description"])
+        self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
+        hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
+                if p["id"] == "color"}
+        self.assertFalse(hues & set(PLATFORM.values()))  # platform hues stay platforms
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        uptime = next(t for t in health["targets"] if t["url"] == UPTIME_URL)
+        self.assertEqual(uptime["root_selector"], "frames.headline")
 
-    def test_margin_by_plan_keeps_its_frame_and_status_line(self):
+    def test_margin_by_plan_keeps_its_frame_and_closes_the_column(self):
         from build_wall_dashboard import FREE, PLAN_NAMES
         board = load("omi-tv-v2")
         panel = next(p for p in board["panels"] if p["title"] == "Margin by plan")
-        # Still the Revenue column's tall closing chart, directly above its
-        # status line (the Variable margin tile now fills the space beside
-        # Unit economics instead — same frame family, 2026-10-24).
+        # The Revenue column's tall closing chart.
         self.assertEqual(panel["gridPos"]["x"], 15)
         self.assertGreaterEqual(panel["gridPos"]["h"], 6)
         target = panel["targets"][0]
@@ -243,6 +284,10 @@ class WallV2Contract(unittest.TestCase):
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertEqual(panel["fieldConfig"]["defaults"]["unit"], "percent")
         self.assertTrue(custom["axisCenteredZero"])
+        # An empty frame names its cause; "Loading…" would read as a stuck query.
+        self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"],
+                         "No day in the last 35 has both plan cost and revenue")
+        self.assertEqual(panel["timeFrom"], "35d")  # MARGIN_DAYS in lib/wall-series.ts
         self.assertFalse(custom["spanNulls"])
         self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
         # Tooltip rows: drawn invisibly on their own hidden scale (Grafana 13 drops
@@ -255,16 +300,32 @@ class WallV2Contract(unittest.TestCase):
         for phrase in ("Allocated estimate", "cost-active user-days", "speech seconds", "point-in-time snapshot",
                        "~3 days back"):
             self.assertIn(phrase, panel["description"])
-        status = next(p for p in board["panels"] if p["targets"][0]["root_selector"] == "frames.marginStatus")
-        self.assertEqual(status["gridPos"], {**panel["gridPos"], "y": panel["gridPos"]["y"] + panel["gridPos"]["h"],
-                                             "h": 1})
+        # It closes the Revenue column; its data-through text stays in the API
+        # (frames.marginStatus), not as a tiny line on the wall (David 2026-11-06).
+        from build_wall_dashboard import WALL_H
+        self.assertEqual(panel["gridPos"]["y"] + panel["gridPos"]["h"], WALL_H)
+        roots = {t.get("root_selector") for p in board["panels"] for t in p.get("targets", [])}
+        self.assertNotIn("frames.marginStatus", roots)
+
+    def test_all_in_tiles_name_their_scope(self):
+        board = load("omi-tv-v2")
+        # Relabelled so the names say what they include (David 2026-11-02): the
+        # stat names stay short (no wrap at 1440), the description carries scope.
+        health = next(p for p in board["panels"] if p["title"] == "Health")
+        blob = json.dumps(health, ensure_ascii=False)
+        self.assertIn("All-in/day", blob)
+        self.assertIn("Uptime", blob)
+        self.assertIn("attempt-weighted", blob)
+        self.assertNotIn('"Cost / day"', blob)
+        self.assertNotIn('"Cost / user"', blob)
 
     def test_variable_margin_tile_big_number_sparkline_and_target(self):
         from build_wall_dashboard import STATUS_GOOD
         board = load("omi-tv-v2")
-        tile = next(p for p in board["panels"] if p["title"] == "Variable margin")
-        # The big number is the latest margin %, with the 60-day daily series
-        # as the stat's own sparkline; 50% is the threshold (green at/above).
+        tile = next(p for p in board["panels"] if p["title"] == "Variable margin (live est.)")
+        # The big number is the latest margin % (today's live estimate), with
+        # the 60-day daily series as the stat's own sparkline; the goal is the
+        # threshold (green at/above).
         self.assertEqual(tile["type"], "stat")
         self.assertEqual(tile["targets"][0]["url"].rsplit("/", 1)[1], "health")
         self.assertEqual(tile["targets"][0]["root_selector"], "frames.variableMargin")
@@ -274,33 +335,24 @@ class WallV2Contract(unittest.TestCase):
         # explicit no-value marker, not an older non-null margin (Luna r3 P2).
         self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
         self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
-        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no MRR book")
+        # No live estimate (or no MRR book) shows no value, never a settled number as live.
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])
         self.assertEqual(steps[1]["color"], STATUS_GOOD)
         # The definition is on the wall, not in a separate doc.
-        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate and Stripe fees",
+        for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone",
                        "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
             self.assertIn(phrase, tile["description"])
-        # The secondary chart: cost run rate vs MRR with the 50% target marked.
-        chart_panel = next(p for p in board["panels"] if p["title"] == "Cost run rate vs MRR")
-        fields = [c["selector"] for c in chart_panel["targets"][0]["columns"]]
-        for field in ("costPerMonth", "mrr", "goalCost", "vertexReservedPerMonth"):
-            self.assertIn(field, fields)
-        styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
-                  for o in chart_panel["fieldConfig"]["overrides"]}
-        target_line = styled["50% target cost"]
-        self.assertEqual(target_line["color"]["fixedColor"], STATUS_GOOD)
-        self.assertEqual(target_line["custom.lineStyle"]["dash"], [6, 4])  # a goal, not a series
-        # Missing/stale vendor lines are named on the tile's own status line,
-        # which also carries the MRR source and its non-USD exclusion count.
-        status = next(p for p in board["panels"]
-                      if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
-        self.assertEqual(status["gridPos"]["h"], 1)
-        self.assertIn("named", status["description"])
-        self.assertIn("non-USD", status["description"])
-        self.assertIn("7-day window", status["description"])
+        # Cost vs revenue on Health covers the run-rate view; the duplicate
+        # chart and the tiny status lines are gone (David 2026-11-06).
+        titles = {p["title"] for p in board["panels"]}
+        self.assertNotIn("Cost run rate vs MRR", titles)
+        roots = {t.get("root_selector") for p in board["panels"] for t in p.get("targets", [])}
+        self.assertNotIn("frames.variableMarginStatus", roots)
+        shopify = next(p for p in board["panels"] if p["title"] == "Shopify sales per week")
+        self.assertGreaterEqual(shopify["gridPos"]["h"], 5)  # tall enough to read the bars
 
     def test_cost_estimates_are_dated_like_the_api(self):
         import re

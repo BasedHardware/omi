@@ -13,6 +13,26 @@ stackdriver:
     - "based-hardware-dev"
   metrics:
     prefixes:
+      - 'prometheus.googleapis.com/omi_finalization_pair_'
+      - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
+      # WP-C lifecycle dwell and observer health (closed labels).
+      - 'prometheus.googleapis.com/omi_batch_record_pending_'
+      # Retained held dead-letter stock/rate alert; serving maintenance emits these.
+      - 'prometheus.googleapis.com/omi_batch_held_expired_total/'
+      - 'prometheus.googleapis.com/omi_batch_held_expired_units/'
+      - 'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_total/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_units/'
+      - 'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/'
+      # Backlog state machine alerts (charts/monitoring/alerts/backlog-state-machine.json).
+      - 'prometheus.googleapis.com/omi_backlog_state_transitions_total/'
+      - 'prometheus.googleapis.com/omi_capture_retry_cap_total/'
+      - 'prometheus.googleapis.com/omi_record_seal_nojob_'
+      # Lease soak and the late-append invariant consume these bounded families.
+      - 'prometheus.googleapis.com/omi_record_token_lease_'
+      - 'prometheus.googleapis.com/omi_record_token_late_append_total/'
+      - 'prometheus.googleapis.com/omi_enrichment_obligation_'
+      - 'prometheus.googleapis.com/omi_finalization_byok_'
       - 'prometheus.googleapis.com/omi_capture_finalization_failures_total/'
       - 'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/'
       - 'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/'
@@ -29,7 +49,10 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_fallback_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_firestore_read_operations_total/'
+      - 'prometheus.googleapis.com/omi_home_rows_user_day_count_total/'
+      - 'prometheus.googleapis.com/omi_home_rows_user_day_sum_total/'
       - 'prometheus.googleapis.com/omi_journey_accepted_total/'
+      - 'prometheus.googleapis.com/omi_journey_failure_reason_total/'
       - 'prometheus.googleapis.com/omi_journey_latency_seconds/'
       - 'prometheus.googleapis.com/omi_journey_terminal_total/'
       - 'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/'
@@ -58,6 +81,10 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
     interval: '10m'
     offset: '1m'
+
+# Descriptor discovery is stable; sample collection remains inline on every scrape.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h
 
 serviceAccount:
   create: false

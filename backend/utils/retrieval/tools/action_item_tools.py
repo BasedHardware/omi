@@ -15,6 +15,8 @@ from utils.messaging.projection import surface_runtime
 from utils.messaging.turn_context import phone_reminder_confirmation
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
+
+conversations_db: Any = None
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
@@ -25,6 +27,8 @@ from utils.model_text import count_header, format_date, format_instant, truncati
 from utils.user_clock import clock_for_config
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
+from utils.retrieval.tool_services.action_items import create_action_item
+from utils.task_intelligence.task_source_validation import TaskSourceValidationError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -451,6 +455,15 @@ def create_action_item_tool(
     # Validate description
     if not description or not description.strip():
         return "Error: Description is required to create an action item."
+
+    if conversation_id is not None:
+        conv_db = conversations_db
+        if conv_db is None:
+            import database.conversations as conv_db
+        conversation = conv_db.get_conversation(uid, conversation_id)
+        if not conversation or conv_db.is_soft_deleted(conversation):
+            return f"Error: Conversation with ID '{conversation_id}' not found."
+
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
@@ -503,7 +516,7 @@ def create_action_item_tool(
 
     # Create the action item
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."
 
@@ -557,6 +570,8 @@ def create_action_item_tool(
 
         return result
 
+    except TaskSourceValidationError as e:
+        return f'Error: {e} Ask the user to choose an available source; do not retry by dropping the source link.'
     except Exception as e:
         logger.error(f"❌ Error creating action item: {e}", exc_info=True)
         return "Error creating action item. Please try again."
@@ -637,14 +652,14 @@ def update_action_item_tool(
         return "Error: User ID not found in configuration"
     clock = clock_for_config(cfg, uid)
 
-    # Check if action item exists
+    # Check if action item exists and is not soft-deleted
     resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
     if ref_error:
         return ref_error
     assert resolved_id is not None
     action_item_id = resolved_id
     existing_item = action_items_db.get_action_item(uid, action_item_id)
-    if not existing_item:
+    if not existing_item or existing_item.get('deleted', False):
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."
 
     # Prepare update data

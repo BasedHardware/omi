@@ -1,3 +1,5 @@
+// Resolves stored device gestures and dispatches progressive tap sequences.
+// Waits for higher mapped tap counts so one gesture runs only one action.
 enum ButtonAction { askQuestion, endConversation, toggleMute, starConversation, none }
 
 const int maxButtonTapCount = 3;

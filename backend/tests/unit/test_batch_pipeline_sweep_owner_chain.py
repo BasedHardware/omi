@@ -30,6 +30,8 @@ SWITCHES = ('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'BATCH_PIPELINE_PROJECTI
 @pytest.fixture(autouse=True)
 def claims(monkeypatch):
     """Advisory owner claim that records nesting; a busy set refuses entry."""
+    # Trace assertions exercise the exact head-first discovery rollback.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     state = SimpleClaims()
 
     @contextmanager
@@ -591,7 +593,9 @@ def test_pending_page_skips_receipts_and_follow_ups_still_run(monkeypatch):
     projector.sweep()
     assert projector.has_async_followups
     pages = [call for call in recorder.calls if call[0] == 'projection_page']
-    assert [dict(call[2]).get('states') for call in pages] == [('pending',), ('persisted', 'ready')]
+    # The pending page is two queries since 2026-11-13: the newest commits, then the main cursor.
+    assert [dict(call[2]).get('states') for call in pages] == [('pending',), ('pending',), ('persisted', 'ready')]
+    assert [dict(call[2]).get('limit') for call in pages[:2]] == [50, 100]
     # Async receipts are not replayed through the assignment claim/check.
     assert [call for call in recorder.calls if call[0] in {'session', 'check'}] == []
 

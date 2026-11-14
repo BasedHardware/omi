@@ -27,6 +27,7 @@ from fastapi import HTTPException
 import database.conversations as conversations_db
 import database.conversation_scan as conversation_scan
 import database.users as users_db
+from database.ports.folders import FolderEntity
 import routers.conversations as conversations_router
 import routers.developer as developer_router
 import routers.google_calendar as google_calendar_router
@@ -295,7 +296,7 @@ def _run_integration_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCaptur
 
 def _run_search_overview(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     _stub(monkeypatch, search_router, 'run_blocking', _inline_run_blocking)
-    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [{'id': 'folder-1', 'name': 'F'}])
+    _stub(monkeypatch, search_router, '_list_folders', lambda uid: [FolderEntity(id='folder-1', name='F')])
     _stub(monkeypatch, search_router.daily_summaries_db, 'get_summaries_count', lambda uid: 0)
     _stub(monkeypatch, search_router.memories_db, 'count_default_visible_memories', lambda uid: 0)
     _stub(monkeypatch, users_db, 'count_people', lambda uid: 0)
@@ -422,6 +423,7 @@ def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     from utils.other import daily_recap
 
     monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    _stub(monkeypatch, daily_recap, 'account_deletion_blocks_user_work', lambda _uid: False)
     _stub(monkeypatch, notifications_utils, 'generated_compute_allowed', lambda *_: True)
     _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda *_: True)
     _stub(monkeypatch, notifications_utils, 'release_daily_summary_lock', lambda *_: None)

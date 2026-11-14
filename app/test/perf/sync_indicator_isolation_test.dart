@@ -35,6 +35,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnected => true;
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+  @override
   bool get isConnecting => false;
   @override
   int get batteryLevel => 75;
@@ -45,7 +47,7 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   String get latestStableFirmwareVersion => '';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -97,6 +99,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   bool get isSyncing => active;
   @override
   List<Wal> get allWals {
+    inventoryReads++;
+    return wals;
+  }
+
+  @override
+  List<Wal> get pendingWorkWals {
     inventoryReads++;
     return wals;
   }

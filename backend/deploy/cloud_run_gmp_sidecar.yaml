@@ -1,3 +1,7 @@
+# Delivery outcomes also remain in the shared omi_.* keep-list.
+# People scan eligibility/reuse remains covered by the shared omi_.* keep-list.
+# Quiet-check arm/empty-exit counters predate the omi_ prefix and are the
+# quiet-exit rollout readout; keep them explicitly (see the sync profile too).
 apiVersion: monitoring.googleapis.com/v1beta
 kind: RunMonitoring
 metadata:
@@ -6,18 +10,23 @@ spec:
   endpoints:
     - port: 9090
       path: /metrics
-      interval: 30s
+      # margin-20: halve shared-profile ingestion; rollback 30s.
+      interval: 60s
       timeout: 10s
       metricRelabeling:
         - action: keep
           sourceLabels:
             - __name__
-          regex: omi_.*|conversation_llm_input_dedupe_.*
+          # Pin the suppression readout explicitly as well as the broad application keep.
+          regex: omi_.*|omi_listen_server_batch_suppression_total|listen_quiet_check_.*|conversation_llm_input_dedupe_.*|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total
   targetLabels:
     metadata:
       - service
+  # Backend Cloud Run peaked at 9,873 samples per scrape (24h max, 2026-11-01) against the
+  # old 10,000 cap; over the cap GMP drops the instance's whole scrape. 15,000 restores
+  # headroom. Ingestion is billed per sample emitted, not by this ceiling.
   limits:
-    samples: 10000
+    samples: 15000
     labels: 30
     labelNameLength: 100
     labelValueLength: 256

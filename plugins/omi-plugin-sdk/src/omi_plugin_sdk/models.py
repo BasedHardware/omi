@@ -1,3 +1,5 @@
+from .task_due import ReminderIntent, ReminderOrigin, TaskDue
+
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Literal, Optional
@@ -12,7 +14,15 @@ MeetingType = Literal[
 # Optional structured fields added for rich meeting notes are serialized only
 # when the producer actually set them: the flag-off note shape must stay
 # byte-identical in prompts, responses, and persisted documents.
-_OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance', 'salience')
+_OMIT_WHEN_UNSET = (
+    'meeting_type',
+    'participants',
+    'insights',
+    'note_claims',
+    'title_provenance',
+    'salience',
+    'gist',
+)
 
 
 def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple[str, ...]) -> dict:
@@ -64,6 +74,9 @@ class ActionItem(BaseModel):
     created_at: Optional[datetime] = Field(default=None, description="When the action item was created")
     updated_at: Optional[datetime] = Field(default=None, description="When the action item was last updated")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
+    due: Optional[TaskDue] = None
+    reminder_intent: Optional[ReminderIntent] = None
+    reminder_origin: Optional[ReminderOrigin] = None
     completed_at: Optional[datetime] = Field(default=None, description="When the action item was completed")
     conversation_id: Optional[str] = Field(
         default=None, description="ID of the conversation this action item came from"
@@ -164,12 +177,35 @@ class Participant(BaseModel):
     organization: Optional[str] = Field(default=None, description="Participant's organization when known")
     role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
     is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+    alias: Optional[str] = Field(
+        default=None, description='Short alias explicitly asserted for this person; never derive it'
+    )
+    speaker_bindings: List[int] = Field(
+        default_factory=list,
+        description='Exact numeric spk keys the notes model binds to this non-owner participant; omit when uncertain',
+    )
     source: Literal['roster', 'transcript'] = Field(
         description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
     )
     evidence: Optional[str] = Field(
         default=None, description='Short evidence that identifies this participant; agentic notes only'
     )
+
+    @field_validator('source', mode='before')
+    @classmethod
+    def fold_unreleased_sources(cls, value):
+        # Released app clients only decode roster|transcript. Screen and background
+        # evidence still creates the person; the wire value stays transcript.
+        if value in ('screen', 'background'):
+            return 'transcript'
+        return value
+
+    @field_validator('speaker_bindings', mode='before')
+    @classmethod
+    def keep_numeric_bindings(cls, value):
+        if not isinstance(value, list):
+            return []
+        return list(dict.fromkeys(v for v in value if type(v) is int and v >= 0))[:8]
 
 
 class Insight(BaseModel):
@@ -208,6 +244,10 @@ class Structured(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default="",
     )
+    gist: str = Field(
+        description="One line of at most 12 words saying what this conversation was about",
+        default="",
+    )
     # The neutral "nothing chose" default, matching backend models.conversation_emoji.NEUTRAL_EMOJI.
     # 🧠 is the extraction schemas' unset sentinel and must never persist by accident of a forgotten field.
     emoji: str = Field(description="An emoji to represent the conversation", default="💬")
@@ -227,7 +267,7 @@ class Structured(BaseModel):
     )
     participants: List[Participant] = Field(
         default_factory=list,
-        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+        description='People and AI agents evidenced by the supplied notes context, including screen evidence; never the account owner',
     )
     insights: List[Insight] = Field(
         default_factory=list,

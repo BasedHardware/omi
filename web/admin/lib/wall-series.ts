@@ -25,6 +25,7 @@ import {
   AggregateRows,
   CAPTURE_SEGMENTS,
   captureSourceQuery,
+  deviceFunnelQuery,
   CHURNED_ROW,
   cohortQuery,
   DAYS_ROW_PREFIX,
@@ -44,6 +45,7 @@ import {
   fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
+  fetchMeterTile,
   fetchVendorBalanceHistory,
   FinopsHistory,
   HEALTH_COST_DAYS,
@@ -51,6 +53,7 @@ import {
   ModulateModelledDay,
   PlanCostHistory,
   StripeFeeHistory,
+  MeterTile,
   VendorBalanceHistory,
 } from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
@@ -62,10 +65,22 @@ import {
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
   sonioxBalanceInputs,
+  sonioxRate7d,
   sonioxSeriesBroken,
   variableMarginLineStatus,
   variableMarginSeries,
+  VARIABLE_MARGIN_RUN_DAYS,
 } from "./wall-cost";
+import { LiveDoc } from "./wall-live";
+import { readLiveDoc } from "./wall-live-store";
+import {
+  liveCostDays,
+  liveDayStates,
+  liveUntilGap,
+  reconcileLive,
+  spliceCostDays,
+  trailingMean,
+} from "./wall-live-margin";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -102,6 +117,9 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
+  /** When the oldest value in this body turns 24h old; the stats proxy never
+   * serves the body as last-good past it. */
+  staleUntil: string | null;
 }
 
 export const GROWTH_WEEKS = 26;
@@ -125,6 +143,8 @@ const PARTIAL_RETRY = 2 * 60_000;
 const FAILURE_RETRY = 60_000;
 const MAX_BACKOFF = 30 * 60_000;
 const MAX_STALE = 24 * 60 * 60_000;
+/** The warm route answers within this; Scheduler's attempt deadline is 30 min. */
+export const WARM_BUDGET_MS = 20 * 60_000;
 const DAYS_PER_MONTH = 365.25 / 12;
 /** 60% blended margin goal: cost may be at most 40% of revenue per MAU. */
 export const MARGIN_GOAL = 0.6;
@@ -168,6 +188,10 @@ export interface SeriesSources {
   }>;
   /** Mercury non-GCP infra run rate; throws while that table is dark. */
   infra?: (today: string) => Promise<InfraHistory>;
+  /** The live metered document the health series splices in (health only). */
+  live?: () => Promise<LiveDoc | null>;
+  /** The margin meter's newest hourly row: the Variable margin headline (health only). */
+  meter?: () => Promise<MeterTile | null>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -190,6 +214,8 @@ export const defaultSeriesSources: SeriesSources = {
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
   infra: fetchInfraHistory,
+  live: readLiveDoc,
+  meter: fetchMeterTile,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -198,9 +224,15 @@ export const defaultSeriesSources: SeriesSources = {
 
 /** Leg results. Each leg is complete, partial (some periods failed) or failed. */
 export interface Legs {
+  /** The producer's metered live days (health only; absent = no live days). */
+  live?: LiveDoc | null;
+  /** The margin meter's newest hourly row (health only; absent = unavailable). */
+  meter?: MeterTile | null;
   growth?: AggregateRows;
   activationHistory?: AggregateRows;
   captureSource?: AggregateRows;
+  /** Weekly cohorts by platform and paired-within-48h; period 0 is the newest. */
+  deviceFunnel?: AggregateRows;
   retainedHistory?: AggregateRows;
   establishedHistory?: AggregateRows;
   curve?: AggregateRows;
@@ -232,11 +264,26 @@ export interface Legs {
     prepayUsd: number;
   }[];
 }
-type LegName = keyof Legs;
+/** The live document is read directly for health, not as a lazily filled leg. */
+type LegName = Exclude<keyof Legs, "live" | "meter">;
+/** The meter headline is shown only while its newest hourly row is this fresh. */
+export const METER_FRESH_MS = 3 * 3_600_000;
+
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
-  headline: ["finops", "mauPrior", "billing"],
+  // The headline's Cost / user is the health series' cost-per-user point, so it
+  // reads the same vendor and plan legs the health chart does (David 2026-11-02).
+  headline: [
+    "finops",
+    "mauPrior",
+    "billing",
+    "planCost",
+    "fees",
+    "vendorBalance",
+    "modulate",
+    "infra",
+  ],
   growth: ["growth"],
-  activation: ["activationHistory", "captureSource"],
+  activation: ["activationHistory", "captureSource", "deviceFunnel"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
   revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
   health: [
@@ -354,6 +401,17 @@ export function legJobs(
       ),
     captureSource: () =>
       read({ kind: "capture", end }, captureSourceQuery(end)),
+    // One cohort per read; partial cohorts are kept and only the missing retried.
+    deviceFunnel: () =>
+      periods(FUNNEL_WEEKS, async (p) =>
+        Object.assign(
+          (await sources.query(deviceFunnelQuery(back(p)))).map((r) => [
+            0,
+            ...r,
+          ]),
+          { sourceRefreshedAt: null }
+        )
+      ),
     retainedHistory: () =>
       history(
         (stop, n) => cohortQuery(stop, 37, n),
@@ -543,17 +601,23 @@ export function growthFrames(
     for (const r of rows)
       if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
         lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    // Growth accounting compares against the prior period. When that period
+    // starts before full telemetry, its users are undercounted: "lost" shrinks
+    // and "back after a break" swells (the 2026-05-14 quick ratio read 3.9).
+    const accounted =
+      isoDay(shiftDay(end, -7 * (p + 2))) >= QUALIFIED_TELEMETRY_START;
     points.set(isoDay(shiftDay(end, -7 * p - 1)), {
       total,
       macos: a.split.macos,
       mobile: a.split.mobile,
       other: a.split.other,
       mcp: a.split.mcp ?? null,
-      new: fresh,
-      resurrected,
-      retained,
-      churned: -churned,
-      quickRatio: churned ? round((fresh + resurrected) / churned) : null,
+      new: accounted ? fresh : null,
+      resurrected: accounted ? resurrected : null,
+      retained: accounted ? retained : null,
+      churned: accounted ? -churned : null,
+      quickRatio:
+        accounted && churned ? round((fresh + resurrected) / churned) : null,
       stickiness: total ? round((100 * sum(3)) / (7 * total), 1) : null,
     });
   }
@@ -596,6 +660,97 @@ const CAPTURE_LABELS: Record<(typeof CAPTURE_SEGMENTS)[number], string> = {
   "No capture": "No capture",
 };
 
+/** Weekly cohorts on the funnel row; the oldest two are old enough to show Kept. */
+const FUNNEL_WEEKS = 6;
+const FUNNEL_KEPT_PERIOD = 4;
+const FUNNEL_PLATFORMS: Record<string, string> = {
+  ios: "iOS",
+  android: "Android",
+  macos: "macOS",
+  windows: "Windows",
+  web: "Web",
+};
+// Columns of a `deviceFunnel` row: period, entry, device, then these counts.
+const PEOPLE = 3;
+const ACTIVATED = 7;
+const KEPT = 8;
+// Only these clients send Onboarding Completed (Windows and web do not), so
+// the Onboarded step counts people who entered on one of them.
+const ONBOARDING_PLATFORMS: unknown[] = ["ios", "android", "macos"];
+const ONBOARDED = 4;
+const FUNNEL_STEPS = [
+  ["Conversation, day 1", 5],
+  ["Conversation, week 1", 6],
+  ["Activated", ACTIVATED],
+] as const;
+
+export function funnelFrames(legs: Legs, now: Date) {
+  const all = (legs.deviceFunnel || []) as unknown as unknown[][];
+  const week = (p: number) => all.filter((r) => Number(r[0]) === p);
+  const device = (rows: unknown[][]) => rows.filter((r) => Number(r[2]) === 1);
+  const organic = (rows: unknown[][]) => rows.filter((r) => Number(r[2]) !== 1);
+  const count = (rows: unknown[][], column: number) =>
+    rows.reduce((sum, r) => sum + Number(r[column]), 0);
+  const percent = (part: number, whole: number) =>
+    whole ? Math.round((1000 * part) / whole) / 10 : null;
+  const rate = (rows: unknown[][], column: number) =>
+    percent(count(rows, column), count(rows, PEOPLE));
+  const split = (step: string, rows: unknown[][], column: number): Row => ({
+    step,
+    Device: rate(device(rows), column),
+    Organic: rate(organic(rows), column),
+  });
+
+  const latest = week(0);
+  const people = count(latest, PEOPLE);
+  const funnel: Row[] = people
+    ? [
+        {
+          step: "New users",
+          Device: percent(count(device(latest), PEOPLE), people),
+          Organic: percent(count(organic(latest), PEOPLE), people),
+        },
+        split(
+          "Onboarded",
+          latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
+          ONBOARDED
+        ),
+        ...FUNNEL_STEPS.map(([step, column]) => split(step, latest, column)),
+      ]
+    : [];
+  const older = week(FUNNEL_KEPT_PERIOD);
+  if (people && count(older, PEOPLE))
+    funnel.push(split("Kept, weeks 2–5", older, KEPT));
+
+  // Users ride in the label, largest platform first, as on Activation by capture.
+  const funnelPlatforms: Row[] = Object.entries(FUNNEL_PLATFORMS)
+    .map(([key, platform]) => ({
+      platform,
+      rows: latest.filter((r) => r[1] === key),
+    }))
+    .filter(({ rows }) => count(rows, PEOPLE) > 0)
+    .sort((a, b) => count(b.rows, PEOPLE) - count(a.rows, PEOPLE))
+    .map(({ platform, rows }) => ({
+      platform: `${platform} · ${count(rows, PEOPLE).toLocaleString("en-US")}`,
+      Device: rate(device(rows), ACTIVATED),
+      Organic: rate(organic(rows), ACTIVATED),
+    }));
+
+  // Dated by the cohort's last day, as the other cohort charts are.
+  const stop = shiftDay(utcDay(now), -7);
+  const funnelWeekly: Row[] = [];
+  for (let p = FUNNEL_WEEKS - 1; p >= 0; p--) {
+    const rows = week(p);
+    if (rows.length)
+      funnelWeekly.push({
+        date: ts(isoDay(shiftDay(stop, -7 * p - 1))),
+        Device: rate(device(rows), ACTIVATED),
+        Organic: rate(organic(rows), ACTIVATED),
+      });
+  }
+  return { funnel, funnelPlatforms, funnelWeekly };
+}
+
 export function activationFrames(
   legs: Legs,
   snapshot: WallPayload | null,
@@ -630,6 +785,7 @@ export function activationFrames(
     capture: captured,
     sources,
     maturing: maturingBand(stop, now),
+    ...funnelFrames(legs, now),
   };
 }
 
@@ -780,9 +936,13 @@ export function healthFrames(
   // chart's STT matches the stat. The fee leg is unavailable, not zero, while
   // the FinOps fee table is dark.
   const feesUnavailable = legs.fees ? null : FEES_UNAVAILABLE_REASON;
+  const sonioxBal = sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff);
   const vendor = {
     sttMeasured: legs.planCost?.sttMeasured,
-    sonioxBalance: sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff),
+    sonioxBalance: sonioxBal,
+    // The measured trailing-7-day rate replaces the stale console constant on
+    // every day without a measured row (David 2026-11-02).
+    sonioxRate7d: sonioxRate7d(sonioxBal, cutoff),
     modulateModelled: legs.modulate ?? undefined,
     sttCash: legs.planCost?.sttCash,
     saasMeasured: legs.planCost?.saasMeasured,
@@ -818,6 +978,28 @@ export function healthFrames(
   // 1 when a manual estimate is older than its line's staleness threshold.
   const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
+  // Settled days through D−2, live (metered) days for D−1 and today, each day
+  // in exactly one source (`spliceCostDays` throws on a double count).
+  const sonioxRate = vendor.sonioxRate7d ?? null;
+  // One settled end for both sources (review r1): the newest settled day the
+  // billing read actually returned on or before the cutoff. Live days are
+  // every metered day after it, so a midnight-straddling read cannot leave a
+  // day in neither source.
+  const settledEnd =
+    days.filter((d) => d.date <= cutoff).at(-1)?.date ?? cutoff;
+  const liveAll = liveCostDays(
+    legs.live ?? null,
+    trailingMean(
+      days.filter((d) => d.date <= settledEnd).slice(-VARIABLE_MARGIN_RUN_DAYS)
+    ),
+    now.getTime(),
+    sonioxRate,
+    settledEnd
+  );
+  // A missing metered day cuts the live days after it: no window crosses a hole.
+  const liveDays = liveUntilGap(settledEnd, liveAll);
+  const liveGapped = liveDays.length < liveAll.length;
+  const spliced = spliceCostDays(days, liveDays, settledEnd);
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
     (net?.trend || []).map((t) => [t.date, t.value])
@@ -829,10 +1011,12 @@ export function healthFrames(
   // The fee/infra history reads cover every frame this renders (their shared
   // window constant), so a fee-dark day keeps its Mercury stripe_fees cash
   // however old it is.
-  const cost = days.slice(-HEALTH_COST_DAYS).map((d) => {
+  const cost = spliced.slice(-HEALTH_COST_DAYS).map((d) => {
     const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),
+      // 1 for a live (metered, estimated) day; settled days are 0.
+      live: d.date > settledEnd ? 1 : 0,
       gcp: d.gcp,
       vertexLlm: d.vertexLlm,
       openai: d.openai,
@@ -874,7 +1058,10 @@ export function healthFrames(
       oneTimeExcluded: d.oneTime || null,
       // The snapshot uses estimates; measured vendor lines own the all-in total.
       total:
-        d.sttMeasured || d.saasMeasured || d.infraMeasured
+        d.date > settledEnd ||
+        d.sttMeasured ||
+        d.saasMeasured ||
+        d.infraMeasured
           ? d.total
           : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
@@ -887,22 +1074,34 @@ export function healthFrames(
       r.arpmau as number,
     ])
   );
-  const live = usable(metric(snapshot, "cost.per_mau_month"));
-  // Daily, settled D−2: day k's 30-day all-in cost ÷ the same window's MAU.
+  // Cost per cost-active user (David 2026-11-02, not qualified MAU): the 30-day
+  // all-in cost ÷ the window's average daily cost-active users, the FinOps plan
+  // rows' `users` summed per day. Daily-average, not the 30-day distinct count:
+  // no pipeline produces that yet (see the report).
+  const activeByDay = new Map<string, number>();
+  for (const [date, plans] of Object.entries(legs.planCost?.plans ?? {}))
+    activeByDay.set(
+      date,
+      Object.values(plans).reduce((sum, p) => sum + (p.users || 0), 0)
+    );
+  // Daily, settled D−2: day k's 30-day all-in cost ÷ that window's average
+  // daily cost-active users.
   const costPerMau: Row[] = [];
   for (let k = UNIT_DAYS - 1; k >= 1; k--) {
     const windowEnd = shiftDay(end, -k); // exclusive; D−2 inclusive at k = 1
-    const window = Array.from({ length: 30 }, (_, i) =>
-      byDay.get(isoDay(shiftDay(windowEnd, -30 + i)))
+    const dates = Array.from({ length: 30 }, (_, i) =>
+      isoDay(shiftDay(windowEnd, -30 + i))
     );
-    const mau = k === 1 ? live?.denominator ?? null : mauAt(legs, k);
-    const settled = window.every((v) => v != null);
-    const value =
-      k === 1 && live
-        ? live.value
-        : settled && mau
-        ? window.reduce<number>((s, v) => s + (v as number), 0) / mau
-        : null;
+    const costs = dates.map((d) => byDay.get(d));
+    const actives = dates.map((d) => activeByDay.get(d));
+    const complete =
+      costs.every((v) => v != null) && actives.every((v) => v != null && v > 0);
+    const avgActive = complete
+      ? actives.reduce<number>((s, v) => s + (v as number), 0) / 30
+      : null;
+    const value = avgActive
+      ? costs.reduce<number>((s, v) => s + (v as number), 0) / avgActive
+      : null;
     if (value == null) continue;
     const arpmau = arp.get(isoDay(shiftDay(windowEnd, -1)));
     costPerMau.push({
@@ -912,12 +1111,80 @@ export function healthFrames(
     });
   }
   const marginByPlan = marginFrames(legs, days, now);
-  // Variable-margin points off the same all-in days (see the return note).
+  // Variable margin over the spliced days: settled through D−2, live (est.)
+  // for D−1 and today. A live day with no book snapshot takes the latest book
+  // on or before now, labelled est.; a settled day never borrows a book.
+  let latestBook: number | null = null;
+  for (let k = 0; k < 7 && latestBook == null; k++)
+    latestBook = finopsMrr(legs.finops, shiftDay(utcDay(now), -k));
   const variable = variableMarginSeries(
-    days,
-    (d) => finopsMrr(legs.finops, new Date(ts(d))),
+    spliced,
+    (d) =>
+      finopsMrr(legs.finops, new Date(ts(d))) ??
+      (d > settledEnd ? latestBook : null),
     { feesCash: vendor.infraStripeFeesCash }
   );
+  const liveSeries = variable;
+  const liveHead = liveSeries.at(-1);
+  const recon = reconcileLive(
+    days,
+    legs.live ?? null,
+    cutoff,
+    sonioxRate,
+    (d) => finopsMrr(legs.finops, new Date(ts(d)))
+  );
+  const liveDayCount = spliced.filter((d) => d.date > settledEnd).length;
+  const pct = (v: number | null) => (v == null ? "—" : `${v.toFixed(1)}%`);
+  const pp = (v: number | null) =>
+    v == null ? "n/a" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`;
+  // The headline margin is the live estimate (marked est.); the settled D−2
+  // figure and its variance from the stored live days sit under it.
+  // Producer state for today and yesterday: a stale or missing day is named,
+  // never shown as a silent fresh value; an estimated Cloud Run size is named.
+  const liveStates = liveDayStates(legs.live ?? null, now.getTime());
+  const liveFlags = liveStates
+    .filter((s) => s.state === "stale" || s.state === "missing")
+    .map((s) => `${s.date} ${s.state}`);
+  const liveEstimated = Array.from(
+    new Set(liveStates.flatMap((s) => s.estimated))
+  );
+  // The headline is the margin meter's newest hourly row while it is fresh
+  // (David 2026-11-13). A stale or missing row never shows as a number: the
+  // headline falls back to the metered live day when there is one, else no
+  // value, and the disclosure names the meter's age.
+  const meter = legs.meter ?? null;
+  const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
+  const meterFresh =
+    meter != null && meterAgeMs != null && meterAgeMs < METER_FRESH_MS;
+  const meterStatus = meterFresh
+    ? `Headline: margin meter hour ${meter!.asOf
+        .slice(0, 16)
+        .replace("T", " ")}Z${
+        meter!.basisVersion ? ` (basis ${meter!.basisVersion})` : ""
+      }`
+    : meter
+    ? `Margin meter stale since ${meter.asOf
+        .slice(0, 16)
+        .replace("T", " ")}Z (over ${
+        METER_FRESH_MS / 3_600_000
+      } h old): no meter headline`
+    : "Margin meter row unavailable";
+  const marginLiveStatus =
+    (liveDayCount === 0
+      ? "Live estimate unavailable: no fresh metered day"
+      : `Live est. through ${liveHead?.date ?? "—"}${
+          liveHead && liveHead.date > settledEnd ? "" : " (settled only)"
+        } · settled D-2: ${pct(recon.settledPct)}, variance ${pp(
+          recon.variancePp
+        )}`) +
+    (liveFlags.length ? ` · producer ${liveFlags.join(", ")}` : "") +
+    (liveGapped ? " · live cut at a day the producer did not supply" : "") +
+    (liveEstimated.length
+      ? ` · Cloud Run estimated (default size or request-billed, no request metrics): ${liveEstimated.join(
+          ", "
+        )}`
+      : "") +
+    ` · ${meterStatus}`;
   return {
     cost,
     costPerMau,
@@ -940,30 +1207,57 @@ export function healthFrames(
     // fees), trailing-7-day run rate against that day's book. MRR comes from
     // the day's own snapshot — a day without one keeps its cost point and
     // nulls the margin, never borrowing a neighbour's book.
-    variableMargin: variable.map((p) => ({
+    // The headline is live only when a live day sits after the cutoff. Otherwise
+    // the last point is a settled value and is shown as no value, never as live.
+    variableMargin: variable.map((p, i, all) => ({
       date: ts(p.date),
-      marginPct: round(p.marginPct, 1),
+      marginPct:
+        i === all.length - 1 && meterFresh
+          ? round(meter!.variableMarginPct, 1)
+          : i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
+          ? null
+          : round(p.marginPct, 1),
+      // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
+      live: p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
       costPerMonth: round(p.costPerMonth, 0),
       mrr: p.mrr == null ? null : round(p.mrr, 0),
       goalCost: round(p.goalCost, 0),
       gcpPerMonth: round(p.gcpPerMonth, 0),
       vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+      pineconePerMonth: round(p.pineconePerMonth, 0),
       openaiPerMonth: round(p.openaiPerMonth, 0),
       sonioxPerMonth: round(p.sonioxPerMonth, 0),
       modulatePerMonth: round(p.modulatePerMonth, 0),
       feesPerMonth: round(p.feesPerMonth, 0),
       missing: p.missing.length ? p.missing.join("+") : null,
     })),
+    marginLive: liveHead
+      ? [
+          {
+            date: ts(liveHead.date),
+            marginPct: round(liveHead.marginPct, 1),
+            costPerMonth: round(liveHead.costPerMonth, 0),
+            mrr: liveHead.mrr == null ? null : round(liveHead.mrr, 0),
+            goalCost: round(liveHead.goalCost, 0),
+            live: liveHead.date > settledEnd ? 1 : 0,
+          },
+        ]
+      : [],
+    marginLiveStatus: [{ text: marginLiveStatus }],
     variableMarginStatus: [
       {
-        text: variableMarginLineStatus(variable.at(-1), {
-          now,
-          soniox: vendor.sonioxBalance,
-          feesUnavailable,
-          nonUsdPaying: variable.at(-1)
-            ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
-            : null,
-        }).join(" · "),
+        text: [
+          marginLiveStatus,
+          ...variableMarginLineStatus(variable.at(-1), {
+            now,
+            soniox: vendor.sonioxBalance,
+            sonioxRate7d: vendor.sonioxRate7d,
+            feesUnavailable,
+            nonUsdPaying: variable.at(-1)
+              ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
+              : null,
+          }),
+        ].join(" · "),
       },
     ],
   };
@@ -994,7 +1288,11 @@ export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
   const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
   const known = new Set<string>(MARGIN_PLANS);
   const rows: Row[] = [];
-  for (let k = MARGIN_DAYS; k >= 1; k--) {
+  // The panel window is now − MARGIN_DAYS (`timeFrom` 35d), so the day
+  // MARGIN_DAYS back starts at 00:00Z before it and can never render. When
+  // that was the only row, Grafana said "Data outside time range" instead of
+  // the board's empty-state message (2026-11-10).
+  for (let k = MARGIN_DAYS - 1; k >= 1; k--) {
     const day = isoDay(shiftDay(utcDay(now), -k));
     const plans = legs.planCost?.plans[day];
     const book = legs.finops?.mrr[day];
@@ -1718,6 +2016,59 @@ export function dataStatus(
 
 const ALL_LEGS = Array.from(new Set(Object.values(LEGS_FOR).flat()));
 
+export interface WarmLeg {
+  day: string | null;
+  complete: boolean;
+  reason: string | null;
+  /** Another instance holds the fill lease; the next warm tick picks it up. */
+  busy: boolean;
+  storeDown: boolean;
+}
+
+/** Fill every leg to completion off the viewing path (the `omi-admin-wall-warm`
+ * scheduler). Viewers then read legs that are already complete for the UTC day
+ * instead of paying the day's cold fill; a complete leg is a store read only.
+ * Uses the same leases as requests, so a warm tick and a viewer never fill the
+ * same leg twice. */
+export async function warmSeries(
+  now = new Date(),
+  sources: SeriesSources = defaultSeriesSources,
+  /** Answer by then; unfinished fills keep running (retained) and the next
+   * tick sees their leases. Keeps the request under Scheduler's deadline. */
+  budgetMs = WARM_BUDGET_MS,
+  retain: (work: Promise<unknown>) => void = () => {}
+): Promise<Record<string, WarmLeg>> {
+  const day = isoDay(utcDay(now));
+  const store = sources.store ?? localStore;
+  const starts = await Promise.all(
+    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, retain))
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : []))),
+    new Promise((resolve) => (timer = setTimeout(resolve, budgetMs))),
+  ]);
+  if (timer) clearTimeout(timer);
+  return Object.fromEntries(
+    ALL_LEGS.map((leg) => {
+      const state = local.get(leg);
+      const entry = state?.doc?.entry;
+      return [
+        leg,
+        {
+          day: entry?.day ?? null,
+          complete: Boolean(
+            entry?.complete && entry.day === day && !state?.flight
+          ),
+          reason: entry?.reason ?? null,
+          busy: Boolean(state?.busy),
+          storeDown: Boolean(state?.storeDown),
+        },
+      ];
+    })
+  );
+}
+
 export async function seriesPayload(
   name: SeriesName,
   snapshot: Promise<WallPayload | null>,
@@ -1734,7 +2085,7 @@ export async function seriesPayload(
   );
   const flights = starts.flatMap((s) => (s ? [s.flight] : []));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const [wall] = await Promise.all([
+  const [served] = await Promise.all([
     snapshot.catch(() => null),
     flights.length
       ? Promise.race([
@@ -1744,21 +2095,46 @@ export async function seriesPayload(
       : null,
   ]);
   if (timer) clearTimeout(timer);
+  // A metric the snapshot retained is shown for 24h from `retainedSince`,
+  // never longer, whatever the age of the snapshot that carries it.
+  const wall = served && {
+    ...served,
+    metrics: served.metrics.map((m) =>
+      m.retainedSince &&
+      now.getTime() - Date.parse(m.retainedSince) >= MAX_STALE
+        ? { ...m, value: null, trend: [] }
+        : m
+    ),
+  };
   const legs: Legs = {};
   const gaps: Record<string, string> = {};
   let cacheStale = Boolean(wall?.cacheStale);
   let refreshing = false;
+  let staleUntil = Infinity;
+  // A retained snapshot metric ages from `retainedSince`, not the snapshot's
+  // newer generatedAt (Luna r3).
+  for (const m of wall?.metrics || []) {
+    if (m.value == null) continue;
+    const at = Date.parse(m.retainedSince || wall!.generatedAt);
+    if (Number.isFinite(at)) staleUntil = Math.min(staleUntil, at + MAX_STALE);
+  }
   for (const leg of LEGS_FOR[name]) {
     const state = local.get(leg);
     const entry = state?.doc?.entry;
     const running = Boolean(state?.flight || state?.busy);
     refreshing ||= running;
-    if (entry?.value !== undefined)
+    // Never serve a value older than the stale-good bound, however it was kept.
+    const expired =
+      entry?.value !== undefined && now.getTime() - entry.at >= MAX_STALE;
+    if (entry?.value !== undefined && !expired) {
       (legs as Record<string, unknown>)[leg] = entry.value;
+      staleUntil = Math.min(staleUntil, entry.at + MAX_STALE);
+    }
     if (entry?.day !== day && entry?.value !== undefined) cacheStale = true;
     if (entry?.value === undefined && running)
       gaps[leg] = "Series refresh running";
-    if (entry?.reason) gaps[leg] = entry.reason;
+    if (expired) gaps[leg] = "Series data older than 24h";
+    else if (entry?.reason) gaps[leg] = entry.reason;
     else if (entry?.value === undefined && !running)
       gaps[leg] = state?.storeDown
         ? "Shared series store unavailable"
@@ -1772,6 +2148,20 @@ export async function seriesPayload(
   } else if (wall?.refreshing || wall?.retryableFailures) refreshing = true;
   // A finished partial snapshot is retried in 30s: keep it unsettled so the
   // proxy does not pin the gap (or a retained stat) for its settled TTL.
+  if (name === "health") {
+    // Metered live days ride on the health legs: read directly (not a lazily
+    // filled leg), bounded by the store wait; any failure is no live days.
+    legs.live = await withTimeout(
+      sources.live ? sources.live() : Promise.resolve(null),
+      COLD_STORE_WAIT
+    ).catch(() => null);
+    // The margin meter's hourly row is the Variable margin headline; read
+    // directly for the same reason (hourly, not a per-day leg).
+    legs.meter = await withTimeout(
+      sources.meter ? sources.meter() : Promise.resolve(null),
+      COLD_STORE_WAIT
+    ).catch(() => null);
+  }
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;
   if (name === "headline") {
@@ -1820,6 +2210,9 @@ export async function seriesPayload(
     status,
     frames,
     gaps,
+    staleUntil: Number.isFinite(staleUntil)
+      ? new Date(staleUntil).toISOString()
+      : null,
   };
 }
 

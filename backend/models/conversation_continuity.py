@@ -6,9 +6,12 @@ from typing import Any, Mapping
 
 from config.server_batch import language_compatible, owned
 
-DEFAULT_GAP_SECONDS = 120
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
-MEETING_END_GRACE_SECONDS = 120
+from config.recorded_time_tolerances import (
+    CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_CONVERSATION_TIMEOUT_SECONDS,
+)
+
+MEETING_END_GRACE_SECONDS = DEFAULT_GAP_SECONDS
 
 
 def gap_splits(seconds: float, timeout: float = DEFAULT_GAP_SECONDS) -> bool:
@@ -88,7 +91,9 @@ def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SE
         return timeout
 
     window = calendar_continuity_window(context)
-    finish = _utc_datetime(row.get('finished_at'))
+    from utils.conversations.recorded_time import recorded_end
+
+    finish = recorded_end(row)
     if window is None or finish is None:
         return timeout
     start, end = window
@@ -103,13 +108,15 @@ def resumable_continuation(
     *,
     source: str,
     device_id: str | None,
-    now: datetime,
+    arrival_at: datetime,
     timeout: int,
     language: str | None = None,
     allow_server_batch: bool = True,
 ) -> bool:
     """Unknown device is a partition, not permission to join another device."""
-    finish = row.get('finished_at')
+    from utils.conversations.recorded_time import recorded_end
+
+    finish = recorded_end(row)
     if not allow_server_batch:
         if owned(row):
             return False
@@ -122,5 +129,5 @@ def resumable_continuation(
         and row.get('source') == source
         and row.get('client_device_id') == device_id
         and isinstance(finish, datetime)
-        and not gap_splits((now - finish).total_seconds(), continuation_timeout(row, timeout))
+        and not gap_splits((arrival_at - finish).total_seconds(), continuation_timeout(row, timeout))
     )

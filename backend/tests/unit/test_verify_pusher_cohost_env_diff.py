@@ -293,7 +293,9 @@ def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: Simple
         batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
     assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
     assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
+    assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_INPUT_EXPIRING_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
@@ -326,3 +328,49 @@ def test_reconnect_recovery_switch_copied_to_pusher_is_rejected(gate: SimpleName
         'STALE_IN_PROGRESS_RECOVERY_ENABLED is no longer listen-only' in error
         for error in gate.validate_preflight(chart_fixture)
     )
+
+
+def test_replay_binding_is_explained_only_on_prod_listen(gate: SimpleNamespace) -> None:
+    keys = gate._FINALIZATION_REPLAY_LISTEN_ONLY
+    assert keys <= gate.LISTEN_ONLY_ALLOWED['prod']
+    assert not keys & gate.LISTEN_ONLY_ALLOWED['dev']
+    assert 'LISTEN_FINALIZATION_DISPATCH_MODE' not in keys
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+@pytest.mark.parametrize(
+    'name',
+    (
+        'LISTEN_FINALIZATION_REPLAY_ENABLED',
+        'LISTEN_FINALIZATION_TASKS_QUEUE',
+        'LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        'LISTEN_FINALIZATION_TASKS_INVOKER_SA',
+        'LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS',
+    ),
+)
+def test_copying_replay_binding_to_pusher_is_rejected(gate: SimpleNamespace, chart_fixture: Path, name: str) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    path.write_text(path.read_text().replace('env:\n', f'env:\n  - name: {name}\n    value: "probe"\n', 1))
+    assert any(f'{name} is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture))
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_preview_custody_rollback_is_listen_only(gate: SimpleNamespace, chart_fixture: Path, env: str) -> None:
+    values = chart_fixture / f'backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml'
+    replace_once(
+        values,
+        '  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED\n    value: "true"\n',
+        '  - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED\n    value: "false"\n',
+    )
+    assert gate.validate_preflight(chart_fixture) == []
+
+
+def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkeypatch) -> None:
+    assert gate.validate_preflight(REPO_ROOT) == []
+    # Removing the reviewed listen-only classification must reject the chart binding.
+    monkeypatch.setitem(
+        gate.LISTEN_ONLY_ALLOWED,
+        'prod',
+        gate.LISTEN_ONLY_ALLOWED['prod'] - {'SERVER_BATCH_ONLY_WEB_PERCENT'},
+    )
+    assert any('SERVER_BATCH_ONLY_WEB_PERCENT' in error for error in gate.validate_preflight(REPO_ROOT))

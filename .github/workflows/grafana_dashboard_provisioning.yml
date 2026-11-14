@@ -20,6 +20,7 @@ on:
       - '.github/scripts/provision_grafana_dashboards.py'
       - '.github/scripts/grafana_business.py'
       - 'web/admin/grafana/dashboards/omi-tv-v2.json'
+      - 'web/admin/grafana/dashboards/omi-tv-funnel.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -117,10 +118,12 @@ jobs:
             --grafana-url "$GRAFANA_URL" \
             --token-env BUSINESS_GRAFANA_TOKEN \
             --source-sha "$GIT_SHORT_SHA" \
-            --allowlist omi-tv-v2.json \
+            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
             --folder-uid business
       - name: Apply production alert definitions and check drift
-        if: matrix.environment == 'prod'
+        # Dispatch-only: a push resolves to the dev environment anyway, so no
+        # dashboard-path push can reach this prod step.
+        if: github.event_name == 'workflow_dispatch' && matrix.environment == 'prod'
         env:
           MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
         run: |
@@ -141,5 +144,98 @@ jobs:
         with:
           name: grafana-alert-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/grafana-alert-backup.json
+          if-no-files-found: ignore
+          retention-days: 15
+
+  # Auto-apply for prod Ops dashboard JSON (David approved 2026-11-09). Every
+  # push to main that matches the trigger paths applies the current Ops
+  # dashboards to prod without a dispatch. The apply is idempotent and runs on
+  # every surviving push, so a superseded push run cannot skip a dashboard
+  # change (review P1). It uses the production Grafana token from the
+  # grafana-dashboards-prod environment, which holds only that token and has no
+  # required reviewers, so it runs without an approval tap. The repo-level
+  # MONITOR_GRAFANA_TOKEN is the dev token and must never reach monitor.omi.me.
+  # The Business TV boards (omi-tv-v2, omi-tv-funnel) apply here too once
+  # BUSINESS_GRAFANA_TOKEN is added to the grafana-dashboards-prod environment
+  # (David, 2026-11-12: dashboard deploys are automatic). Until that secret
+  # exists the step warns and skips, and the boards still need the gated prod
+  # dispatch: five dispatches between 2026-11-09 and 2026-11-11 expired unapproved
+  # and two merged board fixes never reached monitor.omi.me. Alert rules and the
+  # admin deploy keep their gates.
+  provision-prod-ops-dashboards:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: grafana-dashboards-prod
+    # Same group as a prod dispatch run, so an approval-waiting dispatch and an
+    # automatic apply never write the same Ops UIDs at once.
+    concurrency:
+      group: grafana-dashboard-provisioning-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Provision prod Ops dashboards (dashboard JSON only)
+        env:
+          MONITOR_GRAFANA_TOKEN: ${{ secrets.MONITOR_GRAFANA_TOKEN }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$MONITOR_GRAFANA_TOKEN"
+          # A service-account token writes only to its own Grafana organization.
+          # From 2026-11-10 to 2026-11-12 this job held a Business-org token as
+          # MONITOR_GRAFANA_TOKEN, created stray copies of the Ops boards there and
+          # passed its own read-back. Refuse to write unless the token's org matches.
+          org_id=$(curl -fsS --max-time 20 -H "Authorization: Bearer $MONITOR_GRAFANA_TOKEN" https://monitor.omi.me/api/org | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          if [ "$org_id" != "1" ]; then
+            echo "::error::MONITOR_GRAFANA_TOKEN belongs to Grafana org $org_id, expected 1; nothing was written."
+            exit 1
+          fi
+          python3 backend/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir backend/charts/monitoring/dashboards \
+            --grafana-url https://monitor.omi.me \
+            --token-env MONITOR_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --backup-file "$RUNNER_TEMP/grafana-dashboard-backup.json" \
+            --allowlist 'omi-core-features.json,omi-translation.json,resilience-fallbacks.json,omi-services-overview.json,fleet-telemetry.json'
+      - name: Provision prod Business boards (dashboard JSON only)
+        env:
+          BUSINESS_GRAFANA_TOKEN: ${{ secrets.BUSINESS_GRAFANA_TOKEN }}
+          GIT_SHORT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          # No repository- or organization-level BUSINESS_GRAFANA_TOKEN exists
+          # (checked 2026-11-12; only the prod and monitoring-prod environments
+          # hold one), so an empty value here means this environment has no token.
+          # Never add one at repository scope: it would reach this step ungated.
+          if [ -z "${BUSINESS_GRAFANA_TOKEN:-}" ]; then
+            echo "::warning::BUSINESS_GRAFANA_TOKEN is not set in the grafana-dashboards-prod environment; the Omi TV boards were not applied and still need the gated prod dispatch."
+            exit 0
+          fi
+          # A service-account token writes only to its own Grafana organization.
+          # From 2026-11-10 to 2026-11-12 this job held a Business-org token as
+          # MONITOR_GRAFANA_TOKEN, created stray copies of the Ops boards there and
+          # passed its own read-back. Refuse to write unless the token's org matches.
+          org_id=$(curl -fsS --max-time 20 -H "Authorization: Bearer $BUSINESS_GRAFANA_TOKEN" https://monitor.omi.me/api/org | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+          if [ "$org_id" != "2" ]; then
+            echo "::error::BUSINESS_GRAFANA_TOKEN belongs to Grafana org $org_id, expected 2; nothing was written."
+            exit 1
+          fi
+          python3 .github/scripts/provision_grafana_dashboards.py \
+            --dashboards-dir web/admin/grafana/dashboards \
+            --grafana-url https://monitor.omi.me \
+            --token-env BUSINESS_GRAFANA_TOKEN \
+            --source-sha "$GIT_SHORT_SHA" \
+            --allowlist omi-tv-v2.json,omi-tv-funnel.json \
+            --folder-uid business
+      - name: Preserve pre-apply dashboard definitions for reviewed rollback
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: grafana-dashboard-backup-prod-auto-${{ github.run_id }}
+          path: ${{ runner.temp }}/grafana-dashboard-backup.json
           if-no-files-found: ignore
           retention-days: 15

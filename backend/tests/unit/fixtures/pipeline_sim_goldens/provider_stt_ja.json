@@ -11,6 +11,7 @@
     "client_status": "completed",
     "conversation_id": "conv-1",
     "duration_seconds": 117.77,
+    "fresh_capture": false,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -18,6 +19,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 117.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -37,6 +39,7 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -84,6 +87,7 @@
     "client_status": "completed",
     "conversation_id": "conv-2",
     "duration_seconds": 217.61,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-1",
@@ -91,6 +95,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 217.61,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -110,6 +115,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-1",
@@ -157,6 +163,7 @@
     "client_status": "completed",
     "conversation_id": "conv-3",
     "duration_seconds": 329.81,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-2",
@@ -164,6 +171,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 329.81,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -183,6 +191,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -204,7 +213,7 @@
     "<30s provider_running",
     "<30s result_ready",
     "<30s committed",
-    "<30s committed client:completed"
+    "<1m committed client:completed"
    ],
    "owner": "owner-2",
    "paid_calls": 1,
@@ -219,7 +228,7 @@
    },
    "result_transitions": [
     "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<1m completed outcome:success"
    ]
   },
   "seg-4": {
@@ -230,6 +239,7 @@
     "client_status": "completed",
     "conversation_id": "conv-4",
     "duration_seconds": 559.77,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-2",
@@ -237,6 +247,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 559.77,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -256,6 +267,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -274,10 +286,10 @@
    },
    "job_transitions": [
     "<1s provider_pending",
-    "<30s provider_running",
-    "<30s result_ready",
-    "<30s committed",
-    "<30s committed client:completed"
+    "<1m provider_running",
+    "<1m result_ready",
+    "<1m committed",
+    "<1m committed client:completed"
    ],
    "owner": "owner-2",
    "paid_calls": 1,
@@ -291,8 +303,8 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s completed outcome:success"
+    "<1m pending outcome:success",
+    "<1m completed outcome:success"
    ]
   },
   "seg-5": {
@@ -303,6 +315,7 @@
     "client_status": "completed",
     "conversation_id": "conv-5",
     "duration_seconds": 552.98,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
@@ -310,6 +323,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 552.98,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -329,6 +343,7 @@
    },
    "final_result": {
     "conversation_id": "conv-5",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",
@@ -347,9 +362,9 @@
    },
    "job_transitions": [
     "<1s provider_pending",
-    "<30s provider_running",
-    "<30s result_ready",
-    "<30s committed",
+    "<1m provider_running",
+    "<1m result_ready",
+    "<1m committed",
     "<1m committed client:completed"
    ],
    "owner": "owner-3",
@@ -364,7 +379,7 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
+    "<1m pending outcome:success",
     "<1m completed outcome:success"
    ]
   },
@@ -376,6 +391,7 @@
     "client_status": "completed",
     "conversation_id": "conv-6",
     "duration_seconds": 447.66,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
@@ -383,6 +399,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 447.66,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -402,6 +419,7 @@
    },
    "final_result": {
     "conversation_id": "conv-6",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-3",
@@ -422,7 +440,7 @@
     "<1s provider_pending",
     "<30s provider_running",
     "<30s result_ready",
-    "<30s committed",
+    "<1m committed",
     "<1m committed client:completed"
    ],
    "owner": "owner-3",
@@ -437,7 +455,7 @@
     "words_provider": "modulate"
    },
    "result_transitions": [
-    "<30s pending outcome:success",
+    "<1m pending outcome:success",
     "<1m completed outcome:success"
    ]
   },
@@ -449,6 +467,7 @@
     "client_status": "completed",
     "conversation_id": "conv-7",
     "duration_seconds": 525.29,
+    "fresh_capture": true,
     "late_capture": false,
     "merge_pending": false,
     "owner_id": "owner-3",
@@ -456,6 +475,7 @@
     "privacy_generation": 0,
     "protocol_version": 1,
     "provider_intent": {
+     "measured_vad_speech_seconds": 525.29,
      "privacy_generation": 0,
      "service": "modulate"
     },
@@ -475,6 +495,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 3,
     "owner_id": "owner-3",

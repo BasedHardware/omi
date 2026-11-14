@@ -1,0 +1,602 @@
+[
+  {
+    "uid": "omi-pipeline-upload-503-storm",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Batch upload admission 503 storm",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(logging_googleapis_com:user_omi_pipeline_upload_admission_503{monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\"}[1m] offset 10m)) or vector(0))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A > 100"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-06T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Backend-sync upload admission exceeds 100 size-class 266-byte 503s/min for 10 minutes.",
+      "user_impact": "Batch audio may wait longer for admission or publication.",
+      "scope": "POST /v2/sync-local-files on backend-sync; 266-byte request-log response, not every 503. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
+      "verification": "Compare the exact log-metric filter to a one-minute request-log count; exclude the separate 259-byte sync_batch_unavailable class. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 100 for 10m",
+      "review_by": "2026-11-07",
+      "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-upload-503-storm",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-pipeline-firestore-contention",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Batch Firestore contention exhausted",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted{monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\"}[1m] offset 10m)) or vector(0))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A > 20"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-06T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Batch services log more than 20 FirestoreContentionExhausted entries/min for 10 minutes.",
+      "user_impact": "Batch audio may wait longer for admission or publication.",
+      "scope": "Cloud Run backend-sync, backend-sync-backfill and backend-integration. Counts log entries, not unique transactions. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
+      "verification": "Count matching textPayload/jsonPayload.message entries per minute across the three services and inspect the bounded exception type. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 20 for 10m",
+      "review_by": "2026-11-07",
+      "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt."
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-firestore-contention",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-pipeline-projection-drain-stall",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Batch projection drain stalled",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((sum(rate(logging_googleapis_com:user_omi_pipeline_owner_drain_claim_busy{monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\"}[5m] offset 10m)) or vector(0)) / clamp_min((sum(rate(logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_count{monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\"}[5m] offset 10m)) or vector(0)), 1e-9))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(rate(logging_googleapis_com:user_omi_pipeline_owner_drain_advanced_sum{monitored_resource=\"cloud_run_revision\",project_id=\"based-hardware\"}[5m] offset 10m)) or vector(0))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "C"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "($A > 0.5 || $B < 10) && $C > 0"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-06T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Owner drain claim_busy share exceeds 50% or advanced rows fall below 10/s for 15 minutes while pending projection debt exists.",
+      "user_impact": "Batch audio may wait longer for admission or publication.",
+      "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
+      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 1200 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
+      "review_by": "2026-11-07",
+      "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-projection-drain-stall",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": true,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-pipeline-held-row-age",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Batch held row older than six hours",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A > 21600"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-06T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A quarantine_held, assignment_held or record_pending row is older than six hours.",
+      "user_impact": "Batch audio may wait longer for admission or publication.",
+      "scope": "All-epoch stock age by leg, including rows before the timeliness epoch and older than 24h. Fresh sample required; no capped lifecycle cohort gauge. Alert-only; no scheduler, ramp, rollback or autoscaling consumer.",
+      "verification": "Read the leg label and compare the oldest indexed row timestamp: committed_at for quarantine_held, enqueued_at for assignment_held and record_pending. Check the existing sample-stale alert.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 21600 for 10m",
+      "review_by": "2026-11-07",
+      "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
+      "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
+      "unpause_criteria": "After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy."
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-held-row-age",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": true,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-oldest-age-gauge-flat-1h",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Oldest-age sampler gauge frozen for one hour",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(count(omi_batch_projection_obligation_oldest_age_seconds > 0 and (max_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) - min_over_time(omi_batch_projection_obligation_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_projection_obligation_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_batch_pipeline_vendor_held_oldest_age_seconds > 0 and (max_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) - min_over_time(omi_batch_pipeline_vendor_held_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_batch_pipeline_vendor_held_oldest_age_seconds)[1h:1m]) >= 3300)) or vector(0)) + (count(omi_summary_debt_oldest_age_seconds > 0 and (max_over_time(omi_summary_debt_oldest_age_seconds[1h]) - min_over_time(omi_summary_debt_oldest_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_summary_debt_oldest_age_seconds)[1h:1m]) >= 3300) and (time() - omi_summary_debt_sample_timestamp_seconds < 300)) or vector(0)) + (count(omi_demand_processing_queue_age_seconds > 0 and (max_over_time(omi_demand_processing_queue_age_seconds[1h]) - min_over_time(omi_demand_processing_queue_age_seconds[1h]) == 0) and (time() - min_over_time(timestamp(omi_demand_processing_queue_age_seconds)[1h:1m]) >= 3300)) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A positive oldest-age gauge is constant across a one-hour window with at least 55 minutes of per-series observation history.",
+      "user_impact": "Frozen metrics can hide delayed batch publication or demand processing and mislead backlog triage.",
+      "scope": "Per-series projection obligation, vendor-held, summary-debt and demand-processing ages. Each series needs an observation at least 3300s old in its 1h window; a 1m timestamp subquery tolerates scrape cadence without assuming a sample count. Zero ages, absent emitters and short histories contribute zero. Summary ages require the matching replica sample to be younger than 300s. Agent-tier telemetry warning; no lifecycle consumer.",
+      "verification": "Check the emitting pod and its supervised tick logs. Compare max_over_time minus min_over_time over 1h per series and confirm time() minus min_over_time(timestamp(age)[1h:1m]) is at least 3300s; never borrow history across replicas. Verify omi_batch_projection_obligation_observed_at_seconds and the existing omi-batch-queue-safety-blind rule on omi_batch_pipeline_metrics_refreshed_at_seconds; timeliness sample-stale owns fresh-gated ages. Exclude summary replicas whose omi_summary_debt_sample_timestamp_seconds is absent or at least 300s old. Summary producer absence/staleness is separate enablement-aware alert debt, not a failure in this rule.",
+      "safe_next_action": "Check the emitting pod's supervised tick logs; restart the pod; confirm the gauge resumes changing. This alert authorizes no runtime changes beyond a pod restart.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 0 for 10m; positive per-series age constant over 1h with at least 3300s observation history; summary replica sample younger than 300s",
+      "evaluated_bad": "Positive age with max_over_time equal to min_over_time over 1h and a timestamp observation at least 3300s old in that window; summary ages also require a fresh matching sampler.",
+      "evaluated_good": "Zero or changing age, fewer than 55 minutes of series history, or absent emitter contributes zero. Stale/absent summary samples are excluded, not proof of healthy summary repair."
+    },
+    "labels": {
+      "alert_identity": "omi-oldest-age-gauge-flat-1h",
+      "component": "batch-pipeline",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  }
+]

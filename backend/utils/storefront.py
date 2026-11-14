@@ -6,10 +6,8 @@ import json
 import os
 from typing import Any, Callable, Literal
 
-from config import ladder_v1 as ladder_policy
 from models.storefront import (
     StorefrontCapChoice,
-    ChatAtCap,
     StorefrontCurrent,
     StorefrontPrice,
     StorefrontResponse,
@@ -19,7 +17,6 @@ from models.storefront import (
 from models.users import Subscription
 from utils.storefront_copy import (
     copy_for,
-    chat_at_cap,
     format_date,
     format_money,
     blocked_line,
@@ -220,6 +217,9 @@ def _prices_for(
                 currency=row['currency'],
                 locale=locale,
             )
+            if payload['cta_label']:
+                payload['cta_label_template'] = copy_for(locale)['cta']['switch_yearly']
+                payload['saving_minor'] = monthly_minor * 12 - row['unit_amount']
         rendered.append(StorefrontPrice(**payload))
     return rendered
 
@@ -369,6 +369,10 @@ def build_storefront(
                             )
                             for line in copy_for(locale)['prices']['confirm_yearly_lines']
                         ]
+                        item.confirm_line_templates = [
+                            line.format(date=format_date(subscription.current_period_end, locale), amount='{price}')
+                            for line in copy_for(locale)['prices']['confirm_yearly_lines']
+                        ]
             if resubscribe_this and current_price_id:
                 prices = [item for item in prices if item.price_id == current_price_id]
             switch = want_switch and any(item.cta_label for item in prices)
@@ -471,24 +475,20 @@ def build_storefront(
         locale=locale,
         currency=current_currency,
     )
+    line_template, _ = current_line(
+        plan_id=current_plan,
+        plan_name_text=plan_name(current_plan, ladder),
+        amount_minor=current_amount,
+        interval=current_interval,
+        period_end=subscription.current_period_end,
+        cancel=subscription.cancel_at_period_end,
+        legacy=legacy,
+        locale=locale,
+        currency=current_currency,
+        price_label='{price}',
+    )
     at_cap = None
     chat_pause = None
-    if (
-        ladder_policy.enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
-        and not legacy
-        and usage.kind == 'usage_budget'
-        and usage.percent is not None
-        and usage.percent >= 100
-        and usage.period_id is not None
-    ):
-        from datetime import datetime, timezone
-
-        # usage period_id is the charged calendar month; reset is its next month.
-        year, month = map(int, usage.period_id.split('-'))
-        reset_at = int(datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=timezone.utc).timestamp())
-        chat_pause = ChatAtCap(**chat_at_cap(current_plan, reset_at, locale))
-        at_cap = dict(copy_for(locale)['at_cap'])
-        at_cap['body'] = at_cap['body'].format(date=format_date(reset_at, locale))
     return StorefrontResponse(
         chat_at_cap=chat_pause,
         at_cap=StorefrontCapChoice(**at_cap) if at_cap is not None else None,
@@ -513,6 +513,9 @@ def build_storefront(
             cancel_at_period_end=subscription.cancel_at_period_end,
             line=line,
             legacy_note=note,
+            amount_minor=current_amount,
+            currency=current_currency if current_amount is not None else None,
+            line_template=line_template if current_amount is not None else None,
         ),
         usage=usage,
         yearly_toggle_label=None if resubscribe_only else yearly_toggle_label(_sheet_months_free(tiers), locale),

@@ -10,6 +10,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from utils import rollout_cohorts as cohorts
+from utils.rollout import runtime_percent as rp
+
+
+@pytest.fixture(autouse=True)
+def no_remote_ramp_io(monkeypatch):
+    monkeypatch.setattr(rp, '_cache', rp._RampCache(lambda: None))
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -30,10 +36,10 @@ def test_all_flags_share_one_read_and_refresh_at_sixty_seconds(monkeypatch):
     clock = [0]
     monkeypatch.setattr(cohorts.time, 'monotonic', lambda: clock[0])
     reads = []
-    cache(monkeypatch, lambda uid: reads.append(uid) or {'batch-pipeline': True, 'first-summary': True})
+    cache(monkeypatch, lambda uid: reads.append(uid) or {'batch-pipeline': True, 'audio-archive': True})
     for _ in range(1000):
         assert cohorts.in_rollout_cohort('synthetic-owner', 'batch-pipeline')
-        assert cohorts.in_rollout_cohort('synthetic-owner', 'first-summary')
+        assert cohorts.in_rollout_cohort('synthetic-owner', 'audio-archive')
         assert not cohorts.in_rollout_cohort('synthetic-owner', 'dream-agent')
     assert reads == ['synthetic-owner']
     clock[0] = 59.999
@@ -71,10 +77,10 @@ def test_missing_documents_negative_members_and_errors_are_cached(monkeypatch, c
 
 def test_firestore_false_revokes_retained_env_and_other_flags_are_independent(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
-    cache(monkeypatch, lambda _: {'batch-pipeline': False, 'first-summary': True})
+    cache(monkeypatch, lambda _: {'batch-pipeline': False, 'audio-archive': True})
     assert not cohorts.in_rollout_cohort('synthetic-owner', 'batch-pipeline')
-    assert cohorts.in_rollout_cohort('synthetic-owner', 'first-summary')
-    assert not cohorts.in_rollout_cohort('synthetic-owner', 'first-summary-prefix')
+    assert cohorts.in_rollout_cohort('synthetic-owner', 'audio-archive')
+    assert not cohorts.in_rollout_cohort('synthetic-owner', 'audio-archive-prefix')
 
 
 def test_cache_capacity_evicts_completed_entries(monkeypatch):
@@ -173,16 +179,13 @@ def test_absent_keys_preserve_each_legacy_contract(monkeypatch):
     from config import summary_guarantee, sync_lineage
 
     cache(monkeypatch, lambda _: {})
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', raising=False)
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
-    # Main #22113 makes first-summary empty deny; lineage retains its legacy empty contract.
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    # First-summary admission is universal; lineage retains its legacy empty contract.
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert sync_lineage.sync_lineage_resolve_uid_allowed('owner')
 
 
@@ -263,7 +266,7 @@ def test_operator_suppresses_sdk_document_paths_and_requires_operator_tier(monke
     assert 'synthetic-private-owner' not in capsys.readouterr().err
 
 
-@pytest.mark.parametrize('members', [{'first-summary': False, 'sync-lineage-resolve': False}, None])
+@pytest.mark.parametrize('members', [{'audio-archive': False, 'sync-lineage-resolve': False}, None])
 def test_firestore_denial_beats_even_legacy_enable_all(monkeypatch, members):
     from config import summary_guarantee, sync_lineage
 
@@ -273,11 +276,8 @@ def test_firestore_denial_beats_even_legacy_enable_all(monkeypatch, members):
         return members
 
     cache(monkeypatch, read)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')
-    assert not summary_guarantee.enabled('owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'owner'})
     assert not sync_lineage.sync_lineage_resolve_uid_allowed('owner')
 
 
@@ -319,21 +319,21 @@ def test_shared_customer_project_never_unions_dev_and_prod_members(monkeypatch):
     value = cohorts._TTLReads(
         lambda uid: reads.append(uid)
         or {
-            'dev': {'batch-pipeline': True, 'first-summary': False},
-            'prod': {'batch-pipeline': False, 'first-summary': True},
+            'dev': {'batch-pipeline': True, 'audio-archive': False},
+            'prod': {'batch-pipeline': False, 'audio-archive': True},
         }
     )
     monkeypatch.setattr(cohorts, '_cache', value)
     for _ in range(100):
         monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
         assert cohorts.in_rollout_cohort('owner', 'batch-pipeline')
-        assert not cohorts.in_rollout_cohort('owner', 'first-summary')
+        assert not cohorts.in_rollout_cohort('owner', 'audio-archive')
         monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
         assert not cohorts.in_rollout_cohort('owner', 'batch-pipeline')
-        assert cohorts.in_rollout_cohort('owner', 'first-summary')
+        assert cohorts.in_rollout_cohort('owner', 'audio-archive')
     assert reads == ['owner']
     monkeypatch.setenv('OMI_ENV_STAGE', 'typo')
-    assert not cohorts.in_rollout_cohort('owner', 'first-summary')
+    assert not cohorts.in_rollout_cohort('owner', 'audio-archive')
 
 
 def test_background_discovery_is_environment_scoped(monkeypatch):

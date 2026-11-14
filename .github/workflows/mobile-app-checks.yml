@@ -164,7 +164,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'
-    timeout-minutes: 30
+    # Healthy full-suite runs measured at 27-29.6 min on main (41736391155:
+    # 29:36 for 8207 tests); run 41693050609 was cancelled at the 30-min cap
+    # with all 7842 tests so far passing and ~360 remaining — same cold-path
+    # ceiling problem test_mobile_ci_infra_guards.py documents for
+    # ios-compile-check. 40 keeps ~10 min of headroom; the CI budget check
+    # counts p50, not the ceiling.
+    # The analyzer ratchet plus the full flutter test suite now needs 27-30 min
+    # of wall time on ubuntu-latest (the suite alone is ~26 min); 30 min cancelled
+    # runs that had already printed "All tests passed" (PR #24370). The far-timezone
+    # second pass of this same suite already runs with a 60-min ceiling.
+    timeout-minutes: 40
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -228,6 +238,13 @@ jobs:
             --reporter expanded \
             --file-reporter "json:$GITHUB_WORKSPACE/flutter-test-results.json" \
             2>&1 | tee "$GITHUB_WORKSPACE/flutter-test-output.log"
+
+      - name: Verify Home local-day boundaries in non-UTC zones
+        working-directory: app
+        run: |
+          TZ=America/New_York flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
+          TZ=Pacific/Kiritimati flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
+          TZ=Pacific/Pago_Pago flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
 
       - name: Summarize failed Flutter tests
         if: ${{ failure() && steps.flutter_tests.outcome == 'failure' }}
@@ -395,6 +412,10 @@ jobs:
           sudo docker image prune --all --force
           df -h /
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -530,6 +551,10 @@ jobs:
         shell: bash
         run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:

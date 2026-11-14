@@ -1,4 +1,4 @@
-"""Versioned backend presentation contract; clients render fields verbatim."""
+"""Versioned copy with optional raw-money templates for currency-safe clients."""
 
 from typing import Literal
 
@@ -17,6 +17,9 @@ class StorefrontPrice(BaseModel):
     confirm_lines: list[str] | None = None
     # Present only when this price overrides the tier cta_label (switch to yearly).
     cta_label: str | None = None
+    cta_label_template: str | None = None
+    saving_minor: int | None = None
+    confirm_line_templates: list[str] | None = None
 
     @model_serializer(mode='wrap')
     def _omit_empty_optionals(self, handler):
@@ -27,6 +30,9 @@ class StorefrontPrice(BaseModel):
             data.pop('confirm_lines', None)
         if data.get('cta_label') is None:
             data.pop('cta_label', None)
+        for key in ('cta_label_template', 'saving_minor', 'confirm_line_templates'):
+            if data.get(key) is None:
+                data.pop(key, None)
         return data
 
 
@@ -56,6 +62,17 @@ class StorefrontCurrent(BaseModel):
     cancel_at_period_end: bool = False
     line: str
     legacy_note: str | None = None
+    amount_minor: int | None = None
+    currency: str | None = None
+    line_template: str | None = None
+
+    @model_serializer(mode='wrap')
+    def _omit_absent_money(self, handler):
+        data = handler(self)
+        for key in ('amount_minor', 'currency', 'line_template'):
+            if data.get(key) is None:
+                data.pop(key, None)
+        return data
 
 
 class StorefrontUsage(BaseModel):

@@ -1,6 +1,9 @@
 """Encrypted artifact boundary tests; synthetic identities and fake object IO."""
 
 from dataclasses import replace
+import hashlib
+import json
+import time
 from types import SimpleNamespace
 
 from cryptography.exceptions import InvalidTag
@@ -17,6 +20,8 @@ from utils.batch_pipeline.artifacts import (
 )
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline import upload_policy
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
+from utils.batch_pipeline.source_audio import MAGIC
 
 
 class ObjectClient:
@@ -99,6 +104,34 @@ def setup(level='enhanced'):
         register_artifact=lambda *args: state.registered.append(args),
     )
     return store, client, state
+
+
+def test_missing_audio_proof_is_generation_pinned_metadata_only():
+    store, client, _ = setup()
+    original = item()
+    uri = store.stage_audio(original, b'synthetic audio')
+    staged = replace(original, audio_uri=uri)
+    assert store.missing_audio_evidence(staged, now=100) is None
+    client.objects.clear()
+    proof = store.missing_audio_evidence(staged, now=101)
+    assert proof == {
+        'status': 404,
+        'generation': 1,
+        'uri_sha256': __import__('hashlib').sha256(uri.encode()).hexdigest(),
+        'verified_at': 101,
+    }
+    assert client.downloads == 0
+
+
+@pytest.mark.parametrize('failure', [PermissionError, TimeoutError, ValueError])
+def test_missing_audio_proof_never_treats_other_errors_as_absence(failure):
+    store, client, _ = setup()
+    original = item()
+    uri = store.stage_audio(original, b'synthetic audio')
+    client.blob = lambda *a, **kw: SimpleNamespace(reload=lambda **kwargs: (_ for _ in ()).throw(failure()))
+    with pytest.raises(failure):
+        store.missing_audio_evidence(replace(original, audio_uri=uri), now=100)
+    assert client.downloads == 0
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -265,3 +298,85 @@ def test_recovery_upload_lost_reply_reconciles_same_encrypted_generation():
     state.context = ProtectionContext('enhanced', 1)
     with pytest.raises(PermissionError):
         store.find_recovery_result(staged, token)
+
+
+@pytest.mark.parametrize('limit', ['bytes', 'objects', 'time'])
+def test_invocation_read_budget_refuses_before_object_download(limit):
+
+    store, client, _ = setup()
+    original = item()
+    staged = replace(original, audio_uri=store.stage_audio(original, b'audio'))
+    budget = ArtifactReadBudget(time.monotonic() + 180, 1024, 2)
+    if limit == 'bytes':
+        budget.max_bytes = 1
+    elif limit == 'objects':
+        budget.max_objects = 0
+    else:
+        budget.deadline = time.monotonic() - 1
+    with pytest.raises(ArtifactReadLimit):
+        store.fetch_audio(staged, read_budget=budget)
+    assert client.downloads == 0
+
+
+def test_result_and_audio_share_one_download_budget():
+
+    store, client, _ = setup()
+    original = item()
+    staged = replace(original, audio_uri=store.stage_audio(original, b'audio'))
+    uri = store.persist_result(staged, {'words': []})
+    budget = ArtifactReadBudget(time.monotonic() + 180, 1024, 1)
+    assert store.load_result(staged, uri, read_budget=budget) == {'words': []}
+    assert budget.received_bytes == budget.downloaded_bytes > 0
+    with pytest.raises(ArtifactReadLimit):
+        store.fetch_audio(staged, read_budget=budget)
+    assert budget.objects == client.downloads == 1
+
+
+@pytest.mark.parametrize('max_objects', [1, 2])
+def test_manifest_source_reads_share_the_staging_budget(max_objects):
+
+    store, client, state = setup()
+    original = item(conversation_id='synthetic-conversation')
+    pcm = b'\x01\0' * 16000
+    path = 'chunks/synthetic-owner/synthetic-conversation/source.batch'
+    client.objects[path] = (7, pcm)
+    manifest = (
+        MAGIC
+        + json.dumps(
+            {
+                'owner_id': original.owner_id,
+                'conversation_id': original.conversation_id,
+                'capture_at': original.capture_at,
+                'context': {},
+                'references': [
+                    {
+                        'bucket': 'omi-private-cloud-sync',
+                        'path': path,
+                        'generation': 7,
+                        'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
+                        'start_frame': 0,
+                        'offset_frame': 0,
+                        'frames': 16000,
+                    }
+                ],
+            }
+        ).encode()
+    )
+    staged = replace(original, audio_uri=store.stage_audio(original, manifest))
+    checks = []
+
+    def authorize_read(item, *, read_budget):
+        checks.append(read_budget)
+        return state.context
+
+    store.authorize_read = authorize_read
+    budget = ArtifactReadBudget(time.monotonic() + 180, 1024 * 1024, max_objects)
+    if max_objects == 1:
+        with pytest.raises(ArtifactReadLimit):
+            store.fetch_audio(staged, read_budget=budget)
+    else:
+        assert store.fetch_audio(staged, read_budget=budget)
+    assert client.downloads == budget.objects == max_objects
+    manifest_size = sum(len(body) for _, body in client.objects.values()) - len(pcm)
+    assert budget.received_bytes == budget.downloaded_bytes == manifest_size + (len(pcm) if max_objects == 2 else 0)
+    assert checks == [budget] * (3 if max_objects == 2 else 2)

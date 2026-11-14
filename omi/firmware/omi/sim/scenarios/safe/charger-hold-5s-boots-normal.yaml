@@ -1,0 +1,17 @@
+id: safe/charger-hold-5s-boots-normal
+summary: A 5 s power-on hold on the charger is too short for manual entry.
+committee: [1]
+tags: [baseline-bug]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 5000}
+end: 12000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, safe: false, log: ["Device initialized successfully"]}
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {safe: true, latch_reason: 2}

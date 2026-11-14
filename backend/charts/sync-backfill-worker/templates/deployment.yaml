@@ -1,0 +1,72 @@
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.image.digest) }}
+{{- fail "image.digest must pin a qualified sync worker role image" }}
+{{- end }}
+{{- if or (lt (int .Values.replicaCount) 1) (gt (int .Values.replicaCount) 2) }}
+{{- fail "idle pilot requires 1 or 2 replicas" }}
+{{- end }}
+{{- if or (not (regexMatch "^https://[^/]+[.]run[.]app$" .Values.worker.apiUrl)) (ne .Values.worker.audience .Values.worker.apiUrl) }}
+{{- fail "worker requires a run.app service base and matching OIDC audience" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy: {type: Recreate}
+  progressDeadlineSeconds: 2400
+  selector:
+    matchLabels: {app.kubernetes.io/name: sync-backfill-worker, app.kubernetes.io/instance: {{ .Release.Name }}}
+  template:
+    metadata:
+      labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/name: sync-backfill-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      terminationGracePeriodSeconds: 1500
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      containers:
+        - name: worker
+          image: "{{ required "image.repository required" .Values.image.repository }}@{{ .Values.image.digest }}"
+          command: [python, -m, utils.sync.worker_runtime]
+          envFrom:
+            - secretRef: {name: {{ required "complete backend-sync-backfill runtime secret required" .Values.runtimeSecret }}}
+          env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
+            - name: BATCH_FINAL_PASS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.runtimeConfigMapName | quote }}
+                  key: BATCH_FINAL_PASS_ENABLED
+            # The full runtime contract supplies data/provider secrets, while
+            # the attached Workload Identity remains the only Google identity.
+            - {name: SERVICE_ACCOUNT_JSON, value: ""}
+            - {name: GOOGLE_APPLICATION_CREDENTIALS, value: ""}
+            - {name: FIREBASE_AUTH_CREDENTIALS_PATH, value: ""}
+            - {name: OMI_ENV_STAGE, value: prod}
+            - {name: SYNC_BACKFILL_WORKER_API_URL, value: {{ .Values.worker.apiUrl | quote }}}
+            - {name: SYNC_BACKFILL_WORKER_AUDIENCE, value: {{ .Values.worker.audience | quote }}}
+          ports: [{name: http, containerPort: 8080}]
+          startupProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

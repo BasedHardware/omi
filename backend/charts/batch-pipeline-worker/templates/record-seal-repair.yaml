@@ -1,0 +1,120 @@
+{{- if and .Values.enabled .Values.recordSealRepair.enabled (eq .Values.stage "prod") }}
+{{- include "batch-pipeline-worker.recordTokenLeaseGuard" . }}
+{{- if ne .Release.Namespace "prod-omi-backend" }}
+{{- fail "record seal repair requires prod-omi-backend" }}
+{{- end }}
+{{- if not (has .Values.recordSealRepair.mode (list "plan" "apply")) }}
+{{- fail "recordSealRepair.mode must be plan or apply" }}
+{{- end }}
+{{- if or (lt (int .Values.recordSealRepair.workers) 1) (gt (int .Values.recordSealRepair.workers) 64) }}
+{{- fail "recordSealRepair.workers must be 1..64" }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: record-seal-repair
+spec:
+  suspend: {{ .Values.recordSealRepair.suspend }}
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 60
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      # Discovery <=60s + repair <=1500s + startup/reaping headroom.
+      activeDeadlineSeconds: 1680
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: record-seal-repair
+            service_name: record-seal-repair
+        spec:
+          serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile: {type: RuntimeDefault}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      {{- if .Values.recordSealRepair.nodePool }}
+                      # CPU-only repair runs on the batch-pipeline pool (8-19% CPU) instead of the
+                      # saturated monitoring pool. Empty nodePool restores the old exclusion below.
+                      - key: cloud.google.com/gke-nodepool
+                        operator: In
+                        values: [{{ .Values.recordSealRepair.nodePool }}]
+                      {{- else }}
+                      - {key: cloud.google.com/gke-accelerator, operator: DoesNotExist}
+                      - key: cloud.google.com/gke-nodepool
+                        operator: NotIn
+                        values: [batch-pipeline-pool, batch-pipeline-pool-spot, parakeet-pool]
+                      {{- end }}
+          {{- with .Values.recordSealRepair.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: repair
+              image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
+              command: [python, scripts/record_seal_repair_job.py]
+              ports:
+                - {name: metrics, containerPort: 9090}
+              env:
+                - {name: PUSHER_PROJECTION_DEBT_DURABLE_ENABLED, value: {{ .Values.recordSealRepair.projectionDebtDurableEnabled | quote }}}
+                - {name: RECORD_SEAL_REPAIR_JOBS, value: {{ .Values.recordSealRepair.jobsDiscovery | quote }}}
+                - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealRepair.runtimeEnabled | quote }}}
+                - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
+                - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
+                - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE, value: {{ .Values.recordTokenLease.mode | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: {{ .Values.recordTokenLease.servePercent | quote }}}
+                - {name: RECORD_TOKEN_LEASE_SECONDS, value: {{ .Values.recordTokenLease.seconds | quote }}}
+                - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: {{ .Values.recordTokenLease.deployedAt | quote }}}
+                - {name: RECORD_SEAL_REPAIR_MODE, value: {{ .Values.recordSealRepair.mode | quote }}}
+                - {name: RECORD_SEAL_REPAIR_WORKERS, value: {{ .Values.recordSealRepair.workers | quote }}}
+                - {name: RECORD_SEAL_REPAIR_ROW_SECONDS, value: {{ .Values.recordSealRepair.rowSeconds | quote }}}
+                - {name: RECORD_SEAL_REPAIR_RUN_SECONDS, value: "1500"}
+                - {name: RECORD_SEAL_REPAIR_SERVER_FLAGS, value: {{ .Values.recordSealRepair.serverFlags | toJson | quote }}}
+                - {name: OMI_ENV_STAGE, value: prod}
+                - {name: OMI_FIRESTORE_DATA_PLANE_PROJECT, value: {{ .Values.dataPlaneProject | quote }}}
+                - {name: BUCKET_BATCH_PIPELINE, value: {{ .Values.bucket | quote }}}
+                - {name: BATCH_PIPELINE_ENABLED, value: "false"}
+                - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "false"}
+                - {name: HOME, value: /tmp}
+                - name: ENCRYPTION_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ required "worker secretName required" .Values.secretName }}
+                      key: ENCRYPTION_SECRET
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: {{ .Values.recordSealRepair.cpuRequest | quote }}, memory: 4Gi}
+                limits: {cpu: "4", memory: 8Gi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: record-seal-repair
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: record-seal-repair}
+  endpoints:
+    - {port: metrics, interval: 15s, path: /metrics}
+{{- end }}

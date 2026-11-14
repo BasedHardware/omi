@@ -116,6 +116,31 @@ jobs:
             exit 1
           fi
 
+      - name: Bind shared record token lease rollout inputs
+        shell: bash
+        env:
+          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
+          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+        run: |
+          python3 - <<'PYTHON'
+          import math, os
+          mode = os.environ['RECORD_TOKEN_LEASE_MODE']
+          percent = int(os.environ['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+          seconds = int(os.environ['RECORD_TOKEN_LEASE_SECONDS'])
+          epoch = float(os.environ['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+          if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+              raise ValueError('invalid record token lease rollout vector')
+          if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+              raise ValueError('enabled record token leases require a pinned release epoch')
+          epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                                 'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                  output.write(f'{key}={value}\n')
+          PYTHON
+
       - name: Validate live-capacity-gate break-glass inputs
         if: env.SERVICE == 'pusher' && github.event.inputs.skip_live_capacity_gate == 'true'
         run: |
@@ -275,7 +300,8 @@ jobs:
         with:
           source_sha: ${{ env.FIRESTORE_GATE_SOURCE_SHA }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.
@@ -517,6 +543,7 @@ jobs:
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
           STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          PRERECORDED_SONIOX_FAILOVER_ENABLED: "true"
           STT_SERVICE_MODELS: dg-nova-3,modulate-velma-2,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
@@ -709,6 +736,7 @@ jobs:
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
           STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          PRERECORDED_SONIOX_FAILOVER_ENABLED: "true"
           STT_SERVICE_MODELS: modulate-velma-2,soniox,dg-nova-3,parakeet
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}

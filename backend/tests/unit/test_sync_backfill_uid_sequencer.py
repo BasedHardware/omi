@@ -75,7 +75,7 @@ class _Query:
         return self
 
     def start_after(self, snapshot):
-        self.cursor_id = snapshot.id
+        self.cursor_id = snapshot['__name__'].id if isinstance(snapshot, dict) else snapshot.id
         return self
 
     def stream(self, transaction=None):
@@ -144,6 +144,9 @@ class _Firestore:
 
 @pytest.fixture
 def db(monkeypatch):
+    from utils.sync import worker_control
+
+    monkeypatch.setattr(worker_control, '_candidate_after', None, raising=False)
     client = _Firestore()
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'off')
@@ -152,6 +155,7 @@ def db(monkeypatch):
     monkeypatch.delenv('SYNC_BACKFILL_ORDER_PERCENT', raising=False)
     monkeypatch.delenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', raising=False)
     monkeypatch.setattr(backfill_cutover, 'r', fakeredis.FakeRedis())
+    monkeypatch.setattr(sync_jobs, 'r', fakeredis.FakeRedis())
 
     def transactional(fn):
         def run(transaction):
@@ -165,6 +169,226 @@ def db(monkeypatch):
     return client
 
 
+def test_pull_claim_races_fallback_and_slow_worker_is_still_run_locked(db, monkeypatch):
+    """Actual sequencer plus actual Redis scripts; no mocked lease decisions."""
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    payload = {'uid': 'a', 'job_id': 'pull', 'lane': 'backfill', 'ledger_fence_mode': 'active', 'worker_eligible': True}
+    registry.register_job('a', 'pull', payload, None, now=NOW)
+    epoch = registry.claim_next('a', now=NOW)['epoch']
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'status': 'queued'})
+    barrier = threading.Barrier(2)
+
+    def compete(drive):
+        barrier.wait(timeout=5)
+        if drive == 'worker':
+            return registry.claim_worker('a', 'pull', epoch, 'worker-token', now=NOW)
+        return registry.begin_job('a', 'pull', epoch, now=NOW)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(compete, ['worker', 'task']))
+    assert sum(value is not None for value in results) == 1
+    # Exercise a slow pull winner independently of scheduling's race winner.
+    owner = db.docs[(registry.COLLECTION, 'a')]
+    owner.update(active_state='dispatching', worker_available=True)
+    owner.pop('worker_token', None)
+    assert registry.claim_worker('a', 'pull', epoch, 'worker-token', now=NOW)
+    run_token = sync_jobs.try_acquire_sync_job_run_lock('pull')
+    assert run_token
+    assert registry.redrive_job('a', 'pull', epoch, now=NOW + timedelta(seconds=1799)) is None
+    expired = NOW + timedelta(seconds=1801)
+    replacement = registry.redrive_job('a', 'pull', epoch, now=expired)
+    assert replacement['epoch'] == epoch + 1
+    assert registry.begin_job('a', 'pull', replacement['epoch'], now=expired)
+    # A delayed worker leaf still owns Redis: fallback cannot execute even
+    # though the sequencer redrive already won. No TTL is shortened.
+    assert sync_jobs.try_acquire_sync_job_run_lock('pull') is None
+    assert not registry.renew_job('a', 'pull', epoch, worker_token='worker-token', now=expired)
+    assert not registry.finish_job('a', 'pull', epoch, 'completed', worker_token='worker-token', now=expired)
+    sync_jobs.release_job_run_lock('pull', run_token)
+    assert sync_jobs.try_acquire_sync_job_run_lock('pull')
+
+
+@pytest.mark.parametrize(
+    'percent,lane,fence,mode,eligible',
+    [
+        ('0', 'backfill', 'active', 'on', False),
+        ('100', 'fresh', 'active', 'on', False),
+        ('100', 'backfill', 'legacy', 'on', False),
+        ('100', 'backfill', 'active', 'dark', False),
+        ('100', 'backfill', 'active', 'draining', False),
+        ('100', 'backfill', 'active', 'on', True),
+    ],
+)
+def test_admission_marks_only_active_sequenced_backfill_cohort(db, monkeypatch, percent, lane, fence, mode, eligible):
+    from utils.sync import legacy_dark
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', percent)
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode(mode))
+    payload = {'uid': 'a', 'job_id': 'job', 'lane': lane, 'ledger_fence_mode': fence, 'worker_eligible': True}
+    registry.register_job('a', 'job', payload, None, now=NOW)
+    stored = db.docs[(registry.PENDING_COLLECTION, 'job')]['payload']
+    assert (stored.get('worker_eligible') is True) is eligible
+    # Caller-owned payloads never acquire or lose flags by mutation.
+    assert payload['worker_eligible'] is True
+
+
+def test_no_claim_worker_keeps_named_task_as_five_minute_fallback(db, monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(uid='a', job_id='job', lane='backfill', ledger_fence_mode='active')
+    registry.register_job('a', 'job', payload, None, now=NOW)
+    claim = registry.claim_next('a', now=NOW)
+    enqueues = []
+    monkeypatch.setattr(cloud_tasks, '_enqueue_sync_job_routed', lambda *args: enqueues.append(args))
+    uid_sequencer._dispatch(claim)
+    assert enqueues[0][1] == 'job-s1'
+    assert enqueues[0][2] == int(NOW.timestamp()) + 300
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'status': 'queued'})
+    assert registry.begin_job('a', 'job', claim['epoch'], now=NOW + timedelta(seconds=300))
+    assert registry.claim_worker('a', 'job', claim['epoch'], 'late-worker', now=NOW + timedelta(seconds=300)) is None
+
+
+@pytest.mark.parametrize('filtered_by', ['cohort', 'legacy_dark'])
+def test_pull_claim_reaches_owner_after_first_100_filtered_candidates(db, monkeypatch, filtered_by):
+    from config import sync_backfill_worker as policy
+    from utils.sync import legacy_dark, worker_control
+
+    # Persist eligibility at 100%, then reduce the cohort: all first-page
+    # owners remain available but are outside the current 5% rollout.
+    excluded = [f'a-synthetic-{i:04d}' for i in range(1000) if policy.cohort_bucket(f'a-synthetic-{i:04d}', '') >= 5][
+        :100
+    ]
+    eligible = next(f'z-synthetic-{i:04d}' for i in range(1000) if policy.cohort_bucket(f'z-synthetic-{i:04d}', '') < 5)
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'false')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(sync_jobs, 'get_sync_ledger_fence_mode', lambda: sync_jobs.SyncLedgerFenceMode.ACTIVE)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for uid in [*excluded, eligible]:
+        payload = {'uid': uid, 'job_id': 'job', 'lane': 'backfill', 'ledger_fence_mode': 'active'}
+        registry.register_job(uid, 'job', payload, None, now=NOW)
+        assert registry.claim_next(uid, now=NOW)
+    if filtered_by == 'cohort':
+        monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '5')
+        assert all(not policy.selected(uid) for uid in excluded)
+        assert policy.selected(eligible)
+    else:
+        monkeypatch.setattr(
+            legacy_dark,
+            'current_mode',
+            lambda uid=None: (
+                legacy_dark.LegacySyncMode.ON if uid in (None, eligible) else legacy_dark.LegacySyncMode.DARK
+            ),
+        )
+    pages = []
+    stream = _Query.stream
+
+    def record_page(query, transaction=None):
+        rows = stream(query, transaction=transaction)
+        if query.path == (registry.COLLECTION,) and query.equals == ('worker_available', True):
+            pages.append([doc.id for doc in rows])
+        return rows
+
+    monkeypatch.setattr(_Query, 'stream', record_page)
+    # A bounded poll resumes at its cursor on the following request.
+    assert worker_control.claim() is None
+    lease = worker_control.claim()
+    assert lease is not None
+    assert lease['payload']['uid'] == eligible
+    assert pages == [excluded, [eligible]]
+    assert all(db.docs[(registry.COLLECTION, uid)]['worker_available'] for uid in excluded)
+    assert not db.docs[(registry.COLLECTION, eligible)]['worker_available']
+
+
+def test_claim_bounds_scan_and_resumes_then_wraps(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for i in range(201):
+        db.docs[(registry.COLLECTION, f'synthetic-{i:04d}')] = {
+            'worker_available': True,
+            'active_epoch': 1,
+            'active_job_id': 'job',
+        }
+    monkeypatch.setattr(worker_control.policy, 'selected', lambda uid: uid == 'synthetic-0200')
+    claim = MagicMock(return_value=None)
+    monkeypatch.setattr(registry, 'claim_worker', claim)
+    pages = []
+    stream = _Query.stream
+
+    def record(query, transaction=None):
+        rows = stream(query, transaction=transaction)
+        pages.append(len(rows))
+        return rows
+
+    monkeypatch.setattr(_Query, 'stream', record)
+    assert worker_control.claim() is None
+    assert pages == [100]
+    assert worker_control.claim() is None
+    assert pages == [100, 100]
+    assert worker_control.claim() is None
+    claim.assert_called_once()
+    # One rejected transactional claim ends this poll; next poll reaches EOF.
+    assert pages == [100, 100, 1]
+    assert worker_control.claim() is None
+    assert pages == [100, 100, 1, 0]
+    assert worker_control.claim() is None
+    assert pages == [100, 100, 1, 0, 100]
+
+
+def test_claim_attempts_at_most_one_transaction_per_poll(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_LEDGER_FENCE_MODE', 'active')
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for i in range(100):
+        db.docs[(registry.COLLECTION, f'synthetic-{i:04d}')] = {
+            'worker_available': True,
+            'active_epoch': 1,
+            'active_job_id': 'job',
+        }
+    claim = MagicMock(return_value=None)
+    monkeypatch.setattr(registry, 'claim_worker', claim)
+    assert worker_control.claim() is None
+    claim.assert_called_once()
+
+
+def test_worker_completion_immediately_dispatches_next_head_once(db, monkeypatch):
+    from utils.sync import legacy_dark, worker_control
+
+    monkeypatch.setenv('SYNC_BACKFILL_WORKER_PERCENT', '100')
+    monkeypatch.setenv('SYNC_BACKFILL_UID_SEQUENCER', 'on')
+    monkeypatch.setenv('SYNC_DURABLE_REDRIVE_GUARD', 'false')
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: legacy_dark.LegacySyncMode.ON)
+    for offset, job_id in enumerate(('first', 'next')):
+        payload = {key: None for key in cloud_tasks.SYNC_JOB_TASK_PAYLOAD_KEYS}
+        payload.update(uid='a', job_id=job_id, lane='backfill', ledger_fence_mode='active')
+        registry.register_job('a', job_id, payload, None, now=NOW + timedelta(seconds=offset - 1))
+    first = registry.claim_next('a')
+    assert registry.claim_worker('a', 'first', first['epoch'], 'worker-token')
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: {'uid': 'a', 'status': 'completed'})
+    enqueues = []
+    monkeypatch.setattr(uid_sequencer, 'enqueue_sync_job', lambda payload, **kwargs: enqueues.append(payload))
+    assert worker_control.complete('a', 'first', first['epoch'], 'worker-token')
+    assert not worker_control.complete('a', 'first', first['epoch'], 'worker-token')
+    assert len(enqueues) == 1
+    assert enqueues[0]['job_id'] == 'next'
+    assert enqueues[0]['sequencer_epoch'] > first['epoch']
+    assert registry.get_owner('a')['active_job_id'] == 'next'
+
+
 def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(
@@ -176,6 +400,29 @@ def test_nonprod_delivery_guard_is_pure_before_any_redis_read(monkeypatch):
     assert not uid_sequencer.foreign_delivery({'lane': 'fresh'})
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     assert not uid_sequencer.foreign_delivery({'lane': 'backfill', 'sequencer_epoch': 3})
+
+
+def test_begin_job_returns_prior_state_only_after_a_valid_claim(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    claim = registry.claim_next('a', firestore_client=db, now=NOW)
+    prior = {'status': 'queued', 'attempt': 4}
+    read = MagicMock(return_value=prior)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', read)
+    assert registry.begin_job('a', 'job', claim['epoch'], firestore_client=db, now=NOW) == {'job': prior}
+    read.assert_called_once_with('job')
+    read.reset_mock()
+    before = copy.deepcopy(db.docs)
+    assert registry.begin_job('a', 'job', claim['epoch'] + 1, firestore_client=db, now=NOW) is None
+    assert db.docs == before
+    read.assert_not_called()
+
+
+def test_begin_job_keeps_a_valid_claim_when_the_redis_job_is_missing(db, monkeypatch):
+    _register('a', 'job', 0, db=db)
+    claim = registry.claim_next('a', firestore_client=db, now=NOW)
+    monkeypatch.setattr(sync_jobs, 'get_sync_job', lambda _: None)
+    assert registry.begin_job('a', 'job', claim['epoch'], firestore_client=db, now=NOW) == {'job': None}
+    assert registry.get_owner('a', firestore_client=db)['active_state'] == 'running'
 
 
 def test_dev_cannot_read_or_claim_production_registry(db, monkeypatch):

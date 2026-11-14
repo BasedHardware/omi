@@ -14,6 +14,8 @@ from scripts.diff_prod_adapter import (
     DIARIZER_BATCH_RULE,
     BATCH_PIPELINE_RULE,
     BATCH_PIPELINE_CAPACITY_RULE,
+    BATCH_PIPELINE_CHAIN_RULE,
+    RECORD_SEAL_RULE,
     PARAKEET_QUEUE_RULES,
     compare,
     expected_config,
@@ -61,12 +63,15 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
     if service == 'batch-pipeline-worker':
         values = chart / 'prod_omi_batch-pipeline-worker_values.yaml'
-    templates = ['templates/hpa.yaml']
+    # Retired charts intentionally render no HPA; --show-only errors on empty templates.
+    templates = [] if service == 'parakeet' else ['templates/hpa.yaml']
     command = [
         helm,
         'template',
         f'prod-omi-{service}',
         str(chart),
+        '--namespace',
+        'prod-omi-backend',
         '--values',
         str(values),
         '--set-string',
@@ -78,9 +83,14 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
         command.extend(['--set-string', 'image.digest=sha256:' + 'b' * 64])
         # The production default remains fixed4 until qualification. Verify the
         # prepared HPA cutover against the adapter without enabling it by default.
-        command.extend(['--set', 'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true'])
+        # f05065 cutover shape: single OD-pinned HPA from the prod 3/16 budget.
+        command.extend(['--set', 'autoscaling.enabled=true'])
     rendered = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     hpas = [obj for obj in yaml.safe_load_all(rendered) if obj and obj['kind'] == 'HorizontalPodAutoscaler']
+    if service == 'parakeet':
+        assert yaml.safe_load(values.read_text())['fleetRetired'] is True
+        assert hpas == []
+        return
     assert hpas, f'{service}: no prod HPA rendered'
     rules = yaml.safe_load(ADAPTER.read_text())['rules']
     available = {
@@ -110,13 +120,30 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert actual == [BATCH_PIPELINE_RULE]
     supplied = yaml.safe_load((CHARTS / 'batch-pipeline-worker/prometheus-adapter-rules.yaml').read_text())
     capacity = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']]
-    assert actual + capacity == supplied['external']
+    chain = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as']]
+    seal = [r for r in rules if r['name']['as'] == RECORD_SEAL_RULE['name']['as']]
+    assert seal == [RECORD_SEAL_RULE]
+    assert seal + actual + capacity + chain == supplied['external']
     assert capacity == [BATCH_PIPELINE_CAPACITY_RULE]
     query = capacity[0]['metricsQuery']
     assert 'max by (namespace, worker_release, priority)' in query
     assert 'count by (namespace, worker_release)' in query and '== 3' in query
     assert 'capacity_refreshed_at_seconds < 60' in query
     assert 'or vector(0)' not in query
+    assert chain == [BATCH_PIPELINE_CHAIN_RULE]
+    chain_query = chain[0]['metricsQuery']
+    assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[10m])' in chain_query
+    # Two scrape jobs read every worker pod: one series per pod, or demand doubles.
+    assert 'max by (namespace, pod) (' in chain_query
+    assert 'sampler_observed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'or' in chain_query  # old-worker clock remains valid during rollback/mixed fleets
+    assert 'or vector(0)' not in chain_query
+    # Stage timers export only the stage label; requiring worker_release here
+    # (or in the HPA selector) would match zero series and pin the floor.
+    assert 'worker_release' not in chain_query
+    assert 'worker_release' not in BATCH_PIPELINE_CHAIN_RULE['seriesQuery']
+    assert 'and on (namespace, pod)' in chain_query
 
 
 def test_diff_accepts_missing_batch_rule_but_rejects_false_zero_or_duplicate():
@@ -155,6 +182,24 @@ def test_diff_capacity_rule_is_a_closed_reviewed_addition():
             expected_config(broken)
 
 
+def test_diff_chain_rule_is_a_closed_reviewed_addition():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    missing = copy.deepcopy(live)
+    missing['externalRules'].remove(BATCH_PIPELINE_CHAIN_RULE)
+    assert expected_config(missing) == expected_config(live)
+    for mutation in ('false_zero', 'duplicate'):
+        broken = copy.deepcopy(live)
+        if mutation == 'duplicate':
+            broken['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CHAIN_RULE))
+        else:
+            next(r for r in broken['externalRules'] if r['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as'])[
+                'metricsQuery'
+            ] = 'vector(0)'
+        with pytest.raises(ValueError, match='Unexpected live batch pipeline chain'):
+            expected_config(broken)
+
+
 def test_hpa_and_adapter_changes_select_this_contract():
     sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
     sources += list(CHARTS.glob('*/templates/hpa.yaml'))
@@ -182,7 +227,9 @@ def _comparison_inputs():
     config = {'externalRules': values['external'], 'rules': values['custom']}
     live = copy.deepcopy(config)
     live['externalRules'].remove(NLLB_RULE)
-    listen = live['externalRules'][0]
+    listen = next(
+        rule for rule in live['externalRules'] if rule['name']['as'] == 'backend_listen_active_ws_connections_per_pod'
+    )
     listen['seriesQuery'] = 'backend_listen_active_ws_connections'
     listen['metricsQuery'] = 'avg(backend_listen_active_ws_connections{job="backend-listen-metrics"})'
     # Captured pre-upgrade queries, independent of the candidate values above.

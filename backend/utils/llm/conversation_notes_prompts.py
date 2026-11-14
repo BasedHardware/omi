@@ -5,11 +5,24 @@ SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the a
 # Notes-only instructions travel after the shared cacheable prefix. Keep the
 # baseline static/volatile prompt contracts independent of feature-specific rules.
 ACTION_ITEM_EXTRACTION_RULES = '''ACTION ITEM EXTRACTION RULES
+- Write a self-contained description of the action and its object or outcome. Resolve references
+  using cited source/context and the supplied speaker-role map, never a speaker number or a guessed name.
+  Do not invent a counterpart or object when unresolved; omit that candidate. A simple task such as
+  "Buy milk" is complete without a person's name. Keep exact supporting source_segment_ids.
 - Extract only tasks the account owner committed to or was directly asked to do.
   Use the account owner identity in the supplied evidence; never infer it from a speaker number.
   Another attendee's "Ask Riley for the download link" or "Email Riley" is that attendee's task,
   not Riley's. If Riley (the account owner) agreed to deliver it, extract "Send the download link to Morgan"
   with Riley as owner_name instead. Do not extract other attendees' tasks toward the owner.
+- An explicit "remind me to ..." or "don't let me forget ..." from the owner is a
+  direct task request, including ordinary errands. Extract the requested action,
+  preserve any explicit date/time and timezone, and keep its exact supporting IDs.
+  A reminder request is not merely a durable memory. Never invent a time for a date-only request;
+  preserve the date in context when due_at cannot represent it without guessing an hour.
+- Instructions to an AI assistant to inspect, implement, or report something in the
+  current session are not personal follow-up tasks unless the owner explicitly asks
+  for a reminder or commits to later follow-up. Do not turn incidental narration
+  of routine actions into tasks; an explicit reminder remains actionable.
 - Exclude observations and status statements such as "User is testing the new memory feature"
   or "Morgan is working on the proposal". An ongoing activity alone is not a commitment or request.'''
 
@@ -53,6 +66,12 @@ FACTUAL FIDELITY
   reported actions, and completed work distinct. Preserve tense and qualifications. A suggestion
   is not a decision; agreement is not execution; a reported past action is not a new commitment.
   For example, "I'll add it" means the speaker intends to add it, not that it was added.
+- Calendar titles, scheduled times, and attendee lists describe plans and context.
+  They do not prove attendance, completion, pickup, purchase, or any other outcome.
+  Describe a completed outcome only when the transcript supports it; preserve an
+  explicit cancellation, delay, or incomplete action even when the invite title implies completion.
+- Nearby speech and media playback are not automatically the account owner's activity.
+  Do not attribute a background meeting to the owner without participation evidence.
 - Keep past anecdotes, current plans, and unrelated threads separate. Do not transfer people,
   relationships, events, or problems between them. Do not turn jokes into factual claims.
 - Keep different companies and products separate. Do not attach a price, role, feature, or description
@@ -90,8 +109,15 @@ FACTUAL FIDELITY
 OVERVIEW
 - Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
 
+GIST
+- Also emit `gist`: one line of at most 12 words saying what this conversation was about, in the output
+  language. It is the one-line row label, so make it specific and self-contained; do not repeat the title
+  verbatim, do not add a trailing period, and never write meta-commentary about the transcript.
+
 ACTION ITEMS
-- Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
+- Keep description timeless, specific, verb-led, and at most 15 words. Keep timing out of description.
+- Put explicit date-and-time deadlines in due_at; retain an explicit date-only request in context
+  without inventing an hour.
 - Set owner_name to the actual name when known and context to one line explaining why/detail.
 - LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific
   calendar date for completing the item. A date that was merely discussed, proposed, or floated is

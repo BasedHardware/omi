@@ -160,14 +160,16 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
 
         if not memories or not memory_texts:
             # Default suggestion when no unlocked memories are available
-            return sanitize_goal_suggestion({
-                'suggested_title': 'Learn something new every day',
-                'suggested_type': 'scale',
-                'suggested_target': 10.0,
-                'suggested_min': 0.0,
-                'suggested_max': 10.0,
-                'reasoning': 'Start tracking your daily learning progress!',
-            })
+            return sanitize_goal_suggestion(
+                {
+                    'suggested_title': 'Learn something new every day',
+                    'suggested_type': 'scale',
+                    'suggested_target': 10.0,
+                    'suggested_min': 0.0,
+                    'suggested_max': 10.0,
+                    'reasoning': 'Start tracking your daily learning progress!',
+                }
+            )
 
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
@@ -217,25 +219,29 @@ Make the goal specific, measurable, and relevant to their interests."""
                 pass
 
         # Fallback if parsing fails
-        return sanitize_goal_suggestion({
-            'suggested_title': 'Track your daily progress',
-            'suggested_type': 'scale',
-            'suggested_target': 10.0,
-            'suggested_min': 0.0,
-            'suggested_max': 10.0,
-            'reasoning': 'A simple goal to get you started!',
-        })
+        return sanitize_goal_suggestion(
+            {
+                'suggested_title': 'Track your daily progress',
+                'suggested_type': 'scale',
+                'suggested_target': 10.0,
+                'suggested_min': 0.0,
+                'suggested_max': 10.0,
+                'reasoning': 'A simple goal to get you started!',
+            }
+        )
 
     except Exception as e:
         logger.error(f"Error generating goal suggestion: {e}")
-        return sanitize_goal_suggestion({
-            'suggested_title': 'Make progress every day',
-            'suggested_type': 'scale',
-            'suggested_target': 10.0,
-            'suggested_min': 0.0,
-            'suggested_max': 10.0,
-            'reasoning': 'Start tracking your daily progress!',
-        })
+        return sanitize_goal_suggestion(
+            {
+                'suggested_title': 'Make progress every day',
+                'suggested_type': 'scale',
+                'suggested_target': 10.0,
+                'suggested_min': 0.0,
+                'suggested_max': 10.0,
+                'reasoning': 'Start tracking your daily progress!',
+            }
+        )
 
 
 def get_goal_advice(uid: str, goal_id: str) -> str:
@@ -395,7 +401,11 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 if not goal:
                     continue
                 # Double-guard: never write numeric progress to a purely qualitative goal
-                if goal.get('target_value') is None and goal.get('metric') is None and goal.get('current_value') is None:
+                if (
+                    goal.get('target_value') is None
+                    and goal.get('metric') is None
+                    and goal.get('current_value') is None
+                ):
                     continue
                 parsed_val = _safe_optional_float(result_dict.get('value'))
                 if parsed_val is None or parsed_val < 0:

@@ -88,6 +88,7 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
     assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
     if env_name == 'prod':
+        assert 'name: SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT' not in rendered
         token = _env_value(_load_values(expected['values_file']), 'POSTHOG_PRODUCT_CAPTURE_TOKEN')
         assert token and f'name: POSTHOG_PRODUCT_CAPTURE_TOKEN\n              value: "{token}"' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
@@ -97,13 +98,15 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
-def test_prod_listen_carries_an_explicit_zero_mobile_batch_only_percent():
-    """Ruling 73b217: the mobile batch-only cohort is a reviewed listen value, explicit 0 until a ramp PR changes it.
+def test_prod_listen_carries_the_paired_100_mobile_batch_only_percent():
+    """Ruling 73b217 / 2026-11-01 all-in: the mobile batch-only cohort is a reviewed listen value;
+    this ramp PR sets 100, paired with the Cloud Run batch pipeline already at 100 (_ramp revision 34).
+    Its pre-reviewed revert restores the explicit 0.
 
     The value must reach the rendered container env (not only the values file), so a listen roll applies it.
     """
     values = _load_values(ENV_IDENTITY_DEFAULTS["prod"]["values_file"])
-    assert _env_value(values, "SERVER_BATCH_ONLY_MOBILE_PERCENT") == "0"
+    assert _env_value(values, "SERVER_BATCH_ONLY_MOBILE_PERCENT") == "100"
     names = [entry.get("name") for entry in values.get("env", []) or [] if isinstance(entry, dict)]
     assert names.count("SERVER_BATCH_ONLY_MOBILE_PERCENT") == 1
 
@@ -125,7 +128,7 @@ def test_prod_listen_carries_an_explicit_zero_mobile_batch_only_percent():
         capture_output=True,
         text=True,
     ).stdout
-    assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "0"' in rendered
+    assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "100"' in rendered
 
 
 def test_backend_listen_helm_template_requires_image_tag():
@@ -326,7 +329,7 @@ def test_prod_listen_hpa_scales_on_cpu_with_socket_guards():
         'backend_listen_requests_per_pod': 16,
         'backend_listen_active_ws_connections_per_pod': 35,
     }
-    # 2026-10-24 right-sizing: the night fleet needs only ~31 pods at the 55%
-    # target, so the floor returns to its pre-#22623 value of 30; the peak
-    # path (max 60, requests, guards) is unchanged.
-    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (30, 60)
+    # 2026-10-29 retire100: batch at 100% takes consented mobile off the live
+    # leg; the floor drops to the residual (opt-outs + desktop) size. The 10-24
+    # note's peak path (max 60, requests, guards) is unchanged. Rollback: 30.
+    assert (hpa['spec']['minReplicas'], hpa['spec']['maxReplicas']) == (20, 60)

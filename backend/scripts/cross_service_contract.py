@@ -181,6 +181,7 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
         audience_fallback=True,  # create_wake(): PROVIDER_STT_TASKS_OIDC_AUDIENCE or handler URL
         empty_target_ok=True,  # unset handler = provider-STT dispatch not configured on that host
         deadline_seconds=1500,
+        append_route=True,  # create_wake() joins ROUTE onto the handler origin, so the URL carries no path
     ),
 )
 
@@ -641,7 +642,7 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
 
 
 def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
-    """Env key for os.getenv(K), os.environ.get(K), os.environ[K] and *env*(K) helpers; K literal or constant."""
+    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
         key = _literal_key(node.args[0], constants)
         if key is None:
@@ -655,7 +656,16 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
             and func.value.attr == 'environ'
         ):
             return key
-        if 'env' in name.lower():
+        if 'env' in name.lower() or name in {
+            '_default_on',
+            'default_on',
+            'modes_default_on',
+            'rollout_default_on',
+            '_default_off',
+            'default_off',
+            'modes_default_off',
+            'rollout_default_off',
+        }:
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)

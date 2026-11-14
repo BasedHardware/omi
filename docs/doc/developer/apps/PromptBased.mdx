@@ -1,25 +1,23 @@
 ---
-title: "Prompt-Based Apps"
+title: "Prompt-based apps"
 icon: "terminal"
-description: "Customize Omi's behavior with prompts - no server required. Create specialized AI personalities and memory processors."
+description: "Customize Omi's behavior with prompts. No server is required. Create specialized AI personalities and memory processors."
 ---
 
-## What Are Prompt-Based Apps?
+## What are prompt-based apps?
 
-Prompt-based apps let you customize how Omi thinks and responds without writing any backend code. Simply define your prompt and Omi's behavior changes accordingly.
+Prompt-based apps let you customize how Omi thinks and responds without writing any backend code. Define your prompt, and Omi's behavior changes to match.
 
 <CardGroup cols={2}>
-  <Card title="No Server Required" icon="cloud-slash">
-    Everything runs on Omi's infrastructure - just write your prompt
+  <Card title="No server required" icon="cloud-slash">
+    Everything runs on Omi's infrastructure. You only write the prompt.
   </Card>
-  <Card title="Instant Deployment" icon="bolt">
+  <Card title="Instant deployment" icon="bolt">
     Create, test, and publish in minutes
   </Card>
 </CardGroup>
 
----
-
-## Chat Prompts
+## Chat prompts
 
 Chat prompts alter Omi's conversational style and knowledge base. Create specialized versions of Omi for different contexts or expertise areas.
 
@@ -32,7 +30,7 @@ flowchart LR
 ```
 
 <AccordionGroup>
-  <Accordion title="How Chat Prompts Work" icon="gear">
+  <Accordion title="How chat prompts work" icon="gear">
     When a user chats with Omi while your app is enabled:
 
     1. Your prompt is injected into the system context
@@ -41,14 +39,14 @@ flowchart LR
 
     The prompt persists for the entire conversation, creating a consistent experience.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
-    - **Expert Personas**: Make Omi communicate like a historian, scientist, or creative writer
-    - **Professional Advisors**: Create a fitness coach, financial advisor, or therapist persona
-    - **Language Tutors**: Build a conversational partner for language learning
-    - **Role-Playing**: Create characters for storytelling or gaming
-    - **Domain Experts**: Specialized knowledge in cooking, gardening, coding, etc.
+  <Accordion title="Example use cases" icon="lightbulb">
+    - Expert personas: make Omi communicate like a historian, scientist, or creative writer
+    - Professional advisors: create a fitness coach, financial advisor, or therapist persona
+    - Language tutors: build a conversational partner for language learning
+    - Role-playing: create characters for storytelling or gaming
+    - Domain experts: specialized knowledge in cooking, gardening, coding, etc.
   </Accordion>
-  <Accordion title="Video Tutorial" icon="video">
+  <Accordion title="Video tutorial" icon="video">
     <iframe
       width="560"
       height="315"
@@ -62,13 +60,13 @@ flowchart LR
   </Accordion>
 </AccordionGroup>
 
-### Writing Effective Chat Prompts
+### Writing effective chat prompts
 
 <Tip>
 A great chat prompt defines personality, expertise, and response style clearly.
 </Tip>
 
-**Example - Fitness Coach Prompt:**
+**Example: fitness coach prompt**
 ```
 You are an enthusiastic fitness coach named Alex. You:
 - Provide encouraging, actionable fitness advice
@@ -78,7 +76,7 @@ You are an enthusiastic fitness coach named Alex. You:
 - Keep responses concise but informative
 ```
 
-**Example - Creative Writing Partner:**
+**Example: creative writing partner prompt**
 ```
 You are a creative writing mentor. You:
 - Help brainstorm story ideas and plot structures
@@ -88,9 +86,7 @@ You are a creative writing mentor. You:
 - Encourage experimentation with different styles
 ```
 
----
-
-## Memory Prompts
+## Memory prompts
 
 Memory prompts analyze conversations and extract specific information based on your criteria. They run after each conversation is processed.
 
@@ -104,7 +100,7 @@ flowchart LR
 ```
 
 <AccordionGroup>
-  <Accordion title="How Memory Prompts Work" icon="gear">
+  <Accordion title="How memory prompts work" icon="gear">
     After a conversation is transcribed and processed:
 
     1. The full transcript is passed to your prompt
@@ -113,15 +109,15 @@ flowchart LR
 
     This creates structured data from unstructured conversations.
   </Accordion>
-  <Accordion title="Example Use Cases" icon="lightbulb">
-    - **Action Items**: Extract to-do items and deadlines from meetings
-    - **Key Decisions**: Identify and log important decisions made
-    - **Meeting Notes**: Generate structured summaries
-    - **Sentiment Analysis**: Track emotional tone of conversations
-    - **Topic Extraction**: Categorize conversations by subject matter
-    - **Quote Collection**: Pull notable quotes or insights
+  <Accordion title="Example use cases" icon="lightbulb">
+    - Action items: extract to-do items and deadlines from meetings
+    - Key decisions: identify and log important decisions made
+    - Meeting notes: generate structured summaries
+    - Sentiment analysis: track the emotional tone of conversations
+    - Topic extraction: categorize conversations by subject matter
+    - Quote collection: pull notable quotes or insights
   </Accordion>
-  <Accordion title="Video Tutorial" icon="video">
+  <Accordion title="Video tutorial" icon="video">
     <iframe
       width="560"
       height="315"
@@ -135,13 +131,13 @@ flowchart LR
   </Accordion>
 </AccordionGroup>
 
-### Writing Effective Memory Prompts
+### Writing effective memory prompts
 
 <Tip>
 Be specific about what to extract and how to format the output.
 </Tip>
 
-**Example - Action Item Extractor:**
+**Example: action item extractor prompt**
 ```
 Analyze this conversation and extract all action items.
 
@@ -154,7 +150,7 @@ For each action item, identify:
 Format as a numbered list. If no action items exist, respond with "No action items found."
 ```
 
-**Example - Meeting Summary:**
+**Example: meeting summary prompt**
 ```
 Create a structured summary of this meeting:
 
@@ -167,65 +163,59 @@ Create a structured summary of this meeting:
 Keep each section concise (2-3 sentences max).
 ```
 
----
-
-## Combining Chat and Memory Prompts
+## Combining chat and memory prompts
 
 <Info>
 You can create apps with both chat AND memory prompts for comprehensive functionality.
 </Info>
 
-**Example - Project Manager App:**
+**Example: project manager app**
 - **Chat Prompt**: Acts as a project management assistant, helping plan tasks and track progress
 - **Memory Prompt**: Extracts project updates, blockers, and timeline changes from conversations
 
----
-
-## Creating Your App
+## Creating your app
 
 <Steps>
-  <Step title="Define Your Purpose" icon="target">
+  <Step title="Define your purpose" icon="target">
     Decide what your app will do:
     - **Chat only**: Personality/expertise customization
     - **Memory only**: Information extraction
     - **Both**: Complete conversational experience with data extraction
   </Step>
-  <Step title="Write Your Prompt(s)" icon="pen">
+  <Step title="Write your prompt(s)" icon="pen">
     Craft clear, specific prompts:
     - Define personality traits and expertise areas
     - Specify extraction criteria and output format
     - Include examples if helpful
   </Step>
-  <Step title="Test Thoroughly" icon="flask">
+  <Step title="Test thoroughly" icon="flask">
     Before publishing, test your app extensively (see testing section below)
   </Step>
   <Step title="Publish" icon="rocket">
-    Change visibility to public or submit for review (reviewed within 24 hours)
+    Change visibility to public or submit for review
   </Step>
 </Steps>
 
----
+## Testing your app
 
-## Testing Your App
-
-### Testing Memory Prompts
+### Testing memory prompts
 
 <Steps>
-  <Step title="Enable Developer Mode" icon="code">
+  <Step title="Enable developer mode" icon="code">
     Open the Omi app → Settings → Enable Developer Mode
   </Step>
-  <Step title="Open a Memory" icon="brain">
+  <Step title="Open a memory" icon="brain">
     Navigate to any existing memory in your app
   </Step>
-  <Step title="Access Developer Tools" icon="wrench">
+  <Step title="Access developer tools" icon="wrench">
     Tap the 3-dot menu (top right) → Developer Tools section
   </Step>
-  <Step title="Run Your Prompt" icon="play">
+  <Step title="Run your prompt" icon="play">
     Test your memory prompt against the existing conversation
   </Step>
 </Steps>
 
-<Accordion title="Video: Testing Memory Prompts" icon="video">
+<Accordion title="Video: testing memory prompts" icon="video">
   <iframe
     width="560"
     height="315"
@@ -238,16 +228,16 @@ You can create apps with both chat AND memory prompts for comprehensive function
   ></iframe>
 </Accordion>
 
-### Testing Chat Prompts
+### Testing chat prompts
 
 <Steps>
-  <Step title="Create Private App" icon="lock">
+  <Step title="Create private app" icon="lock">
     Create your app with visibility set to private
   </Step>
-  <Step title="Enable Your App" icon="toggle-on">
+  <Step title="Enable your app" icon="toggle-on">
     Install and enable your private app
   </Step>
-  <Step title="Chat Normally" icon="comments">
+  <Step title="Chat normally" icon="comments">
     Start a conversation and verify the behavior matches expectations
   </Step>
   <Step title="Iterate" icon="arrows-rotate">
@@ -255,21 +245,19 @@ You can create apps with both chat AND memory prompts for comprehensive function
   </Step>
 </Steps>
 
----
-
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Be Specific" icon="bullseye">
+  <Card title="Be specific" icon="bullseye">
     Vague prompts lead to inconsistent results. Define exact behaviors, formats, and constraints.
   </Card>
-  <Card title="Test Edge Cases" icon="flask">
+  <Card title="Test edge cases" icon="flask">
     Try unusual inputs to ensure your prompt handles unexpected scenarios gracefully.
   </Card>
-  <Card title="Keep It Focused" icon="compress">
+  <Card title="Keep it focused" icon="compress">
     Single-purpose apps perform better than apps trying to do everything.
   </Card>
-  <Card title="Iterate Quickly" icon="arrows-rotate">
+  <Card title="Iterate quickly" icon="arrows-rotate">
     Start simple, test, and refine. Don't try to perfect the prompt on the first attempt.
   </Card>
 </CardGroup>
@@ -278,21 +266,19 @@ You can create apps with both chat AND memory prompts for comprehensive function
 Avoid prompts that could generate harmful, misleading, or inappropriate content. Apps violating community guidelines will be removed.
 </Warning>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Build webhook-based apps for external integrations
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools that users can invoke in chat
   </Card>
-  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+  <Card title="Submit your app" icon="rocket" href="/doc/developer/apps/Submitting">
     Publishing guidelines and review process
   </Card>
-  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+  <Card title="Apps introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
     Overview of all app types
   </Card>
 </CardGroup>

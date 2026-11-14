@@ -20,6 +20,7 @@ and the batch-pipeline constants modules.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 from prometheus_client import Counter
@@ -27,7 +28,32 @@ from prometheus_client import Counter
 REASON_VALUE_MAX_LENGTH = 40
 
 
+class ServerBatchSuppressionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    SUPPRESSED = 'suppressed'
+    LANGUAGE_AUTO = 'language_auto'
+    LANGUAGE_UNSUPPORTED = 'language_unsupported'
+    PROFILE_MISMATCH = 'profile_mismatch'
+    PRIVATE_SYNC_OFF = 'private_sync_off'
+    CUSTOM_STT = 'custom_stt'
+    MULTI_CHANNEL = 'multi_channel'
+    PHONE_CALL = 'phone_call'
+    ONBOARDING = 'onboarding'
+    PUSHER_UNAVAILABLE = 'pusher_unavailable'
+    CAPTURE_NOT_OWNED = 'capture_not_owned'
+    PLATFORM_UNSELECTED = 'platform_unselected'
+    NOT_ENABLED = 'not_enabled'
+
+
+class MemoryL1Reason(StrEnum):
+    NOISE = 'noise'
+    SHORT_OWNER_SPEECH = 'short_owner_speech'
+    UNKNOWN = 'unknown'
+
+
 class ReasonFamily(StrEnum):
+    MEMORY_L1 = 'memory_l1'
+    PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
     RECOVERY_FAILURE = 'recovery_failure'
@@ -48,6 +74,34 @@ class ReasonFamily(StrEnum):
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
+    SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    ADMISSION_HOLD = 'admission_hold'
+    LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
+    RECORD_PARTIAL_RERUN = 'record_partial_rerun'
+    VENDOR_ROUTE = 'vendor_route'
+    DELIVERY = 'delivery'
+    BATCH_FINAL_PASS = 'batch_final_pass'
+    RECURRING_VOICE = 'recurring_voice'
+    RECORD_GAP_FILL = 'record_gap_fill'
+    RECORD_RETAINED_ACK = 'record_retained_ack'
+    PIPELINE_LEDGER = 'pipeline_ledger'
+    JOURNEY_FAILURE = 'journey_failure'
+    LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
+    DUE_MARKER_SWEEP = 'due_marker_sweep'
+
+
+class PusherPcmStage(StrEnum):
+    UNKNOWN = 'unknown'
+    LIVE = 'live'
+    TAIL = 'tail'
+
+
+class PusherPcmErrorReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ACQUIRE = 'acquire'
+    RELEASE = 'release'
+    LATE_STORAGE = 'late_storage'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -67,6 +121,68 @@ for _family in ReasonFamily:  # pre-initialise children so rate() sees them from
     OMI_REASON_TOTAL.labels(family=_family.value)
 
 
+class RecordGapFillOutcome(StrEnum):
+    """One closed-record gap-fill attempt (``utils.batch_pipeline.record_gap_fill``)."""
+
+    UNKNOWN = 'unknown'
+    WRITTEN = 'written'
+    SKIPPED_GATE = 'skipped_gate'
+    SKIPPED_RECENT = 'skipped_recent'
+    SKIPPED_MARKER = 'skipped_marker'
+    SKIPPED_NO_PENDING = 'skipped_no_pending'
+    SKIPPED_RETAINED = 'skipped_retained'
+    SKIPPED_NO_GAP = 'skipped_no_gap'
+    SKIPPED_NO_AUDIO = 'skipped_no_audio'
+    SKIPPED_NOT_CONTIGUOUS = 'skipped_not_contiguous'
+    SKIPPED_COLLISION = 'skipped_collision'
+    SKIPPED_BUSY = 'skipped_busy'
+    RACED = 'raced'
+    FAILED = 'failed'
+
+
+class RecordRetainedAckOutcome(StrEnum):
+    """One option A byte-exact retained-copy proof (``utils.batch_pipeline.record_retained_ack``)."""
+
+    UNKNOWN = 'unknown'
+    ACKED = 'acked'
+    SKIPPED_FILL = 'skipped_fill'
+    SKIPPED_UNCOVERED = 'skipped_uncovered'
+    SKIPPED_LOSSY_SOURCE = 'skipped_lossy_source'
+    SKIPPED_BYTES_DIFFER = 'skipped_bytes_differ'
+    SKIPPED_OUTSIDE_RECORD = 'skipped_outside_record'
+    SKIPPED_BOUNDS = 'skipped_bounds'
+    SKIPPED_PRIVACY = 'skipped_privacy'
+    FAILED = 'failed'
+
+
+class DeliveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DELIVERED = 'delivered'
+    NO_OP = 'no_op'
+    DEFERRED = 'deferred'
+    FAILED = 'failed'
+
+
+class SyncProcessingHoldOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    QUIET_WAIT = 'quiet_wait'
+    WATERMARK_WAIT = 'watermark_wait'
+    READY = 'ready'
+    MAX_HOLD = 'max_hold'
+    UNCHANGED = 'unchanged'
+    IMMATERIAL = 'immaterial'
+    LATE_CAP = 'late_cap'
+
+
+class ListenSessionTranscriptOutcome(StrEnum):
+    """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
+
+    UNKNOWN = 'unknown'
+    TRANSCRIBED = 'transcribed'
+    NO_TRANSCRIPT = 'no_transcript'
+    TOO_SHORT = 'too_short'
+
+
 class PersonVoiceQualityReason(StrEnum):
     UNKNOWN = 'unknown'
     INVALID_PERSON_VOICEPRINT = 'invalid_person_voiceprint'
@@ -84,6 +200,15 @@ class StaleRecoveryOutcome(StrEnum):
     OVERSIZED_CLOSE_ATTEMPTED = 'oversized_close_attempted'
     CURRENT_SESSION = 'current_session'
     CANCELLED = 'cancelled'
+
+
+class DueMarkerSweepOutcome(StrEnum):
+    """Result of re-marking one finalization job that had no due marker."""
+
+    UNKNOWN = 'unknown'
+    REMARKED = 'remarked'
+    SKIPPED = 'skipped'
+    ERROR = 'error'
 
 
 class RetryReason(StrEnum):
@@ -130,6 +255,30 @@ class TransitionTailOutcome(StrEnum):
     SEALED = 'sealed'
 
 
+class HeldRecoverySkipOutcome(StrEnum):
+    """Why a processing choice skipped a backlog item without any recovery attempt."""
+
+    UNKNOWN = 'unknown'
+    OUT_OF_SCOPE = 'out_of_scope'
+    UNKNOWN_ORIGIN = 'unknown_origin'
+    TEXT_OUT_OF_SCOPE = 'text_out_of_scope'
+    # Intended: Free owners never recover (David, 2026-11-01). Kept out of the recovery gate.
+    NOT_PAID = 'not_paid'
+
+
+class BacklogChoiceOutcome(StrEnum):
+    """Result of a "Process waiting recordings" tap or a Stripe trial's one-time grant."""
+
+    UNKNOWN = 'unknown'
+    ACCEPTED = 'accepted'
+    OUT_OF_SCOPE = 'out_of_scope'
+    NOT_PAID = 'not_paid'
+    CAPPED = 'capped'
+    NOTHING_WAITING = 'nothing_waiting'
+    STALE_INTENT = 'stale_intent'
+    ERROR = 'error'
+
+
 class StagingRetryOutcome(StrEnum):
     """Disposition of a held-audio staging attempt, including volatile custody."""
 
@@ -154,16 +303,75 @@ class SyncCaptureTimeReason(StrEnum):
 
     Owner: `utils/sync/capture_clock.py`. `accepted_future_skew` is a real
     capture whose phone clock runs ahead of the server within tolerance;
-    `rejected_future`/`rejected_early` are implausible stamps (bogus device
-    clock marker, pre-2024 fragment) that stay refused.
+    `accepted_early_clamped` is a reset-clock stamp normalized to receipt time.
+    `rejected_early` remains available when its kill switch is off;
+    malformed stamps and beyond-tolerance future clocks stay refused.
     """
 
     UNKNOWN = 'unknown'
     ACCEPTED = 'accepted'
     ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
+    ACCEPTED_EARLY_CLAMPED = 'accepted_early_clamped'
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'
+
+
+class ContainedDonorShadowOutcome(StrEnum):
+    """`omi_sync_bridge_contained_donor_shadow_total{outcome}` for a processed sync donor.
+
+    Owner: `utils/sync/bridge.py::_shadow_contained_donor`. The shadow count gates
+    the shadow-to-on ramp, so the label is a closed enum rather than free text.
+    `error` is a bounded read/compare failure: the shadow path still refuses.
+    """
+
+    UNKNOWN = 'unknown'
+    WOULD_ABSORB = 'would_absorb'
+    PARTIAL_OVERLAP = 'partial_overlap'
+    OPEN_TARGET = 'open_target'
+    NO_OVERLAP = 'no_overlap'
+    NO_SEGMENT_SPAN = 'no_segment_span'
+    UNPLACED_DONOR = 'unplaced_donor'
+    DONOR_INELIGIBLE = 'donor_ineligible'
+    ERROR = 'error'
+
+
+class BatchIntakeOutcome(StrEnum):
+    """`omi_batch_intake_outcome_total{outcome}`: where one v2 sync upload's batch routing landed.
+
+    Owner: `utils/batch_pipeline/intake_outcome.py`. `batch` is an upload batch
+    intake admitted fresh work; `heavy_excluded`/`language_excluded` are this
+    request's fresh exclusions that landed it on legacy; `not_cohort` is the
+    ramp cohort decision. An upload following a prior durable owner carries no
+    fresh decision and is not counted.
+    """
+
+    UNKNOWN = 'unknown'
+    BATCH = 'batch'
+    HEAVY_EXCLUDED = 'heavy_excluded'
+    LANGUAGE_EXCLUDED = 'language_excluded'
+    NOT_COHORT = 'not_cohort'
+
+
+class AdmissionHoldReason(StrEnum):
+    """Closed reasons a compute-admission lease was held at defer time.
+
+    Owner: `utils/batch_pipeline/admission.py`. The literals are that module's
+    fair-use/ceiling/reservation/privacy holds; the spend-gate members mirror
+    the refusal subset of `utils.observability.stt_cap_dispatch.DispatchReason`.
+    Anything else folds to `unknown` by `reason_label`, never free text.
+    """
+
+    UNKNOWN = 'unknown'
+    FAIR_USE_RESTRICTED = 'fair_use_restricted'
+    DAILY_AUDIO_CEILING = 'daily_audio_ceiling'
+    BACKFILL_RESERVATION = 'backfill_reservation'
+    PRIVACY_BLOCKED = 'privacy_blocked'
+    CONSENT_DENIED = 'consent_denied'
+    ALLOWANCE_EXHAUSTED = 'allowance_exhausted'
+    BUDGET_EXHAUSTED = 'budget_exhausted'
+    ALLOWANCE_UNAVAILABLE = 'allowance_unavailable'
+    ACCESS_DENIED = 'access_denied'
 
 
 class WorkOutcome(StrEnum):
@@ -173,6 +381,29 @@ class WorkOutcome(StrEnum):
     SUCCESS = 'success'
     SILENCE = 'silence'
     NO_RECOVERABLE_SPEECH = 'no_recoverable_speech'
+
+
+class BatchFinalPassOutcome(StrEnum):
+    """Fallback outcomes of the batch whole-conversation pass (`utils/conversations/final_pass_batch.py`)."""
+
+    UNKNOWN = 'unknown'
+    SKIPPED_BUDGET = 'skipped_budget'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SHARED_UNIT = 'skipped_shared_unit'
+    REQUEUE = 'failed_requeue'
+    SLOT_EXHAUSTED = 'skipped_slot_exhausted'
+    RETRY_EXHAUSTED = 'skipped_retry_exhausted'
+    FAILED_DEPENDENCY = 'failed_dependency'
+    SKIPPED_NO_CHANGES = 'skipped_no_changes'
+    TOO_LONG = 'failed_too_long'
+    READ_BUDGET = 'failed_read_budget'
+    INCOMPLETE_COVERAGE = 'failed_incomplete_coverage'
+    PARTIAL_COVERAGE = 'partial_coverage'
+    BATCH_AUDIO = 'failed_batch_audio'
+    INCOMPATIBLE_SPACE = 'failed_incompatible_space'
+    REVOKED = 'failed_revoked'
+    UNASSIGNED_WORDS = 'failed_unassigned_words'
 
 
 class QuarantineReason(StrEnum):
@@ -238,6 +469,91 @@ class ProviderSttReason(StrEnum):
     PROVIDER_FAILED = 'provider_failed'
 
 
+# All-vendor batch routing (utils/batch_pipeline/vendor_route_contracts.py). Slice A froze
+# these member lists; a slice that needs a new value posts the change before adding it.
+
+
+class VendorRouteReason(StrEnum):
+    """Why selection chose a route: ``omi_batch_pipeline_vendor_route_decisions_total{route,reason}``."""
+
+    UNKNOWN = 'unknown'
+    CHEAPEST = 'cheapest'
+    ORDERED = 'ordered'
+    GPU_FLOOR = 'gpu_floor'
+    SOLE_CAPABLE = 'sole_capable'
+    FAILOVER = 'failover'
+    NO_HEALTHY_ROUTE = 'no_healthy_route'
+    GPU_OVERFLOW = 'gpu_overflow'
+    KILL_SWITCH = 'kill_switch'
+    NOT_IN_COHORT = 'not_in_cohort'
+
+
+class VendorRouteTableOutcome(StrEnum):
+    """Which rung of the table ladder served: ``..._vendor_route_table_loads_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    CONFIGURED = 'configured'
+    LAST_VALID = 'last_valid'
+    BUILTIN = 'builtin'
+
+
+class VendorHealthReason(StrEnum):
+    """Second element of ``VendorHealth.allows(service)``."""
+
+    UNKNOWN = 'unknown'
+    HEALTHY = 'healthy'
+    HALF_OPEN_PROBE = 'half_open_probe'
+    DEGRADED = 'degraded'
+    BREAKER_OPEN = 'breaker_open'
+    FUNDS_REFUSAL = 'funds_refusal'
+    RATE_LIMITED = 'rate_limited'
+    DAILY_CAP_REACHED = 'daily_cap_reached'
+    MONTHLY_BUDGET_REACHED = 'monthly_budget_reached'
+    NOT_ADMITTED = 'not_admitted'
+    STATE_UNAVAILABLE = 'state_unavailable'
+
+
+class VendorAttemptOutcome(StrEnum):
+    """One vendor attempt's outcome: ``..._vendor_attempts_total{provider,outcome}``."""
+
+    UNKNOWN = 'unknown'
+    RUNNING = 'running'
+    OK = 'ok'
+    SILENCE = 'silence'
+    ERROR_5XX = 'error_5xx'
+    TIMEOUT = 'timeout'
+    RATE_LIMITED = 'rate_limited'
+    CREDIT_REFUSAL = 'credit_refusal'
+    EMPTY_VALIDATED = 'empty_validated'
+    INVALID_RESPONSE = 'invalid_response'
+    ABANDONED = 'abandoned'
+    SUPERSEDED = 'superseded'
+    # Slice D (bus ask fe314f): our own failure on the attempt (invalid audio before the POST, an
+    # invalid payload or unexpected local error after it). Billable, never fails over.
+    LOCAL_FAILURE = 'local_failure'
+
+
+class VendorHoldReason(StrEnum):
+    """Why a unit is parked in ``vendor_held``: ``..._vendor_held_units{reason}``."""
+
+    UNKNOWN = 'unknown'
+    NO_HEALTHY_VENDOR = 'no_healthy_vendor'
+    FUNDS_REFUSAL = 'funds_refusal'
+    CAP_REACHED = 'cap_reached'
+    RATE_LIMITED = 'rate_limited'
+    HEALTH_UNAVAILABLE = 'health_unavailable'
+
+
+class VendorHoldOutcome(StrEnum):
+    """``..._vendor_held_transitions_total{outcome}``."""
+
+    UNKNOWN = 'unknown'
+    HELD = 'held'
+    REDRIVEN = 'redriven'
+    REROUTED_GPU = 'rerouted_gpu'
+    RELEASED = 'released'
+
+
 class LiveSttReason(StrEnum):
     """Live STT failover and health reasons (1:1 with the legacy LIVE_STT_REASONS frozenset)."""
 
@@ -282,6 +598,21 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class LocalPreviewEngineUnavailableReason(StrEnum):
+    """LivePreviewReason failure wire values; unknown client input folds to OTHER."""
+
+    UNKNOWN = 'unknown'
+    OS_TOO_OLD = 'os_too_old'
+    OS_ENGINE_UNAVAILABLE = 'os_engine_unavailable'
+    LOCALE_UNSUPPORTED = 'locale_unsupported'
+    LOCALE_ASSET_MISSING = 'locale_asset_missing'
+    SPEECH_PERMISSION_DENIED = 'speech_permission_denied'
+    BUNDLED_NOT_INSTALLED = 'bundled_not_installed'
+    BUNDLED_NOT_BUILT = 'bundled_not_built'
+    ENGINE_ERROR = 'engine_error'
+    OTHER = 'other'
+
+
 class LocalPreviewOutcome(StrEnum):
     """Mobile local-preview lane admission at listen session start (routers/listen/local_preview.py)."""
 
@@ -313,6 +644,7 @@ class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 
     UNKNOWN = 'unknown'
+    FETCH_DECODE = 'fetch_decode'
     VAD_WINDOWS = 'vad_windows'
     WORD_CLOCKS = 'word_clocks'
     ASSEMBLE_WORDS = 'assemble_words'
@@ -323,6 +655,7 @@ class WorkerValidationReason(StrEnum):
     """Worker validation failure reasons."""
 
     UNKNOWN = 'unknown'
+    STAGED_AUDIO_INVALID = 'staged_audio_invalid'
     WORD_SHAPE = 'word_shape'
     WORD_CLOCK = 'word_clock'
     WORD_SEQUENCE = 'word_sequence'
@@ -446,6 +779,7 @@ class NotesAgentForceReason(StrEnum):
 
     UNKNOWN = 'unknown'
     LOOKUP_CAP = 'lookup_cap'
+    SUBMISSION_REJECTED_AT_CAP = 'submission_rejected_at_cap'
     SUBMISSION_REJECTED = 'submission_rejected'
     TEXT_ONLY_RESPONSE = 'text_only_response'
     PRIOR_REJECTION = 'prior_rejection'
@@ -492,3 +826,128 @@ def reason_label(family: ReasonFamily, value: object, enum: type[StrEnum]) -> st
     except Exception:
         pass
     return result
+
+
+class RecurringProfileOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    CREATED = 'created'
+    PROMOTED = 'promoted'
+    REFRESHED = 'refreshed'
+    BOUND = 'bound'
+    REJECTED = 'rejected'
+    EXPIRED = 'expired'
+    EVICTED_CAP = 'evicted_cap'
+
+
+class RecurringMatchOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    MATCHED = 'matched'
+    NEW_CANDIDATE = 'new_candidate'
+    ABSTAINED_MARGIN = 'abstained_margin'
+    OWNER_EXCLUDED = 'owner_excluded'
+    NO_OWNER_PRINT = 'no_owner_print'
+    CAP = 'cap'
+
+
+class IdentitySpeechOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OWNER = 'owner'
+    PERSON = 'person'
+    RECURRING = 'recurring'
+    UNNAMED = 'unnamed'
+
+
+class PipelineLedgerOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    ERROR = 'error'
+    DISABLED = 'disabled'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    ILLEGAL = 'illegal'
+    TERMINAL = 'terminal'
+
+
+class PipelineLedgerFailureReason(StrEnum):
+    UNKNOWN = 'unknown'
+    TIMEOUT = 'timeout'
+    UNAVAILABLE = 'unavailable'
+    PERMISSION = 'permission'
+    INVALID = 'invalid'
+    OTHER = 'other'
+
+
+class ChatResponseFailureReason(StrEnum):
+    """Why a ``chat_response`` journey ended in ``failure`` (``omi_journey_failure_reason_total``).
+
+    Mapped from the values the chat path stages in ``callback_data['error']`` by
+    ``chat_response_failure_reason``. Exception class names are folded to a member
+    there, so no raw class name or message text reaches a label.
+    """
+
+    UNKNOWN = 'unknown'
+    IDLE_TIMEOUT = 'idle_timeout'
+    SETUP_TIMEOUT = 'setup_timeout'
+    TIMEOUT = 'timeout'
+    PROVIDER_ERROR = 'provider_error'
+    PROVIDER_REFUSAL = 'provider_refusal'
+    EMPTY_ANSWER = 'empty_answer'
+    STREAM_FAILURE = 'stream_failure'
+    PERSISTENCE_FAILURE = 'persistence_failure'
+
+
+class ListenNoAudioCloseReason(StrEnum):
+    """How an accepted /v4/listen session that never sent audio was closed, as the server observed it."""
+
+    UNKNOWN = 'unknown'
+    CLIENT_CLOSE_NORMAL = 'client_close_normal'
+    CLIENT_CLOSE_ABNORMAL = 'client_close_abnormal'
+    SERVER_CLOSE = 'server_close'
+    NO_CLOSE_FRAME = 'no_close_frame'
+
+
+# Values staged on callback_data['error'] by utils.retrieval (agentic, graph) and utils.chat_turn.
+_CHAT_STAGED_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'idle_timeout': ChatResponseFailureReason.IDLE_TIMEOUT,
+    'setup_timeout': ChatResponseFailureReason.SETUP_TIMEOUT,
+    'empty_answer': ChatResponseFailureReason.EMPTY_ANSWER,
+    'provider_refusal': ChatResponseFailureReason.PROVIDER_REFUSAL,
+    'stream_failure': ChatResponseFailureReason.STREAM_FAILURE,
+}
+# Exception class names that reach callback_data['error'] as type(error).__name__.
+_CHAT_EXCEPTION_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'TimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'APITimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'ConnectTimeout': ChatResponseFailureReason.TIMEOUT,
+    'ReadTimeout': ChatResponseFailureReason.TIMEOUT,
+    'WriteTimeout': ChatResponseFailureReason.TIMEOUT,
+    'PoolTimeout': ChatResponseFailureReason.TIMEOUT,
+    'APIError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIStatusError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIConnectionError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'AuthenticationError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'BadRequestError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'InternalServerError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RateLimitError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ConnectError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ReadError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RemoteProtocolError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'WriteError': ChatResponseFailureReason.PROVIDER_ERROR,
+}
+_EXCEPTION_CLASS_NAME = re.compile(r'[A-Z][A-Za-z0-9_]{0,79}')
+
+
+def chat_response_failure_reason(staged: object) -> ChatResponseFailureReason:
+    """Fold a staged chat error value (sentinel or exception class name) to a member; never raises."""
+    if not isinstance(staged, str):
+        return ChatResponseFailureReason.UNKNOWN
+    if staged in _CHAT_STAGED_FAILURE_REASONS:
+        return _CHAT_STAGED_FAILURE_REASONS[staged]
+    return _CHAT_EXCEPTION_FAILURE_REASONS.get(staged, ChatResponseFailureReason.UNKNOWN)
+
+
+def exception_class_name(value: object) -> str | None:
+    """The value when it is shaped like an exception class name, else None (no message text ever passes)."""
+    if isinstance(value, str) and _EXCEPTION_CLASS_NAME.fullmatch(value):
+        return value
+    return None

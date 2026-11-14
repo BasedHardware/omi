@@ -18,7 +18,7 @@ from config.stt_cap_dispatch import (
     offline_admission_enabled,
     LANES,
 )
-from config.ladder_v1 import budget_enforcement_enabled
+
 from utils.observability.stt_cap_dispatch import (
     allowance_decision_reason,
     record_audio,
@@ -156,10 +156,6 @@ class LiveAdmission:
         # excludes their overlap with its billable window: held audio is metered
         # once, by recovery, when it is actually transcribed.
         self.held_spans: list[list[float]] = []
-        if budget_enforcement_enabled():
-            from database.usage_units_session import UsageUnitsSession
-
-            self.usage_cache = UsageUnitsSession()
 
     def refresh_due(self):
         if self.refreshed_at is None:
@@ -417,6 +413,21 @@ def live_provider(provider, rate_index):
         @wraps(fn)
         async def connect(*args, **kwargs):
             admission = current_live_admission.get()
+            from utils.byok import get_byok_uid
+            from utils.stt.allowance_watch import observe_async
+
+            from utils.stt.allowance_session import current
+
+            scope = current.get()
+            if scope is not None:
+                await scope.reserve_async(provider, customer_funded=customer_funded(provider))
+            else:
+                await observe_async(
+                    admission.uid if admission is not None else get_byok_uid(),
+                    'live_open',
+                    provider,
+                    customer_funded=customer_funded(provider),
+                )
             if admission is not None and not execution_admission_enabled(admission.uid, 'live'):
                 admission = None
             if admission is None:
@@ -457,9 +468,13 @@ def session_admission(fn):
     async def connect(self, *args, **kwargs):
         admission = getattr(self.receiver, 'cap_admission', None)
         token = current_live_admission.set(admission)
+        from utils.stt.allowance_session import current
+
+        scope_token = current.set(getattr(getattr(self.receiver, 'host', None), 'allowance_operation', None))
         try:
             return await fn(self, *args, **kwargs)
         finally:
+            current.reset(scope_token)
             current_live_admission.reset(token)
 
     return connect

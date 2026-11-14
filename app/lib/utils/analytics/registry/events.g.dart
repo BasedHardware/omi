@@ -6,6 +6,25 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum OnDeviceTranscriptionUsedRoute {
+  allowance("allowance"),
+  custom("custom"),
+  offlineBatch("offline_batch");
+  const OnDeviceTranscriptionUsedRoute(this.wireName);
+  final String wireName;
+}
+
+final class OnDeviceTranscriptionUsed extends RegisteredEvent {
+  const OnDeviceTranscriptionUsed({required this.route, required this.audioMs, required this.segmentCount});
+  final OnDeviceTranscriptionUsedRoute route;
+  final int audioMs;
+  final int segmentCount;
+  @override
+  String get wireName => "On Device Transcription Used";
+  @override
+  Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),
@@ -1701,7 +1720,8 @@ enum ConversationActionAction {
   open("open"),
   select("select"),
   copyConversationId("copy_conversation_id"),
-  testPrompt("test_prompt");
+  testPrompt("test_prompt"),
+  exportTranscript("export_transcript");
   const ConversationActionAction(this.wireName);
   final String wireName;
 }
@@ -2353,7 +2373,8 @@ final class ConversationUntitledRendered extends RegisteredEvent {
 
 enum ChatAppConnectStartedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppConnectStartedChannel(this.wireName);
   final String wireName;
 }
@@ -2369,7 +2390,8 @@ final class ChatAppConnectStarted extends RegisteredEvent {
 
 enum ChatAppConnectedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppConnectedChannel(this.wireName);
   final String wireName;
 }
@@ -2385,7 +2407,8 @@ final class ChatAppConnected extends RegisteredEvent {
 
 enum ChatAppDisconnectedChannel {
   telegram("telegram"),
-  imessage("imessage");
+  imessage("imessage"),
+  whatsapp("whatsapp");
   const ChatAppDisconnectedChannel(this.wireName);
   final String wireName;
 }
@@ -2430,7 +2453,9 @@ enum PaywallOpenedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2500,7 +2525,9 @@ enum UpgradePlanSelectedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2694,6 +2721,112 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
 
+enum SubscriptionYearlySwitchShownSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchShownSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchShown extends RegisteredEvent {
+  const SubscriptionYearlySwitchShown({required this.surface});
+  final SubscriptionYearlySwitchShownSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Shown";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchOpenedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchOpenedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchOpened extends RegisteredEvent {
+  const SubscriptionYearlySwitchOpened({required this.surface});
+  final SubscriptionYearlySwitchOpenedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Opened";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchConfirmedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchConfirmedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchConfirmed extends RegisteredEvent {
+  const SubscriptionYearlySwitchConfirmed({required this.surface});
+  final SubscriptionYearlySwitchConfirmedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Confirmed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchSucceededSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchSucceededSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchSucceeded extends RegisteredEvent {
+  const SubscriptionYearlySwitchSucceeded({required this.surface});
+  final SubscriptionYearlySwitchSucceededSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Succeeded";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchFailedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchFailedSurface(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionYearlySwitchFailedReason {
+  declined("declined"),
+  refused("refused"),
+  previewUnavailable("preview_unavailable"),
+  error("error");
+  const SubscriptionYearlySwitchFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchFailed extends RegisteredEvent {
+  const SubscriptionYearlySwitchFailed({required this.surface, required this.reason});
+  final SubscriptionYearlySwitchFailedSurface surface;
+  final SubscriptionYearlySwitchFailedReason reason;
+  @override
+  String get wireName => "Subscription Yearly Switch Failed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "reason": reason.wireName};
+}
+
+enum SubscriptionYearlySwitchDismissedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchDismissedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchDismissed extends RegisteredEvent {
+  const SubscriptionYearlySwitchDismissed({required this.surface});
+  final SubscriptionYearlySwitchDismissedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Dismissed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
 enum GuidedIntroPayoffShownAnswerSource {
   chat("chat"),
   fallback("fallback");
@@ -2866,7 +2999,9 @@ enum PaywallVariantShownSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -2905,6 +3040,42 @@ final class PaywallVariantFallback extends RegisteredEvent {
   String get wireName => "Paywall Variant Fallback";
   @override
   Map<String, Object> get properties => {"variant": variant.wireName, "reason": reason.wireName};
+}
+
+final class PaywallMonthlyFallbackShown extends RegisteredEvent {
+  const PaywallMonthlyFallbackShown({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Shown";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
+}
+
+enum PaywallMonthlyFallbackAcceptedOutcome {
+  purchased("purchased"),
+  cancelled("cancelled"),
+  failed("failed");
+  const PaywallMonthlyFallbackAcceptedOutcome(this.wireName);
+  final String wireName;
+}
+
+final class PaywallMonthlyFallbackAccepted extends RegisteredEvent {
+  const PaywallMonthlyFallbackAccepted({required this.trial, required this.outcome});
+  final bool trial;
+  final PaywallMonthlyFallbackAcceptedOutcome outcome;
+  @override
+  String get wireName => "Paywall Monthly Fallback Accepted";
+  @override
+  Map<String, Object> get properties => {"trial": trial, "outcome": outcome.wireName};
+}
+
+final class PaywallMonthlyFallbackDismissed extends RegisteredEvent {
+  const PaywallMonthlyFallbackDismissed({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Dismissed";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
 }
 
 final class OnboardingWebviewShown extends RegisteredEvent {
@@ -3217,4 +3388,28 @@ final class WalUploadRefused extends RegisteredEvent {
   String get wireName => "WAL Upload Refused";
   @override
   Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
+}
+
+final class SubscriptionPaymentIssueShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueShown();
+  @override
+  String get wireName => "Subscription Payment Issue Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueUpdateTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueUpdateTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Update Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
+  const SubscriptionPaymentIssuePortalOpened();
+  @override
+  String get wireName => "Subscription Payment Issue Portal Opened";
+  @override
+  Map<String, Object> get properties => {};
 }

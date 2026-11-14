@@ -14,7 +14,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from config import live_stt_state
-from config.live_stt_registry import DEFAULT_TARGETS, Target, assigned, registry, routing_on
+from config.live_stt_registry import Target, assigned, registry, routing_on
+from tests.unit.fixtures.live_stt_registry import ENABLED_TARGETS as DEFAULT_TARGETS, enabled_live_targets
 from utils.stt import (
     connect_backoff as connect_backoff_module,
     live_failure,
@@ -36,12 +37,12 @@ from utils.stt.live_metrics import COST_SHADOW, COST_DECISION, CONNECT_BACKOFF
 
 @pytest.fixture(autouse=True)
 def controls(monkeypatch):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '0')
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
-    monkeypatch.delenv('STT_ROUTING_TARGETS_JSON', raising=False)
     monkeypatch.delenv('STT_ROUTING_DISRUPTION_GATE', raising=False)
     # Scope every new test's process state; do not poison another module's circuits.
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
@@ -245,15 +246,42 @@ class MemoryRedis:
             self.expires_at.pop(state_key, None)
             self.expires_at.pop(probe_key, None)
             return 1
-        key, expected, new, ttl = args
+        key = args[0]
+        expected, new, ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
+        mode = args[_numkeys + 3] if len(args) > _numkeys + 3 else ''
+        mode_keys = int(args[_numkeys + 7]) if len(args) > _numkeys + 7 else _numkeys
+        if len(args) > _numkeys + 7:
+            for index, value in enumerate(json.loads(args[_numkeys + 6])):
+                actual = self.data.get(args[mode_keys + index], '')
+                if (actual.decode() if isinstance(actual, bytes) else actual) != value:
+                    return 0
+        result = 1
+        if mode == 'hold':
+            held, guard_indices = args[_numkeys + 4 : _numkeys + 6]
+            stages = {
+                index
+                + 1: min(
+                    json.loads(self.data.get(args[index], '{"stage":100}'))['stage'],
+                    json.loads(self.data.get(args[index + 1], '{"stage":100}'))['stage'],
+                )
+                for index in range(1, mode_keys, 2)
+            }
+            if any(stages[index] >= 5 for index in json.loads(guard_indices)) and all(
+                stage < 100 for stage in stages.values()
+            ):
+                new, ttl, result = held, 0, 2
         self.data[key] = new
         self.expires_at.pop(key, None)
         if int(ttl) > 0:
             self.expires_at[key] = self.clock() + int(ttl)
         self.ttls[key] = ttl
-        return 1
+        if str(mode).isdigit():
+            seconds = int(mode)
+            self.data[args[1]] = str(self.clock() + seconds)
+            self.expires_at[args[1]] = self.clock() + seconds
+        return result
 
     def pipeline(self, *, transaction=False):
         redis = self

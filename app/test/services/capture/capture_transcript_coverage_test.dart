@@ -9,6 +9,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import '../../support/refactor_flag_adapter.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -16,6 +20,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -26,6 +31,7 @@ void main() {
   late CaptureReplayWorld world;
 
   setUp(() async {
+    AnalyticsManager.resetForTesting();
     directory = await Directory.systemTemp.createTemp('capture_safety_copy_');
     // These custody fixtures intentionally delay transcripts for several minutes.
     // Keep capture admitted using the existing four-hour setting; default silence
@@ -39,6 +45,7 @@ void main() {
 
   tearDown(() async {
     await world.dispose();
+    AnalyticsManager.resetForTesting();
     if (directory.existsSync()) directory.deleteSync(recursive: true);
   });
 
@@ -117,7 +124,7 @@ void main() {
     var last = '';
     for (var i = 0; i < 40; i++) {
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
       final wals = await world.wal.syncs.phone.getAllWals();
       final now = [
         for (final wal in wals) '${wal.id}:${wal.status.name}:${wal.conversationId}',
@@ -137,7 +144,7 @@ void main() {
       final wals = await world.wal.syncs.phone.getAllWals();
       if (done(wals) && done(await WalFileManager.loadWals())) return wals;
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
     }
     final wals = await world.wal.syncs.phone.getAllWals();
     final state = [
@@ -172,7 +179,7 @@ void main() {
   Future<void> telemetryReaches(bool Function() done) async {
     for (var i = 0; i < 200 && !done(); i++) {
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
     }
     expect(done(), isTrue);
   }
@@ -371,6 +378,52 @@ void main() {
     await plainJudgedReplay(seconds, spans, serverSkew: serverSkew, hasStart: hasStart);
     return expectAllKeptThenUploaded('c1', failClosedReason: failClosedReason);
   }
+
+  for (final rawAudio in [false, true]) {
+    for (final complete in [false, true]) {
+      test('Custom STT durable coverage complete=$complete rawAudio=$rawAudio preserves upload choice', () async {
+        await setRefactorFlags({'custody_capture_committed_release': true});
+        await SharedPreferencesUtil().saveCustomSttConfig(
+            CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: rawAudio));
+        world.autoUploadAllowed = false;
+        final origin = world.clock.now();
+        final link = await connectPendant();
+        final end = complete ? 60.0 : 25.0;
+        await streamPendant(link, end.toInt());
+        world.controller.onSegmentReceived([segment('custom', 0, (0, end))]);
+        if (!complete) await streamPendant(link, 35);
+        final before = audioFilesOnDisk();
+        await serverCloses(conversation('custom', origin, [(0, end)]));
+        final (covered, kept) = await judgedWals();
+        expect(covered, isNotEmpty);
+        expect(kept.isEmpty, complete);
+        await recoveryPass();
+        expect(world.uploads.attempts, isEmpty);
+        expect(audioFilesOnDisk(), containsAll(before));
+        expect((await persistedStatuses()).values.where((s) => s == WalStatus.synced).length, covered.length);
+      });
+    }
+  }
+
+  test('Custom STT Process Now confirms saved coverage instead of queuing an upload', () async {
+    await setRefactorFlags({'custody_capture_committed_release': true});
+    await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: false));
+    world.autoUploadAllowed = false;
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 60);
+    world.controller.onSegmentReceived([segment('processed', 0, (0, 60))]);
+    // A preference change during finalization must not rewrite the session mode.
+    await SharedPreferencesUtil().saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.omi));
+    world.processOutcome = () async => InProgressProcessOutcome(
+        response: CreateConversationResponse(messages: [], conversation: conversation('processed', origin, [(0, 60)])));
+    await world.controller.forceProcessingCurrentConversation();
+    final (covered, kept) = await judgedWals();
+    expect(covered, isNotEmpty);
+    expect(kept, isEmpty);
+    expect(world.uploads.attempts, isEmpty);
+  });
 
   test('pendant: a conversation with natural pauses retains every covered copy and repairs silent gaps', () async {
     final anchorEstimates = <int>[];
@@ -650,6 +703,24 @@ void main() {
       ConversationProcessingStartedEvent(memory: conversation('c1', origin, [(1, 100)])),
     );
     await settleFiles();
+    await world.elapse(const Duration(seconds: 31));
+    await settleFiles();
+
+    await expectAllKeptThenUploaded('c1', failClosedReason: 'missing_conversation_event');
+  });
+
+  test('pendant: an unrelated saved conversation cannot cancel the pending recovery', () async {
+    final origin = world.clock.now();
+    final link = await connectPendant();
+    await streamPendant(link, 140);
+
+    world.controller.onMessageEventReceived(
+      ConversationProcessingStartedEvent(memory: conversation('c1', origin, [(1, 100)])),
+    );
+    await settleFiles();
+    world.controller.onMessageEventReceived(
+      ConversationEvent(memory: conversation('unrelated', origin, [(0, 200)]), messages: []),
+    );
     await world.elapse(const Duration(seconds: 31));
     await settleFiles();
 

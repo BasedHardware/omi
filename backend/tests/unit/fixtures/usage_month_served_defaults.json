@@ -1,0 +1,473 @@
+{
+  "backend/deploy/runtime_env.yaml": {
+    "/environments/dev/cloud_run/jobs/day3-reengagement-email-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/jobs/frame-request-retention-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/jobs/notifications-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/jobs/x-connector-sync-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/services/backend-integration/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/services/backend-sync-backfill/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/services/backend-sync/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/cloud_run/services/backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/desktop_backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/gke/backend-listen/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/dev/gke/pusher/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/jobs/day3-reengagement-email-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/jobs/frame-request-retention-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/jobs/notifications-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/jobs/x-connector-sync-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/services/backend-integration/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/services/backend-sync-backfill/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "62230c0e85c49f41f6e99a70b97d553796dc4faede1b8c3abf4d189387ebb815",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/cloud_run/services/backend-sync/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
+    },
+    "/environments/prod/cloud_run/services/backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/desktop_backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/gke/backend-listen/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environments/prod/gke/pusher/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    }
+  },
+  "backend/deploy/runtime_env/_base.yaml": {
+    "/environment_shared/cloud_run/jobs/day3-reengagement-email-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/jobs/frame-request-retention-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/jobs/notifications-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/jobs/x-connector-sync-job/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/services/backend-integration/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/services/backend-sync-backfill/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/services/backend-sync/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/cloud_run/services/backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/desktop_backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/gke/backend-listen/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/environment_shared/gke/pusher/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "v1"
+      },
+      "FSR_USAGE_MONTH_TTL_SECONDS": {
+        "category": "rollout",
+        "value": "60"
+      },
+      "all_levers_sha256": "3dddaf1e93885fe83d2900aa08d387a0aa20652f9b83b231d01e15e1000e4644",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    }
+  },
+  "backend/deploy/runtime_env/prod.overlay.yaml": {
+    "/overlay/cloud_run/services/backend-integration/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/overlay/cloud_run/services/backend-sync-backfill/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "all_levers_sha256": "62230c0e85c49f41f6e99a70b97d553796dc4faede1b8c3abf4d189387ebb815",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    },
+    "/overlay/cloud_run/services/backend-sync/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
+    },
+    "/overlay/cloud_run/services/backend/env": {
+      "FSR_USAGE_MONTH_TOTAL_EPOCH": {
+        "category": "rollout",
+        "value": "c2fs_20261026_r1"
+      },
+      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "usage_month_cache": 0,
+      "usage_month_total": 0
+    }
+  }
+}

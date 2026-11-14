@@ -2,6 +2,197 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.574",
+      "date": "2026-11-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.573",
+      "date": "2026-11-11",
+      "changes": [
+        "Fixed expired conversations remaining stuck in processing",
+        "Moved failures to Activity with notes-only retries that safely resume after connection errors",
+        "Restored the previous Home conversation display"
+      ]
+    },
+    {
+      "version": "0.12.572",
+      "date": "2026-11-09",
+      "changes": [
+        "Fixed always-on recording staying off while the Mac keeps running after sleep"
+      ]
+    },
+    {
+      "version": "0.12.571",
+      "date": "2026-11-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.570",
+      "date": "2026-11-08",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.569",
+      "date": "2026-11-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.568",
+      "date": "2026-11-05",
+      "changes": [
+        "Fixed pending batch recordings losing their Transcribing title or offering Reprocess while transcription is still running"
+      ]
+    },
+    {
+      "version": "0.12.567",
+      "date": "2026-11-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.566",
+      "date": "2026-11-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.565",
+      "date": "2026-11-04",
+      "changes": [
+        "Meeting-note Action items retain metadata in cache, show owners, context, and confirmed or tentative due dates, support adding, completing, reopening, and finding linked tasks, and start with Try with Apps collapsed."
+      ]
+    },
+    {
+      "version": "0.12.564",
+      "date": "2026-11-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.563",
+      "date": "2026-11-04",
+      "changes": [
+        "Conversations waiting for a plan now show a quiet Waiting badge instead of an amber Saved and waiting one."
+      ]
+    },
+    {
+      "version": "0.12.562",
+      "date": "2026-11-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.561",
+      "date": "2026-11-04",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.560",
+      "date": "2026-10-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.559",
+      "date": "2026-10-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.558",
+      "date": "2026-10-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.557",
+      "date": "2026-10-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.556",
+      "date": "2026-10-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.555",
+      "date": "2026-10-29",
+      "changes": [
+        "Improved task descriptions and prevented tasks from linking to unavailable source conversations."
+      ]
+    },
+    {
+      "version": "0.12.554",
+      "date": "2026-10-28",
+      "changes": [
+        "Improved meeting-note attribution from call participant names while excluding app titles, browser tabs, and your own name."
+      ]
+    },
+    {
+      "version": "0.12.553",
+      "date": "2026-10-28",
+      "changes": [
+        "Fixed recordings failing to upload forever when their stored session id was blank: uploads now always carry a real session id"
+      ]
+    },
+    {
+      "version": "0.12.552",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.551",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.550",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.549",
+      "date": "2026-10-28",
+      "changes": [
+        "Kept Google Meet calls in one conversation when the same meeting resumes within 15 minutes"
+      ]
+    },
+    {
+      "version": "0.12.548",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.547",
       "date": "2026-10-27",
       "changes": [

@@ -117,6 +117,9 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(claims, '_redis_client', lambda: redis)
     monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 2)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_BACKOFF_SECONDS', '120')
+    now = [1000.0]
+    monkeypatch.setattr(projection_followup, '_monotonic', lambda: now[0])
     batch = lane.seed()
     client_redis = fakeredis.FakeRedis()
     monkeypatch.setattr(sync_jobs, 'r', client_redis)
@@ -155,7 +158,16 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
     loads = list(lane.loads)
     monkeypatch.setattr(projection_followup, 'run_blocking', real)
     monkeypatch.setattr(projection_followup, 'FOLLOWUP_TIMEOUT_SECONDS', 120)
-    # Re-query the actual durable outbox, including ready-but-not-completed rows.
+    # A timeout deliberately backs this receipt off. Discovery must preserve
+    # it without retrying before the deadline, then resume both persisted and
+    # ready-but-not-completed receipts from the actual durable outbox.
+    retry_at, _ = runner.backoff[sid]
+    now[0] = retry_at - 0.001
+    await runner.schedule()
+    assert not runner.tasks
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert lane.loads == loads
+    now[0] = retry_at
     await runner.schedule()
     await asyncio.wait_for(asyncio.gather(*list(runner.tasks.values())), 10)
     completed = batch.ledger.get().to_dict()
@@ -182,6 +194,10 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    # Isolate paginated discovery. Newer owner-chain walking and pending-only
+    # assignment pages intentionally bypass the legacy mixed-page stall.
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
     monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
     # All commit timestamps tie. Document-ID ordering must still cross pages.

@@ -22,6 +22,9 @@ import logging
 from typing import Any, Mapping
 
 from config.episodes import episodes_enabled_for
+from config.episode_attach import noop_schedule_enabled
+from config.recorded_time import recorded_episodes_enabled
+from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import client_gate
 from utils.executors import ExecutorSaturatedError, lifecycle_executor, submit_with_context, submit_with_context_retry
@@ -55,12 +58,32 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
         return 'error'
 
 
+def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absorbed_from=None):
+    """Before submission; validate current visibility even with a just-read row."""
+    if (
+        not recorded_episodes_enabled()
+        or not isinstance(row, Mapping)
+        or absorbed_from
+        or is_relevance_discarded(row)
+        or row.get('deleted')
+        or row.get('sync_merged_into')
+        or row.get('sync_merged_from')
+    ):
+        return False
+    # Keep the database/episode import chain deferred for router imports.
+    from database import episode_attach_memo
+
+    return episode_attach_memo.matches(uid, conversation_id, row, finalized=finalized)
+
+
 def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
     """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid) or not conversation_id:
         return
     snapshot = dict(row) if isinstance(row, Mapping) else {}
     try:
+        if skip_unchanged_schedule(uid, conversation_id, snapshot):
+            return
         submit_with_context(
             lifecycle_executor(uid, episode=True), attach_synced_at_intake, uid, conversation_id, snapshot
         )
@@ -86,16 +109,47 @@ def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source
         return 'error'
 
 
-def schedule_after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
-    """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
-    if not episodes_enabled_for(uid):
+def schedule_group_attachments(uid: str, conversation_ids: list[str]) -> None:
+    """Schedule the canonical member once through the existing finalizer worker."""
+    if not episodes_enabled_for(uid) or not client_gate.client_seen_cached(uid):
         return
     try:
+        from database import conversations as conversations_db
+
+        for cid in dict.fromkeys(conversation_ids):
+            row = conversations_db.get_conversation_raw_snapshot(uid, cid, field_paths=['capture_group'])
+            if row is not None:
+                primary = (row.get('capture_group') or {}).get('primary_id') or cid
+                schedule_after_finalization(uid, primary, ProcessingTrigger.CAPTURE_GROUP)
+                return
+    except Exception as error:
+        logger.warning('event=episode_group_attach outcome=error exception_type=%s', type(error).__name__)
+
+
+def schedule_after_finalization(
+    uid: str, conversation_id: str, trigger: ProcessingTrigger, *, row=None, inputs_changed=False
+) -> bool:
+    """Return scheduling intent; only completed current proof may suppress a sync hook.
+
+    A processor's before snapshot already contains the persisted append. Equal
+    inputs in that pass do not prove that this append has ever finalized.
+    """
+    if not episodes_enabled_for(uid):
+        return False
+    try:
+        if (
+            trigger == ProcessingTrigger.SYNC_UPDATE
+            and noop_schedule_enabled()
+            and not inputs_changed
+            and skip_unchanged_schedule(uid, conversation_id, row, finalized=True)
+        ):
+            return False
         submit_with_context(lifecycle_executor(uid, episode=True), _after_finalization, uid, conversation_id, trigger)
     except ExecutorSaturatedError:
         _queue_retry(uid, _after_finalization, uid, conversation_id, trigger)
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
+    return True
 
 
 def _queue_retry(uid: str, hook, *args) -> None:

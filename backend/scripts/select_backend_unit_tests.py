@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
+from tests.support.sync_legacy_ratchet_scope import is_sync_legacy_ratchet_path  # noqa: E402
 
 FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
@@ -109,6 +110,8 @@ MEMORY_POLICY_CORE_TESTS = (
 # intentional-exception check below — single source so the two lists cannot
 # drift apart and silently stop selecting the monitoring unit contracts.
 MONITORING_CONTRACT_SOURCES = (
+    'backend/charts/monitoring/core-features/recording-rules.yaml',
+    'backend/charts/backend-secrets/',
     'backend/charts/monitoring/prometheus-adapter/',
     'backend/scripts/diff_prod_adapter.py',
     'backend/charts/parakeet/',
@@ -163,6 +166,22 @@ FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
 # workers and outbox modules. A PR that adds a violation must fail in its own changed-file CI.
 REASON_LABEL_ENUM_TESTS = ('tests/unit/test_reason_label_enums.py',)
 BATCH_STAGE_ENV_RATCHET_TESTS = ('tests/unit/test_batch_stage_env_ratchet.py',)
+
+# Batch census completeness guard (W3 / SCA-1921): a new job/projection state or
+# an unregistered reason vocabulary must fail the PR that adds it, not only the
+# post-merge ``--all`` run. The scanned writer sites and vocabularies live in
+# config/batch_census.py and tests/unit/test_batch_census_registry.py; selection
+# uses their prefixes so an edit to any registered writer or enum always runs the
+# guard. ``backend/config/batch_census.py`` also keeps its full-suite fallback
+# because it is not otherwise mapped to a narrow area.
+CENSUS_GUARD_TESTS = ('tests/unit/test_batch_census_registry.py',)
+CENSUS_GUARD_PREFIXES = (
+    'backend/utils/batch_pipeline/',
+    'backend/database/batch_pipeline_',
+    'backend/utils/observability/reasons.py',
+    'backend/config/batch_census.py',
+    'backend/scripts/batch_pipeline_poll_state_census.py',
+)
 BATCH_STAGE_ENV_RATCHET_PREFIXES = (
     'backend/utils/batch_pipeline/',
     'backend/database/batch_pipeline_',
@@ -177,9 +196,11 @@ BATCH_STAGE_ENV_RATCHET_PREFIXES = (
 # prefixes cover its SCOPE.
 FLAG_BUDGET_TESTS = ('tests/unit/test_flag_budget.py',)
 FLAG_BUDGET_PREFIXES = (
+    'backend/utils/pusher_audio_projection.py',
     'backend/utils/batch_pipeline/',
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
+    'backend/config/batch_language_recovery.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',
@@ -187,6 +208,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/config/live_stt_',
     'backend/config/transcription_final_pass.py',
     'backend/config/flag_budget.json',
+    'backend/parakeet/language_gate.py',
 )
 
 
@@ -198,6 +220,17 @@ BACKGROUND_TASK_RATCHET_TESTS = (
     'tests/unit/test_background_task_ratchet.py',
     'tests/unit/test_revision_drain_harness.py',
 )
+
+# Legacy-sync import ratchet: no new importer of the retiring legacy sync
+# modules (plan C class (a)) may slip past changed-file CI and only fail the
+# post-merge --all run. Selection uses the shared scope predicate
+# (tests/support/sync_legacy_ratchet_scope.py) so the ratchet runs for every
+# importer path its walk can scan, mirroring the background-task ratchet.
+# Only the ratchet itself: test_workflow_contracts.py stays out of this
+# cross-cutting set — it covers the background-task ratchet and other
+# workflows, and is selected by its own declared contract sources
+# (testing/workflow_contracts.json) plus the backend/testing/ full-run prefix.
+SYNC_LEGACY_RATCHET_TESTS = ('tests/unit/test_sync_legacy_import_ratchet.py',)
 
 # Shared with the canonical release manifest's named trigger. Do not copy the
 # inventory's directory exclusions into a second set of workflow path globs.
@@ -232,7 +265,58 @@ def is_firestore_index_guard_path(path: str) -> bool:
     )
 
 
+LIFECYCLE_INVARIANT_TESTS = (
+    'tests/unit/test_lifecycle_state_table_writers.py',
+    'tests/unit/test_lifecycle_invariants.py',
+)
+LIFECYCLE_SOURCE_REGRESSION_TESTS = {
+    'backend/utils/batch_pipeline/scheduler.py': ('tests/unit/test_batch_pipeline_scheduler.py',),
+    'backend/utils/fair_use.py': ('tests/unit/test_lifecycle_ladder_properties.py',),
+    'backend/database/fair_use.py': ('tests/unit/test_lifecycle_ladder_properties.py',),
+}
+
 AREA_TESTS = (
+    # Source-effective lever declarations and expiry metadata share the existing unit lane.
+    (
+        (
+            'backend/config/firestore_read_levers.py',
+            'backend/deploy/runtime_env/',
+            'backend/deploy/runtime_env.yaml',
+            'backend/deploy/compose_runtime_env.py',
+            'backend/deploy/generate_read_lever_manifest.py',
+            'backend/deploy/firestore_read_levers_manifest.json',
+            'backend/charts/batch-pipeline-worker/',
+            'backend/charts/backend-listen/',
+            'backend/charts/pusher/',
+        ),
+        (),
+        (
+            'tests/unit/test_backend_runtime_env_validator.py',
+            'tests/unit/test_batch_pipeline_chart.py',
+            'tests/unit/test_config_train.py',
+            'tests/unit/test_runtime_env_sources.py',
+        ),
+    ),
+    (
+        (
+            'backend/utils/conversations/',
+            'backend/utils/batch_pipeline/',
+            'backend/database/record_audio.py',
+            'backend/database/record_partial.py',
+            'backend/database/conversation_finalization_jobs.py',
+            'backend/database/episodes.py',
+            'backend/database/episode_timeline.py',
+            'backend/utils/episodes/',
+            'backend/utils/fair_use.py',
+            'backend/database/fair_use.py',
+            'backend/utils/sync/assignment.py',
+            'backend/utils/sync/bridge_pending.py',
+            'backend/tests/support/lifecycle_state_table.py',
+            'backend/charts/monitoring/alerts/',
+        ),
+        ('backend/database/batch_pipeline_*.py',),
+        LIFECYCLE_INVARIANT_TESTS,
+    ),
     (
         ('backend/charts/incluster-guards/',),
         (
@@ -368,6 +452,10 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_timeliness_metrics_are_scraped.py',
+            'tests/unit/test_serving_podmonitoring_chart.py',
+            'tests/unit/test_firestore_attribution_charts.py',
+            'tests/unit/test_backend_secrets_chart.py',
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_journey_observability.py',
             'tests/unit/test_verify_pusher_live_alert_route.py',
@@ -636,12 +724,39 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(
             test for test in ('tests/unit/test_generated_compute_inventory_guardrails.py',) if test in all_tests
         )
+    # Add the timeliness contract without classifying an otherwise-unmapped
+    # producer/deploy edit as narrow: retain its existing full-suite fallback.
+    if any(
+        path.startswith(('backend/utils/batch_pipeline/', 'backend/database/batch_pipeline_'))
+        or path == 'backend/deploy/cloud_run_gmp_sync.yaml'
+        for path in changed_paths
+    ):
+        selected.update(
+            test
+            for test in (
+                'tests/unit/test_timeliness_metrics_are_scraped.py',
+                'tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py',
+            )
+            if test in all_tests
+        )
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):
         selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
     if any(is_reason_label_scope_path(path) for path in changed_paths):
         selected.update(test for test in REASON_LABEL_ENUM_TESTS if test in all_tests)
+    # The AST inventory also discovers a new writer in a previously unrelated
+    # module. Keep the source fallback unchanged while always running its guard.
+    if any(path.startswith(('backend/database/', 'backend/utils/')) and path.endswith('.py') for path in changed_paths):
+        selected.update(test for test in LIFECYCLE_INVARIANT_TESTS if test in all_tests)
+    if any(path.startswith('backend/') and path.endswith('.py') for path in changed_paths):
+        selected.update(test for test in ('tests/unit/test_lifecycle_state_table_writers.py',) if test in all_tests)
+    for path in changed_paths:
+        selected.update(test for test in LIFECYCLE_SOURCE_REGRESSION_TESTS.get(path, ()) if test in all_tests)
+    if any(is_sync_legacy_ratchet_path(path) for path in changed_paths):
+        selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
+    if any(path.startswith(CENSUS_GUARD_PREFIXES) for path in changed_paths):
+        selected.update(test for test in CENSUS_GUARD_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):
@@ -675,7 +790,10 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
             if any(path.startswith(prefix) for prefix in source_prefixes) or any(
                 path_matches(path, pattern) for pattern in source_globs
             ):
-                mapped_backend_sources.add(path)
+                # These are additive guards. They cannot turn a previously
+                # unmapped implementation path into a narrow two-file suite.
+                if test_globs != LIFECYCLE_INVARIANT_TESTS:
+                    mapped_backend_sources.add(path)
                 selected.update(match_tests(all_tests, test_globs))
 
     if any(is_memory_policy_core_path(path) for path in backend_paths):

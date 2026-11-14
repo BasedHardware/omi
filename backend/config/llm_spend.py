@@ -7,11 +7,20 @@ default off until their eval is accepted.
 
 import os
 
-from config.refactor_switches import default_off as rollout_default_off
 from config.refactor_switches import default_on as rollout_default_on
 
 _FALSE_WORDS = frozenset({'false', '0', 'off', 'no'})
 _TRUE_WORDS = frozenset({'true', '1', 'on', 'yes'})
+
+
+def memory_l1_prompt_schema_trim_enabled() -> bool:
+    """Omit only fields recomputed by the server from the generation schema."""
+    return os.getenv('MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED', 'true').strip().lower() not in _FALSE_WORDS
+
+
+def vertex_embedding_dedupe_enabled() -> bool:
+    """Reuse successful, exact-input Vertex embeddings for the same owner."""
+    return os.getenv('VERTEX_EMBEDDING_DEDUPE_ENABLED', 'true').strip().lower() not in _FALSE_WORDS
 
 
 def topic_deterministic_short_enabled() -> bool:
@@ -19,18 +28,4 @@ def topic_deterministic_short_enabled() -> bool:
     return rollout_default_on(
         'CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED',
         os.getenv('CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED', 'true').strip().lower() not in _FALSE_WORDS,
-    )
-
-
-def memory_l1_owner_neutral_prefix_enabled() -> bool:
-    """Serve the L1 system prompt without the owner name embedded in it.
-
-    Off keeps the exact legacy wording. On moves the owner name to the volatile
-    tail so the instruction prefix is shareable across a user's calls (and the
-    provider's prompt cache can read it); enable only after the fixture eval
-    shows unchanged extraction behavior.
-    """
-    return rollout_default_off(
-        'MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED',
-        os.getenv('MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED', 'false').strip().lower() in _TRUE_WORDS,
     )

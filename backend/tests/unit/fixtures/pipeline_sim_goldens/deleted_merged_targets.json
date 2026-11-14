@@ -30,6 +30,7 @@
    },
    "final_result": {
     "conversation_id": "conv-9",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -47,7 +48,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -94,6 +95,7 @@
    },
    "final_result": {
     "conversation_id": "conv-17",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 3,
     "owner_id": "owner-3",
@@ -138,6 +140,7 @@
    "final_result": {
     "conversation_id": "conv-3",
     "erased": true,
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 7,
     "owner_id": "owner-1",
@@ -172,6 +175,7 @@
    "final_result": {
     "conversation_id": "conv-3",
     "erased": true,
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 8,
     "owner_id": "owner-1",
@@ -206,6 +210,7 @@
    "final_result": {
     "conversation_id": "conv-3",
     "erased": true,
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 9,
     "owner_id": "owner-1",
@@ -260,6 +265,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 10,
     "owner_id": "owner-1",
@@ -324,6 +330,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 11,
     "owner_id": "owner-1",
@@ -365,69 +372,33 @@
    "content_kind": "speech",
    "duration_seconds": 209.11,
    "final_job": null,
-   "final_result": {
-    "conversation_id": "conv-6",
-    "erased": true,
-    "late_capture": true,
-    "log_sequence": 12,
-    "owner_id": "owner-1",
-    "previous_segment_id": "seg-15",
-    "privacy_generation": 0,
-    "projection_state": "erased",
-    "protocol_version": 1,
-    "result": {
-     "outcome": "success"
-    }
-   },
+   "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
-    "<30s result_ready",
-    "<30s committed",
+    "<30s leased",
     "<30s purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [],
    "result_artifact": null,
-   "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s erased outcome:success"
-   ]
+   "result_transitions": []
   },
   "seg-17": {
    "content_kind": "speech",
    "duration_seconds": 65.86,
    "final_job": null,
-   "final_result": {
-    "conversation_id": "conv-6",
-    "erased": true,
-    "late_capture": true,
-    "log_sequence": 13,
-    "owner_id": "owner-1",
-    "previous_segment_id": "seg-16",
-    "privacy_generation": 0,
-    "projection_state": "erased",
-    "protocol_version": 1,
-    "result": {
-     "outcome": "success"
-    }
-   },
+   "final_result": null,
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
-    "<30s result_ready",
-    "<30s committed",
+    "<30s leased",
     "<30s purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [],
    "result_artifact": null,
-   "result_transitions": [
-    "<30s pending outcome:success",
-    "<30s erased outcome:success"
-   ]
+   "result_transitions": []
   },
   "seg-18": {
    "content_kind": "speech",
@@ -456,6 +427,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 4,
     "owner_id": "owner-3",
@@ -473,10 +445,10 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
-    "<5s committed client:completed"
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
+    "<30s committed client:completed"
    ],
    "owner": "owner-3",
    "paid_calls": 0,
@@ -489,8 +461,8 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
-    "<5s completed outcome:success"
+    "<30s pending outcome:success",
+    "<30s completed outcome:success"
    ]
   },
   "seg-2": {
@@ -520,6 +492,7 @@
    },
    "final_result": {
     "conversation_id": "conv-10",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-1",
@@ -537,7 +510,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -584,6 +557,7 @@
    },
    "final_result": {
     "conversation_id": "conv-11",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 3,
     "owner_id": "owner-1",
@@ -601,7 +575,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -648,6 +622,7 @@
    },
    "final_result": {
     "conversation_id": "conv-12",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 4,
     "owner_id": "owner-1",
@@ -665,9 +640,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<30s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-1",
@@ -681,7 +656,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -712,6 +687,7 @@
    },
    "final_result": {
     "conversation_id": "conv-13",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 5,
     "owner_id": "owner-1",
@@ -729,9 +705,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<30s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-1",
@@ -745,7 +721,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -776,6 +752,7 @@
    },
    "final_result": {
     "conversation_id": "conv-14",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 6,
     "owner_id": "owner-1",
@@ -793,9 +770,9 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed",
+    "<30s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s committed client:completed"
    ],
    "owner": "owner-1",
@@ -809,7 +786,7 @@
     "words_provider": "parakeet"
    },
    "result_transitions": [
-    "<5s pending outcome:success",
+    "<30s pending outcome:success",
     "<30s completed outcome:success"
    ]
   },
@@ -840,6 +817,7 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -904,6 +882,7 @@
    },
    "final_result": {
     "conversation_id": "conv-15",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",
@@ -968,6 +947,7 @@
    },
    "final_result": {
     "conversation_id": "conv-16",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-3",

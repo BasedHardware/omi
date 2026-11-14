@@ -20,6 +20,24 @@ INCOMPLETE_REASONS = (
 )
 
 
+def _donor_speech_span(segment: dict) -> tuple[float, float] | None:
+    """Empty finite donor intervals contribute zero, without relaxing proof."""
+    span = incoming_speech_span(segment)
+    if span is not None:
+        return span
+    timestamp, start, end = (segment.get(key) for key in ('timestamp', 'start', 'end'))
+    if (
+        isinstance(timestamp, (int, float))
+        and isinstance(start, (int, float))
+        and isinstance(end, (int, float))
+        and all(math.isfinite(value) for value in (timestamp, start, end))
+        and start == end
+        and math.isfinite(timestamp + timestamp)
+    ):
+        return timestamp, timestamp
+    return None
+
+
 def count_bucket(value: int) -> str:
     return '0' if value == 0 else '1' if value == 1 else '2_5' if value <= 5 else '6_20' if value <= 20 else 'gt_20'
 
@@ -73,7 +91,7 @@ def bridge_observation(
             reason = report.incomplete_reason if report.incomplete_reason != 'none' else reason
             kept_objects = {id(segment) for segment in report.kept}
             for segment in original:
-                span = incoming_speech_span(segment)
+                span = _donor_speech_span(segment)
                 if span is None:
                     reason = 'invalid_timing'
                     continue
@@ -85,7 +103,7 @@ def bridge_observation(
             lexical += report.lexical
             retry += report.exact_retry
             for segment in report.kept:
-                span = incoming_speech_span(segment)
+                span = _donor_speech_span(segment)
                 if span is None:
                     reason = 'invalid_timing'
                     continue

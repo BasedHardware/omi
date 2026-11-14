@@ -30,7 +30,15 @@
       "stage": "response_validation"
      },
      "privacy_generation": 0,
-     "provider": "modulate"
+     "provider": "modulate",
+     "recognizers": {
+      "soniox": {
+       "outcome": "refused",
+       "provider": "soniox",
+       "vad_speech_seconds": 1.0,
+       "word_count": null
+      }
+     }
     },
     "recovery_state": "failed_held",
     "recovery_wake": {
@@ -100,6 +108,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -157,6 +166,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-1",
@@ -170,7 +180,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed"
    ],
@@ -214,6 +224,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 3,
     "owner_id": "owner-1",
@@ -227,7 +238,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed"
    ],
@@ -272,6 +283,7 @@
    },
    "final_result": {
     "conversation_id": "conv-5",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -289,7 +301,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -364,6 +376,7 @@
    },
    "final_result": {
     "conversation_id": "conv-6",
+    "fresh_capture": true,
     "late_capture": true,
     "log_sequence": 3,
     "owner_id": "owner-2",
@@ -382,7 +395,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -436,6 +449,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -453,7 +467,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

@@ -15,7 +15,9 @@ Grafana provisioning workflow reads it directly with a one-file allowlist.
 It creates the team/folder, replaces folder permissions with Admin + team View,
 removes old explicit dashboard grants, and verifies folder/read-back placement.
 Never add Viewer/Editor org grants or publish/anonymous access. The workflow's
-prod-only step needs `BUSINESS_GRAFANA_TOKEN` in `monitoring-prod`.
+gated prod-dispatch step reads `BUSINESS_GRAFANA_TOKEN` from the `prod` environment. The
+automatic push-to-main apply reads it from `grafana-dashboards-prod` and skips with a
+warning while that environment does not hold it.
 
 ## Keyless datasource
 
@@ -30,9 +32,24 @@ Service or host port. It accepts only GET `/api/omi/stats/wall` (the exact
 private-board route; no query strings) and
 forwards to the fixed `https://admin.omi.me` origin. It forwards no client headers,
 disables redirects/environment proxies, bounds response size/concurrency, and
-never logs tokens, URLs or upstream bodies. Successful responses coalesce/cache
-for 15 minutes (never across UTC midnight); failures coalesce for five seconds,
-release waiting queries and never serve expired success data.
+never logs tokens, URLs or upstream bodies. Each path coalesces on its own lock
+(one slow series never queues the others) and caches 15 minutes, or 15 seconds
+while the admin reports `refreshing`. After a path has answered once, an expired
+or failed refresh serves that last good body (at most 24 hours old, the admin's
+own stale-good bound) while one background refresh per path runs; the body carries
+its own "Data through"/`cacheStale` freshness. Only a path that has never answered
+blocks a panel, and its failure is shared for five seconds.
+
+The sidecar also serves GET `/api/omi/stats/uptime` itself, for the Health
+column's Uptime number (David, 2026-11-06). It runs fixed PromQL against the
+in-cluster Prometheus (`OMI_UPTIME_PROMETHEUS_URL`, default the prod
+`prod-omi-kube-prometheus-s-prometheus` service). No query text, label or range
+comes from the request, so the Business org still holds no Prometheus datasource.
+It returns aggregates only (7-day attempt-weighted success over live capture,
+conversation saved, chat answer and cloud push-to-talk, per journey and per day),
+caches 15 minutes and serves the last good body for up to six hours while
+Prometheus is unreachable. Deploying it is the same ConfigMap + SHA annotation
+roll as any `stats_proxy.py` change.
 The metadata access token is used only for IAM Credentials `generateIdToken`
 on `omi-stats-reader`, audience `https://admin.omi.me/api/omi/stats`, includeEmail.
 The ID token stays in memory and refreshes five minutes early, or once on 401.

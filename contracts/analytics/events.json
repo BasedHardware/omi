@@ -3,6 +3,37 @@
   "adopted_files": [],
   "events": [
     {
+      "id": "onDeviceTranscriptionUsed",
+      "wire_name": "On Device Transcription Used",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "route": {
+          "type": "enum",
+          "wire_name": "route",
+          "values": [
+            "allowance",
+            "custom",
+            "offline_batch"
+          ]
+        },
+        "audioMs": {
+          "type": "int",
+          "wire_name": "audio_ms"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        }
+      },
+      "consumers": [
+        "on-device-transcription-usage"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",
@@ -2708,7 +2739,8 @@
             "open",
             "select",
             "copy_conversation_id",
-            "test_prompt"
+            "test_prompt",
+            "export_transcript"
           ]
         },
         "surface": {
@@ -3643,7 +3675,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3665,7 +3698,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3687,7 +3721,8 @@
           "wire_name": "channel",
           "values": [
             "telegram",
-            "imessage"
+            "imessage",
+            "whatsapp"
           ]
         }
       },
@@ -3743,7 +3778,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         },
         "currentPlan": {
@@ -3821,7 +3858,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },
@@ -4045,6 +4084,148 @@
             "other",
             "none",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchShown",
+      "wire_name": "Subscription Yearly Switch Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchOpened",
+      "wire_name": "Subscription Yearly Switch Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchConfirmed",
+      "wire_name": "Subscription Yearly Switch Confirmed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchSucceeded",
+      "wire_name": "Subscription Yearly Switch Succeeded",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchFailed",
+      "wire_name": "Subscription Yearly Switch Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "preview_unavailable",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchDismissed",
+      "wire_name": "Subscription Yearly Switch Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
           ]
         }
       },
@@ -4316,7 +4497,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },
@@ -4350,6 +4533,69 @@
             "timeout",
             "page_requested"
           ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackShown",
+      "wire_name": "Paywall Monthly Fallback Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackAccepted",
+      "wire_name": "Paywall Monthly Fallback Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "purchased",
+            "cancelled",
+            "failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackDismissed",
+      "wire_name": "Paywall Monthly Fallback Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
         }
       },
       "consumers": [
@@ -4813,10 +5059,49 @@
         "wal-upload-refusals"
       ],
       "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueShown",
+      "wire_name": "Subscription Payment Issue Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueUpdateTapped",
+      "wire_name": "Subscription Payment Issue Update Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssuePortalOpened",
+      "wire_name": "Subscription Payment Issue Portal Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {
-    "source": "docs/finops/telemetry-transport-contract.md section 4",
+    "source": "backend/docs/telemetry-transport-contract.md section 4",
     "note": "Legacy required events stay in the events array. Recording Requested is documented here with request_origin semantics. It is not inserted into events[] in this change because the registry generator would also rewrite app/lib/utils/analytics/registry/events.g.dart, which is outside the admin and analytics write boundary. Parent regenerates that Dart file if the event is later promoted into events[].",
     "recording_requested": {
       "wire_name": "Recording Requested",

@@ -16,6 +16,8 @@ transaction.
 
 from __future__ import annotations
 
+from database import transcript_pointer
+
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -28,7 +30,8 @@ from google.api_core.exceptions import FailedPrecondition
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.firestore_index_registry import (
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
@@ -36,6 +39,7 @@ from database.firestore_index_registry import (
 from database.people_stats_cache import invalidate_people_stats_cache
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.conversations.summary_delivery import rearm_on_revision_change
 from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
@@ -323,6 +327,9 @@ def absorb_conversation(
     expected_survivor_sync_revision: Any = _UNSET,
     expected_donor_sync_revision: Any = _UNSET,
     last_fragment_id: Optional[str] = None,
+    finalization_fence: tuple[str, int, int] | None = None,
+    processing_owner: str | None = None,
+    before_processing: bool = False,
     firestore_client: Any = None,
 ) -> AbsorbResult:
     """Atomically append the donor to the survivor and leave a redirect tombstone.
@@ -357,6 +364,34 @@ def absorb_conversation(
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
             return AbsorbResult('rejected', 'conversation_not_eligible')
+        if finalization_fence is not None:
+            job_id, generation, epoch = finalization_fence
+            job = (
+                client.collection('conversation_finalization_jobs')
+                .document(job_id)
+                .get(transaction=transaction)
+                .to_dict()
+                or {}
+            )
+            until = job.get('lease_expires_at')
+            if (
+                job.get('status') != 'leased'
+                or job.get('uid') != uid
+                or job.get('conversation_id') != donor_id
+                or job.get('dispatch_generation') != generation
+                or job.get('lease_epoch') != epoch
+                or donor_raw.get('finalization_job_id') != job_id
+                or donor_raw.get('finalization_revision') != job.get('finalization_revision')
+                or job.get('fanout_status') == 'completed'
+                or not isinstance(until, datetime)
+                or until <= datetime.now(timezone.utc)
+            ):
+                return AbsorbResult('rejected', 'survivor_changed')
+        if processing_owner is not None and (
+            donor_raw.get('summary_processing_owner') != processing_owner
+            or float(donor_raw.get('summary_processing_lease_until') or 0) <= datetime.now(timezone.utc).timestamp()
+        ):
+            return AbsorbResult('rejected', 'survivor_changed')
         donor_state = donor_raw.get(SMART_MERGE_FIELD) or {}
         if donor_raw.get('deleted'):
             if donor_state.get('role') == 'donor' and donor_state.get('survivor_id') == survivor_id:
@@ -371,7 +406,7 @@ def absorb_conversation(
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()
-        if flatten:
+        if flatten or before_processing:
             if expected_survivor_sync_revision is not _UNSET and (
                 survivor_raw.get('sync_content_revision') != expected_survivor_sync_revision
             ):
@@ -380,6 +415,7 @@ def absorb_conversation(
                 donor_raw.get('sync_content_revision') != expected_donor_sync_revision
             ):
                 return AbsorbResult('rejected', 'flatten_content_changed')
+        if flatten:
             reason, union_ids = merge_ancestry.ancestry_union(survivor_raw, {donor_id: donor_raw})
             if reason is not None:
                 return AbsorbResult('rejected', reason)
@@ -390,8 +426,14 @@ def absorb_conversation(
             }
         else:
             ancestor_rows = {}
-        survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
-        donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        try:
+            survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
+        try:
+            donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         last_fragment_row = None
         if last_fragment_id is not None:
             if last_fragment_id == survivor_id:
@@ -403,7 +445,10 @@ def absorb_conversation(
                     else collection.document(last_fragment_id).get(transaction=transaction).to_dict()
                 )
                 if fragment_raw is not None:
-                    fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    try:
+                        fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                        return AbsorbResult('rejected', 'conversation_not_eligible')
                     last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
         if has_intervening_discarded(uid, survivor, donor, transaction=transaction, firestore_client=client):
             return AbsorbResult('rejected', 'intervening_discarded')
@@ -441,7 +486,14 @@ def absorb_conversation(
             dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
         )
         remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
-        payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        from utils.conversations.recorded_time import write_span
+
+        survivor_update.update(write_span({**survivor, **survivor_update}))
+        if 'transcript_segments' in survivor_update:
+            rearm_on_revision_change(survivor_raw, survivor_update)
+        payload = conversations_db.encode_conversation_for_write(
+            uid, survivor_update, level, conversation_state=survivor_raw
+        )
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw
@@ -658,3 +710,25 @@ def complete_survivor_refresh(
         return True
 
     return run_transactional(client, complete)
+
+
+def delegate_survivor_refresh(uid: str, survivor_id: str, *, revision: int, firestore_client: Any = None) -> bool:
+    """Receipt a durable outbox handoff, without claiming any processing completed."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def delegate(transaction):
+        row = ref.get(transaction=transaction).to_dict() or {}
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        if row.get('deleted') or int(state.get('revision') or 0) != revision:
+            return False
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if isinstance(until, datetime) and until > datetime.now(timezone.utc):
+            return False
+        state['delegated_revision'] = revision
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, delegate)

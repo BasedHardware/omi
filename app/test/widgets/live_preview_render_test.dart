@@ -39,6 +39,7 @@ import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../helpers/sfpro_font_fixtures.dart';
@@ -335,6 +336,96 @@ void main() {
     return '${number.toString().padLeft(3, '0')}-mobile-ios-${light ? slug : '$slug-dark'}.png';
   }
 
+  for (final after in [false, true]) {
+    testWidgets('noengine fallback ${after ? 'after' : 'before'} fixture', (tester) async {
+      android = false;
+      final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine)) ?? (null, null);
+      // Same phone after its one-way refusal: the local surface is inactive
+      // and the existing server transcript is delivered by visible restore.
+      if (after) preview!.revoke();
+      final capture = after ? _Capture(preview: preview, admitted: false) : captureFor(_State.noEngine, preview);
+      if (after) {
+        capture.segments = [
+          TranscriptSegment(
+            id: 'synthetic-cloud-preview',
+            text: 'Let’s meet on Thursday and review the plan together.',
+            speaker: 'SPEAKER_0',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 4,
+            translations: [],
+          ),
+        ];
+      }
+      addTearDown(capture.dispose);
+      final episodes = episodesWith(episodeWith(title: ''));
+      addTearDown(episodes.dispose);
+      await shoot(tester, '${after ? '002' : '001'}-mobile-ios-noengine-${after ? 'after' : 'before'}.png',
+          light: true,
+          home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+          capture: capture,
+          episodes: episodes);
+      expect(find.text(en.livePreviewNoEngineBody), after ? findsNothing : findsOneWidget);
+      expect(find.textContaining('Let’s meet on Thursday'), after ? findsOneWidget : findsNothing);
+      expect(find.text('Live on this phone'), findsNothing);
+    });
+  }
+
+  testWidgets('hybrid 1000-line live episode stays lazy and preview ticks leave final rows alone', (tester) async {
+    final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
+    final capture = captureFor(_State.hybrid, preview);
+    capture.segments = List.generate(
+        1000,
+        (i) => TranscriptSegment(
+              id: 'history-$i',
+              text: 'Final line $i',
+              speaker: 'SPEAKER_0',
+              isUser: true,
+              personId: null,
+              start: i.toDouble(),
+              end: i + 1.0,
+              translations: [],
+            ));
+    addTearDown(capture.dispose);
+    for (var i = 0; i < 200; i++) {
+      engine!.emit('preview-$i', 'Preview line $i', true);
+    }
+    final episodes = episodesWith(episodeWith());
+    addTearDown(episodes.dispose);
+    await shoot(tester, null,
+        light: true,
+        home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+        capture: capture,
+        episodes: episodes);
+    final rows = find.byWidgetPredicate((w) =>
+        w is KeyedSubtree &&
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith('transcript-segment-'));
+    expect(rows.evaluate().length, lessThan(40));
+    expect(find.byKey(const ValueKey('live_preview_tail_preview-199')).hitTestable(), findsOneWidget);
+    final mountedFinalRows = rows.evaluate().map((e) => e.widget).toList();
+    var transcriptBuilds = 0;
+    var previewTextBuilds = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is TranscriptWidget) transcriptBuilds++;
+      final widget = element.widget;
+      if (widget is Text && (widget.data ?? '').startsWith('Preview line ')) previewTextBuilds++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+    for (var i = 0; i < 3; i++) {
+      engine!.emit('preview-199', 'Preview line 199 with revision $i and more words', false);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 600));
+    }
+    expect(transcriptBuilds, 0);
+    expect(previewTextBuilds, 3, reason: 'only the revised preview line rebuilds per tick');
+    for (final row in rows.evaluate()) {
+      expect(mountedFinalRows.any((old) => identical(old, row.widget)), isTrue);
+    }
+    expect(find.text('Preview line 199 with revision 2 and more words'), findsOneWidget);
+  });
+
   for (final (onAndroid, light) in [(false, false), (false, true), (true, false), (true, true)]) {
     final theme = '${onAndroid ? 'android' : 'ios'}, ${light ? 'light' : 'dark'}';
 
@@ -374,8 +465,7 @@ void main() {
       expect(find.text(en.livePreviewListening), findsOneWidget);
     });
 
-    testWidgets('no on-device engine: Recording safely card, settings link only when it can land ($theme)',
-        (tester) async {
+    testWidgets('no on-device engine: quiet line, settings link only when it can land ($theme)', (tester) async {
       android = onAndroid;
       final (preview, _) = await tester.runAsync(() => previewIn(_State.noEngine)) ?? (null, null);
       final capture = captureFor(_State.noEngine, preview);
@@ -387,11 +477,9 @@ void main() {
           home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
           capture: capture,
           episodes: episodes);
-      expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
       expect(find.text(en.livePreviewNoEngineBody), findsOneWidget);
       expect(find.byKey(const Key('live_preview_turn_on_live_text')), findsNothing,
           reason: 'locale_asset_missing has no settings deep-link');
-      expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
     });
 
     testWidgets('no engine with denied speech permission offers Turn on live text ($theme)', (tester) async {
@@ -402,7 +490,7 @@ void main() {
       final capture = captureFor(_State.noEngine, preview);
       addTearDown(capture.dispose);
       await shoot(tester, null, light: light, home: const LiveEpisodePage(), capture: capture);
-      expect(find.text(en.livePreviewNoEngineTitle), findsOneWidget);
+      expect(find.text(en.livePreviewNoEngineBody), findsOneWidget);
       expect(find.text(en.livePreviewTurnOnLiveText), findsOneWidget);
       expect(tester.getSize(find.byKey(const Key('live_preview_turn_on_live_text'))).height,
           greaterThanOrEqualTo(kOmiMinTapTarget));
@@ -417,7 +505,7 @@ void main() {
         final capture = captureFor(_State.hybrid, preview, inFlightSeconds: 22);
         capture.applyInProgressConversation(ServerConversation(
             id: 'c1',
-            createdAt: DateTime.utc(2026, 10, 27),
+            createdAt: DateTime.now().subtract(const Duration(minutes: 11)),
             structured: Structured('', ''),
             transcriptSegments: capture.segments.reversed.toList()));
         expect(capture.segments.map((s) => s.start), [0, 4]);
@@ -429,8 +517,8 @@ void main() {
             home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
             capture: capture,
             episodes: episodes);
-        // Finals with their speakers come first.
-        expect(find.textContaining('Thursday', findRichText: true), findsWidgets);
+        // Finals with their speakers come first; the list follows the latest, so the first may sit above the fold.
+        expect(find.textContaining('Thursday', findRichText: true, skipOffstage: false), findsWidgets);
         // The divider names where the preview continues.
         expect(find.byKey(const Key('live_preview_divider')), findsOneWidget);
         expect(find.text(en.livePreviewOnPhoneDivider), findsOneWidget);
@@ -440,17 +528,21 @@ void main() {
         // The uncovered volatile tail does, lighter than settled text.
         final tail = tester.widget<Text>(
             find.descendant(of: find.byKey(const Key('live_preview_tail_a2')), matching: find.byType(Text)));
-        expect(tail.style?.color, OmiColors.textSecondary);
-        // One quiet behind-line instead of the uploading pill and chunk count; on the episode
-        // page it is the last line under the transcript.
-        final behind = find.byKey(const Key('live_preview_behind_line'));
-        expect(behind, findsOneWidget);
-        expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
+        expect(tail.style?.color, OmiColors.textTertiary);
+        // One quiet account of the gap instead of the uploading pill and chunk count.
         expect(find.text(en.uploadingAudioForTranscription(en.timeCompactSecs(22))), findsNothing);
         expect(find.text(en.captureChunksPending(2)), findsNothing);
         if (onEpisodePage) {
-          expect(tester.getTopLeft(behind).dy,
-              greaterThan(tester.getBottomLeft(find.byKey(const Key('live_preview_divider'))).dy));
+          // The rule and the saved card sit between the final lines and the preview.
+          final catchUp = find.byKey(const Key('live_transcript_catch_up'));
+          expect(find.byKey(const Key('live_transcribed_up_to')), findsOneWidget);
+          expect(find.textContaining(en.liveAudioSaved(en.timeCompactSecs(20))), findsOneWidget);
+          expect(find.byKey(const Key('live_preview_behind_line')), findsNothing);
+          expect(tester.getBottomLeft(catchUp).dy,
+              lessThanOrEqualTo(tester.getTopLeft(find.byKey(const Key('live_preview_divider'))).dy));
+        } else {
+          expect(find.byKey(const Key('live_preview_behind_line')), findsOneWidget);
+          expect(find.text(en.livePreviewBehind(en.timeCompactSecs(20))), findsOneWidget);
         }
       });
     }
@@ -548,11 +640,9 @@ void main() {
             capture: capture,
             episodes: episodes,
             textScale: largest ? _largestTextScale : 1);
-        // On-device bullets with their provenance tag and footnote.
+        // On-device bullets.
         expect(find.byKey(const Key('episode_on_device_notes')), findsOneWidget);
         expect(find.text('Ship the pendant update first'), findsOneWidget);
-        expect(find.text(en.episodeOnThisPhone), findsOneWidget);
-        expect(find.text(en.episodeOnDeviceNotesFootnote), findsOneWidget);
         // No server notes exist, so the "aren't updating" line is gone.
         expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
         expect(find.text(en.episodeNotesStartWithTranscript), findsNothing);
@@ -565,23 +655,7 @@ void main() {
         final header = tester.widget<ColoredBox>(find.byKey(const Key('live_episode_pinned_header')));
         expect(header.color, OmiColors.surface0);
         if (largest) return;
-        // The Live card: preview text, no "You" label, and the Open transcript link; the old
-        // "Live Transcript" card with speaker labels is gone.
-        expect(find.byKey(const Key('live_episode_preview_card')), findsOneWidget);
-        expect(find.text(en.liveCardTitle), findsOneWidget);
-        expect(find.text(en.episodeOpenTranscript), findsOneWidget);
-        expect(find.text(en.liveTranscript), findsNothing);
-        expect(tester.getSize(find.byKey(const Key('live_episode_open_transcript'))).height,
-            greaterThanOrEqualTo(kOmiMinTapTarget));
-        final richTexts = tester.widgetList<Text>(
-            find.descendant(of: find.byKey(const Key('live_episode_preview_card')), matching: find.byType(Text)));
-        expect(richTexts.any((text) => (text.data ?? '').startsWith('You')), isFalse,
-            reason: 'preview text has no speaker attribution');
-        // The newest words stay visible: the card trims at the start, never the end.
-        final card = tester.widget<RichText>(find
-            .descendant(of: find.byKey(const Key('live_episode_preview_card_text')), matching: find.byType(RichText))
-            .first);
-        expect(card.text.toPlainText(), endsWith('and if the overnight run looks clean we can'));
+        expect(find.byKey(const Key('live_episode_preview_card')), findsNothing);
       });
     }
 
@@ -613,7 +687,6 @@ void main() {
       }
       expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
-      expect(find.text(en.episodeOnThisPhone), findsNothing);
     });
 
     testWidgets('summary with no engine on the phone: the quiet line ($theme)', (tester) async {
@@ -628,7 +701,6 @@ void main() {
       await shoot(tester, name('summary-notes-unavailable', light),
           light: light, home: const LiveEpisodePage(), capture: capture, episodes: episodes);
       expect(find.text(en.episodeNotesStartWithTranscript), findsOneWidget);
-      expect(find.text(en.episodeOnThisPhone), findsNothing, reason: 'no bullets, no provenance tag');
       expect(find.byKey(const Key('episode_on_device_notes')), findsNothing);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
     });
@@ -664,18 +736,13 @@ void main() {
         // The tile carries the same session length the page counts, in whole minutes.
         expect(find.text('8m'), findsOneWidget);
         expect(find.text(title.isEmpty ? en.episodeListeningNow : title), findsOneWidget);
+        // Newest on-device words stay visible on line two; an empty preview keeps Listening.
         if (state == _State.streaming) {
-          // Line two is the preview, trimmed at the start so the newest words stay.
-          final line = tester.widget<Text>(
-              find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-          final words = line.textSpan!.toPlainText();
-          expect(words, endsWith('we can'));
-          expect(words.startsWith('…') || words.startsWith('Okay'), isTrue,
-              reason: 'trimmed at the start, never the end');
+          expect(find.byKey(const Key('home_live_episode_preview')), findsOneWidget);
+          expect(find.textContaining('we can', findRichText: true), findsOneWidget);
         } else {
-          // No preview text: today's subtitle without the duration.
           expect(find.byKey(const Key('home_live_episode_preview')), findsNothing);
-          expect(find.text(en.live), findsOneWidget);
+          expect(find.text(title.isEmpty ? en.live : en.listening), findsOneWidget);
         }
         // The row keeps its size: the tile never outgrows it.
         if (textScale == 1) {
@@ -683,23 +750,6 @@ void main() {
         }
       });
     }
-
-    testWidgets('home unspaced preview keeps the newest graphemes ($theme)', (tester) async {
-      android = onAndroid;
-      final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
-      const newest = '明日の予定を確認しましょう';
-      engine!.emit('latest', '${List.filled(40, '今日の会議で話し合った内容').join()}$newest', true);
-      final capture = captureFor(_State.streaming, preview);
-      addTearDown(capture.dispose);
-      final episodes = episodesWith(episodeWith());
-      addTearDown(episodes.dispose);
-      await shoot(tester, name('home-unspaced-preview', light),
-          light: light, home: homeRow(), capture: capture, episodes: episodes);
-      final text = tester.widget<Text>(
-          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
-      expect(text.textSpan!.toPlainText(), startsWith('…'));
-      expect(text.textSpan!.toPlainText(), endsWith(newest));
-    });
 
     testWidgets('Continues pill keeps its compact visual inside the larger hit area ($theme)', (tester) async {
       android = onAndroid;

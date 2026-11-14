@@ -1039,5 +1039,672 @@
       "audience": "agent",
       "owner": "two-lane-lead"
     }
+  },
+  {
+    "uid": "omi-pusher-db-executor-saturated",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - DB executor saturated",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum without (task) (omi_executor_task_active{job=\"pusher-metrics\",executor=\"db\"}) / omi_executor_max_workers{job=\"pusher-metrics\",executor=\"db\"}",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.99
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-30T10:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/pusher-degraded.md",
+      "threshold": "All configured DB workers active for 10 minutes (per scrape target, summed across task kinds)",
+      "summary": "Pusher shared DB executor has no spare worker capacity.",
+      "user_impact": "Transcript integrations can drop queued items and audio-byte integrations can close sessions with 1011.",
+      "scope": "Each production pusher metrics target; capacity follows PUSHER_DB_EXECUTOR_WORKERS.",
+      "verification": "Compare active and queued DB work against omi_executor_max_workers and inspect record_barrier pool pressure.",
+      "safe_next_action": "Escalate to the pusher rollout lead. Preserve record custody semantics; verify release attribution before mitigation."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-db-executor-saturated",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    }
+  },
+  {
+    "uid": "omi-pusher-storage-queue-warning",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - Storage executor queue high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  256
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-06T12:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "More than 256 queued storage tasks per pusher target for 10m (2x the 128 workers).",
+      "summary": "Pusher storage work is queuing persistently.",
+      "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
+      "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
+      "evaluated_bad": "Synthetic: a fresh pusher target has 257 queued storage tasks continuously for 10m.",
+      "evaluated_good": "Synthetic: current queue depth is at most 256, or a high sample is older than 120s or absent."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-storage-queue-warning",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-lifecycle"
+    }
+  },
+  {
+    "uid": "omi-pusher-storage-queue-critical",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - Storage executor queue critical",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum without (task) (omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"} and (time() - timestamp(omi_executor_task_queued{job=\"pusher-metrics\",executor=\"storage\"}) < 120))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  512
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-06T12:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "More than 512 queued storage tasks per pusher target for 10m (4x the 128 workers).",
+      "summary": "Pusher storage work is queuing persistently.",
+      "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
+      "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
+      "evaluated_bad": "Synthetic: a fresh pusher target has 513 queued storage tasks continuously for 10m.",
+      "evaluated_good": "Synthetic: current queue depth is at most 512, or a high sample is older than 120s or absent."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-storage-queue-critical",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-lifecycle"
+    }
+  },
+  {
+    "uid": "omi-pusher-memory-working-set-high",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - Memory working set high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (pod) ((container_memory_working_set_bytes{namespace=\"prod-omi-backend\",container!=\"\",image!=\"\"} and (time() - timestamp(container_memory_working_set_bytes{namespace=\"prod-omi-backend\",container!=\"\",image!=\"\"}) < 120)) * on (namespace,pod) group_left(workload,workload_type) (namespace_workload_pod:kube_pod_owner:relabel{namespace=\"prod-omi-backend\",workload=\"prod-omi-pusher\",workload_type=~\"deployment\"} and (time() - timestamp(namespace_workload_pod:kube_pod_owner:relabel{namespace=\"prod-omi-backend\",workload=\"prod-omi-pusher\",workload_type=~\"deployment\"}) < 120))) / 3758096384",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.75
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-06T12:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "Working set above 75% of the 3.5 GiB pusher limit for 15m (2.625 GiB).",
+      "summary": "Pusher memory is approaching its container limit.",
+      "user_impact": "Storage delays can postpone durable audio ACKs; memory exhaustion can disconnect live capture sessions and force client replay.",
+      "scope": "Production pusher current-state gauges only. Samples older than 120s are excluded before aggregation; absent data is not pressure. Byte admission is optional and off when the configured limit is zero.",
+      "verification": "Compare per-target storage queued/active tasks, omi_pusher_storage_pcm_inflight_bytes, pod working set and recent GCS errors. Read omi_pusher_storage_pcm_budget_limit_bytes (zero means off) and refusal stages. Attribute pressure to the running release.",
+      "safe_next_action": "Escalate to the lifecycle lead with the affected pod and release. Inspect GCS latency and queued work; preserve unacknowledged audio and custody objects. Use an approved rollback if the release caused the pressure.",
+      "evaluated_bad": "Synthetic: a fresh pusher pod working set is 80% of 3.5 GiB continuously for 15m.",
+      "evaluated_good": "Synthetic: current working set is at most 75%, or a high memory/owner sample is older than 120s or absent."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null,
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-memory-working-set-high",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-lifecycle"
+    }
+  },
+  {
+    "uid": "omi-pusher-storage-pcm-refusals",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - Storage PCM admission refused",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}[5m]) and (time() - timestamp(omi_pusher_storage_pcm_refusals_total{job=\"pusher-metrics\"}) < 120))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-06T12:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/c758b698-01a0-4b5c-b58c-e81e4ff33ccd",
+      "runbook": "backend/docs/runbooks/audio-durable-outbox.md",
+      "threshold": "Refusal rate >0 continuously for 30m.",
+      "summary": "Pusher custody storage admission remains saturated.",
+      "user_impact": "Refused PCM has no receipt or opcode-203 ACK. Client WAL stays retained for replay; live socket is not closed by refusal.",
+      "scope": "Production pusher byte-admission refusals only, by live/tail stage; stale samples older than120s are excluded. No signal proves playback or client replay cadence.",
+      "verification": "Compare the running release, configured budget limit, in-flight bytes, refusal stages, storage queued/active work and GCS errors. Confirm socket kills and pod memory separately.",
+      "safe_next_action": "Escalate to omi-lifecycle. Preserve source WALs and custody objects. Approved rollback sets PUSHER_STORAGE_PCM_BUDGET_MB chart value to0; do not clear producer fences or delete audio.",
+      "evaluated_bad": "Synthetic: fresh live-stage refusal counter increases every five-minute window for30m.",
+      "evaluated_good": "Synthetic: zero refusal rate, an isolated short burst, absent data or stale samples older than120s."
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "live-transcription",
+      "alert_identity": "omi-pusher-storage-pcm-refusals",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-lifecycle"
+    }
   }
 ]

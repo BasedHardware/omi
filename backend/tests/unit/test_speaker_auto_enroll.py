@@ -269,7 +269,7 @@ def test_enrollment_binding_records_the_pcm_crop_not_the_original_placement(monk
     monkeypatch.setattr(speaker_resolution, 'iter_audio_chunk_pcm', lambda *args, **kwargs: iter([(start, pcm)]))
     monkeypatch.setattr(speaker_resolution, 'extract_embedding_from_bytes', embed)
     segment = TranscriptSegment(id='wide', start=0, end=30, text='Synthetic speech.', speaker_id=1, is_user=False)
-    placements = {'wide': SimpleNamespace(window=(start, start + 30))}
+    placements = {'wide': SimpleNamespace(window=(start, start + 30), reason='sync', store=None)}
     cache, seconds, measured = {}, {}, {}
     count, _ = speaker_resolution._embed_missing(
         UID,

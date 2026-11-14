@@ -27,6 +27,7 @@ class SyncJobStartResponse(BaseModel):
 class SyncJobStatusResponse(BaseModel):
     job_id: str
     status: str
+    total_files: int = 0
     total_segments: int = 0
     processed_segments: int = 0
     successful_segments: int = 0
@@ -52,3 +53,7 @@ class SyncCaptureManifestRequest(BaseModel):
 
 class SyncCaptureManifestResponse(BaseModel):
     manifest: str
+
+
+class SyncUploadHoldReleaseResponse(BaseModel):
+    accepted: bool

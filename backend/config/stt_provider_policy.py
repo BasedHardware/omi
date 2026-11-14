@@ -12,6 +12,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Final, Mapping
 
+from config.live_stt_gpu_fleet import gpu_fleet_off, streaming_parakeet_slot_enabled
+
 
 class STTServingSurface(str, Enum):
     STREAMING = 'streaming'
@@ -121,34 +123,33 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
             STTServingSurface.PTT,
         }
     ),
-    # Async is admitted only for bounded, language-guarded held recovery; general
-    # prerecorded/PTT selection continues to use its existing providers.
-    SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY}),
+    # Async is admitted for fenced held recovery and, on the prerecorded surface,
+    # only as failover capacity: no prerecorded model token maps to Soniox
+    # (config.prerecorded_stt.provider_for_model_token) and it is absent from
+    # DEFAULT_MODELS_BY_SURFACE, so general prerecorded/PTT selection keeps its
+    # existing providers. Ordinary Modulate credit/breaker refusals and the batch
+    # route table both constrain Soniox to one replacement submission.
+    SONIOX_PROVIDER: frozenset(
+        {STTServingSurface.STREAMING, STTServingSurface.HELD_RECOVERY, STTServingSurface.PRERECORDED}
+    ),
 }
 
-# Held batch recovery used to spend one more multilingual call after Modulate
-# returned a validated empty response for long unknown-language speech
-# (utils/batch_pipeline/quarantine_recovery.py). Deepgram retired 2026-08-27
-# (no contract); there is no second provider with a batch client, so recovery
-# is Modulate-only and eligible units settle without the second call.
-HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = None
+# One independent call after a validated Modulate-empty held recovery, inside
+# the same paid intent. BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED is its kill switch.
+HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = SONIOX_PROVIDER
 
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
 #
-# Parakeet is the bounded-capacity last resort: the Parakeet service owns the
-# hard stream gate (see parakeet/admission.py), so every listener converges on
-# one cap per serving pod instead of listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
     # Velma-2 leads on cost, and its failures are recoverable: a mid-session
     # error frame hands the stream to Soniox rather than ending it (#12459), which
     # is what the second slot is for. Soniox only ever serves as that failover
     # hop, so judge it by the failover metrics, not by session-start acceptance
-    # (#13662). Parakeet stays last rather than being dropped: a client can ask
-    # for it by name (`?stt_service=parakeet`), and that preference is only
-    # honorable while the model is listed here.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'parakeet'),
+    # (#13662). The plain Parakeet last-resort slot is retired independently of
+    # the reviewed parakeet-window lane and can be restored by its kill switch.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
@@ -212,6 +213,16 @@ def normalized_stt_language(language: str | None) -> str:
     if not language:
         return ''
     return language.split('-')[0].split('_')[0].lower()
+
+
+# Profile equivalence is not provider capability or a change to the recorded
+# language. Only near-identical spoken pairs belong in this small map.
+LANGUAGE_EQUIVALENCE: Final[Mapping[str, str]] = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
+
+
+def canonical_language(language: str | None) -> str:
+    code = normalized_stt_language(language)
+    return LANGUAGE_EQUIVALENCE.get(code, code)
 
 
 # Soniox rejects any ``language_hints`` entry outside this vocabulary with
@@ -335,6 +346,9 @@ def deepgram_provider_for_runtime(self_hosted: bool) -> str:
 
 def provider_is_enabled(provider: str, surface: STTServingSurface) -> bool:
     """Return whether a provider may serve the specified product surface."""
+    # Modulate is a vendor, not a fleet GPU: it keeps live streaming after the shared fleet retires.
+    if gpu_fleet_off() and provider == PARAKEET_PROVIDER:
+        return False
     return surface in PROVIDER_SERVING_SURFACES.get(provider, frozenset())
 
 
@@ -344,6 +358,12 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
     A Deepgram token is admissible when either deployment is allowed. Selection
     re-checks the runtime's own provider, so this cannot reach a withheld one.
     """
+    if (
+        model.strip().lower() == 'parakeet'
+        and surface == STTServingSurface.STREAMING
+        and not streaming_parakeet_slot_enabled()
+    ):
+        return False
     if model.strip().lower() == 'parakeet-window' and surface != STTServingSurface.STREAMING:
         return False
     provider = provider_for_model_token(model)
@@ -356,7 +376,10 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
 
 def default_models_for_surface(surface: STTServingSurface) -> tuple[str, ...]:
     """Return the canonical model ordering for one serving surface."""
-    return tuple(model for model in DEFAULT_MODELS_BY_SURFACE[surface] if model_is_enabled(model, surface))
+    models = DEFAULT_MODELS_BY_SURFACE[surface]
+    if surface == STTServingSurface.STREAMING and streaming_parakeet_slot_enabled():
+        models += ('parakeet',)
+    return tuple(model for model in models if model_is_enabled(model, surface))
 
 
 def canonical_model_config(surface: STTServingSurface) -> str:

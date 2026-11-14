@@ -38,6 +38,7 @@ _PAYLOAD_FIELDS = (
     'conversation_id',
     'language',
     'effects_only',
+    'sync_hold',
     'immediate',
     'version',
     'first_pending_at',
@@ -68,6 +69,36 @@ def _claim(row: Mapping[str, Any], row_id: str) -> Claim:
         payload={name: row.get(name) for name in _PAYLOAD_FIELDS},
         policy_id=row.get('policy_id'),
     )
+
+
+# Consecutive superseded or revision-raced settlements of one row (bounded); reset by any processed settle.
+SUPERSEDE_STREAK_FIELD = 'supersede_streak'
+SUPERSEDE_STREAK_CAP = 8
+
+
+@functools.cache
+def _supersede_streak() -> Any:
+    from prometheus_client import REGISTRY, Histogram
+
+    try:
+        return Histogram(
+            'omi_enrichment_supersede_streak',
+            'Consecutive superseded or revision-raced settlements of one enrichment row, observed at each (cap 8)',
+            buckets=tuple(range(1, SUPERSEDE_STREAK_CAP + 1)),
+        )
+    except ValueError:  # an isolated loader re-executed this module
+        return REGISTRY._names_to_collectors['omi_enrichment_supersede_streak']  # type: ignore[attr-defined]
+
+
+def _bump_streak(row: dict[str, Any], observed: dict[str, int]) -> None:
+    streak = min(SUPERSEDE_STREAK_CAP, int(row.get(SUPERSEDE_STREAK_FIELD) or 0) + 1)
+    row[SUPERSEDE_STREAK_FIELD] = streak
+    observed['streak'] = streak
+
+
+def _observe_streak(observed: dict[str, int], committed: bool) -> None:
+    if committed and observed.get('streak'):
+        _supersede_streak().observe(observed['streak'])
 
 
 def _holds(row: Mapping[str, Any] | None, claim: Claim) -> bool:
@@ -228,6 +259,10 @@ class FirestoreEnrichmentOutbox:
 
         if self._blocked(row_id):
             return Outcome.DISCARDED
+        from utils.enrichment.age_gate import park_if_expired
+
+        if park_if_expired(row_id, wake_token, now=now, client=self._bound_client):
+            return Outcome.STALE
         if not admit(row_id, now=now, token=wake_token):
             return Outcome.DEFERRED  # Demand processing owns this row's next wake.
         outbox = _outbox()
@@ -243,7 +278,9 @@ class FirestoreEnrichmentOutbox:
                 return old, (Outcome.BUSY, None)
             row = dict(old)
             outbox.stamp_claim_policy(row, cache, stamps)
-            if row['due_at'] > now and (not row.get('effects_only') or not enabled(row['uid'])):
+            if row.get('sync_hold') and not outbox.processing_hold.enabled():
+                row['due_at'] = now
+            if row['due_at'] > now and (not outbox.effects_may_run_early(row) or not enabled(row['uid'])):
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (Outcome.DEFERRED, row)
             row.update(
@@ -297,10 +334,17 @@ class FirestoreEnrichmentOutbox:
         """Settle a processed lease with today's ``run`` completion rules (``finish``)."""
         outbox = _outbox()
         version = claim.payload.get('version')
+        observed: dict[str, int] = {}
 
         def finish(old):
+            observed.clear()
             if not _holds(old, claim):
                 return old, (False, None)
+            old = {key: value for key, value in old.items() if key != 'deferred_since'}  # A completed callback ends it.
+            if reason == 'superseded':
+                _bump_streak(old, observed)
+            else:
+                old.pop(SUPERSEDE_STREAK_FIELD, None)
             summary_seen = old.get('summary_seen_by') == claim.lease_token
             if old['version'] == version:
                 if summary_seen:
@@ -318,6 +362,7 @@ class FirestoreEnrichmentOutbox:
                         summary_expected_revision=None,
                     )
                     settled.pop('summary_seen_by', None)
+                    settled.pop(SUPERSEDE_STREAK_FIELD, None)  # a dormant receipt ends the episode
                     return settled, (True, None)
                 return None, (True, None)
             pending = dict(old)
@@ -334,25 +379,36 @@ class FirestoreEnrichmentOutbox:
             return pending, (True, pending)
 
         settled, pending = self._mutate(claim.row_id, finish)
+        _observe_streak(observed, settled)
         if pending is not None:
             self._rearmed(pending)
         return settled
 
     def defer(self, claim: Claim, available_at: float, reason: str, *, now: float) -> str | None:
+        """Re-arm a deferred row. ``reason`` is the consumer's custody cause when it has one.
+
+        Same episode rule as the sync handler's custody deferral (#24264): a cause that has deferred
+        the row past the grace polls hourly. The C3 consumer serves prod (ENRICHMENT_ROUTE=
+        enrichment_queue), where this claim/defer loop was ~130k writes/h on 2026-11-02.
+        """
+        outbox = _outbox()
 
         def rearm(old):
             if not _holds(old, claim):
                 return old, None
             pending = dict(old)
             pending.pop('summary_seen_by', None)
+            since = outbox.custody_deferred_since(old, reason, now)
+            due = outbox.custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
             pending.update(
                 deferred_reason=reason,
-                due_at=available_at,
-                task_due_at=available_at,
+                deferred_since=since,
+                due_at=due,
+                task_due_at=due,
                 task_token=uuid.uuid4().hex,
                 lease_until=0,
                 owner=None,
-                wake_check_after=available_at,
+                wake_check_after=due,
             )
             return pending, pending
 
@@ -365,11 +421,15 @@ class FirestoreEnrichmentOutbox:
     def repair(self, claim: Claim, retry_revision: int, *, now: float) -> str | None:
         """Enrichment-only: a repair lost its revision race; re-arm now behind the newer revision's fence."""
 
+        observed: dict[str, int] = {}
+
         def rearm(old):
+            observed.clear()
             if not _holds(old, claim):
                 return old, None
             pending = dict(old)
             pending.pop('summary_seen_by', None)
+            _bump_streak(pending, observed)
             due = min(now, pending['due_at'])
             pending.update(
                 summary_repair=True,
@@ -383,6 +443,7 @@ class FirestoreEnrichmentOutbox:
             return pending, pending
 
         pending = self._mutate(claim.row_id, rearm)
+        _observe_streak(observed, pending is not None)
         if pending is None:
             return None
         self._rearmed(pending)
@@ -395,30 +456,57 @@ class FirestoreEnrichmentOutbox:
         the new wake may already have been answered BUSY. Then re-arm under a fresh token and wake it.
         """
 
+        observed: dict[str, int] = {}
+
         def drop(old):
+            observed.clear()
             if not _holds(old, claim):
                 return old, (False, None)
             row = {**old, 'lease_until': 0, 'owner': None}
             row.pop('summary_seen_by', None)
+            if reason == 'persistence_fenced':  # the sync revision moved under this run (#24660)
+                _bump_streak(row, observed)
             if claim.wake_token and row.get('task_token') != claim.wake_token:
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (True, row)
             return row, (True, None)
 
         released, rearmed = self._mutate(claim.row_id, drop)
+        _observe_streak(observed, released)
         if rearmed is not None:
             self._rearmed(rearmed)
         return released
 
+    def rearm_released(self, row_id: str, wake_token: str, *, now: float) -> bool:
+        """Re-arm a released row whose queue retry was already answered, under a fresh token, and wake it.
+
+        The enrichment route answers a 409 at its delivery budget while the worker still holds the lease, so
+        that retry is consumed as BUSY. A worker that then releases (RETRY) has no live task left; without this
+        its row waits for the sweep's repair threshold.
+        """
+
+        def rotate(old):
+            if old is None or old.get('dormant') or old.get('task_token') != wake_token:
+                return old, None
+            if old.get('owner') or old.get('lease_until', 0) > now:
+                return old, None  # A newer claim owns it, so its own settlement wakes it.
+            row = {**old, 'task_token': uuid.uuid4().hex, 'task_due_at': old['due_at']}
+            return row, row
+
+        rearmed = self._mutate(row_id, rotate)
+        if rearmed is not None:
+            self._rearmed(rearmed)
+        return rearmed is not None
+
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
-        # Invariant 8: no shared scan cursor; every pass starts at the oldest due row.
+        # Share legacy's bounded inspection progress; per-row CAS still owns custody.
         counts = _outbox().sweep(
             now=now,
             limit=limit,
             discard=self._blocked,
             client=self._bound_client,
             wake=None if self._create_wake is None else self._wake,
-            cursor=False,
+            cursor=True,
         )
         return SweepCounts(
             rewoken=counts['repaired'],

@@ -329,6 +329,17 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
     return run_rate_rows(rows, dates, config, SAAS_RUN_RATE_CATEGORIES[0])
 
 
+def spend_saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
+    """Ledger SaaS excludes vendors represented by separate cash rows.
+
+    Filter before cadence detection, including retained annual history. Keep
+    coverage/unmapped markers so classification completeness still gates rates.
+    The legacy mercury_saas_daily calculation retains its existing contract.
+    """
+    split_vendors = {'anthropic', 'replicate', 'xai', 'openrouter'}
+    return saas_rows([row for row in rows if row['vendor'] not in split_vendors], dates, config)
+
+
 def infra_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
     """The non-GCP infra run rate (`mercury_infra_non_gcp_daily`): Modal, AWS,
     Runpod and similar — cash that is not in GCP billing, so the wall's all-in

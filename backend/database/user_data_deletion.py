@@ -1,6 +1,9 @@
 """Account-data erasure across top-level batch stores and recursive user data."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
+
+from database.action_item_fence import fenced_action_item_commit
 import logging
 from typing import Any
 
@@ -10,6 +13,8 @@ from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
 from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
+from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
+from database.redis_db import delete_app_cache_by_id, delete_generic_cache
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,18 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # client's project). A failed delete must propagate so the account wipe
     # retries it.
     get_data_plane_firestore_client().collection('rollout_cohorts').document(uid).delete()
+    # Creator-owned marketplace apps live outside users/{uid}; remove their
+    # nested API keys/reviews too so final and immediate erasure share parity.
+    delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
+    for app in search_apps_db(uid, my_apps=True):
+        app_id = app.get('id')
+        if not isinstance(app_id, str) or not app_id:
+            raise ValueError('creator-owned app missing id during account deletion')
+        app_ref = client.collection(apps_collection).document(app_id)
+        for subcollection in app_ref.collections():
+            delete_collection(subcollection, client=client)
+        app_ref.delete()
+        delete_app_cache_by_id(app_id)
     user_ref = client.collection('users').document(uid)
     root_exists = user_ref.get().exists
 
@@ -39,7 +56,8 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # messages, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        delete_collection(sub, client=client)
+        with fenced_action_item_commit(uid) if sub.id == 'action_items' else nullcontext():
+            delete_collection(sub, client=client)
     # A historical-source-index bump or build (database/memories.py) can land
     # after memory_state was walked; the doc holds only hashes, but drop it too.
     user_ref.collection('memory_state').document('historical_source_index').delete()

@@ -103,7 +103,12 @@ def test_error_serves_last_known_good_indefinitely(reader, clock):
     snap = rp.ramp_snapshot()
     assert snap.source == 'lkg'
     assert snap.error_seconds >= 300
-    assert rp.RUNTIME_PERCENT_SOURCE.labels(source='lkg')._value.get() == 1
+    assert (
+        rp.RUNTIME_PERCENT_SOURCE.labels(
+            source='lkg', revision=rp.runtime_revision(), revision_name=rp.os.getenv('K_REVISION', '')
+        )._value.get()
+        == 1
+    )
 
 
 def test_malformed_document_is_an_error_not_a_value(reader, clock):
@@ -140,9 +145,96 @@ def test_nesting_clamped_at_read_time(reader):
 def test_legacy_sync_mode_and_staging_identity(reader, monkeypatch):
     outcomes, _ = reader
     monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
-    outcomes.append(ramp_doc(env='staging', legacy_sync='draining'))
+    outcomes.append(
+        ramp_doc(env='staging', legacy_sync='draining', percents={'legacy-sync': 100, 'batch-pipeline': 100})
+    )
     assert rp.legacy_sync_mode() == 'draining'
     assert rp.ramp_snapshot().env == 'staging'
+
+
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize('percent', range(101))
+def test_legacy_retirement_uses_the_deployed_batch_bucket(reader, monkeypatch, mode, percent):
+    outcomes, _ = reader
+    outcomes.append(ramp_doc(legacy_sync=mode, percents={'legacy-sync': percent, 'batch-pipeline': 100}))
+    for bucket in range(100):
+        monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt, bucket=bucket: bucket)
+        expected = mode if bucket < percent else 'on'
+        assert rp.legacy_sync_mode('synthetic-owner') == expected
+    assert rp.legacy_sync_mode() == (mode if percent == 100 else 'on')
+
+
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+def test_missing_retirement_scope_and_invalid_owner_keep_legacy_on(reader, mode):
+    outcomes, _ = reader
+    outcomes.append(ramp_doc(legacy_sync=mode))
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    outcomes[0] = ramp_doc(legacy_sync=mode, percents={'legacy-sync': 100, 'batch-pipeline': 100})
+    rp._cache.invalidate()
+    assert rp.legacy_sync_mode('') == 'on'
+    assert rp.legacy_sync_mode('_ramp') == 'on'
+
+
+def test_one_mode_write_rolls_every_bucket_back_without_changing_percent(reader, clock, monkeypatch):
+    outcomes, _ = reader
+    outcomes.extend(
+        [
+            ramp_doc(legacy_sync='dark', percents={'legacy-sync': 100, 'batch-pipeline': 100}),
+            ramp_doc(revision=4, legacy_sync='on', percents={'legacy-sync': 100, 'batch-pipeline': 100}),
+        ]
+    )
+    assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
+    clock[0] += 31
+    for bucket in range(100):
+        monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt, bucket=bucket: bucket)
+        assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+
+
+def test_legacy_retirement_read_error_serves_on_even_with_a_dark_lkg(reader, clock, monkeypatch):
+    outcomes, _ = reader
+    monkeypatch.setattr(rp, 'cohort_bucket', lambda uid, salt: 0)
+    outcomes.extend(
+        [
+            ramp_doc(legacy_sync='dark', percents={'legacy-sync': 100, 'batch-pipeline': 25}),
+            RuntimeError('synthetic read failure'),
+        ]
+    )
+    assert rp.legacy_sync_mode('synthetic-owner') == 'dark'
+    clock[0] += 31
+    assert rp.legacy_sync_mode('synthetic-owner') == 'on'
+    assert rp.runtime_percent('batch-pipeline', env_default=100) == 25
+
+
+@pytest.mark.parametrize('batch_percent,legacy_percent', [(0, 0), (5, 5), (25, 25), (50, 25), (100, 50), (25, 50)])
+def test_legacy_retirement_nests_inside_real_batch_policy(reader, monkeypatch, batch_percent, legacy_percent):
+    outcomes, _ = reader
+    outcomes.append(
+        ramp_doc(legacy_sync='dark', percents={'batch-pipeline': batch_percent, 'legacy-sync': legacy_percent})
+    )
+    for uid in ('synthetic-owner', 'test-uid', 'synthetic-user'):
+        batch = resolve_batch_policy(
+            uid,
+            flags={
+                'BATCH_PIPELINE_ENABLED': 'true',
+                'BATCH_PIPELINE_PERCENT': str(batch_percent),
+            },
+        )
+        retired = rp.legacy_sync_mode(uid) == 'dark'
+        expected = batch.batch_enabled and rp.cohort_bucket(uid, rp.COHORT_SALTS['batch-pipeline']) < min(
+            batch_percent, legacy_percent
+        )
+        assert retired == expected
+        assert not retired or batch.batch_enabled
+
+
+def test_batch_percent_rollback_clamps_retirement_without_a_second_write():
+    before = store.empty_ramp_env()
+    before['percents'] = {'batch-pipeline': 50, 'legacy-sync': 25}
+    before['legacy_sync'] = 'dark'
+    after = store.apply_ramp_change(before, {'percents': {'batch-pipeline': 0}})
+    assert rp.clamp_nesting(after['percents'])['legacy-sync'] == 0
+    with pytest.raises(store.RampDocumentError, match='legacy-sync exceeds'):
+        store.apply_ramp_change(before, {'percents': {'legacy-sync': 51}})
 
 
 def test_unknown_deployment_identity_fails_safe(reader, monkeypatch):
@@ -161,7 +253,8 @@ def test_event_loop_cold_path_never_blocks(monkeypatch, clock):
     async def call():
         return rp.runtime_percent('batch-pipeline', env_default=5.0)
 
-    assert asyncio.run(call()) == 5.0  # read scheduled, not awaited
+    assert asyncio.run(call()) == 0.0  # pending remote state cannot admit via a stale env fallback
+    assert rp.ramp_snapshot().source == 'pending'
     assert len(submitted) == 1
     submitted[0]()
     assert rp.runtime_percent('batch-pipeline', env_default=5.0) == 10.0
@@ -169,11 +262,9 @@ def test_event_loop_cold_path_never_blocks(monkeypatch, clock):
 
 def test_bound_config_modules_read_runtime_percent(monkeypatch):
     monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: {'first-summary': 100.0}.get(name, default))
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    assert summary_guarantee.enabled('synthetic-owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'synthetic-owner'})
     monkeypatch.setattr(policy, '_percent_resolver', lambda name, default: default)
-    assert not summary_guarantee.enabled('synthetic-owner')
+    assert summary_guarantee.first_summary_pending({'uid': 'synthetic-owner'})
     # After E1 the batch and retire percents come from the policy resolver, which reads _ramp
     # through the same seam (production only; explicit replay flags never read it).
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')

@@ -1,3 +1,9 @@
+// The Rewind page: the screen-activity timeline with integrated inline search.
+//
+// The timeline is the primary interface -- search results highlight inline on
+// it rather than replacing it -- and the page carries an optional brain
+// destination because it can be opened in place of another page (task
+// evidence, a citation) and must hand navigation back.
 @preconcurrency import AppKit
 import Combine
 import OmiTheme
@@ -1271,7 +1277,7 @@ struct RewindPage: View {
           AnalyticsManager.shared.screenCaptureResetClicked(source: "rewind_empty_state")
           // Re-enable screen analysis so it auto-starts after the restart
           screenAnalysisEnabled = true
-          AssistantSettings.shared.screenAnalysisEnabled = true
+          SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true)
           ScreenCaptureService.resetScreenCapturePermissionAndRestart()
         } label: {
           Text("Reset & Restart")
@@ -1307,7 +1313,7 @@ struct RewindPage: View {
         Button {
           // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
           screenAnalysisEnabled = true
-          AssistantSettings.shared.screenAnalysisEnabled = true
+          SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true)
           ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
         } label: {
           Text("Grant Permission")

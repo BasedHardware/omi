@@ -152,7 +152,8 @@ void main() {
               dueStartDate,
               dueEndDate}) async =>
           const ActionItemsResponse(actionItems: []),
-      createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) => created.future,
+      createActionItemRequest: ({required description, dueAt, conversationId, completed = false, idempotencyKey}) =>
+          created.future,
     );
     addTearDown(provider.dispose);
     await provider.ensureLoaded();
@@ -179,7 +180,8 @@ void main() {
               });
       final offsets = <int>[];
       final provider = ActionItemsProvider(
-        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) => created.future,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false, idempotencyKey}) =>
+            created.future,
         actionItemsApi: ActionItemsApi(
             baseUrl: 'http://fixture.invalid/',
             send: (request) async {

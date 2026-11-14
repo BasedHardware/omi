@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "titling-late-result-control",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "5bc9c986f51f300e259a367b280448313e526b72c80194dc90bc242057121f44",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e",
+    "69562e8a912a939c156299e0df89456adb3780b62174b8a69a2458fab6fe18b6"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Real late-result commit, native projection follow-up and outbox delivery already heal this synthetic case on the WP1 product source. No late arrival remains a distinct completed-without-title stop.",
+  "stages": {
+    "titling": {
+      "expect": "pass"
+    }
+  }
+}

@@ -1,4 +1,9 @@
-"""Dedupe/coverage OFF retain baseline behavior except the always-on stamp-gap guard."""
+"""Dedupe/coverage OFF retain baseline behavior plus mandatory safety stamps.
+
+The frozen source fixture includes the explicit, unconditional sync-intake keep
+record from #23370. It is literal expected data, independent of the production
+stamp helper, so payload bytes (including the decision) still compare exactly.
+"""
 
 import hashlib
 import json
@@ -41,10 +46,10 @@ def _load(name, source, monkeypatch, namespace=None):
     if namespace is not None:
         module.__dict__.update(namespace)
     monkeypatch.setitem(sys.modules, name, module)
-    # The immutable snapshot predates graduation. Pin its removed recovery
+    # The lineage baseline predates graduation. Pin its removed recovery
     # switch to the shipped ON behavior without restoring a production API.
     source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
-    # Adapt only the import path after verifying the immutable snapshot hash.
+    # Adapt only the import path after verifying the frozen source hash.
     source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
@@ -60,7 +65,12 @@ def _normalize(value):
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, dict):
-        return {str(key): _normalize(item) for key, item in value.items()}
+        # Phase A globally adds timing metadata even while lineage features are off.
+        # Its values and placement are asserted by test_recorded_span; compare the
+        # retained lineage payload here against the immutable pre-span snapshot.
+        from utils.conversations.recorded_time import SPAN_FIELDS
+
+        return {str(key): _normalize(item) for key, item in value.items() if key not in SPAN_FIELDS}
     if isinstance(value, (list, tuple)):
         return [_normalize(item) for item in value]
     if isinstance(value, (set, frozenset)):
@@ -92,6 +102,7 @@ def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
     # Match lifecycle intake: consume the transient observation before the
     # returned conversation reaches enrichment or behavioral parity checks.
     result[0].pop('_sync_projected_size_bucket', None)
+    result[0].pop('_sync_published_observations', None)
     return result
 
 
@@ -158,6 +169,10 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
 
 @pytest.fixture(autouse=True, params=['off', 'disabled-typo'])
 def off(monkeypatch, request):
+    # This immutable pre-hold snapshot specifies the rollback/eager behavior.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     for flag in FLAGS:
         monkeypatch.setenv(flag, request.param)
 
@@ -388,3 +403,23 @@ def test_excluded_cohort_stays_main_even_with_both_flags_on(frozen, monkeypatch)
         outputs.append(_bytes({'result': result, 'rows': _rows(store)}))
     assert outputs[0] == outputs[1]
     assert recording_lineage.lineage_resolution_requested('u', ORIGIN, 1500, 1510) is False
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

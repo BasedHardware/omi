@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -107,6 +110,28 @@ void main() {
       expect(deleted, ['a']);
     });
 
+    testWidgets('a refused delete restores the row and shows an error', (tester) async {
+      final a = _conversation('a');
+      provider.conversations = [a];
+      provider.conversationDeleteFetcherOverride = (_) async => false;
+      await pump(
+        tester,
+        Consumer<ConversationProvider>(
+          builder: (_, current, __) => current.conversations.isEmpty ? const SizedBox.shrink() : deleteButton([a]),
+        ),
+      );
+
+      await tester.tap(find.text('delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('delete'), findsNothing);
+
+      await tester.pump(OmiFeedbackTiming.undo);
+      await tester.pumpAndSettle();
+
+      expect(provider.conversations.map((c) => c.id), ['a']);
+      expect(find.text('Unable to Delete Conversation'), findsOneWidget);
+    });
+
     testWidgets('a bulk delete shows one toast that counts and restores them all', (tester) async {
       final a = _conversation('a');
       final b = _conversation('b');
@@ -120,6 +145,36 @@ void main() {
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect(provider.conversations.map((c) => c.id).toSet(), {'a', 'b'});
+    });
+
+    testWidgets('a bulk delete sends its server deletes one at a time', (tester) async {
+      // The server answers overlapping deletes on one account with 409.
+      final rows = ['a', 'b', 'c', 'd'].map(_conversation).toList();
+      final responses = <String, Completer<bool>>{};
+      var inFlight = 0;
+      var maxInFlight = 0;
+      provider.conversationDeleteFetcherOverride = (id) {
+        deleted.add(id);
+        maxInFlight = max(maxInFlight, ++inFlight);
+        return (responses[id] = Completer<bool>()).future.whenComplete(() => inFlight--);
+      };
+      provider.conversations = [...rows];
+      await pump(tester, deleteButton(rows));
+
+      await tester.tap(find.text('delete'));
+      await tester.pumpAndSettle();
+      await tester.pump(OmiFeedbackTiming.undo);
+      await tester.pumpAndSettle();
+
+      for (final row in rows) {
+        expect(deleted.last, row.id);
+        expect(inFlight, 1);
+        responses[row.id]!.complete(true);
+        await tester.pumpAndSettle();
+      }
+      expect(deleted, ['a', 'b', 'c', 'd']);
+      expect(maxInFlight, 1);
+      expect(provider.conversations, isEmpty);
     });
   });
 

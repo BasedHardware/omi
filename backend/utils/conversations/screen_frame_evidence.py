@@ -22,15 +22,26 @@ import io
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
 from PIL import Image
 
-from database.screen_frames import get_conversation_screen_frames, own_frames
+from database import conversations as conversations_db
+from database.screen_frames import (
+    get_conversation_screen_frames,
+    get_conversation_screenshot_sharing_enabled,
+    own_frames,
+)
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from utils.conversations.capture_group_meeting_context import (
+    group_members as capture_group_members,
+    member_row_is_shareable,
+    capture_group_primary_notes_enabled,
+    shared_speech_group_record,
+)
 from utils.conversations.meeting_context import is_ai_agent_tile_name, strip_leading_tile_glyphs
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -45,6 +56,10 @@ FRAME_READ_TIMEOUT_SECONDS = 3.0
 FRAME_READ_BUDGET_SECONDS = 6.0
 MAX_SCREEN_MOMENTS = 7
 MAX_SCREEN_FRAME_NAMES = 8
+# Capture-group members whose frames join the primary's evidence. Only desktop
+# members hold meeting frames, and a split meeting adds a handful of halves;
+# the cap keeps the extra per-member queries bounded for any group shape.
+MAX_GROUP_MEMBER_FRAME_READS = 3
 
 _NAME_DECORATION = re.compile(r'\s*(?:\(.*?\)|\d{1,2}:\d{2}\s*(?:AM|PM)?|·.*)\s*$', re.IGNORECASE)
 _NOT_A_NAME = {'you', 'me', 'guest', 'host', 'presenting', 'participants', 'everyone'}
@@ -58,6 +73,9 @@ class ScreenFrameEvidence:
     banner_suitability: float
     names: tuple[str, ...]
     summary: str
+    # Conversation owning the stored frame bytes; a capture-group member's
+    # frames download under that member's path, not the primary's.
+    conversation_id: Optional[str] = None
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
@@ -99,8 +117,55 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
                 banner_suitability=float(doc.get('banner_suitability') or 0.0),
                 names=names,
                 summary=summary.strip() if isinstance(summary, str) else '',
+                conversation_id=conversation_id,
             )
         )
+    evidence.sort(key=lambda item: item.captured_at)
+    return tuple(evidence)
+
+
+def load_capture_group_frame_evidence(uid: str, conversation: Any) -> tuple[ScreenFrameEvidence, ...]:
+    """This conversation's approved frames plus its capture-group desktop members'.
+
+    The user reads the primary row, but a meeting's screen frames were captured
+    under the desktop members' conversation ids (a split meeting stores one set
+    per half). Member frames join oldest-first with the conversation's own, so
+    roster names, screen moments and frame images all reflect the whole event.
+    Non-desktop members hold no meeting frames and are not queried.
+    """
+    own_id = getattr(conversation, 'id', None)
+    evidence = [replace(item, conversation_id=own_id) for item in load_screen_frame_evidence(uid, own_id)]
+    if not capture_group_primary_notes_enabled():
+        return tuple(evidence)
+    group = shared_speech_group_record(uid, conversation)
+    if group is None:
+        return tuple(evidence)
+    members = [
+        member['id']
+        for member in capture_group_members({'capture_group': group})
+        if member['id'] != own_id and member['source'] == 'desktop'
+    ]
+    for member_id in members[:MAX_GROUP_MEMBER_FRAME_READS]:
+        try:
+            member_row = conversations_db.get_conversation_raw_snapshot(
+                uid,
+                member_id,
+                field_paths=['external_data', 'visibility', 'deleted', 'screenshot_sharing_enabled'],
+            )
+            external_data = (member_row or {}).get('external_data') or {}
+            if (
+                member_row is None
+                or not member_row_is_shareable(member_row)
+                or not get_conversation_screenshot_sharing_enabled(member_row)
+                or not isinstance(external_data, dict)
+                or external_data.get('conversation_role') != 'meeting'
+            ):
+                continue
+            evidence.extend(
+                replace(item, conversation_id=member_id) for item in load_screen_frame_evidence(uid, member_id)
+            )
+        except Exception as exc:  # noqa: BLE001 - evidence is best effort
+            logger.warning('capture group member frame read failed uid=%s: %s', uid, type(exc).__name__)
     evidence.sort(key=lambda item: item.captured_at)
     return tuple(evidence)
 
@@ -296,7 +361,10 @@ def load_notes_frame_images(
             break
         try:
             raw = download_screen_frame_bytes(
-                uid, conversation_id, item.frame_id, timeout=min(FRAME_READ_TIMEOUT_SECONDS, remaining)
+                uid,
+                item.conversation_id or conversation_id,
+                item.frame_id,
+                timeout=min(FRAME_READ_TIMEOUT_SECONDS, remaining),
             )
             jpeg = _downscale_jpeg(raw)
         except Exception as exc:  # noqa: BLE001 - frame images are best effort

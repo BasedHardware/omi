@@ -2293,10 +2293,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get firmwareUsbWarning => 'La connexió USB durant les actualitzacions pot fer malbé el teu dispositiu.';
 
   @override
-  String get firmwareBatteryAbove15 => 'Bateria superior al 15%';
+  String get firmwareBatteryRequirement => 'Bateria superior al 30%';
 
   @override
-  String get firmwareEnsureBattery => 'Assegura\'t que el teu dispositiu té un 15% de bateria.';
+  String get firmwareEnsureBattery => 'Assegura\'t que el teu dispositiu té un 30% de bateria.';
 
   @override
   String get firmwareStableConnection => 'Connexió estable';
@@ -8770,6 +8770,28 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deleteReasonOther => 'Altres';
 
   @override
+  String get deletePauseInsteadTitle => 'Posar Omi en pausa?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Atureu la gravació i conserveu-ho tot. Podeu tornar quan vulgueu.';
+
+  @override
+  String get deletePauseRecordingLine => 'La gravació s\'aturarà. Mentre no hi sigueu, no es gravarà res de nou.';
+
+  @override
+  String get deletePauseKeepLine => 'Els vostres records, converses i aplicacions es conservaran tal com estan.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'La sessió continuarà iniciada. Podeu reprendre la gravació quan vulgueu. La subscripció continuarà sense canvis.';
+
+  @override
+  String get pauseOmiButton => 'Posa Omi en pausa';
+
+  @override
+  String get continueDeletingButton => 'Continua eliminant';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Explica\'ns més';
 
   @override
@@ -8789,6 +8811,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'El teu compte no es pot restaurar — ni tan sols pel suport.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Encara s\'estan processant $count enregistraments. Si els elimineu ara, els perdreu.',
+      one: 'Encara s\'està processant un enregistrament. Si l\'elimineu ara, el perdreu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Torneu a iniciar la sessió en un termini de $days dies per restaurar el compte.',
+      one: 'Torneu a iniciar la sessió en un dia per restaurar el compte.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Escriu DELETE per confirmar';
@@ -8894,12 +8938,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Xat: \$$used / \$$limit utilitzat aquest mes';
+    return 'Xat: $used / $limit utilitzat aquest mes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Xat: \$$used utilitzat aquest mes';
+    return 'Xat: $used utilitzat aquest mes';
   }
 
   @override
@@ -9180,6 +9224,24 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'No s\'ha pogut determinar la versió actual del firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Aplica al pla actual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Codi aplicat al teu pla actual.',
+        'refused': 'No es pot aplicar aquest codi. Comprova el codi i el pla necessari.',
+        'conflict': 'El codi ja s\'ha utilitzat o el pla ja té un descompte.',
+        'rateLimited': 'Massa intents. Espera i torna-ho a provar més tard.',
+        'other': 'No s\'ha pogut aplicar el codi. Torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Codi promocional';
@@ -10600,8 +10662,12 @@ class AppLocalizationsCa extends AppLocalizations {
       'No s\'ha pogut baixar l\'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.';
 
   @override
+  String get firmwareBatteryUnavailable =>
+      'El nivell de bateria encara no està disponible. Espera un moment i torna a connectar el dispositiu si continua així.';
+
+  @override
   String firmwareBatteryTooLow(int level) {
-    return 'La bateria és al $level%. Carrega el dispositiu com a mínim fins al 15% abans d\'actualitzar.';
+    return 'La bateria és al $level%. Carrega el dispositiu com a mínim fins al 30% abans d\'actualitzar.';
   }
 
   @override
@@ -12549,43 +12615,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reviewChangesSectionOther => 'Altres canvis';
 
   @override
-  String reviewChangeConversationCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count converses',
-      one: '1 conversa',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangePlaceCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count llocs',
-      one: '1 lloc',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String reviewChangeShowAll(int count) {
-    return 'Mostra-ho tot ($count)';
-  }
-
-  @override
   String get reviewChangeUndoAll => 'Desfés-ho tot';
 
   @override
-  String get reviewChangeSeeEvidence => 'Mostra les proves';
-
-  @override
   String get reviewChangeViewConversation => 'Mostra la conversa';
-
-  @override
-  String get reviewChangeViewTask => 'Mostra la tasca';
 
   @override
   String reviewChangesUndoPartial(int failed, int total) {
@@ -12660,10 +12693,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportTitle => 'Informe de Dream';
 
   @override
-  String get dreamReportShadowBanner =>
-      'Mode de vista prèvia: Dream mostra què canviaria, però encara no es modifica res al teu compte.';
-
-  @override
   String get dreamReportLiveBanner =>
       'Dream aplica aquests canvis per si sol. Desfés qualsevol d\'ells a Canvis recents.';
 
@@ -12709,11 +12738,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportNothingFound => 'Res a corregir';
 
   @override
-  String dreamReportStats(int records, int tokens) {
-    return 'S\'han llegit $records elements · $tokens tokens';
-  }
-
-  @override
   String get dreamReportWouldFix => 'Corregiria';
 
   @override
@@ -12729,27 +12753,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dreamReportLearnedWords => 'Paraules que ha après';
 
   @override
-  String get dreamReportFeedback => 'Informat a l\'equip d\'Omi';
-
-  @override
   String get dreamReportDeletedItem => 'Element eliminat';
-
-  @override
-  String dreamReportPasses(int count, int limit) {
-    return '$count de $limit execucions avui';
-  }
-
-  @override
-  String dreamReportQueued(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count canvis en espera',
-      one: '1 canvi en espera',
-      zero: 'Cap canvi en espera',
-    );
-    return '$_temp0';
-  }
 
   @override
   String dreamReportRunsLeft(int count) {
@@ -12777,28 +12781,6 @@ class AppLocalizationsCa extends AppLocalizations {
       one: '1 suggeriment',
     );
     return '$_temp0 · $_temp1';
-  }
-
-  @override
-  String dreamReportDropped(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count canvis anteriors omesos',
-      one: '1 canvi anterior omès',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String dreamReportPrivacyHeld(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count informes retinguts per privacitat',
-      one: '1 informe retingut per privacitat',
-    );
-    return '$_temp0';
   }
 
   @override
@@ -13384,6 +13366,30 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallOutlineHeadline => 'No et perdis mai més ni una paraula.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$days dies gratis, després $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13482,6 +13488,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallTrialCancelNote => 'Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Encara no vols un any sencer?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Comença amb el pla mensual. Els mateixos $days dies gratis, després $price al mes. Cancel·la quan vulguis.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Prova el mensual gratis';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'La teva prova gratuïta de $days dies d\'Omi Pro ha començat.';
   }
@@ -13530,15 +13547,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get syncStepLabelDownload => 'Omi → mòbil';
-
-  @override
-  String get syncStepLabelUpload => 'Pujada';
-
-  @override
-  String get syncStepLabelTranscribe => 'Transcripció';
-
-  @override
   String get syncDetailsTitle => 'Detalls de la sincronització';
 
   @override
@@ -13558,9 +13566,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncDetailsTranscribing => 'Transcrivint a Omi';
-
-  @override
-  String get syncDetailsForSupport => 'Per a assistència';
 
   @override
   String get syncDetailsAudioFiles => 'Fitxers d\'àudio';
@@ -13748,6 +13753,9 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Torna a generar les notes';
 
   @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
@@ -14467,6 +14475,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeMoments => 'Moments';
 
   @override
+  String get episodeFollowUps => 'Seguiments';
+
+  @override
+  String get episodeOpenTranscript => 'Obre la transcripció';
+
+  @override
   String get episodeSoFar => 'Fins ara';
 
   @override
@@ -14681,19 +14695,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeNotesStartWithTranscript => 'Les notes comencen quan arriba la transcripció final.';
 
   @override
-  String get episodeOnDeviceNotesFootnote =>
-      'Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.';
-
-  @override
-  String get episodeOnThisPhone => 'En aquest telèfon';
-
-  @override
-  String get episodeOpenTranscript => 'Obre la transcripció';
-
-  @override
-  String get liveCardTitle => 'En directe';
-
-  @override
   String livePreviewBehind(Object duration) {
     return 'La transcripció final va amb uns $duration de retard';
   }
@@ -14705,10 +14706,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get livePreviewNoEngineBody => 'Les teves paraules apareixen aquí un o dos minuts després de dir-les.';
 
   @override
-  String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
-
-  @override
-  String get livePreviewOnPhoneDivider => 'En directe en aquest telèfon';
+  String get livePreviewOnPhoneDivider => 'Ara mateix, en aquest telèfon';
 
   @override
   String get livePreviewTurnOnLiveText => 'Activa el text en directe';
@@ -14718,11 +14716,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceCatchUpWhenOnline => 'quan hi hagi connexió';
-
-  @override
-  String onTheWayCatchingUp(String duration) {
-    return 'Falten $duration per pujar';
-  }
 
   @override
   String get onTheWayUploadsByItself =>
@@ -14749,5 +14742,775 @@ class AppLocalizationsCa extends AppLocalizations {
       'Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se\'ns notifica automàticament.';
 
   @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Encara no s\'han pujat $count enregistraments. Si els elimineu ara, els perdreu — deixeu l\'aplicació oberta perquè s\'acabin de pujar.',
+      one:
+          'Encara no s\'ha pujat un enregistrament. Si l\'elimineu ara, el perdreu — deixeu l\'aplicació oberta perquè s\'acabi de pujar.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Reviseu què passarà amb les vostres dades abans de marxar.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi està en pausa. Podeu reprendre la gravació quan vulgueu.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments encara s\'estan processant. Es conserven al vostre compte durant ',
+      one: '1 enregistrament encara s\'està processant. Es conserva al vostre compte durant ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dies.',
+      one: '1 dia.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Els vostres records i converses s\'esborraran al cap de $days dies.',
+      one: 'Els vostres records i converses s\'esborraran al cap d\'un dia.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Les aplicacions i integracions es desconnectaran immediatament.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'La subscripció es cancel·larà immediatament.';
+
+  @override
+  String get deleteRestoreTitle => 'El vostre compte està pendent d\'eliminació';
+
+  @override
+  String get deleteRestoreSubtitle => 'Heu canviat d\'opinió? Restaureu el compte abans que s\'esborri.';
+
+  @override
+  String get deleteRestoreKeepData => 'Restaureu els vostres records i converses.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'La subscripció continuarà cancel·lada. Torneu a connectar les aplicacions i integracions després de restaurar el compte.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Teniu $days dies per recuperar el vostre compte.',
+      one: 'Teniu 1 dia per recuperar el vostre compte.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Restaura el meu compte';
+
+  @override
+  String get deleteFinishButton => 'Acaba d\'eliminar';
+
+  @override
+  String get deleteFinishNowButton => 'Esborra el meu compte ara';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Això posa fi al període de restauració. El compte i els seus enregistraments s\'esborraran definitivament.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Teniu menys d\'un dia per recuperar el vostre compte.';
+
+  @override
+  String get deleteFinishNowTitle => 'Voleu eliminar el vostre compte?';
+
+  @override
+  String get syncHealthAlerts => 'Alertes d\'estat de sincronització';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avisa si l\'Omi no ha sincronitzat enregistraments durant més d\'un dia';
+
+  @override
+  String get syncStallAlertTitle => 'Omi no se sincronitza';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Fa més de $hours hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi no se sincronitza';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Cap enregistrament sincronitzat fa més de $hours hores';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Resums diaris a l\'Inici';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
+
+  @override
+  String get yearlySwitchTitle => 'Canvia a anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Estalvia $amount l\'any';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Estalvia $amount l\'any amb el pagament anual';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'El mateix pla, un sol pagament l\'any';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pla';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price l\'any';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'A pagar avui';
+
+  @override
+  String get yearlySwitchRenews => 'Es renova';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclou crèdit per a la resta d\'aquest mes.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagament rebutjat. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchFailed => 'No s\'ha pogut canviar. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'No s\'ha pogut carregar el preu.';
+
+  @override
+  String get yearlySwitchUnavailable => 'El pagament anual no està disponible per al teu pla ara mateix.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Ara pagues anualment';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Avui s\'han cobrat $amount. Es renova el $date.';
+  }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Envia el missatge a $app. Aquesta pantalla s\'actualitzarà quan l\'Omi el rebi.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Obtén un codi nou i envia\'l des de $app.';
+  }
+
+  @override
+  String get episodeWritingNotes => 'S\'estan escrivint les notes…';
+
+  @override
+  String get homeStepTranscribing => 'Transcrivint…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments',
+      one: '$count enregistrament',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeWritingNotesDetail => 'Primer acabem la transcripció. Pots sortir d\'aquesta pàgina.';
+
+  @override
+  String episodeCoversUpTo(Object time) {
+    return 'Cobreix fins a les $time · notes completes en acabar';
+  }
+
+  @override
+  String liveTranscribedUpTo(Object time) {
+    return 'Transcrit fins a les $time';
+  }
+
+  @override
+  String liveAudioSaved(Object duration) {
+    return '$duration desats';
+  }
+
+  @override
+  String get liveAudioSavedDetail => 'Els interlocutors i la transcripció final apareixeran aquí a mesura que es pugi.';
+
+  @override
+  String get searchNoiseFilter => 'Clips curts';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count converses',
+      one: '1 conversa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count llocs',
+      one: '1 lloc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Mostra-ho tot ($count)';
+  }
+
+  @override
+  String get reviewChangeSeeEvidence => 'Mostra les proves';
+
+  @override
+  String get reviewChangeViewTask => 'Mostra la tasca';
+
+  @override
+  String get dreamReportShadowBanner =>
+      'Mode de vista prèvia: Dream mostra què canviaria, però encara no es modifica res al teu compte.';
+
+  @override
+  String dreamReportStats(int records, int tokens) {
+    return 'S\'han llegit $records elements · $tokens tokens';
+  }
+
+  @override
+  String get dreamReportFeedback => 'Informat a l\'equip d\'Omi';
+
+  @override
+  String dreamReportPasses(int count, int limit) {
+    return '$count de $limit execucions avui';
+  }
+
+  @override
+  String dreamReportQueued(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count canvis en espera',
+      one: '1 canvi en espera',
+      zero: 'Cap canvi en espera',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportDropped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count canvis anteriors omesos',
+      one: '1 canvi anterior omès',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dreamReportPrivacyHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count informes retinguts per privacitat',
+      one: '1 informe retingut per privacitat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → mòbil';
+
+  @override
+  String get syncStepLabelUpload => 'Pujada';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcripció';
+
+  @override
+  String get syncDetailsForSupport => 'Per a assistència';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.';
+
+  @override
+  String get episodeOnThisPhone => 'En aquest telèfon';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Falten $duration per pujar';
+  }
+
+  @override
   String get onTheWayDetailsForSupport => 'Detalls per al suport';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count clips curts amagats',
+      one: '1 clip curt amagat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Mostrar';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Amagar $count clips curts',
+      one: 'Amagar 1 clip curt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get speakerWholeRecording => 'Aplica a tota la gravació';
+
+  @override
+  String get speakerSelectionChanged => 'El parlant ha canviat. Torna a seleccionar les línies.';
+
+  @override
+  String speakerRenameIssue(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'limit': 'La gravació és massa gran. Selecciona menys línies en una conversa.',
+        'partial': 'S’han desat algunes línies. Selecciona les restants i torna-ho a provar.',
+        'other': 'S’han desat algunes línies. Selecciona les restants i torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String speakerRecordingCoverage(String state, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'S’han canviat $count línies només en les converses disponibles.',
+      one: 'S’han canviat 1 línies només en les converses disponibles.',
+    );
+    String _temp1 = intl.Intl.selectLogic(
+      state,
+      {
+        'scope': 'Altres línies d’aquesta veu (cobertura de la gravació no confirmada)',
+        'other': '$_temp0',
+      },
+    );
+    return '$_temp1';
+  }
+
+  @override
+  String get episodeFinishingUp => 'Enllestint…';
+
+  @override
+  String get buildAndShareApp => 'Construïu i compartiu la vostra aplicació personalitzada';
+
+  @override
+  String get membersAndCounting => '8000+ membres i sumant.';
+
+  @override
+  String get privacyIntro =>
+      'A Omi, estem compromesos a protegir la vostra privadesa. Aquesta pàgina us permet controlar com s\'emmagatzemen i utilitzen les vostres dades.';
+
+  @override
+  String get dataProtectionDesc =>
+      'Les vostres dades estan protegides per defecte amb un xifratge fort. Reviseu la vostra configuració i opcions futures de privadesa a continuació.';
+
+  @override
+  String get transcriptionConfig => 'Configurar proveïdor STT';
+
+  @override
+  String get importDataConfig => 'Importar dades d\'altres fonts';
+
+  @override
+  String get understandingSubtitle => 'Paraules enteses de les vostres converses.';
+
+  @override
+  String get rememberingSubtitle => 'Fets i detalls recordats per a vosaltres.';
+
+  @override
+  String get debugLogsDesc => 'Ajuda a diagnosticar problemes';
+
+  @override
+  String get deleteKnowledgeGraphMessage =>
+      'Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els vostres records originals restaran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.';
+
+  @override
+  String get deleteKnowledgeGraphDesc => 'Esborrar tots els nodes i connexions';
+
+  @override
+  String get enhanceTranscriptAccuracyDesc =>
+      'A mesura que el nostre model millora, podem proporcionar millors resultats de transcripció per als vostres enregistraments.';
+
+  @override
+  String get bestInClassTranscription => 'Transcripció de millor qualitat sense configuració';
+
+  @override
+  String get optimizedForConversation => 'Optimitzat per a converses';
+
+  @override
+  String get highAccuracy => 'Alta precisió';
+
+  @override
+  String get privacyFirst => 'Privadesa primer';
+
+  @override
+  String get keepGoing => 'Continueu, ho esteu fent molt bé';
+
+  @override
+  String get personalGrowthJourney => 'El teu viatge de creixement personal amb IA que escolta cada paraula teva.';
+
+  @override
+  String get memoryAllowUse => 'Permet l\'ús';
+
+  @override
+  String get memoryDontUse => 'No ho facis servir';
+
+  @override
+  String get alwaysInContext => 'Sempre en context';
+
+  @override
+  String get firmwareBatteryAbove15 => 'Bateria superior al 15%';
+
+  @override
+  String get configureSttProvider => 'Configura el proveïdor STT';
+
+  @override
+  String get clearAllNodesAndConnections => 'Esborra tots els nodes i connexions';
+
+  @override
+  String get welcomeToOmiDescription =>
+      'Benvingut a Omi! El teu company d\'IA està preparat per ajudar-te amb converses, tasques i molt més.';
+
+  @override
+  String get conversationsProcessedAutomatically => 'Les converses es processen automàticament';
+
+  @override
+  String get getInsightsInstantly => 'Obtén informació i resums a l\'instant';
+
+  @override
+  String get dailyScoreDescription => 'Una puntuació per ajudar-te\na centrar-te en l\'execució.';
+
+  @override
+  String get startConversation => 'Comença una conversa i deixa que la màgia comenci';
+
+  @override
+  String get wearableAiCompanion => 'Company d\'IA portàtil';
+
+  @override
+  String get organizeAndControlMemories => 'Organitza i controla els teus records';
+
+  @override
+  String get setAllMemoriesToPrivate => 'Establir tots els records com a privats';
+
+  @override
+  String get setAllMemoriesToPublic => 'Establir tots els records com a públics';
+
+  @override
+  String get selectPreferredLanguageForBestExperience =>
+      'Seleccioneu el vostre idioma preferit per a la millor experiència Omi';
+
+  @override
+  String get enableFeaturesForBestExperience =>
+      'Activeu les funcions per a la millor experiència Omi al vostre dispositiu.';
+
+  @override
+  String get deliveryTimeDescription => 'Quan rebre el teu resum diari';
+
+  @override
+  String get configureSTTProvider => 'Configura el proveïdor STT';
+
+  @override
+  String get setConversationEndDescription => 'Estableix quan finalitzen automàticament les converses';
+
+  @override
+  String get clearNodesDescription => 'Esborra tots els nodes i connexions';
+
+  @override
+  String get deleteKnowledgeGraphWarning =>
+      'Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.';
+
+  @override
+  String get createAndShareYourApp => 'Crea i comparteix la teva aplicació';
+
+  @override
+  String get e2eeDescription =>
+      'El xifratge d\'extrem a extrem és l\'estàndard d\'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d\'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Omi, pot accedir al teu contingut.';
+
+  @override
+  String get secureEncryptionDescription =>
+      'Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d\'Omi o Google, directament des de la base de dades.';
+
+  @override
+  String get e2eeCardDescription =>
+      'Activa per a la màxima seguretat on només tu pots accedir a les teves dades. Toca per saber-ne més.';
+
+  @override
+  String get yourOmiUnleashed => 'El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.';
+
+  @override
+  String get privacyIntroText =>
+      'A Omi, ens prenem molt seriosament la teva privadesa. Volem ser transparents sobre les dades que recollim i com les utilitzem per millorar el producte. Això és el que has de saber:';
+
+  @override
+  String get commitmentText =>
+      'Estem compromesos a utilitzar les dades que recollim només per fer d\'Omi un producte millor per a tu. La teva privadesa i confiança són primordials per a nosaltres.';
+
+  @override
+  String get thankYouText =>
+      'Gràcies per ser un usuari valorat d\'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
+
+  @override
+  String get knowledgeGraphDeleteDescription =>
+      'Això eliminarà totes les dades derivades del graf de coneixement (nodes i connexions). Els teus records originals romandran segurs. El graf es reconstruirà amb el temps o a la propera sol·licitud.';
+
+  @override
+  String get howPeopleWorks =>
+      'Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!';
+
+  @override
+  String get buildAndShareYourCustomApp => 'Crea i comparteix la teva aplicació personalitzada';
+
+  @override
+  String get onboardingChooseYourPreference => 'Tria la teva preferència';
+
+  @override
+  String get onboardingGrantRequiredAccess => 'Concedeix l\'accés requerit';
+
+  @override
+  String get apiEnvironmentDescription => 'Canvia entre els entorns de producció i staging de l\'API';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get omisStorageDesc =>
+      'Quan el vostre Omi no està connectat al telèfon, emmagatzema l\'àudio localment a la seva memòria integrada. Mai perdreu cap enregistrament.';
+
+  @override
+  String get permissionsSetupDescription => 'Activeu uns quants permisos perquè Omi pugui fer la seva màgia.';
+
+  @override
+  String get architectSubtitle => 'IA avançada — milers de xats + automatitzacions d\'agent';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get newestFirst => 'Més recents primer';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
+
+  @override
+  String conversationsNotCapturedCount(int count) {
+    return 'No enregistrat ($count)';
+  }
+
+  @override
+  String get speakerTagPromptSubtitle => 'Una revisió ràpida de les veus dels últims dos dies';
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcripcions pendents $count';
+  }
+
+  @override
+  String get captureRecoveryBanner => 'Omi no envia àudio — toca per tornar a connectar';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
+
+  @override
+  String get capturePendantDisconnectedShort => 'Omi es tornarà a connectar sol';
+
+  @override
+  String pinPersonSubtitle(String name) {
+    return 'Conserva $name i compta que apareixerà a les teves converses';
+  }
+
+  @override
+  String get pinPersonHonestLine => 'Omi pregunta abans d\'associar veus semblants.';
+
+  @override
+  String speakerTagPromptHintConfirm(String name) {
+    return 'Dir que sí augmenta la confiança en $name.';
+  }
+
+  @override
+  String get localCopiesSection => 'Còpies locals';
+
+  @override
+  String get forYou => 'Per a tu';
+
+  @override
+  String get stopThese => 'Atura aquests';
+
+  @override
+  String get meetingActionItemsTitle => 'Elements d\'acció';
+
+  @override
+  String get addToTasks => 'Afegeix a Tasques';
+
+  @override
+  String get showInTranscript => 'Mostra la transcripció';
+
+  @override
+  String tentativeTaskDueDate(String date) {
+    return 'Venciment aproximat $date';
+  }
+
+  @override
+  String tentativeTaskDueDateSemantics(String date) {
+    return 'Venciment previst $date';
+  }
+
+  @override
+  String get openTask => 'Obre la tasca';
+
+  @override
+  String get completeTask => 'Completa la tasca';
+
+  @override
+  String get reopenTask => 'Torna a obrir la tasca';
+
+  @override
+  String get addingToTasks => 'S\'està afegint a Tasques';
+
+  @override
+  String get taskAddedToTasks => 'Tasca creada';
+
+  @override
+  String get completedStatus => 'Completat';
+
+  @override
+  String get notCompletedStatus => 'Pendent';
+
+  @override
+  String get referralAffiliate => 'Programa d\'afiliats';
+
+  @override
+  String get referralCampaignTerms =>
+      'Els amics tenen un 10% de descompte en dispositius Omi. Les compres dels primers 2 amics diferents desbloquegen 2 mesos de Pro i les dels 3 amics diferents següents, 3 més. Fins a 5 amics i 5 mesos en total.';
+
+  @override
+  String referralMilestone(int months, int count, int target) {
+    return '$months mesos de Pro · $count/$target compres';
+  }
+
+  @override
+  String get referralClaim => 'Reclama la recompensa';
+
+  @override
+  String referralClaimed(int months) {
+    return '$months mesos de Pro reclamats';
+  }
+
+  @override
+  String get referralRewardPending => 'La recompensa es desa fins que acabi la subscripció de pagament.';
+
+  @override
+  String get referralCampaignTitle => 'Recomana Omi. Aconsegueix Pro gratis.';
+
+  @override
+  String get referralCampaignSubtitle => 'Un 10% de descompte en Omi per a ells. Fins a 5 mesos de Pro per a tu.';
+
+  @override
+  String get referralShareInvite => 'Comparteix la invitació';
+
+  @override
+  String get referralYourRewards => 'Les teves recompenses';
+
+  @override
+  String get referralRewardFirstTitle => '2 mesos de Pro';
+
+  @override
+  String get referralRewardFirstDetail => 'Quan 2 amics comprin Omi';
+
+  @override
+  String get referralRewardSecondTitle => '3 mesos més';
+
+  @override
+  String get referralRewardSecondDetail => 'Quan 3 amics més comprin';
+
+  @override
+  String get referralClaimShort => 'Reclama';
+
+  @override
+  String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
+
+  @override
+  String paymentDeclinedMessage(Object plan) {
+    return 'Actualitza-la per recuperar $plan';
+  }
+
+  @override
+  String get hasLinkedTasksLabel => 'Té tasques vinculades';
+
+  @override
+  String get hasTasksFilter => 'Amb tasques';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
 }

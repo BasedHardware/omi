@@ -51,6 +51,7 @@ model_config_features:
     - session_titles
     - smart_glasses
     - sync_redrive_title
+    - episode_composer
     - episode_incremental
     - wrapped_analysis
     - x_memory_extraction_flex
@@ -137,6 +138,7 @@ surfaces:
   - utils/llm/conversation_processing.py::feature:conv_discard
   - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental
+  - utils/episodes/composer.py::feature:episode_composer
   - utils/llm/conversation_processing.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result
   - utils/llm/conversation_processing.py::feature:conv_app_select

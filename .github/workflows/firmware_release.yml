@@ -1,7 +1,8 @@
 name: Firmware Build & Release (Omi CV1)
 
 # Builds the Omi CV1 firmware (nRF5340, the consumer "Omi CV 1" device) and
-# optionally publishes a GitHub Release that the backend serves as an OTA
+# promotes the exact tested build-only artifacts to a GitHub Release for OTA.
+# The publish path never builds. The backend serves it as an OTA
 # update (backend/routers/firmware.py).
 #
 # Manual-only by design: firmware has no auto-version/changelog system like the
@@ -49,6 +50,34 @@ on:
         type: string
         required: false
         default: ''
+      qa_run_id:
+        description: 'Required for publish: successful build-only run of this workflow at the same SHA'
+        type: string
+        default: ''
+      qa_run_attempt:
+        description: 'Required for publish: exact bench-tested attempt of qa_run_id'
+        type: string
+        default: ''
+      tested_signed_sha256:
+        description: 'Required for publish: bench-reported SHA-256 of omi.signed.bin'
+        type: string
+        default: ''
+      include_network_core:
+        description: 'Explicitly include image 1 in OTA (must match the tested QA run)'
+        type: boolean
+        default: false
+      rollout_percent:
+        description: 'Initial cohort: 0 or 1 only (emergency_revert permits up to 100); expand by editing the body'
+        type: number
+        default: 1
+      blocked:
+        description: 'Kill switch: do not offer this release'
+        type: boolean
+        default: false
+      emergency_revert:
+        description: 'Explicitly authorize a reserved 3.0.90-3.0.99 emergency revert version'
+        type: boolean
+        default: false
       ota_update_steps:
         description: 'Comma-separated OTA prerequisites e.g. battery,internet (blank = omit)'
         type: string
@@ -59,6 +88,7 @@ permissions:
   # Default token is read-only (checkout). The release/tag is created with the
   # separate, contents:write-scoped Omi Bot app token in the publish step.
   contents: read
+  actions: read
 
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
@@ -74,6 +104,15 @@ jobs:
       group: firmware-release-cv1
       cancel-in-progress: false
     env:
+      VERSION_INPUT: ${{ inputs.version }}
+      PUBLISH: ${{ inputs.publish }}
+      QA_RUN_ID: ${{ inputs.qa_run_id }}
+      QA_RUN_ATTEMPT: ${{ inputs.qa_run_attempt }}
+      TESTED_SIGNED_SHA256: ${{ inputs.tested_signed_sha256 }}
+      INCLUDE_NETWORK_CORE: ${{ inputs.include_network_core }}
+      EMERGENCY_REVERT: ${{ inputs.emergency_revert }}
+      ROLLOUT_PERCENT: ${{ inputs.rollout_percent }}
+      BLOCKED: ${{ inputs.blocked }}
       # Zephyr CI image blessed by omi/firmware/BUILD_AND_OTA_FLASH.md; bundles the
       # toolchain for the NCS 2.9.0 sysbuild + MCUboot signing build.
       # Pinned by digest for reproducible, supply-chain-safe builds (tag kept
@@ -84,74 +123,110 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Resolve version and tag
+      - name: Validate release inputs and prepare build version
         id: meta
-        env:
-          VERSION_INPUT: ${{ github.event.inputs.version }}
-        run: |
-          CONF=omi/firmware/omi/omi.conf
-          if [ -n "$VERSION_INPUT" ]; then
-            VER="$VERSION_INPUT"
-          else
-            VER="$(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF" | sed -E 's/.*="([^"]+)".*/\1/')"
-          fi
-          VER="${VER#v}"
-          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Invalid CV1 version '$VER' (expected X.Y.Z)"
-            exit 1
-          fi
-          echo "ver=$VER" >> "$GITHUB_OUTPUT"
-          echo "tag=Omi_CV1_v$VER" >> "$GITHUB_OUTPUT"
-          echo "CV1 version $VER -> tag Omi_CV1_v$VER"
+        run: python3 omi/firmware/scripts/ci/cv1_release.py prepare
 
       - name: Cache nRF Connect SDK workspace (v2.9.0)
+        if: ${{ inputs.publish != 'publish' }}
         uses: actions/cache@v6
         with:
           path: omi/firmware/v2.9.0
           key: ncs-v2.9.0-${{ runner.os }}
 
-      - name: Sync firmware version into config
-        env:
-          VER: ${{ steps.meta.outputs.ver }}
-        run: |
-          # Make the binary's BLE DIS firmware revision match the release tag.
-          # Without this, a `version` override would publish OTA metadata for one
-          # version while the device reports another -> perpetual update loop.
-          # No-op when version is derived from omi.conf (VER already equals it).
-          CONF=omi/firmware/omi/omi.conf
-          sed -i -E "s|^(CONFIG_BT_DIS_FW_REV_STR=)\".*\"|\1\"$VER\"|" "$CONF"
-          grep -q "CONFIG_BT_DIS_FW_REV_STR=\"$VER\"" "$CONF" || {
-            echo "::error::Failed to set CONFIG_BT_DIS_FW_REV_STR to $VER in $CONF"; exit 1; }
-          echo "omi.conf now: $(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF")"
-
       - name: Build firmware (Docker)
+        if: ${{ inputs.publish != 'publish' }}
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE/omi/firmware:/omi/firmware" \
             -e CMAKE_PREFIX_PATH=/opt/toolchains \
+            -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT \
             "$CI_IMAGE" \
             bash /omi/firmware/scripts/ci/build-cv1.sh
 
+      - name: Upload failed MCUboot build diagnostics
+        if: ${{ failure() && inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bootloader-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.elf
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.hex
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/zephyr.map
+            omi/firmware/v2.9.0/build/mcuboot/zephyr/.config
+            omi/firmware/v2.9.0/build/partitions.yml
+          include-hidden-files: true
+          if-no-files-found: ignore
+
       - name: Fix workspace ownership
+        if: ${{ inputs.publish != 'publish' }}
         run: sudo chown -R "$(id -u):$(id -g)" omi/firmware
 
-      - name: Stage release assets
-        id: stage
+      - name: Upload custom MCUboot qualification evidence (never release assets)
+        if: ${{ inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bootloader-${{ github.run_id }}-${{ github.run_attempt }}
+          path: omi/firmware/v2.9.0/build/cv1-bootloader/*
+          if-no-files-found: error
+
+      # Release gate: the CV1 simulator suite plus a fuzz batch must pass for
+      # this exact SHA before QA assets can be staged; stage refuses to package
+      # without the passing sim-report.json, which travels in the QA artifact
+      # and is revalidated at promote and publish.
+      - name: Run CV1 simulator gate
+        if: ${{ inputs.publish != 'publish' }}
         env:
           VER: ${{ steps.meta.outputs.ver }}
         run: |
-          OUT="$RUNNER_TEMP/cv1-assets"
-          mkdir -p "$OUT"
-          B=omi/firmware/v2.9.0/build
-          cp "$B/dfu_application.zip" "$OUT/Omi_CV1_OTA_v$VER.zip"
-          cp "$B/merged.hex"          "$OUT/Omi_CV1_v$VER.hex"
-          cp "$B/merged_CPUNET.hex"   "$OUT/Omi_CV1_v${VER}_CPUNET.hex"
-          # OTA asset name must contain "ota" + end .zip or the backend drops it.
-          test -s "$OUT/Omi_CV1_OTA_v$VER.zip"
-          ls -l "$OUT"
-          echo "out=$OUT" >> "$GITHUB_OUTPUT"
+          python3 omi/firmware/omi/sim/scenario_runner.py \
+            --cache "$RUNNER_TEMP/cv1-sim" --jobs 4 --fuzz-seeds 40 \
+            --firmware-version "$VER" --report "$RUNNER_TEMP/sim-report.json"
+
+      # The simulator runs in Docker as root; its per-scenario flash images are
+      # root-owned and unreadable to upload-artifact (EACCES) without this.
+      - name: Fix simulator evidence ownership
+        if: ${{ always() && inputs.publish != 'publish' }}
+        run: |
+          if [ -d "$RUNNER_TEMP/cv1-sim" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/cv1-sim"
+          fi
+
+      - name: Upload simulator evidence
+        if: ${{ always() && inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-sim-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/sim-report.json
+            ${{ runner.temp }}/cv1-sim/runs/**
+            ${{ runner.temp }}/cv1-sim/fuzz-failures/**
+            !${{ runner.temp }}/cv1-sim/runs/**/sd.img
+          if-no-files-found: ignore
+
+      - name: Package QA release assets
+        if: ${{ inputs.publish != 'publish' }}
+        env:
+          BUILD: omi/firmware/v2.9.0/build
+          SIM_REPORT: ${{ runner.temp }}/sim-report.json
+        run: python3 omi/firmware/scripts/ci/cv1_release.py stage
+
+      - name: Download and validate tested QA assets
+        if: ${{ inputs.publish == 'publish' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 omi/firmware/scripts/ci/cv1_release.py promote
+
+      - name: Upload bench symbols (never a release asset)
+        if: ${{ inputs.publish != 'publish' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cv1-bench-symbols-v${{ steps.meta.outputs.ver }}
+          path: omi/firmware/v2.9.0/build/omi/zephyr/zephyr.elf
+          if-no-files-found: error
 
       - name: Generate release body
+        if: ${{ inputs.publish == 'publish' }}
         id: body
         env:
           TITLE: Omi CV1 Firmware v${{ steps.meta.outputs.ver }}
@@ -169,63 +244,37 @@ jobs:
             2. Go to **Settings** > **Device Settings**.
             3. Select **Product Update**.
         run: |
+          # The app's update check needs min_version: without it, it reports
+          # "up to date" even when the backend offers the release (3.0.24).
+          if [ -z "$MIN_FW" ]; then
+            echo "::error::minimum_firmware_required is required to publish (every CV1 release so far: 3.0.6, with minimum_app_version 1.0.74 and minimum_app_version_code 438)"
+            exit 1
+          fi
           OUT="$RUNNER_TEMP/cv1-body.md"
           OUT="$OUT" bash omi/firmware/scripts/ci/make-release-body.sh
           echo "file=$OUT" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifacts
+        if: ${{ inputs.publish != 'publish' }}
         uses: actions/upload-artifact@v7
         with:
-          name: Omi_CV1_v${{ steps.meta.outputs.ver }}
-          path: ${{ steps.stage.outputs.out }}/*
+          name: cv1-qa-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cv1-assets/*
           if-no-files-found: error
-
-      - name: Guard - publish only from main
-        if: ${{ github.event.inputs.publish == 'publish' }}
-        env:
-          REF: ${{ github.ref }}
-        run: |
-          if [ "$REF" != "refs/heads/main" ]; then
-            echo "::error::Refusing to publish a firmware release from '$REF'. Dispatch the publish run from the 'main' branch only."
-            exit 1
-          fi
-          echo "Publishing from main — OK."
 
       - name: Generate Omi Bot token
         id: app-token
         if: ${{ github.event.inputs.publish == 'publish' }}
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          app-id: ${{ vars.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
           # Least privilege: only what creating a release/tag needs.
           permission-contents: write
 
       - name: Publish GitHub Release
-        if: ${{ github.event.inputs.publish == 'publish' }}
+        if: ${{ inputs.publish == 'publish' }}
         env:
-          # Release is created/tagged by the Omi Bot GitHub App so it is clearly
-          # attributed to automation, not a person (same as the desktop pipeline).
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ steps.meta.outputs.tag }}
-          TITLE: Omi CV1 Firmware v${{ steps.meta.outputs.ver }}
           BODY_FILE: ${{ steps.body.outputs.file }}
-          OUT: ${{ steps.stage.outputs.out }}
-          VER: ${{ steps.meta.outputs.ver }}
-          SHA: ${{ github.sha }}
-        run: |
-          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            echo "::error::Release $TAG already exists. Bump CONFIG_BT_DIS_FW_REV_STR or pass a new version."
-            exit 1
-          fi
-          # Published, non-draft, non-prerelease — the only shape the backend serves.
-          gh release create "$TAG" \
-            --repo "$REPO" \
-            --title "$TITLE" \
-            --notes-file "$BODY_FILE" \
-            --target "$SHA" \
-            "$OUT/Omi_CV1_OTA_v$VER.zip" \
-            "$OUT/Omi_CV1_v$VER.hex" \
-            "$OUT/Omi_CV1_v${VER}_CPUNET.hex"
-          echo "Published $TAG"
+        run: python3 omi/firmware/scripts/ci/cv1_release.py publish

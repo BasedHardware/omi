@@ -13,7 +13,6 @@ import asyncio
 import json
 import os
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -21,7 +20,6 @@ import tempfile
 import time
 import uuid
 from contextlib import suppress
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -35,7 +33,10 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
+from testing.listen_pusher_stack.recorded_clock import age_conversation
+from testing.lifecycle_sim.faults import validate_fault_selector
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
+from testing.listen_pusher_stack.cleanup import Child, stop_child
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
@@ -44,6 +45,7 @@ ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
 PROJECT = 'demo-omi-listen-stack'
 LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
 METRICS_SECRET = 'listen-pusher-stack-metrics'
+STARTUP_TIMEOUT_SECONDS = 20.0
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
@@ -55,13 +57,6 @@ RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conv
 
 class StackFailure(AssertionError):
     """An actionable scenario assertion failure."""
-
-
-@dataclass
-class Child:
-    name: str
-    process: subprocess.Popen[bytes]
-    log_path: Path
 
 
 def _free_ports(count: int) -> list[int]:
@@ -95,6 +90,8 @@ def _wait_for_port(
     timeout: float = 20.0,
     child: 'Child | None' = None,
 ) -> None:
+    timeout = max(timeout, STARTUP_TIMEOUT_SECONDS)
+
     def child_diagnostics() -> str:
         if child is None:
             return ''
@@ -178,12 +175,7 @@ class Stack:
         if recording_session_mode not in {'shadow', 'dual_write', 'enforce'}:
             raise ValueError(f'unsupported recording session mode: {recording_session_mode}')
         if recording_lifecycle_fault is not None:
-            if set(recording_lifecycle_fault) != RECORDING_LIFECYCLE_FAULT_KEYS:
-                raise ValueError(
-                    f'recording lifecycle fault must contain exactly {sorted(RECORDING_LIFECYCLE_FAULT_KEYS)}'
-                )
-            if not all(recording_lifecycle_fault[key] for key in RECORDING_LIFECYCLE_FAULT_KEYS):
-                raise ValueError('recording lifecycle fault values must be non-empty')
+            validate_fault_selector(recording_lifecycle_fault)
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
@@ -249,6 +241,7 @@ class Stack:
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
                 'HOSTED_PARAKEET_API_URL': f'http://127.0.0.1:{self.parakeet_port}',
                 'STT_SERVICE_MODELS': 'parakeet',
+                'STT_STREAMING_PARAKEET_SLOT_ENABLED': 'true',
                 'CONVERSATION_APPS_OPT_IN_ONLY': 'true',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
@@ -260,6 +253,14 @@ class Stack:
                 # Child logs are evidence when a process fails to bind; avoid
                 # losing a short Python traceback in the file buffer.
                 'PYTHONUNBUFFERED': '1',
+                # The allowlist drops ambient limits too. Bound numerical pools
+                # in each fresh child, including lifecycle pusher restarts.
+                'OMP_NUM_THREADS': '1',
+                'OPENBLAS_NUM_THREADS': '1',
+                'MKL_NUM_THREADS': '1',
+                'VECLIB_MAXIMUM_THREADS': '1',
+                'NUMEXPR_NUM_THREADS': '1',
+                'BLIS_NUM_THREADS': '1',
             }
         )
         if self.memory_enabled is not None:
@@ -312,17 +313,19 @@ class Stack:
             process_env.pop(key, None)
         if extra_env:
             process_env.update(extra_env)
-        output = log_path.open('ab')
-        process = subprocess.Popen(
-            command,
-            cwd=BACKEND,
-            env=process_env,
-            stdin=subprocess.DEVNULL,
-            stdout=output,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-        child = Child(name, process, log_path)
+        # Identify the launch without storing argument values or local test tokens.
+        identity = f'{Path(command[0]).name}:{sha256(json.dumps(command).encode()).hexdigest()}'
+        with log_path.open('ab') as output:
+            process = subprocess.Popen(
+                command,
+                cwd=BACKEND,
+                env=process_env,
+                stdin=subprocess.DEVNULL,
+                stdout=output,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        child = Child(name, process, log_path, BACKEND, identity, os.getuid())
         self.children[name] = child
         return child
 
@@ -446,21 +449,21 @@ class Stack:
         self._start_backend(enable_rest_finalization_race=False)
 
     def stop(self, name: str) -> None:
-        child = self.children.pop(name, None)
-        if not child or child.process.poll() is not None:
+        child = self.children.get(name)
+        if child is None:
             return
-        with suppress(ProcessLookupError):
-            os.killpg(child.process.pid, signal.SIGTERM)
-        try:
-            child.process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            with suppress(ProcessLookupError):
-                os.killpg(child.process.pid, signal.SIGKILL)
-            child.process.wait(timeout=5)
+        stop_child(child, self.state_dir / 'cleanup.jsonl')
+        del self.children[name]
 
     def close(self) -> None:
+        failures = []
         for name in reversed(list(self.children)):
-            self.stop(name)
+            try:
+                self.stop(name)
+            except BaseException as error:
+                failures.append(error)
+        if failures:
+            raise BaseExceptionGroup('listen-pusher stack cleanup failed; child handles retained', failures)
 
     @property
     def pusher_events(self) -> list[dict[str, Any]]:
@@ -634,9 +637,7 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
-            {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
-        )
+        age_conversation(self.firestore, uid, conversation_id)
 
     def release_inline_finalization(self) -> None:
         if not self.hold_inline_finalization:
@@ -1171,7 +1172,7 @@ async def _pusher_restart_replay(stack: Stack) -> None:
         for event in stack.pusher_events
         if event.get('direction') == 'in' and event.get('opcode') == 104 and event.get('conversation_id') == session_id
     )
-    stack.restart_pusher()
+    await asyncio.to_thread(stack.restart_pusher)
     job = _wait_for_job(stack, uid, session_id, 'completed', timeout=30.0)
     finalization_requests = [
         event
@@ -1262,15 +1263,21 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     duplicate_task_events = [
         event for event in stack.finalization_task_events if event.get('event') == 'task_already_exists'
     ]
-    expected_duplicates = stack.rest_finalization_race_parties - 1
-    if len(duplicate_task_events) != expected_duplicates:
+    rest_events = [event for event in stack.finalization_task_events if event.get('admission_origin') == 'rest']
+    rest_created = [event for event in rest_events if event.get('event') == 'task_enqueued']
+    rest_duplicates = [event for event in rest_events if event.get('event') == 'task_already_exists']
+    if (
+        len(rest_events) != stack.rest_finalization_race_parties
+        or len(rest_created) > 1
+        or len(rest_duplicates) != stack.rest_finalization_race_parties - len(rest_created)
+    ):
         raise StackFailure(
-            f'concurrent REST finalization expected {expected_duplicates} named-task AlreadyExists events, '
-            f'observed {len(duplicate_task_events)}'
+            'concurrent REST finalization did not attempt every admission at the same named task: '
+            f'{len(rest_events)} attempts, {len(rest_created)} creates, {len(rest_duplicates)} duplicates'
         )
     if any(
         event.get('task_name') != task.get('task_name') or event.get('payload') != task.get('payload')
-        for event in duplicate_task_events
+        for event in [*duplicate_task_events, *rest_events]
     ):
         raise StackFailure('duplicate REST admission changed the durable Cloud Tasks identity')
     if len(stack.finalization_tasks) != 1 or len(stack.jobs_for(uid, conversation_id)) != 1:
@@ -1410,6 +1417,12 @@ async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
 
 
 async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
+    """Deterministic processing failures terminalize without a delayed budget.
+
+    This fixture raises RuntimeError and uses the harness's two-attempt cap.
+    Exhaustion must close the job and conversation atomically, retain captured
+    content, and fence later deliveries without minting another generation.
+    """
     uid = 'stack-cloud-dead-letter'
     conversation_id = str(uuid.uuid4())
     task = await _cloud_task_for_clean_desktop_close(stack, uid, conversation_id)
@@ -1421,7 +1434,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
         raise StackFailure(f'first terminal-path delivery did not request a retry: {first}')
     final = await stack.deliver_finalization_task(task, retry_count=1)
     if final != (200, {'status': 'dead_letter'}):
-        raise StackFailure(f'final delivery did not dead-letter the exhausted job: {final}')
+        raise StackFailure(f'deterministic exhaustion did not dead-letter at the cap: {final}')
 
     dead_letter = _one_job(stack, uid, conversation_id)
     conversation = stack.conversation(uid, conversation_id)
@@ -1430,25 +1443,44 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
         or dead_letter.get('terminal_outcome') != 'failure'
         or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
+        or dead_letter.get('budget_requeue_count', 0) != 0
+        or dead_letter.get('budget_requeued_at') is not None
+        or dead_letter.get('reconcile_after_at') is not None
+        or dead_letter.get('dispatch_generation') != job.get('dispatch_generation')
     ):
-        raise StackFailure('exhausted worker delivery did not record its terminal durable state')
+        raise StackFailure('deterministic exhaustion did not record terminal state without a second budget')
     if not conversation or {
         'status': conversation.get('status'),
         'discarded': conversation.get('discarded'),
         'finalization_status': conversation.get('finalization_status'),
     } != {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}:
         raise StackFailure('dead-lettering did not atomically close the processing conversation')
+    if not conversation.get('transcript_segments'):
+        raise StackFailure('deterministic dead-lettering lost captured transcript content')
     projection = await stack.finalization_status(uid, conversation_id)
     if projection.get('status') != 'dead_letter' or not projection.get('terminal') or projection.get('retryable'):
         raise StackFailure('client finalization status did not expose the dead-letter terminal state')
 
-    redelivery = await stack.deliver_finalization_task(task, retry_count=2)
-    if redelivery != (200, {'status': 'dropped', 'reason': 'dead_letter'}):
-        raise StackFailure(f'dead-letter redelivery was not safely fenced: {redelivery}')
+    for retry_count in (2, 3):
+        redelivery = await stack.deliver_finalization_task(task, retry_count=retry_count)
+        if redelivery != (200, {'status': 'dropped', 'reason': 'dead_letter'}):
+            raise StackFailure(f'dead-letter redelivery was not safely fenced: {redelivery}')
     if len(_provider_events(stack, conversation_id, 'process', 'controlled_failure')) != 2:
-        raise StackFailure('dead-letter path did not consume exactly the configured attempt budget')
+        raise StackFailure('deterministic terminal path did not stop after exactly two processing attempts')
     if len(stack.finalization_tasks) != 1:
         raise StackFailure('dead-letter path created a new finalization generation')
+
+    worker_log = stack.children['finalization-worker'].log_path.read_text(encoding='utf-8')
+    grant_lines = [line for line in worker_log.splitlines() if 'one delayed requeue scheduled' in line]
+    if grant_lines:
+        raise StackFailure('deterministic exhaustion emitted a delayed-requeue schedule line')
+    terminal_lines = [
+        line for line in worker_log.splitlines() if 'listen finalization dead_letter terminal=True' in line
+    ]
+    if len(terminal_lines) != 1 or any(
+        fragment not in terminal_lines[0] for fragment in ('budget_requeues=0', 'attempt_count=2', 'source=worker')
+    ):
+        raise StackFailure(f'dead-letter observability line was not emitted exactly once: {terminal_lines}')
 
 
 async def _integration_retry_preserves_processed_conversation(stack: Stack) -> None:
@@ -1780,15 +1812,28 @@ def _run_stack_scenario(
     try:
         stack.start()
         asyncio.run(scenario(stack))
-    finally:
+    except BaseException as primary:
+        try:
+            stack.close()
+        except BaseException as cleanup_error:
+            primary.add_note(f'Secondary stack cleanup failure: {cleanup_error!r}')
+        raise
+    else:
         stack.close()
 
 
 def main() -> int:
+    global STARTUP_TIMEOUT_SECONDS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized process logs and JSONL evidence')
     parser.add_argument('--keep', action='store_true', help='preserve generated evidence after a successful run')
+    parser.add_argument(
+        '--startup-timeout', type=float, default=20.0, help='local process startup floor in seconds (20-300)'
+    )
     args = parser.parse_args()
+    if not 20 <= args.startup_timeout <= 300:
+        parser.error('--startup-timeout must be between 20 and 300 seconds')
+    STARTUP_TIMEOUT_SECONDS = args.startup_timeout
     if not PYTHON.exists():
         raise SystemExit(f'missing backend virtual environment: {PYTHON}; run backend/scripts/sync-python-deps.sh')
     state_dir = args.state_dir or Path(tempfile.mkdtemp(prefix='omi-listen-pusher-stack-'))
@@ -1853,7 +1898,7 @@ def main() -> int:
         _run_stack_scenario(
             state_dir / 'cloud-dead-letter',
             finalization_mode='cloud_tasks',
-            finalizer_failures={'process': 2},
+            finalizer_failures={'process': 4},
             scenario=_terminal_cloud_tasks_failure_dead_letters,
         )
         _run_stack_scenario(

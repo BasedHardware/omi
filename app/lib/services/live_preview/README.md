@@ -78,7 +78,18 @@ Parakeet model is not used for streaming yet (`bundled_not_built`). A running
 engine that dies reports a typed runtime failure (`engine_error`); the
 controller retries the selection once without it, else shows the no-engine
 state. Decode work runs in bounded slices (8 packets per event-loop turn). No engine is
-a calm "Transcribing…" state; there is never a cloud fallback.
+reported to capture once with its closed reason. Capture sends
+`local_preview_engine_unavailable` before refusing the socket (held frames flush,
+local preview drops from the batch journal). A one-way per-capture latch prevents
+later sockets from declaring; capture end resets it. The server clears the grant
+and declaration and may attach the existing visible Modulate restore, only with
+durable server batch custody and the existing visible-restore cohort. Renewals
+never re-grant. Restore opens only after 15 s of on-screen visibility and closes
+when hidden. Unowned sessions return to their normal non-preview cloud path,
+including any existing demand policy. A renewal revocation uses the same sticky
+transition and clears the declaration for restore. Deploy server
+first, then the Dart app build. `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` is on unless
+set off; off counts the event and keeps the existing server grant.
 
 Pendant packets are copied, the 3-byte header stripped and decoded with a
 preview-only Opus decoder; the tap only enqueues into a bounded queue, and
@@ -137,10 +148,15 @@ Summary tab shows at most four notes (on-device, above, or the newest server not
 transcript link. The Transcript
 tab shows final segments first, then a "Live on this phone" divider, then the
 preview lines the finals do not already cover (union of final audio-time intervals; timed words allow partial hand-off; the
-volatile tail reads lighter), with one quiet "Final transcript about <N>s
+volatile tail reads lighter). The API has no processed-through watermark, so a
+client watermark trails the latest final segment end by 10 seconds to leave a
+recent out-of-order batch hole intact; older uncovered gaps are final-authoritative,
+including silence or noise the server omitted. Untimed preview lines expire
+after the watermark advances 10 seconds beyond their first observed time. The
+tab has one quiet "Final transcript about <N>s
 behind" line replacing the uploading pill (failed/retrying uploads keep their
-actionable pill). With no on-device engine the tab shows the calm "Recording
-safely" card; its "Turn on live text" link appears only where the platform can
+actionable pill). Before engine rescind is available (or outside the visible-restore cohort),
+with no on-device engine the tab can show the calm "Recording safely" card; its "Turn on live text" link appears only where the platform can
 deep-link to its speech settings (a denied speech permission).
 
 Audio feed timestamps are minted at the capture tap before bounded decoding,
@@ -150,6 +166,8 @@ audio time to delivery time. iOS carries recognized word/phrase ranges; Android
 Missing timing (including Android 13 recognizers) is kept conservatively. Final
 coverage uses the server conversation origin, independently of the local capture
 timer shown on Home. Preview words and timing stay display-only and in memory.
+Coverage scans merged, time-sorted intervals and preview ranges in one forward
+pass; sorting is only needed for an out-of-order batch/result list.
 
 ## Telemetry
 

@@ -31,6 +31,7 @@ from utils.metrics import (
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
+    OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_INTERNAL_FAILURES_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
@@ -43,6 +44,8 @@ from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 from utils.observability.demand_cohort import record_metric
+from utils.observability.listen_close import OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL, no_audio_close_reason
+from utils.observability.reasons import ListenNoAudioCloseReason
 from utils.observability.demand_cohort import DEMAND_COHORTS
 from utils.observability.routing_cohort import current_routing_cohort
 
@@ -52,7 +55,10 @@ _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
 _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'windows'}
 _REVISION_PATTERN = re.compile(r'[^a-zA-Z0-9_.-]')
 _SYNC_LANES = {'backfill', 'fresh'}
-_SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
+# Sync pipeline startup exposes idle lanes without inventing wait observations.
+for _sync_lane in _SYNC_LANES:
+    OMI_SYNC_QUEUE_WAIT_SECONDS.labels(lane=_sync_lane)
+_SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2', 'stt-async-v5'}
 _SYNC_INTERNAL_FAILURE_REASONS = frozenset(reason.value for reason in SyncFailureReason) - {
     SyncFailureReason.NONE.value
 }
@@ -562,18 +568,30 @@ def record_listen_zero_byte_session(*, source: str | None, platform: str | None)
     ).inc()
 
 
-def record_listen_no_audio_teardown(*, source: str | None, platform: str | None) -> None:
+def record_listen_no_audio_teardown(*, source: str | None, platform: str | None, state: object | None = None) -> None:
     """Count one accepted listen session that ended before its first audio byte.
 
     Emitted for every accepted session regardless of VAD or phone-call status so
     the accepted -> first_audio -> no-audio funnel covers all sources. Never
-    labeled by uid.
+    labeled by uid. ``state`` (the listen session state) also yields the close reason.
     """
 
     OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL.labels(
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
+    if state is not None:
+        record_listen_no_audio_close_reason(platform=platform, close_reason=no_audio_close_reason(state))
+
+
+def record_listen_no_audio_close_reason(*, platform: str | None, close_reason: ListenNoAudioCloseReason) -> None:
+    """Count one no-audio accepted session by the close the server observed. Never labeled by uid."""
+
+    try:
+        value = ListenNoAudioCloseReason(close_reason).value
+    except ValueError:
+        value = ListenNoAudioCloseReason.UNKNOWN.value
+    OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.labels(client_platform=_bounded_platform(platform), close_reason=value).inc()
 
 
 _REALTIME_DEMAND_BUCKETS = frozenset({'visible', 'foreground', 'background', 'unreported'})

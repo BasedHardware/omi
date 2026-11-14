@@ -31,8 +31,14 @@ INTENTIONAL_BUDGET_CHANGES = {
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Dart Analyze & Tests: the 30-min ceiling sat below the measured suite
+    # path — main's healthy runs took 27-29.6 min (run 41736391155: 29:36 for
+    # 8207 tests) — so run 41693050609 was cancelled at the cap with all 7842
+    # executed tests passing and ~360 unexecuted, failing Mobile Release
+    # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
-    # the 720s step regression budget excludes it, leaving 180s for setup.
+    # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
     # checkout 72s, apt-get 155s), so 227s + 720s crossed the ceiling and the
     # shard was cancelled mid-run while still inside its step budget — four
@@ -41,11 +47,36 @@ INTENTIONAL_BUDGET_CHANGES = {
     # cold-cache step needed recycling room. Run 40009383869 still exhausted
     # the Azure mirror slices; the step now uses official Ubuntu archives,
     # slices downloads only within 300s, and caps the whole install at 7m.
-    # 25m holds 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
+    # 25m held 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
     # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
     # The test regression gate and warm-path walls stay unchanged, so
-    # budget_p50 stays 8.
-    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
+    # budget_p50 stays 8. 2026-10-26: the step budget rose 720s -> 900s with
+    # measured evidence (selection growth 1727 -> 2319 files since #21259
+    # drifted shard walls to 725-841s on unrelated PRs; see the workflow's
+    # env comment), so the ceiling rises with it: 30m holds 900s tests + 72s
+    # checkout + 90s toolchain + 420s apt, leaving 318s for cache save and
+    # post-actions. The weighted eight-shard rebalance (#23767) later kept
+    # the 720s step line and scaled the p50 forecast to 6; the 900s budget
+    # still bounds every shard with headroom.
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "30",
+    # 2026-11-03 checkout stalls (run 41672443108): a trickling depth-one
+    # fetch exceeded 300s without tripping Git's low-speed retry. Increase the
+    # four test jobs' checkout caps 5->10 minutes and preserve test headroom
+    # with exactly five extra job minutes; unit shard hang caps are pinned
+    # above at 30.
+    ("backend-hermetic-e2e.yml", "hermetic-e2e", "timeout-minutes"): "20",
+    ("backend-hermetic-e2e.yml", "listen-pusher-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "sync-cloud-tasks-stack-gauntlet", "timeout-minutes"): "25",
+    ("backend-hermetic-e2e.yml", "replay-harness-phase0a-gauntlet", "timeout-minutes"): "25",
+    # Linux package smoke: the apt runtime-deps step budget is 20m (cold
+    # cache on a degraded mirror measured ~40-45 KB/s pool throughput in
+    # jobs 120062237675 and 120074210159 — ~14.4 min of pure download), and
+    # a cold run also pays ~70s setup plus ~5m packaging/smoke. At the old
+    # 20m ceiling the cold path was cancelled mid-packaging, and a cancelled
+    # job never saves the apt cache (save-always: false), so every retry
+    # stayed cold. 30m fits the cold path; warm runs still finish in ~7m,
+    # so budget_p50 stays 7.
+    ("desktop-windows-ci.yml", "build-linux", "timeout-minutes"): "30",
 }
 
 
@@ -101,8 +132,12 @@ class WorkflowTests(unittest.TestCase):
         base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout.strip()
         for filename in self.calls.values():
-            baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
-                                      cwd=ROOT, capture_output=True, text=True, check=True).stdout
+            shown = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
+                                   cwd=ROOT, capture_output=True, text=True)
+            if shown.returncode != 0:
+                # A workflow this PR adds has no earlier budget to keep; ci-budget.yaml covers it.
+                continue
+            baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
             self.assertEqual(set(before), set(after), filename)
             for name in before:

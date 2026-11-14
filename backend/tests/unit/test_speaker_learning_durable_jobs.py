@@ -109,6 +109,26 @@ def test_assignment_commits_durable_job_at_label_time(world, target):
     assert (target, 'queued') in world.events
 
 
+@pytest.mark.parametrize('failed_observer', ['cache', 'review'])
+def test_committed_learning_events_survive_other_observer_failures(world, monkeypatch, failed_observer):
+    from database import people_stats_cache
+    from utils.observability import speaker_identification
+
+    def unavailable(*args):
+        raise RuntimeError('Synthetic observer failure')
+
+    if failed_observer == 'cache':
+        monkeypatch.setattr(people_stats_cache, 'invalidate_people_stats_cache', unavailable)
+    else:
+        monkeypatch.setattr(speaker_identification, 'record_speaker_review', unavailable)
+
+    raw, resolved, _, _ = assign(person_id='p', segment_ids=['s0'])
+
+    assert resolved == ['s0'] and raw['transcript_segments'][0]['person_id'] == 'p'
+    assert the_job(world.store)[1]['state'] == 'pending'
+    assert world.events == [('person', 'queued')]
+
+
 @pytest.mark.parametrize('target', ['person', 'owner'])
 def test_coordinator_records_retryable_attempt_with_backoff(world, target):
     if target == 'person':
@@ -874,13 +894,14 @@ def test_assignment_reports_durable_admission(world):
     assert raw2['_speaker_learning_queued'] is False
 
 
-def test_discarded_assignment_admits_terminal_job(world):
+def test_discarded_assignment_is_rejected_before_learning_writes(world):
     world.store.rows[CONV_PATH]['discarded'] = True
-    raw, _, _, _ = assign(person_id='p', segment_ids=['s0'], use_for_speech_training=True)
-    assert raw['_speaker_learning_queued'] is False
-    _, job = the_job(world.store)
-    assert job['state'] == 'terminal' and job['last_outcome'] == 'discarded'
-    assert ('person', 'queued') not in world.events
+    before = deepcopy(world.store.rows)
+    with pytest.raises(ValueError, match='no longer visible'):
+        assign(person_id='p', segment_ids=['s0'], use_for_speech_training=True)
+    assert world.store.rows == before
+    assert jobs_map(world.store) == {}
+    assert world.events == []
     asyncio.run(jobs.run_speaker_learning_jobs(UID, CONV))
     assert world.extract.await_count == 0
 
@@ -1116,18 +1137,10 @@ def test_ensure_after_partial_relabel_supersession_admits_new_job(world, target)
     assert found[old_id]['state'] == 'terminal' and found[old_id]['last_outcome'] == 'superseded'
 
 
-def test_sync_v1_route_schedules_learning_retries_after_audio_finalize():
-    source = (Path(__file__).resolve().parents[2] / 'routers' / 'sync.py').read_text(encoding='utf-8')
-    fn_start = source.index('async def sync_local_files(')
-    fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
-    fn_body = source[fn_start:fn_end]
-    assert fn_body.index('_finalize_sync_audio_files') < fn_body.index('schedule_person_voice_learning_retries')
-
-
 def test_pipeline_schedules_learning_retries_outside_private_cloud_gate():
     """Reprocessed conversations must trigger durable teaching even without fresh audio."""
     source = (Path(__file__).resolve().parents[2] / 'utils' / 'sync' / 'pipeline.py').read_text(encoding='utf-8')
-    start = source.index('async def _run_full_pipeline_background_async')
+    start = source.index('async def run_full_pipeline_background_async')
     end = source.find('\nasync def ', start + 1)
     body = source[start : end if end != -1 else len(source)]
     idx = body.index('schedule_person_voice_learning_retries')

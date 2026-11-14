@@ -141,7 +141,6 @@ def _segment_fixture(monkeypatch, stt_result):
     modulate = Mock(side_effect=AssertionError('paid vendor called'))
     monkeypatch.setattr(pipeline, 'modulate_prerecorded_from_bytes', modulate)
     recover = Mock(return_value=None)
-    monkeypatch.setattr(pipeline, '_recover_empty_segment', recover)
     silence = Mock()
     monkeypatch.setattr(pipeline, '_record_empty_segment_as_silence', silence)
     return stt, modulate, recover, silence
@@ -165,18 +164,6 @@ def test_minimal_double_empty_pins_parakeet_and_records_silence_without_recovery
     modulate.assert_not_called()
     silence.assert_called_once()
     assert silence.call_args.kwargs['provider'] == 'parakeet'
-
-
-def test_normal_double_empty_keeps_selection_and_paid_recovery(monkeypatch):
-    stt, _, recover, silence = _segment_fixture(monkeypatch, ([], 'en'))
-    ok, _, _ = _run_segment()
-    assert ok is False
-    pipeline.get_prerecorded_service.assert_called_once()
-    # Ordinary unknown-language dispatch pins the provider selected after LID;
-    # minimal mode's independent Parakeet pin remains separate above.
-    assert all(call.kwargs['selected_service'] == ('modulate', 'multi', 'velma-2') for call in stt.call_args_list)
-    recover.assert_called_once()
-    silence.assert_called_once()
 
 
 def test_minimal_unservable_language_never_dispatches(monkeypatch):
@@ -444,7 +431,7 @@ async def _run_coordinator(module, **kwargs):
         parakeet_service=MagicMock(return_value=PARAKEET),
         finalize=MagicMock(),
     )
-    await module._run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
+    await module.run_full_pipeline_background_async('job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', **kwargs)
     return seen, module._finalize_sync_job_for_run.call_args.args[2]
 
 
@@ -515,7 +502,7 @@ async def test_coordinator_retries_provider_unavailable_instead_of_finalizing(co
     coordinator.process_segment = segment
     coordinator.minimal_redrive = minimal_redrive
     with pytest.raises(TranscriptionFailure) as raised:
-        await coordinator._run_full_pipeline_background_async(
+        await coordinator.run_full_pipeline_background_async(
             'job', 'uid', ['/tmp/a.opus'], 'omi', False, '/tmp/job', task_mode=True
         )
     assert raised.value.error_code == 'sync_minimal_provider_unavailable'

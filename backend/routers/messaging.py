@@ -10,7 +10,7 @@ from models.messaging import (
     ChannelVisibilityRequest,
     ChannelLinkReceipt,
 )
-from config.messaging import public_link_fields
+from config.messaging import MESSAGING_CHANNELS, public_link_fields
 from utils.messaging.access import require_access, SeatFull, AccessDenied
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 
@@ -35,7 +35,7 @@ def mint_link_proof(
         raise HTTPException(status_code=409, detail={'reason': error.reason, 'message': str(error)}) from None
     except PermissionError:
         raise HTTPException(status_code=503, detail={'reason': 'seat_state_unavailable'}) from None
-    deep_link, address = public_link_fields(body.channel, proof['proof'])
+    deep_link, address = public_link_fields(body.channel, proof['proof'], address=proof.get('address'))
     return {**proof, 'deep_link': deep_link, 'address': address}
 
 
@@ -48,7 +48,7 @@ def list_links(uid: str = Depends(get_current_user_uid)):
 
 def _availability(store, uid):
     result = {}
-    for channel in ('telegram', 'imessage'):
+    for channel in MESSAGING_CHANNELS:
         try:
             require_access(uid, channel)
             reason = store.seat_state(uid, channel)

@@ -115,7 +115,7 @@ conversation from per-segment embeddings so each id is one voice again, and
   teaches other people from explicitly labeled speech; `database/users.py` atomically
   publishes sample, embedding and source identity and fences correction/deletion.
   These profiles do not assign in-session cluster identities. See the
-  [teaching contract](../../../docs/doc/developer/backend/transcription.mdx).
+  [teaching contract](../../docs/transcription.md).
 - `vad.py` and `vad_gate.py` own speech admission; `outcomes.py` owns bounded
   transcription failure values.
 

@@ -23,6 +23,9 @@ tests/unit/test_llm_gateway_deploy_contract.py::test_prod_gateway_wiring_promote
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
+# Copies 10,001 records and verifies every payload group across both namespaces to prove
+# migration cannot silently truncate at Pinecone's 10,000-match query limit (~2.3s CPU).
+tests/unit/test_pinecone_partition_migration.py::test_large_owner_qualifies_complete_inventory_and_every_payload_group
 # Intentionally crosses the legacy 6,000-row boundary to prove cursor paging has no hidden cap.
 tests/unit/test_universal_memory_list_cursor.py::test_cursor_pages_beyond_6000_historical_with_bounded_calls_no_cap
 # Boots the developer memory HTTP surface to verify pending canonical rows remain observable.
@@ -532,3 +535,37 @@ tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_
 tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
 tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
 tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify
+# Imports the owner-chain ResultLog harness (serving/scheduler graph) to mirror
+# ProjectionSession.persist's redriven-watermark guard; measured 1.65s CPU on a
+# loaded local shard (2026-10-29) against the 1.00s guard; import-amortized
+# boundary shape as the entries above, assertions all pass.
+tests/unit/test_batch_pipeline_projection_release.py::test_redriven_reassignment_does_not_regress_the_watermark
+# Vendor outage drills: each runs 2-5 drill-hours of a 90-180 unit fleet through real admission,
+# slice C health, the provider stage (real Velma/Soniox clients over httpx.MockTransport), the GPU
+# scheduler and ordered merge, with no sleeps or network. Measured up to 2.44s CPU per drill on a
+# loaded local shard (2026-11-01); the outage windows, not the code paths, set the size.
+tests/unit/test_batch_vendor_outage_drills.py
+# Pull write budget: 512 queues is the scenario (128 visits reach only 4 short heads), so the walk can't shrink
+# without losing the bound it proves. Measured 1.01-1.07s CPU on CI (2026-11-01).
+tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[None]
+tests/unit/test_batch_pipeline_pull_multi_lease.py::test_long_heads_never_push_one_transaction_past_the_write_budget[1000000]
+# First test in the file: runpy-loads render_backend_runtime_env and parses the composed
+# runtime_env.yaml prod listen manifest under file isolation. Manifest grew again with the
+# live-preview values (#24517). Measured 1.04s CPU on CI main run 41736493180 (2026-11-03);
+# ~1.1s twice on #24516 before that. Assertions unchanged and hermetic.
+tests/unit/test_listen_finalization_cloud_tasks.py::test_prod_listen_has_replay_binding_without_enabling_live_admission
+# Discard-detection audit (PR: terminal decisions at every terminal state): these load the
+# full database graph or replay document-ceiling fixtures in the file-isolation runner,
+# so their first-test CPU amortizes imports; measured on the push-gate runner.
+tests/unit/test_conversation_terminal_effects.py::test_document_ceiling_failure_refreshes_visibility_after_commit
+tests/unit/test_dead_letter_visible_row_title.py::test_missing_structured_is_created_with_the_deterministic_title
+tests/unit/test_dead_letter_visible_row_title.py::test_many_action_item_maps_near_the_limit_drop_the_title
+tests/unit/test_dead_letter_visible_row_title.py::test_dead_letter_with_room_below_the_limit_keeps_title_and_retry
+tests/unit/test_dead_letter_visible_row_title.py::test_dead_letter_at_the_document_limit_still_terminalizes_without_growth
+tests/unit/test_dead_letter_visible_row_title.py::test_orphan_at_the_document_limit_still_terminalizes_without_growth
+tests/unit/test_people_stats_cache.py::test_repeated_route_calls_scan_once_then_serve_the_cache_hit
+tests/unit/test_terminal_relevance.py::test_production_terminal_assessment_call_sites_are_pinned
+tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[no_overlap-False]
+tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[provider_error-None]
+tests/unit/test_sync_cross_job_assignment.py::test_seventy_minutes_of_identical_narration_is_one_recording
+tests/unit/test_monitoring_telemetry_contract.py::test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_cloud_run_bridge[path0]

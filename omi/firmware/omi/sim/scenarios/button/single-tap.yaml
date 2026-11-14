@@ -1,0 +1,9 @@
+id: button/single-tap
+summary: A lone short press is a single tap, with no power or mute side effect.
+tags: [guard]
+timeline:
+  - {t: 5000, tap: [120]}
+end: 9000
+expect:
+  boots:
+    - {exit: stop, muted: 0, is_off: false, log: ["single tap detected"], not_log: ["long press detected"]}

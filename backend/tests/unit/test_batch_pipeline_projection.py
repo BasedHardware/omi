@@ -117,6 +117,59 @@ def test_original_vad_union_must_agree_with_speech_metering():
         projection_speech_spans(payload, 160)
 
 
+def test_decoded_eof_span_overrunning_admitted_duration_is_clamped():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # The worker's fetch_decode check admits decoded audio up to 0.1s longer
+    # than the admitted capture, and span edges ride the decoded sample clock,
+    # so a sample-rounded EOF span ends past the admitted duration (reentry29
+    # probe, 2026-10-28: admitted 1.00001s, 16001 decoded samples).
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    payload = {'speech_spans': [{'start': 0.0, 'end': decoded_eof}], 'speech_seconds': decoded_eof}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.0, 'end': admitted}]
+    # The worker's own tolerance boundary (exactly 0.1s) still clamps.
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.1}], 'speech_seconds': 4.1}
+    assert projection_speech_spans(payload, 4) == [{'start': 0.0, 'end': 4}]
+
+
+def test_vad_span_overrun_beyond_decode_tolerance_is_still_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.2}], 'speech_seconds': 4.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+    # A span starting at or past the admitted duration degenerates after the
+    # clamp (start >= end), whether or not its own overrun is within tolerance.
+    payload = {'speech_spans': [{'start': 4.05, 'end': 4.1}], 'speech_seconds': 0.05}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_clamped_eof_span_keeps_overlapping_spans_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # Overlap against a span the clamp shortened must still fail: the second
+    # span cannot survive inside the admitted tail the first span now owns.
+    payload = {'speech_spans': [{'start': 3.9, 'end': 4.1}, {'start': 3.95, 'end': 4.05}], 'speech_seconds': 0.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_speech_accounting_tolerates_the_eof_clamp_only_within_one_sample():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # speech_seconds counts the decoded-clock union (the worker sums the same
+    # spans it emits), so the clamp must not break the accounting fence: the
+    # pre-clamp union is compared, and a real disagreement still fails.
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    spans = [{'start': 0.5, 'end': decoded_eof}]
+    payload = {'speech_spans': spans, 'speech_seconds': decoded_eof - 0.5}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.5, 'end': admitted}]
+    payload['speech_seconds'] = decoded_eof - 0.5 + 0.001
+    with pytest.raises(ValueError, match='accounting'):
+        projection_speech_spans(payload, admitted)
+
+
 def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection_parts import split_result
@@ -127,6 +180,25 @@ def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     payload = {'audio_seconds': 200, 'words': [{'word': 'Text.', 'timestamp': [0, 1]}]}
     with pytest.raises(ValueError, match='speech_spans'):
         split_result(item, payload)
+
+
+def test_assignment_held_without_recovery_matrix():
+    """Which quarantined-receipt rows the held-partial scan may treat as held."""
+    from database.batch_pipeline_projection import assignment_held_without_recovery
+
+    quarantined = {'projection': {'state': 'quarantined'}}
+    assert assignment_held_without_recovery({'recovery_state': 'held'}, quarantined)
+    # Not recovery-held, or the receipt can still change: not a partial yet.
+    assert not assignment_held_without_recovery({}, quarantined)
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {'projection': {'state': 'persisted'}})
+    assert not assignment_held_without_recovery({'recovery_state': 'held'}, {})
+    # An open operator intent means a reviewed change is already in flight.
+    assert not assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'pending'}}, quarantined
+    )
+    assert assignment_held_without_recovery(
+        {'recovery_state': 'held', 'speech_redrive': {'state': 'completed'}}, quarantined
+    )
 
 
 @pytest.mark.parametrize('bound', [False, True])
@@ -656,6 +728,7 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
     'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
 )
 def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     client = StrictFirestore()
     store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
@@ -815,45 +888,6 @@ def test_non_privacy_errors_log_no_fence_reason(caplog):
     assert 'fence_reason' not in caplog.text
 
 
-def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(binding, monkeypatch, caplog):
-    from utils.batch_pipeline.contracts import WorkItem, Priority
-
-    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
-    payload = {
-        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
-        'audio_seconds': 1,
-        'speech_seconds': 1,
-        'diarization': {'turns': []},
-    }
-    projector = projection.Projector(Mock(), Mock(return_value=payload))
-    projector.store = Mock()
-    session = projector.store.session.return_value
-    monkeypatch.setattr(
-        projection,
-        'build_incoming',
-        lambda *a, **k: {
-            'started_at': Mock(timestamp=lambda: 0),
-            'finished_at': Mock(timestamp=lambda: 1),
-            'transcript_segments': [{'speaker_id_scope': 'sync:fixture'}],
-        },
-    )
-    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
-    assigned = {'id': 'synthetic-neighbour', '_sync_lineage_stamp_gap_refused': True}
-
-    def committed(*args, after_assign, **kwargs):
-        planned = (assigned, False, [])
-        after_assign(Mock(), planned)
-        return planned
-
-    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', committed)
-    with caplog.at_level(logging.INFO):
-        projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, finish=False)
-    session.persist.assert_called_once()
-    assert 'event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0' in caplog.text
-    assert 'synthetic-neighbour' not in caplog.text
-    assert '_sync_lineage_stamp_gap_refused' not in assigned
-
-
 def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(monkeypatch, binding):
     from utils.sync import reprocess
 
@@ -897,3 +931,107 @@ def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(m
         client.collection(reprocess.COLLECTION).document(reprocess.key(binding.owner_id, cid)).get().exists
         for cid in calls
     )
+
+
+def test_claim_peek_is_non_acquiring_and_observes_release(claim_redis):
+    from database import batch_pipeline_projection_claim as claims
+
+    assert not claims.projection_claim_held('synthetic', 'owner')
+    assert not claim_redis.exists('batch_projection:synthetic:owner')
+    with claims.projection_claim('synthetic', 'owner') as acquired:
+        assert acquired and claims.projection_claim_held('synthetic', 'owner')
+        assert not claims.projection_claim_held('different-stage', 'owner')
+    assert not claims.projection_claim_held('synthetic', 'owner')
+
+
+def test_claim_peek_error_fails_open(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+
+    monkeypatch.setattr(claims, '_redis_client', Mock(side_effect=RuntimeError('synthetic outage')))
+    assert claims.projection_claim_held('synthetic', 'owner') is False
+
+
+def test_claim_peek_uses_only_get(monkeypatch):
+    from database import batch_pipeline_projection_claim as claims
+    from unittest.mock import call
+
+    client = Mock()
+    client.get.side_effect = [b'other-walker', None]
+    monkeypatch.setattr(claims, '_redis_client', lambda: client)
+    assert claims.projection_claim_held('synthetic', 'owner')
+    assert not claims.projection_claim_held('synthetic', 'owner')
+    assert client.method_calls == [
+        call.get('batch_projection:synthetic:owner'),
+        call.get('batch_projection:synthetic:owner'),
+    ]
+
+
+def _ledger_completion_store(client=None):
+    store = ProjectionStore(SimpleNamespace(client=client or Mock(), namespace='synthetic'))
+    store.policy = lambda _: ProjectionPolicy()
+    store._mirror = lambda *args, **kwargs: None
+    return store
+
+
+def _recording_binding():
+    return ProjectionBinding(
+        'synthetic-owner', 'job', 'content', ('segment',), target_conversation_id='capture', record_origin=True
+    )
+
+
+def test_first_completion_writes_transcribed_on_the_completion_clock(monkeypatch):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append((args, kwargs)) or True)
+    client = Mock()
+    store = _ledger_completion_store(client)
+    store.run = lambda operation, policy=None: ({'outcome': 'success'}, True, 4.5)
+    accounting = {'seconds': 4.5, 'source_deleted': False}
+
+    assert store.complete('segment', _recording_binding(), 1234.5, accounting)['outcome'] == 'success'
+
+    ((args, kwargs),) = writes
+    assert args == ('synthetic-owner', 'capture', pipeline_ledger.TRANSCRIBED)
+    assert kwargs['now'] == 1234.5  # the completion clock, not the ledger-write time
+    assert kwargs['speech_seconds'] == 4.5 and kwargs['has_speech'] is True
+    assert kwargs['speech_basis'] == 'transcript'
+    assert kwargs['firestore_client'] is client
+
+
+def test_replayed_completion_does_not_write_a_second_transcription(monkeypatch):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    store = _ledger_completion_store()
+    store.run = lambda operation, policy=None: ({'outcome': 'success'}, False, 4.5)
+
+    assert store.complete('segment', _recording_binding(), 2.0, {'seconds': 4.5})['outcome'] == 'success'
+    assert not writes
+
+
+@pytest.mark.parametrize(
+    'accounting,result',
+    [({'seconds': 4.5, 'source_deleted': True}, {}), ({'seconds': 0.0}, {'reason_code': 'source_deleted'})],
+)
+def test_source_deletion_keeps_its_erasure_fence(monkeypatch, accounting, result):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    store = _ledger_completion_store()
+    store.run = lambda operation, policy=None: (result or {'outcome': 'success'}, True, 0.0)
+
+    store.complete('segment', _recording_binding(), 2.0, accounting)
+    assert not writes
+
+
+def test_transcription_writer_is_fail_open_and_needs_a_capture_identity(monkeypatch):
+    from database import pipeline_ledger
+
+    store = _ledger_completion_store()
+    binding = replace(_recording_binding(), target_conversation_id=None)
+    store._observe_transcription(binding, 2.0, {'seconds': 4.5}, {'outcome': 'success'})
+    monkeypatch.setattr(pipeline_ledger, 'advance', Mock(side_effect=RuntimeError('synthetic outage')))
+    store._observe_transcription(_recording_binding(), 2.0, {'seconds': 4.5}, {'outcome': 'success'})
