@@ -193,7 +193,21 @@ const int walMaxRefusalRetriesPerDrain = 25;
 /// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
 const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
-bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds;
+/// Build/patch rollback for clock-priority scheduling; never changes stored time.
+const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
+
+enum WalCaptureTimeClass { live, historical, unknown }
+
+WalCaptureTimeClass walCaptureTimeClass(Wal wal, int nowSeconds) {
+  if (!walClockPriorityOff && (wal.timerStart <= 0 || wal.timerStart > nowSeconds)) {
+    return WalCaptureTimeClass.unknown;
+  }
+  return nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds
+      ? WalCaptureTimeClass.live
+      : WalCaptureTimeClass.historical;
+}
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.live;
 
 class WalStats {
   final int totalFiles;
