@@ -59,6 +59,8 @@ class Transaction(Protocol):
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -91,6 +93,8 @@ class Store(Protocol):
 _DIRECT_READ_KINDS = {
     'first_pending': 'jobs_query',
     'first_ready_pending': 'jobs_query',
+    'fresh_first_pending': 'jobs_query',
+    'fresh_first_ready_pending': 'jobs_query',
     'ready_predecessor': 'jobs_query',
     'service_frontier': 'control_query',
     'check_privacy': 'privacy',
@@ -194,6 +198,12 @@ class FirestoreTransaction:
 
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=False, transaction=self.transaction)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=True, transaction=self.transaction)
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
@@ -606,6 +616,24 @@ def held_merge_owners(
         job = first_pending(client, namespace, mark.id, skip_terminal=False)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
+
+
+def fresh_first_pending(client: Any, namespace: str, owner_key: str, *, ready: bool, transaction: Any) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('fresh_capture', '==', True)
+    )
+    if ready:
+        query = query.where('state', '==', 'result_ready')
+    return next(
+        (
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction)
+        ),
+        None,
+    )
 
 
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:

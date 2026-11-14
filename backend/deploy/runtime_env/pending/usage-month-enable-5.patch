@@ -1,7 +1,7 @@
 diff --git a/backend/deploy/runtime_env/prod.overlay.yaml b/backend/deploy/runtime_env/prod.overlay.yaml
 --- a/backend/deploy/runtime_env/prod.overlay.yaml
 +++ b/backend/deploy/runtime_env/prod.overlay.yaml
-@@ -569,11 +569,11 @@
+@@ -569,11 +569,11 @@ overlay:
            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
            # Pinned per-service Cloud Run literal (ec191a row 3):
            # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
@@ -15,7 +15,7 @@ diff --git a/backend/deploy/runtime_env/prod.overlay.yaml b/backend/deploy/runti
            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
            # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
            # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-@@ -1330,11 +1330,11 @@
+@@ -1330,11 +1330,11 @@ overlay:
            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
            # Pinned per-service Cloud Run literal (ec191a row 3):
            # privacy_negative_lookup_cache=100; privacy_checks_shadow=100; batch_timeliness_leader=0.
@@ -29,7 +29,7 @@ diff --git a/backend/deploy/runtime_env/prod.overlay.yaml b/backend/deploy/runti
            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
            # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
            # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
-@@ -1695,11 +1695,11 @@
+@@ -1695,11 +1695,11 @@ overlay:
            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
            # Pinned per-service Cloud Run literal (ec191a row 3):
            # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.

@@ -3,7 +3,7 @@
 import logging
 import time
 
-from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
+from google.api_core.exceptions import Aborted, FailedPrecondition, GoogleAPICallError
 
 from config.batch_pipeline import (
     merge_catch_up_depth,
@@ -12,6 +12,7 @@ from config.batch_pipeline import (
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
 )
+from config.policy.kill_switches import kill_switch
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
@@ -35,6 +36,11 @@ _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 class HeadWaitUnavailable(Exception):
     """The head-wait query has no serving index; the merge keeps strict order."""
+
+
+class _FreshGateReadError(Exception):
+    def __init__(self, error: GoogleAPICallError):
+        self.error = error
 
 
 def _wait_bucket(seconds: float) -> str:
@@ -69,7 +75,7 @@ def _backlog_held(job: dict) -> bool:
 
 def _ready_since(row: dict) -> float | None:
     """When the row became ready. A provider row settled before provider settle stamped
-    ``ready_at`` carries the same instant on its intent."""
+    ``ready_at`` carries a settle instant on its intent."""
     if row.get('ready_at') is not None:
         return row['ready_at']
     if (row.get('stt_route') or {}).get('stt_route') == 'provider' and provider_merge_membership_enabled():
@@ -86,7 +92,10 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     if rows[0].get('state') == 'result_ready':
         return rows[0], None
     ready = [row for row in rows if row.get('state') == 'result_ready']
-    waited = max((now - row['ready_at'] for row in ready if row.get('ready_at') is not None), default=None)
+    # A provider row settled while the ready_at stamp was off (or had it removed) carries a
+    # settle instant on its intent. Reading only ready_at left such rows behind an unready
+    # earlier fresh row until ready_at was restored.
+    waited = max((now - since for row in ready if (since := _ready_since(row)) is not None), default=None)
     if wait > 0 and waited is not None and waited >= wait:
         earlier = [row['segment_id'] for row in rows[: rows.index(ready[0])]]
         return ready[0], {'segment_ids': earlier, 'state': rows[0].get('state'), 'waited': waited}
@@ -122,6 +131,7 @@ class OrderedMerge:
         self.catch_up_depth = catch_up_depth
         self._head_wait_retry_at = 0.0
         self._fresh_first_retry_at = 0.0
+        self._fresh_tx_retry_at = 0.0
         # Backoff for a backlog-hold probe alone: it must not switch the depth hold off.
         self._backlog_probe_retry_at = 0.0
         # Owners whose last commit attempt found them at the projection depth
@@ -227,6 +237,7 @@ class OrderedMerge:
         released: dict = {}
         held: dict = {}
         head: dict = {}
+        gate = {'determined': True}
 
         def commit(
             tx,
@@ -234,6 +245,7 @@ class OrderedMerge:
             fresh: dict | None = None,
             skipped: dict | None = None,
             exact: str | None = None,
+            tx_fresh: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             bypass.clear()
@@ -241,6 +253,7 @@ class OrderedMerge:
             released.clear()
             held.clear()
             head.clear()
+            gate['determined'] = True  # Reset on every transaction retry.
             owner = tx.get('owners', key)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
@@ -251,6 +264,32 @@ class OrderedMerge:
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
                 head['backlog'] = _backlog_held(candidate)
+            if tx_fresh:
+                if not candidate or not (_catch_up(candidate) or _backlog_held(candidate)):
+                    return None
+                try:
+                    first = tx.fresh_first_pending(key)
+                    fresh = tx.fresh_first_ready_pending(key)
+                except Aborted:
+                    # Contention belongs to the transaction's own retry (or to the caller when
+                    # retries are off), never to the gate's read fallback.
+                    raise
+                except GoogleAPICallError as error:
+                    # Only query errors get probe-style handling; commit writes still raise.
+                    raise _FreshGateReadError(error) from error
+                if fresh is None:
+                    return None
+                if first is None or first['segment_id'] != fresh['segment_id']:
+                    since = _ready_since(fresh)
+                    if since is None:
+                        # The probe can measure a later ready row's wait and pick this row.
+                        gate['determined'] = False
+                        return None
+                    if wait <= 0 or now - since < wait:
+                        # With the head wait off (or unavailable) nothing passes an unready
+                        # earlier fresh row, as on the probe path.
+                        return None
+                    skipped = {'segment_ids': [], 'state': first.get('state') if first else None, 'waited': now - since}
             if exact is not None:
                 # Recovered release: the wake's row must still be this owner's
                 # pending, ready row. It appends at the tail like any commit;
@@ -288,7 +327,7 @@ class OrderedMerge:
                 if not tx.get('merge_holds', key).get('held'):
                     tx.put('merge_holds', key, {'held': True, 'held_at': now})
             if fresh is not None:
-                # Fresh-first (David's fresh bar, 2026-10-20): the probed fresh
+                # Fresh-first (David's fresh bar, 2026-10-20): the selected fresh
                 # row must still be pending and ready behind a catch-up head;
                 # it commits ahead of that backlog, which appends later as
                 # late_capture through the unchanged body below.
@@ -412,7 +451,41 @@ class OrderedMerge:
             # any other fence keeps its strict-order behaviour.
             raise fenced
         depth_probe = bool(depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
-        if entry is None and (backlog_probe or depth_probe):
+        probe = entry is None and (backlog_probe or depth_probe)
+        if (
+            probe
+            and kill_switch('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', log=False)
+            and time.monotonic() >= self._fresh_tx_retry_at
+        ):
+            try:
+                entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                probe = not gate['determined']
+            except _FreshGateReadError as failure:
+                if isinstance(failure.error, FailedPrecondition):
+                    self._fresh_tx_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                    logger.warning(
+                        'event=batch_merge outcome=fresh_tx_gate_unavailable source=%s count=1', self.commit_source
+                    )
+                    record_fallback(
+                        component='firestore_read',
+                        from_mode='fresh_tx_gate',
+                        to_mode='fresh_first',
+                        reason='unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                else:
+                    logger.warning(
+                        'event=batch_merge outcome=fresh_tx_gate_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(failure.error).__name__,
+                    )
+                    probe = False
+            except BatchPrivacyBlocked:
+                probe = False
+                fresh_first.clear()
+                bypass.clear()
+        if probe:
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
@@ -450,6 +523,12 @@ class OrderedMerge:
                 )
                 pending = []
             fresh, skipped = _fresh_pick(pending, now, wait)
+            if len(pending) >= FRESH_PROBE_ROWS and not any(row.get('state') == 'result_ready' for row in pending):
+                # The probe sees one page. A full page with no ready row may hide ready rows
+                # behind it; nothing commits for this owner through the pick until one clears.
+                logger.warning(
+                    'event=batch_merge outcome=fresh_probe_full_no_ready source=%s count=1', self.commit_source
+                )
             if fresh is not None:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))

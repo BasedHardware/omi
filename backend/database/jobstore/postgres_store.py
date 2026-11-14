@@ -168,6 +168,21 @@ class PostgresTransaction:
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
         return self._locked_query_row(*row) if row else None
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        state = "AND state = 'result_ready' " if ready else ''
+        row = self.conn.execute(
+            "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+            f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1",
+            (self.store.namespace, owner_key),
+        ).fetchone()
+        return self._locked_query_row(*row) if row else None
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         # Two matches fail closed, exactly like the Firestore query.
         rows = self.conn.execute(

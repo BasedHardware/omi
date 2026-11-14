@@ -322,6 +322,25 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
+def test_datasource_backed_alert_queries_carry_a_nonzero_relative_range():
+    """Grafana rejects a datasource query whose relative range is 0s..0s.
+
+    A merged rule shipped ``relativeTimeRange`` ``{from: 0, to: 0}`` on a
+    Prometheus selector node; source lint passed but provisioning failed with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062).
+    Expression nodes keep the 0s window Grafana ignores for them.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for query in rule["data"]:
+                if query["datasourceUid"] in ("__expr__", "-100"):
+                    continue
+                window = query["relativeTimeRange"]
+                assert window["from"] > window["to"], f"{export_name}:{uid}:{query['refId']}"
+                assert window["from"] > 0, f"{export_name}:{uid}:{query['refId']}"
+                assert window["to"] >= 0, f"{export_name}:{uid}:{query['refId']}"
+
+
 def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
     for rules in _all_rule_exports().values():
         rule = rules['omi-queue-oldest-ready']
@@ -1298,6 +1317,8 @@ EXTERNAL_ALERT_METRICS = {
     "container_memory_working_set_bytes": "cAdvisor",
     # prometheus-stackdriver-exporter
     "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    # GMP Cloud Monitoring native metric (gmp-cloud-run datasource)
+    "firestore_googleapis_com:document_read_count": "GMP Cloud Monitoring native metric",
     "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
     "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
         "prometheus-stackdriver-exporter"
