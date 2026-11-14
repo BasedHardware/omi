@@ -54,41 +54,54 @@ until full activation.
 | `APP_REVIEW_ASC_API_KEY_JSON` | JSON object with `issuer_id`, `key_id`, and `private_key` from a dedicated App Store Connect API key | Read-only version-state polling for app `6502156163`. Before activation, perform a read-only JWT probe of the app's versions endpoint using the intended app-scoped role. Confirm the narrowest role that can read versions; do not wait for a first-tick credential alert to discover a role problem. |
 | `APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON` | JSON key for a dedicated Google service account | Read-only production-track polling for package `com.friend.ios`. Verify the role against a staging app by opening a temporary edit, reading its production track, and deleting the edit without committing it. |
 
-Do not put the ASC or Play credentials in Codemagic. Deploy the backend after
-the secrets and accessor bindings exist, then verify the sweep route is mounted
-on `backend-sync`. The scheduler must remain paused during these probes.
+Do not put the ASC or Play credentials in Codemagic. The submission and
+sweep routes run on `backend-sync` under `backend-runtime`; do not grant the
+`backend-listen` identity access for them. Deploy the backend after the secrets
+and accessor bindings exist, then verify both routes are mounted on
+`backend-sync`. The scheduler must remain paused during these probes.
 
-## Activation order after merge
+## Activation prerequisites and order
 
-Keep this sequence as a hard gate. Enabling the scheduler requires the held
-Android draft fix from PR #25131 to be merged and present in the deployed
-revision.
+The scheduler remains `lifecycle: planned` and GCP `PAUSED` through source
+repair, review, merge, and deployment. Merging either PR does not authorize
+activation. Before any separately authorized activation, parent PR #25123 must
+land before child PR #25131, and the child's final repaired code must be merged
+and deployed. Confirm the deployed child code preserves all of these behaviors:
+held Android submissions write `draft`; a fresh receipt renews an expired
+lease; first-sight reconciliation repairs a missing receipt without reviving an
+expired tombstone; unavailable and rejected submission tokens reach the real
+paging rule; and the rollout brake proves Cloud Scheduler is `PAUSED` with no
+active writer runs. Use the child regressions and deployment receipts for this
+check. Parent-only checks do not satisfy these gates.
 
-1. Confirm PR #25131's write-side fix is merged: held manual Android
-   production promotions default to `draft`, and only completed releases count
-   as live. Keep manual promote and daily-train submissions frozen.
-2. Create the secrets and accessor bindings above, deploy the backend revision,
-   and confirm `/v2/app-review-config/sweep` is mounted on `backend-sync`.
-   Complete the ASC JWT probe and Play edit/read/delete role probe before
-   continuing.
-3. Before the first scheduler tick, capture a read-only snapshot of
-   `app_review_config/ios` and `app_review_config/android` for rollback and
-   comparison. Keep the snapshot in the operator's secure incident records.
-4. In a reviewed scheduler-manifest change, remove `lifecycle: planned` and set
-   `state: ENABLED` on `app-review-config-sweep-hourly`. The job runs at minute
-   17 UTC. Before applying, verify the deployed backend revision contains
-   PR #25131's held-draft fix. Apply with the existing
-   `gcp_scheduler_reconcile.yml` workflow and typed `APPLY_PROD_SCHEDULER`
-   confirmation.
-5. Confirm the first tick succeeds and the Prometheus gauge
-   `omi_app_review_config_last_sweep_timestamp_seconds` advances on
-   `https://monitor.omi.me`. If needed, force one tick with
-   `gcloud scheduler jobs run app-review-config-sweep-hourly --location=us-central1 --project=based-hardware`.
-   Verify the route response and backend-sync logs before proceeding.
+After those release gates pass, and only under separate activation
+authorization, keep manual promote and daily-train submissions frozen while
+following this order:
+
+1. Confirm the final repaired child revision is deployed, both
+   `/v2/internal/app-review-config/submissions` and
+   `/v2/app-review-config/sweep` are mounted on `backend-sync`, and both run
+   under `backend-runtime`. Keep the scheduler `PAUSED` during credential and
+   role probes.
+2. Create the secrets and scoped accessor bindings above. Verify the ASC role
+   against its versions endpoint and the Play role against a staging app by
+   opening a temporary edit, reading its production track, and deleting the
+   edit without committing it.
+3. Before the first scheduler tick, capture the documented read-only snapshot
+   of `app_review_config/ios` and `app_review_config/android` for rollback and
+   comparison through the approved operator process.
+4. In a separately reviewed scheduler-manifest change, remove
+   `lifecycle: planned` and set `state: ENABLED` on
+   `app-review-config-sweep-hourly`. The job runs at minute 17 UTC. Apply with
+   the existing `gcp_scheduler_reconcile.yml` workflow and typed
+   `APPLY_PROD_SCHEDULER` confirmation.
+5. Confirm the first tick succeeds and
+   `omi_app_review_config_last_sweep_timestamp_seconds` advances. If separately
+   authorized and needed, run the job through the approved scheduler workflow;
+   verify its response and backend-sync logs. With missing store credentials,
+   the sweep still enforces TTL and reports a credential alert.
 6. Enable the `omi-app-review-config-sweep-silent` deadman rule only after the
-   successful first tick. Verify the rule is unpaused in Grafana and its
-   provisioned definition reads back correctly. A paused deadman is not a
-   completed activation gate.
+   successful first tick, then verify the provisioned rule is unpaused.
 7. Validate token authentication without writing a submission: send a validly
    shaped but stale receipt to `/v2/internal/app-review-config/submissions`
    through the approved operator runner, with the token supplied from Secret
@@ -100,9 +113,9 @@ revision.
    `mobile-daily-train`, then release the submission freeze.
 
 The Codemagic hook treats a missing token or failed receipt as best effort so a
-successful store submission does not become a failed build. The first-sight
-Android reconciliation is the fallback for a missing receipt, but it does not
-replace the activation gates.
+successful store submission does not become a failed build. First-sight Android
+reconciliation repairs a missing receipt but does not replace the activation
+gates.
 
 ## Receipt behavior and alerting
 
@@ -110,7 +123,7 @@ Receipts are accepted only for 15 minutes after submission, with at most five
 minutes of future clock skew. Replayed receipts do not extend an active lease.
 The sweep retries Play edit conflicts five times with exponential backoff; the
 Grafana paging rule requires three lifecycle failures within three hours, so a
-single collision is visible in logs and metrics without paging. It covers
+single collision remains visible in logs and metrics without paging. It covers
 `credentials_unavailable`, `store_api_error`, `submission_token_unavailable`,
 and `submission_token_rejected`. Routine repairs and live clears do not page.
 
@@ -121,10 +134,7 @@ receipt authentication check above, confirm the two Firestore documents did
 not change, and resume submissions. A missing secret reports
 `submission_token_unavailable`; a missing or mismatched request token reports
 `submission_token_rejected`. Resolve either page before resuming submissions.
-
-## Monitoring and TTL-only fallback
-
-The Cloud Run scrape contracts declare all four app-review lifecycle metrics:
+ Run scrape contracts declare all four app-review lifecycle metrics:
 `omi_app_review_config_alert_total`,
 `omi_app_review_config_last_alert_timestamp_seconds`,
 `omi_app_review_config_sweep_total`, and
