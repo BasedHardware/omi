@@ -5,6 +5,45 @@ selects emergency legacy behavior; empty or malformed values retain custody.
 The rollout lead owns merge, coordinated listen/pusher rollout, alert activation
 and any emergency rollback. This change does not authorize a production write.
 
+## Lossless PCM storage (new writes)
+
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true` is the default. Listen and pusher
+share the same optional PCM16 representation helper before immutable commit.
+It tries mono PCM windows from 32,000 bytes through 16 MiB, with two encoder
+slots per process, one FFmpeg codec thread, and a two-second deadline for each
+encode/decode subprocess. Busy capacity, missing FFmpeg, timeouts, invalid
+output or any sample mismatch retain original PCM. Windows below the minimum,
+PCM8, native Opus and multichannel originals keep their current representation.
+Only an independently decoded, byte-identical FLAC saving at least 5% is used.
+Compression applies regardless of speech classification: quiet speech is safe.
+
+This changes storage representation, not retention. No historical objects are
+read, rewritten, expired, deleted or moved between storage classes. Mobile
+original files and PCM projections are unchanged. Capture frame byte offsets
+and hashes describe original decoded PCM; media SHA-256 describes the stored
+plaintext container. Existing readers already support both formats. Custody
+still requires both immutable object generations and the manifest before ACK.
+A retry in the same configuration reuses content-addressed media and manifest;
+a retry crossing a writer-switch change can leave both valid representations,
+so neither representation may be treated as deletion eligibility.
+
+Rollback: set `AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=false` on listen/pusher
+through the release lane. This stops new compression without disabling custody
+or reads of existing FLAC. No reader-first deployment or data migration is needed.
+
+Release acceptance: deploy listen and pusher through their owned trains, record
+each serving source SHA plus a fresh `omi_audio_pcm_storage_total{result="flac"}`
+increment, and observe one full 30-minute window. Confirm custody commit/failure,
+raw read checksum/decode/coverage failures and commit latency versus the prior
+window; no new integrity failures, no sustained increase in custody errors or
+latency. If errors or latency regress, disable compression on that surface.
+The encoder outcome counter distinguishes `disabled`, `ineligible`, `busy`,
+`not_smaller`, `encoder_error`, `mismatch`, and `flac`. Input/saved byte counters
+are encoding attempts, including retries before commit, not billed storage
+savings. Use committed `omi_audio_archive_bytes_total{codec="flac"}` and
+bucket growth to corroborate savings; an absent eligible PCM cohort is UNKNOWN,
+not a successful savings measurement. No >90% silence claim follows from this.
+
 This switch is the sole custody kill switch. `AUDIO_ARCHIVE_LIVE_ENABLED`
 controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
