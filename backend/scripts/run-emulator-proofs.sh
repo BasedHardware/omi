@@ -160,6 +160,11 @@ run_proof "pending deletion and restore conformance (sim + emulator required)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_pending_deletion_conformance.py
 
+# PL-571: reason-aware provider funding must retain custody on every Store.
+run_proof "provider funding conformance (PL-571, sim + emulator required)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/provider_funding_emulator_test.py
+
 # Daily parity PL-583/584/585: admission, settle clocks and fresh/backlog isolation.
 # The stage interface is shared; carrier binding and owner discovery stay separate.
 run_proof "provider merge conformance (sim + emulator required; Postgres when available)" \
