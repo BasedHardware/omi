@@ -204,9 +204,9 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     },
     "/environments/prod/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
@@ -217,7 +217,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "62230c0e85c49f41f6e99a70b97d553796dc4faede1b8c3abf4d189387ebb815",
+      "all_levers_sha256": "f7b4239707c1e7e5058dd6736a708014519b5fa0686b00ff60d6762d18557b86",
       "usage_month_cache": 0,
       "usage_month_total": 0
     },
@@ -230,7 +230,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -243,7 +243,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "all_levers_sha256": "f7b4239707c1e7e5058dd6736a708014519b5fa0686b00ff60d6762d18557b86",
       "usage_month_cache": 0,
       "usage_month_total": 0
     },
@@ -438,16 +438,16 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     },
     "/overlay/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "62230c0e85c49f41f6e99a70b97d553796dc4faede1b8c3abf4d189387ebb815",
+      "all_levers_sha256": "f7b4239707c1e7e5058dd6736a708014519b5fa0686b00ff60d6762d18557b86",
       "usage_month_cache": 0,
       "usage_month_total": 0
     },
@@ -456,7 +456,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -465,7 +465,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
+      "all_levers_sha256": "f7b4239707c1e7e5058dd6736a708014519b5fa0686b00ff60d6762d18557b86",
       "usage_month_cache": 0,
       "usage_month_total": 0
     }
