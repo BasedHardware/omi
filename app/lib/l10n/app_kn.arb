@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
     "referralClaimShort": "ಪಡೆಯಿರಿ",
     "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMonthlyMessage": "ಕಾರ್ಡ್ ನವೀಕರಿಸಿ, ಅಥವಾ {plan} ಅನ್ನು ತಿಂಗಳಿಗೆ {price} ಗೆ ಮರಳಿ ಪಡೆಯಿರಿ",
     "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ",
     "hasLinkedTasksLabel": "ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ",
     "hasTasksFilter": "ಕಾರ್ಯಗಳಿವೆ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "ಮಾಸಿಕಕ್ಕೆ ಬದಲಿಸಿ",
+    "monthlySwitchPlanValue": "{plan}, ತಿಂಗಳಿಗೆ {price}",
+    "monthlySwitchNote": "ಪಾವತಿಸದ {yearly} ವಾರ್ಷಿಕ ಶುಲ್ಕದ ಬದಲಿಗೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.",
+    "monthlySwitchDeclined": "ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಯೋಜನೆ ಬದಲಾಗಿಲ್ಲ.",
+    "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
+    "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
+    "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ."
 }

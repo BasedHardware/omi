@@ -54,6 +54,7 @@ EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV = 'EPISODE_COMPOSE_LATE_ATTACH_ENABLED'
 
 
 EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
@@ -176,6 +177,17 @@ def episode_composer_enabled() -> bool:
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_compose_late_attach_enabled() -> bool:
+    """Default-on: a member that joins an already-composed closed episode re-arms its compose.
+
+    Its own switch, not ``EPISODE_COMPOSER_THRIFT``: turning the THRIFT cost
+    controls off must not silently restore the class-7 gap where a late member's
+    notes never reach the composed summary. Off restores the previous attach
+    behavior, where only a member finalize or a Home read could notice the member.
+    """
+    return modes_default_on(EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV)
 
 
 def episode_compose_keep_paid_enabled() -> bool:
