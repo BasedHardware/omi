@@ -395,19 +395,20 @@
             </div>
         </div>
 
-        <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small" style="margin-top: 16px;">
+        <a href="/disconnect?uid={{ safe_uid_param|default(uid) }}" class="btn btn-danger btn-small" style="margin-top: 16px;">
             Disconnect ShipBob
         </a>
 
         <script>
             function updateChannel(channelId) {
+                const currentUid = {{ safe_uid_json|default('""')|safe }};
                 fetch('/select-channel', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        uid: '{{ uid }}',
+                        uid: currentUid,
                         channel_id: channelId
                     })
                 }).then(response => {
@@ -455,7 +456,7 @@
         </div>
 
         {% if uid %}
-        <a href="/auth/shipbob?uid={{ uid }}" class="btn btn-shipbob">
+        <a href="/auth/shipbob?uid={{ safe_uid_param|default(uid) }}" class="btn btn-shipbob">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
             </svg>
