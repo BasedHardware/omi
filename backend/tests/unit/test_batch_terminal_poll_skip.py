@@ -232,16 +232,22 @@ def test_postgres_off_sql_and_parameter_sequence_are_unchanged(monkeypatch):
     def connection():
         yield conn
 
+    def assert_execute(text, params):
+        conn.execute.assert_called_once()
+        query, actual_params = conn.execute.call_args.args
+        assert query.as_string(None) == text
+        assert actual_params == params
+
     monkeypatch.setattr(store, '_read_conn', connection)
     assert store.first_pending_in(conn, 'owner') is None
-    conn.execute.assert_called_once_with(
+    assert_execute(
         'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending '
         'ORDER BY capture_at, key COLLATE "C" LIMIT 1',
         ('ns', 'owner'),
     )
     conn.reset_mock()
     assert store.fresh_pending('owner', 32) == []
-    conn.execute.assert_called_once_with(
+    assert_execute(
         "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
         "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
         ('ns', 'owner', 32),
@@ -249,11 +255,11 @@ def test_postgres_off_sql_and_parameter_sequence_are_unchanged(monkeypatch):
     conn.reset_mock()
     monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', 'true')
     assert store.fresh_pending('owner', 32) == []
-    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0]
+    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0].as_string(None)
     assert conn.execute.call_args.args[1] == ('ns', 'owner', list(TERMINAL), 32)
     conn.reset_mock()
     assert store.first_pending_in(conn, 'owner') is None
-    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0]
+    assert 'state <> ALL(%s)' in conn.execute.call_args.args[0].as_string(None)
     assert conn.execute.call_args.args[1] == ('ns', 'owner', list(TERMINAL))
 
 
