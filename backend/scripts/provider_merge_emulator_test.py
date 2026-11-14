@@ -22,6 +22,7 @@ pytest_plugins = ['tests.conftest']
 
 import pytest
 
+from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
 from config.policy import BatchUnitPolicy
 from database import batch_pipeline_intake
 from database.outbox import EnqueueResult
@@ -30,7 +31,9 @@ from utils.batch_pipeline import provider_stt_admission
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.provider_stt import ProviderSttStage
+from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict
 from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 
 pytestmark = pytest.mark.integration
 POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100)
@@ -136,9 +139,6 @@ def settle(h, segment, now=SETTLED):
     'lag,fresh,late', [(600.0, True, False), (7200.0, True, True), (86400.0, True, True), (86401.0, False, False)]
 )
 def test_pl583_admission_keeps_provider_freshness_distinct_from_conflict_lane(h, lag, fresh, late):
-    from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict
-    from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
-
     original = admit(h, 'unit', lag=lag)
     assert original['fresh_capture'] is fresh
     assert original.get('late_upload', False) is late
@@ -154,8 +154,6 @@ def test_pl583_rollback_changes_only_future_admissions(h, monkeypatch):
     monkeypatch.setenv(LAG, '600')
     assert admit(h, 'after-rollback', capture=CAPTURE + 10.0, lag=7200.0)['fresh_capture'] is False
     assert row(h, 'accepted') == original
-    from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
-
     assert FRESH_CAPTURE_LAG_SECONDS == 600.0
 
 
