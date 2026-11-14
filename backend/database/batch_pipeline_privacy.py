@@ -673,6 +673,11 @@ def _verify_conversation_ids(
                 client.collection('users').document(uid).collection('conversations').document(conversation_id),
                 'conversations',
             )
+            # Report each completed conversation read immediately. A later
+            # tombstone or privacy refusal in this redirect chain must not hide
+            # the prefix from a caller maintaining a wider prepare budget.
+            if verified_out is not None:
+                verified_out.add(conversation_id)
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:
@@ -696,10 +701,6 @@ def _verify_conversation_ids(
             # transaction; user intent above always dominates a redirect.
             conversation_id, redirected = target, True
         verified.update(chain)
-        if verified_out is not None:
-            # Charge the fence for every document this prepare actually verified,
-            # including the redirect hops a later check would otherwise miss.
-            verified_out.update(chain)
     if walk_out is not None:
         walk_out['verified'] = set(verified)
         walk_out['user_sync_enabled'] = user_sync_enabled

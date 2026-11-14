@@ -852,6 +852,39 @@ def test_prepare_fence_counts_redirect_survivors_across_guards(binding, monkeypa
     assert len(session._privacy_fence_ids) == 260
 
 
+def test_prepare_fence_counts_blocked_redirect_prefixes_across_guards(binding, monkeypatch):
+    """A deletion refusal still charges every redirect row read to the prepare."""
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_blocked_hops'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+
+    def blocked_chain(prefix, redirects):
+        for index in range(redirects):
+            user.collection('conversations').document(f'{prefix}-{index}').create(
+                {'deleted': True, 'sync_merged_into': f'{prefix}-{index + 1}'}
+            )
+        target = f'{prefix}-{redirects}'
+        user.collection('deleted_conversations').document(target).create({'deleted': True})
+
+    blocked_chain('first', 126)  # 126 conversation rows plus the refusing tombstone ID = 127
+    blocked_chain('second', 129)  # 129 rows plus the refusing tombstone ID = 130; aggregate = 257
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()
+    transaction = client.transaction()
+
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+        session.guard(transaction, ['first-0'])
+    assert len(session._privacy_fence_ids) == 127
+
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['second-0'])
+    assert len(session._privacy_fence_ids) == 257
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked

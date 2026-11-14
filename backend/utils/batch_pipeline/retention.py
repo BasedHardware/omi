@@ -465,14 +465,15 @@ def cleanup_completed_artifacts(
 
 
 def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
-    """Authorize artifact IO; a memo-served decision leaves the row export empty.
+    """Authorize artifact IO with partial exports on owner-memo hits.
 
     The walk fills ``loaded`` whenever it walks live (identical reads and order
     to the lever-off path). When the owner memo (bpp_owner_memo) serves the
-    check instead, ``loaded`` stays empty and the protection rows this callback
-    needs — the user row and, for ``snapshots`` callers, the target
-    conversation row — are read explicitly below, so the export contract holds
-    either way.
+    check, already-certified IDs are not exported; unseen IDs are still checked
+    live and their conversation rows may be exported. The protection rows this
+    callback needs — the user row and, for ``snapshots`` callers, the target
+    conversation row — are read explicitly below when the decision did not
+    export them.
     """
     from utils.batch_pipeline.artifacts import ProtectionContext
 
@@ -480,7 +481,8 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
         loaded: dict[str, Any] = {}
         # The ordinary artifact callback returns only ProtectionContext, whose
         # protection level is read live below. Every other caller passes
-        # ``loaded``: a live walk fills it, the owner memo may leave it empty.
+        # ``loaded``: a live walk fills it, and an owner hit may leave it empty
+        # for certified IDs or partially fill it for unseen IDs.
         decision_only = (
             snapshots is None
             and current_attempt() is not None
