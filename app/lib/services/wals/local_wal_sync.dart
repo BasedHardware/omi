@@ -156,11 +156,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// The end-of-recording reporter uses it to say when nothing is left to send.
   void Function(String? recordingSessionId)? onRecordingUploadAccepted;
 
-  /// Sealed files of [recordingSessionId] the server has not accepted yet.
-  int pendingWalsForRecording(String recordingSessionId) => _wals
+  /// Sealed files of [recordingSessionId] the server has not accepted yet,
+  /// limited to audio that starts at or before [through] when given.
+  int pendingWalsForRecording(String recordingSessionId, {DateTime? through}) => _wals
       .where((wal) =>
           wal.recordingSessionId == recordingSessionId &&
-          (wal.status == WalStatus.inProgress || wal.status == WalStatus.miss))
+          (wal.status == WalStatus.inProgress || wal.status == WalStatus.miss) &&
+          (through == null || wal.timerStart <= through.millisecondsSinceEpoch ~/ 1000))
       .length;
 
   int _framesPerSecond = 100;

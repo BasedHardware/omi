@@ -40,6 +40,25 @@ void main() {
     expect(result, isA<ApiSuccess<bool>>().having((r) => r.data, 'accepted', true));
   });
 
+  test('no detected speech is sent as null, never as an invented time', () async {
+    late ApiRequest seen;
+    await postSyncCaptureEnd(
+      recordingSessionId: 'rec',
+      endType: 'disconnect',
+      lastSpeechAt: null,
+      endDecidedAt: at(1002),
+      sentAt: at(1010),
+      pendingWals: 0,
+      send: (request) async {
+        seen = request;
+        return http.Response(jsonEncode({'accepted': true}), 200);
+      },
+    );
+    final body = jsonDecode(seen.body) as Map<String, dynamic>;
+    expect(body.containsKey('last_speech_at'), isTrue);
+    expect(body['last_speech_at'], isNull);
+  });
+
   test('not bound yet is a successful false, not a failure', () async {
     final result = await call((_) async => http.Response(jsonEncode({'accepted': false, 'retry': true}), 200));
     expect(result, isA<ApiSuccess<bool>>().having((r) => r.data, 'accepted', false));

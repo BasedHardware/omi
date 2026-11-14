@@ -268,7 +268,15 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
         // Kept by the reporter and retried on the next accepted file.
         ApiFailure() => false,
       },
-      pendingWals: (id) => phone is LocalWalSyncImpl ? phone.pendingWalsForRecording(id) : 0,
+      // Later chunks of trailing silence are not part of the ended recording.
+      pendingWals: (signal) => phone is LocalWalSyncImpl
+          ? phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt)
+          : 0,
+      // The chunk open at the end must be a registered file before it is counted.
+      settle: () async {
+        lane.buffer.seal();
+        await lane.buffer.pending;
+      },
       disabled: CaptureEndMarkerPolicy.disabled,
     );
     provider.captureEndReporter = reporter;

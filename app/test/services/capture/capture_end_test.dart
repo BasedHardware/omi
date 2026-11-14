@@ -56,25 +56,37 @@ void main() {
       expect(detector.stopped('t', CaptureEndType.disconnect, at(2003))!.type.wire, 'disconnect');
     });
 
-    test('a recording that never had speech, or another recording, has no end', () {
+    test('a stop with no speech is still reported, with no speech time', () {
       final detector = CaptureEndDetector()..silenceSeconds = 120;
-      expect(detector.stopped('s', CaptureEndType.userInitiated, at(10)), isNull);
+      expect(detector.stopped('s', CaptureEndType.userInitiated, at(10)), isNull,
+          reason: 'the lane never journaled a packet of this recording');
+      expect(detector.packet('s', at(1000)), isNull);
+      expect(detector.packet('s', at(9000)), isNull, reason: 'no speech, so no silence end');
+      final stop = detector.stopped('s', CaptureEndType.disconnect, at(9001))!;
+      expect(stop.lastSpeechAt, isNull);
+      expect(stop.decidedAt, at(9001));
+      expect(detector.stopped('s', CaptureEndType.disconnect, at(9002)), isNull, reason: 'one end per stop');
+    });
+
+    test('another recording, or no recording, has no end', () {
+      final detector = CaptureEndDetector()..silenceSeconds = 120;
       detector.speech('s', at(1000));
       expect(detector.stopped('other', CaptureEndType.userInitiated, at(1010)), isNull);
-      expect(detector.packet('other', at(5000)), isNull);
       detector.speech(null, at(1));
       detector.speech('', at(1));
+      expect(detector.packet(null, at(5000)), isNull);
       expect(detector.lastSpeechAt, at(1000));
       expect(detector.stopped('s', CaptureEndType.userInitiated, at(1010)), isNotNull);
-      expect(detector.stopped('s', CaptureEndType.userInitiated, at(1011)), isNull, reason: 'one end per stop');
     });
 
     test('a new recording starts with a clean clock', () {
       final detector = CaptureEndDetector()..silenceSeconds = 60;
       detector.speech('s', at(1000));
       detector.speech('t', at(5000));
-      expect(detector.packet('s', at(5100)), isNull);
       expect(detector.packet('t', at(5061))!.recordingSessionId, 't');
+      // Packets of a new recording reset the clock: the old speech time is gone.
+      expect(detector.packet('u', at(9000)), isNull);
+      expect(detector.lastSpeechAt, isNull);
     });
   });
 
@@ -83,6 +95,7 @@ void main() {
     late Map<String, int> pending;
     late bool disabled;
     late bool accept;
+    late int settled;
     late CaptureEndReporter reporter;
 
     CaptureEndSignal signal(String id, {int decided = 1010}) => CaptureEndSignal(
@@ -93,44 +106,71 @@ void main() {
       pending = {};
       disabled = false;
       accept = true;
+      settled = 0;
       reporter = CaptureEndReporter(
         post: (signal, {required pendingWals, required sentAt}) async {
           sent.add((signal.recordingSessionId, pendingWals));
           return accept;
         },
-        pendingWals: (id) => pending[id] ?? 0,
+        pendingWals: (signal) => pending[signal.recordingSessionId] ?? 0,
         disabled: () async => disabled,
+        settle: () async => settled++,
         now: () => at(2000),
       );
     });
 
-    test('reports at the end, then again when the last file is accepted', () async {
-      pending['s'] = 2;
+    test('two calls for a long recording: at the end, and when the last file is accepted', () async {
+      pending['s'] = 5;
       await reporter.report(signal('s'));
-      pending['s'] = 1;
-      await reporter.uploadAccepted('s');
+      for (final left in [4, 3, 2, 1]) {
+        pending['s'] = left;
+        await reporter.uploadAccepted('s');
+      }
+      expect(sent, [('s', 5)], reason: 'intermediate acceptances send nothing');
       pending['s'] = 0;
       await reporter.uploadAccepted('s');
       await reporter.uploadAccepted('s');
-      expect(sent, [('s', 2), ('s', 1), ('s', 0)]);
+      expect(sent, [('s', 5), ('s', 0)]);
     });
 
-    test('an unchanged pending count is not resent', () async {
-      pending['s'] = 2;
+    test('the open chunk is settled into a file before the first count, and only then', () async {
+      // The count becomes visible only once the final chunk is registered.
+      final late_ = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add((signal.recordingSessionId, pendingWals));
+          return true;
+        },
+        pendingWals: (signal) => pending[signal.recordingSessionId] ?? 0,
+        disabled: () async => false,
+        settle: () async {
+          settled++;
+          pending['s'] = 1; // the last sealed file appears in the index
+        },
+      );
+      await late_.report(signal('s'));
+      expect(sent, [('s', 1)], reason: 'never zero while the final file is still being published');
+      pending['s'] = 0;
+      await late_.uploadAccepted('s');
+      expect(sent, [('s', 1), ('s', 0)]);
+      expect(settled, 1, reason: 'resends do not seal again');
+    });
+
+    test('nothing pending at the end is one call', () async {
       await reporter.report(signal('s'));
       await reporter.uploadAccepted('s');
-      expect(sent, [('s', 2)]);
+      expect(sent, [('s', 0)]);
     });
 
-    test('a refused report is retried on the next accepted file', () async {
-      pending['s'] = 1;
+    test('a refused first report is retried on the next accepted file', () async {
+      pending['s'] = 2;
       accept = false;
       await reporter.report(signal('s'));
       accept = true;
+      pending['s'] = 1;
       await reporter.uploadAccepted('s');
       pending['s'] = 0;
       await reporter.uploadAccepted('s');
-      expect(sent, [('s', 1), ('s', 1), ('s', 0)]);
+      expect(sent, [('s', 2), ('s', 1), ('s', 0)]);
     });
 
     test('uploads of a recording with no reported end send nothing', () async {
@@ -139,12 +179,13 @@ void main() {
       expect(sent, isEmpty);
     });
 
-    test('the kill switch sends nothing and forgets the end', () async {
+    test('the kill switch sends nothing, seals nothing and forgets the end', () async {
       disabled = true;
       await reporter.report(signal('s'));
       disabled = false;
       await reporter.uploadAccepted('s');
       expect(sent, isEmpty);
+      expect(settled, 0);
     });
 
     test('a later end of the same recording replaces the earlier one', () async {

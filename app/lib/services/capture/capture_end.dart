@@ -13,7 +13,9 @@ extension CaptureEndTypeWire on CaptureEndType {
 }
 
 /// One end of one recording. Times are this phone's clock: the server compares
-/// them with recorded time, which is on the same clock.
+/// them with recorded time, which is on the same clock. [lastSpeechAt] is null
+/// when the VAD never scored speech in this recording; that is reported as it
+/// is, never replaced by an invented time.
 class CaptureEndSignal {
   const CaptureEndSignal({
     required this.recordingSessionId,
@@ -24,7 +26,7 @@ class CaptureEndSignal {
 
   final String recordingSessionId;
   final CaptureEndType type;
-  final DateTime lastSpeechAt;
+  final DateTime? lastSpeechAt;
   final DateTime decidedAt;
 }
 
@@ -34,7 +36,8 @@ class CaptureEndSignal {
 ///
 /// Pure and synchronous: no timer runs. The silence end is evaluated on each
 /// incoming packet, so it costs one comparison while the pendant streams and
-/// nothing when it does not. A recording with no speech has no end to report.
+/// nothing when it does not. A recording with no speech has no silence end; an
+/// explicit stop or a lost pendant is still reported, with no speech time.
 class CaptureEndDetector {
   String? _recordingSessionId;
   DateTime? _lastSpeechAt;
@@ -67,10 +70,12 @@ class CaptureEndDetector {
   /// A packet of [recordingSessionId] arrived at [now]. Returns the silence end
   /// the first time the timer has run out since the last speech.
   CaptureEndSignal? packet(String? recordingSessionId, DateTime now) {
+    if (recordingSessionId == null || recordingSessionId.isEmpty) return null;
+    // A journaled packet is what makes this a recording the lane owns, speech or not.
+    _bind(recordingSessionId);
     final seconds = _silenceSeconds;
     final speech = _lastSpeechAt;
     if (seconds == null || speech == null || _silenceEndedAt != null) return null;
-    if (recordingSessionId == null || recordingSessionId != _recordingSessionId) return null;
     final decided = speech.add(Duration(seconds: seconds));
     if (now.isBefore(decided)) return null;
     _silenceEndedAt = decided;
@@ -82,10 +87,12 @@ class CaptureEndDetector {
     );
   }
 
-  /// The recording stopped for [type] at [now]. Null when it never had speech.
+  /// The recording stopped for [type] at [now]. Null only when the lane never
+  /// journaled a packet of it. With no speech scored, the end is still
+  /// reported and carries no speech time.
   CaptureEndSignal? stopped(String? recordingSessionId, CaptureEndType type, DateTime now) {
+    if (recordingSessionId == null || recordingSessionId != _recordingSessionId) return null;
     final speech = _lastSpeechAt;
-    if (recordingSessionId == null || recordingSessionId != _recordingSessionId || speech == null) return null;
     _lastSpeechAt = null;
     _silenceEndedAt = null;
     _recordingSessionId = null;
@@ -93,7 +100,7 @@ class CaptureEndDetector {
       recordingSessionId: recordingSessionId,
       type: type,
       lastSpeechAt: speech,
-      decidedAt: now.isBefore(speech) ? speech : now,
+      decidedAt: speech != null && now.isBefore(speech) ? speech : now,
     );
   }
 }
@@ -101,32 +108,44 @@ class CaptureEndDetector {
 typedef CaptureEndPoster = Future<bool> Function(CaptureEndSignal signal,
     {required int pendingWals, required DateTime sentAt});
 
-/// Tells the server about an end, and tells it again once every sealed file of
-/// that recording has been accepted, so the final copy carries zero pending
-/// files. Measurement and latency only: a marker that is never sent changes
-/// nothing about custody or upload, and the server falls back to its wait.
+/// Tells the server about an end, and tells it once more when every sealed file
+/// of that recording up to the end has been accepted, so the final copy carries
+/// zero pending files. At most two accepted reports per end: the first, and the
+/// one at zero. A report the server did not accept is retried on the next
+/// accepted file. Latency information only: a marker that is never sent
+/// changes nothing about custody or upload, and the server keeps its wait.
 ///
 /// Held in memory by design. If the app dies before the resend, the recording
 /// simply takes the server's ordinary wait.
 class CaptureEndReporter {
   CaptureEndReporter({
     required CaptureEndPoster post,
-    required int Function(String recordingSessionId) pendingWals,
+    required int Function(CaptureEndSignal signal) pendingWals,
     required Future<bool> Function() disabled,
+    Future<void> Function()? settle,
     DateTime Function()? now,
   })  : _post = post,
         _pendingWals = pendingWals,
         _disabled = disabled,
+        _settle = settle,
         _now = now ?? DateTime.now;
 
   static const int maxTracked = 16;
 
   final CaptureEndPoster _post;
-  final int Function(String recordingSessionId) _pendingWals;
+
+  /// Sealed files of the signal's recording, with audio up to its end, that
+  /// the server has not accepted.
+  final int Function(CaptureEndSignal signal) _pendingWals;
   final Future<bool> Function() _disabled;
+
+  /// Completes when the chunk open at the end is sealed and registered as a
+  /// file. Counting before that would miss the recording's last file and
+  /// report nothing pending while one is still on its way.
+  final Future<void> Function()? _settle;
   final DateTime Function() _now;
   final Map<String, CaptureEndSignal> _open = {};
-  final Map<String, int> _lastSentPending = {};
+  final Set<String> _accepted = {};
   Future<void> _queue = Future.value();
 
   /// Sends complete before later ones start, so a resend never overtakes the
@@ -140,16 +159,18 @@ class CaptureEndReporter {
     return _queue = _queue.then((_) => _send(signal, first: false));
   }
 
+  void _forget(String id) {
+    _open.remove(id);
+    _accepted.remove(id);
+  }
+
   Future<void> _send(CaptureEndSignal signal, {required bool first}) async {
     final id = signal.recordingSessionId;
     if (first) {
       // A later end of the same recording replaces the earlier one.
-      _open.remove(id);
-      _lastSentPending.remove(id);
+      _forget(id);
       while (_open.length >= maxTracked) {
-        final oldest = _open.keys.first;
-        _open.remove(oldest);
-        _lastSentPending.remove(oldest);
+        _forget(_open.keys.first);
       }
       _open[id] = signal;
     } else if (!identical(_open[id], signal)) {
@@ -157,18 +178,19 @@ class CaptureEndReporter {
     }
     try {
       if (await _disabled()) {
-        _open.remove(id);
-        _lastSentPending.remove(id);
+        _forget(id);
         return;
       }
-      final pending = _pendingWals(id);
-      if (!first && _lastSentPending[id] == pending) return;
+      if (first) await _settle?.call();
+      final pending = _pendingWals(signal);
+      // Once the server holds this end, only "nothing left" is worth a call.
+      if (_accepted.contains(id) && pending != 0) return;
       final accepted = await _post(signal, pendingWals: pending, sentAt: _now());
       if (!accepted) return; // Not bound yet or unreachable: the next accepted file retries.
-      _lastSentPending[id] = pending;
       if (pending == 0) {
-        _open.remove(id);
-        _lastSentPending.remove(id);
+        _forget(id);
+      } else {
+        _accepted.add(id);
       }
     } catch (_) {
       // Never surfaces: the server's ordinary wait is the fallback.
