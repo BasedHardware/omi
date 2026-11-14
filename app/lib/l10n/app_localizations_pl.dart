@@ -15442,6 +15442,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Twoja karta została odrzucona';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Zaktualizuj kartę lub odzyskaj $plan za $price miesięcznie';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Zaktualizuj kartę, aby odzyskać $plan';
   }
@@ -15466,4 +15471,31 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Przejdź na miesięczny';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price miesięcznie';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Zastępuje nieopłaconą roczną płatność $yearly. Odnawia się co miesiąc. Anuluj w dowolnym momencie.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Płatność odrzucona. Twój plan się nie zmienił.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Zmiana jest teraz niedostępna. Zamiast tego zaktualizuj kartę.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Płacisz teraz co miesiąc';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Zapłacono dziś $price. Odnawia się co miesiąc.';
+  }
 }

@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Keď si kúpia ďalší 3 priatelia",
     "referralClaimShort": "Získať",
     "paymentDeclinedTitle": "Vaša karta bola zamietnutá",
+    "paymentDeclinedMonthlyMessage": "Aktualizujte kartu alebo obnovte {plan} za {price} mesačne",
     "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}",
     "hasLinkedTasksLabel": "Má prepojené úlohy",
     "hasTasksFilter": "S úlohami",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Prejsť na mesačné",
+    "monthlySwitchPlanValue": "{plan}, {price} mesačne",
+    "monthlySwitchNote": "Nahrádza nezaplatenú ročnú platbu {yearly}. Obnovuje sa mesačne. Zrušiť môžete kedykoľvek.",
+    "monthlySwitchDeclined": "Platba bola zamietnutá. Váš plán sa nezmenil.",
+    "monthlySwitchUnavailable": "Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.",
+    "monthlySwitchDoneTitle": "Teraz platíte mesačne",
+    "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne."
 }

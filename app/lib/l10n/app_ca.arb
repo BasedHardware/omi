@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Quan 3 amics més comprin",
     "referralClaimShort": "Reclama",
     "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
+    "paymentDeclinedMonthlyMessage": "Actualitza-la o recupera {plan} per {price} al mes",
     "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}",
     "hasLinkedTasksLabel": "Té tasques vinculades",
     "hasTasksFilter": "Amb tasques",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Canvia a mensual",
+    "monthlySwitchPlanValue": "{plan}, {price} al mes",
+    "monthlySwitchNote": "Substitueix el càrrec anual pendent de {yearly}. Es renova cada mes. Cancel·la quan vulguis.",
+    "monthlySwitchDeclined": "Pagament rebutjat. El teu pla no ha canviat.",
+    "monthlySwitchUnavailable": "Ara no es pot canviar. Actualitza la targeta.",
+    "monthlySwitchDoneTitle": "Ara pagues mensualment",
+    "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes."
 }

@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "যখন আরও 3 জন বন্ধু কিনবে",
     "referralClaimShort": "নিন",
     "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
+    "paymentDeclinedMonthlyMessage": "কার্ডটি আপডেট করুন, অথবা {plan} আবার পান মাসে {price}-এ",
     "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন",
     "hasLinkedTasksLabel": "সংযুক্ত কাজ আছে",
     "hasTasksFilter": "কাজ আছে",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "মাসিকে যান",
+    "monthlySwitchPlanValue": "{plan}, মাসে {price}",
+    "monthlySwitchNote": "{yearly}-এর অপরিশোধিত বার্ষিক চার্জের বদলে। প্রতি মাসে নবায়ন হয়। যেকোনো সময় বাতিল করুন।",
+    "monthlySwitchDeclined": "পেমেন্ট প্রত্যাখ্যাত হয়েছে। আপনার প্ল্যান বদলায়নি।",
+    "monthlySwitchUnavailable": "এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।",
+    "monthlySwitchDoneTitle": "আপনি এখন মাসিক প্ল্যানে",
+    "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।"
 }

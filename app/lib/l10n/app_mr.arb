@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "आणखी 3 मित्रांनी घेतल्यावर",
     "referralClaimShort": "मिळवा",
     "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
+    "paymentDeclinedMonthlyMessage": "कार्ड अपडेट करा, किंवा {plan} महिन्याला {price} मध्ये परत मिळवा",
     "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा",
     "hasLinkedTasksLabel": "जोडलेली कार्ये आहेत",
     "hasTasksFilter": "कार्ये असलेले",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "मासिकवर स्विच करा",
+    "monthlySwitchPlanValue": "{plan}, महिन्याला {price}",
+    "monthlySwitchNote": "{yearly} च्या न भरलेल्या वार्षिक शुल्काऐवजी. दर महिन्याला नूतनीकरण होते. कधीही रद्द करा.",
+    "monthlySwitchDeclined": "पेमेंट नाकारले गेले. तुमचा प्लॅन बदललेला नाही.",
+    "monthlySwitchUnavailable": "सध्या स्विच उपलब्ध नाही. त्याऐवजी कार्ड अपडेट करा.",
+    "monthlySwitchDoneTitle": "तुम्ही आता मासिक प्लॅनवर आहात",
+    "monthlySwitchDoneBody": "आज {price} भरले. दर महिन्याला नूतनीकरण होते."
 }

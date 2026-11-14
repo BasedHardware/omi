@@ -15309,6 +15309,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paymentDeclinedTitle => 'تم رفض بطاقتك';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'حدّثها، أو استعد $plan مقابل $price شهريًا';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'حدّث بطاقتك لاستعادة $plan';
   }
@@ -15333,4 +15338,31 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'التبديل إلى الاشتراك الشهري';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، $price شهريًا';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'يحل محل الرسوم السنوية غير المدفوعة البالغة $yearly. يتجدد شهريًا. يمكنك الإلغاء في أي وقت.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'تم رفض الدفع. لم تتغير خطتك.';
+
+  @override
+  String get monthlySwitchUnavailable => 'التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'أصبحت على الدفع الشهري';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'تم دفع $price اليوم. يتجدد شهريًا.';
+  }
 }

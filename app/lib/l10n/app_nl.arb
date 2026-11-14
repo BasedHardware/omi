@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Als nog 3 vrienden kopen",
     "referralClaimShort": "Claimen",
     "paymentDeclinedTitle": "Uw kaart is geweigerd",
+    "paymentDeclinedMonthlyMessage": "Werk je kaart bij of krijg {plan} terug voor {price} per maand",
     "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen",
     "hasLinkedTasksLabel": "Bevat gekoppelde taken",
     "hasTasksFilter": "Met taken",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Overstappen naar maandelijks",
+    "monthlySwitchPlanValue": "{plan}, {price} per maand",
+    "monthlySwitchNote": "Vervangt de onbetaalde jaarlijkse betaling van {yearly}. Verlengt maandelijks. Altijd opzegbaar.",
+    "monthlySwitchDeclined": "Betaling geweigerd. Je abonnement is niet gewijzigd.",
+    "monthlySwitchUnavailable": "Overstappen kan nu niet. Werk in plaats daarvan je kaart bij.",
+    "monthlySwitchDoneTitle": "Je betaalt nu maandelijks",
+    "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks."
 }

@@ -467,6 +467,35 @@ def _mark_mutation_uncertain(transaction: Any, ref: Any, key: PartitionKey, tick
     return _route(row)
 
 
+def _uncertain_operation_refs(ref: Any, transaction: Any, limit: int) -> list[Any]:
+    # Same lazy SDK boundary as _transactional, for import-isolated tests.
+    from google.cloud.firestore_v1 import FieldFilter
+
+    query = ref.collection('operations').where(filter=FieldFilter('status', '==', 'uncertain'))
+    return [snapshot.reference for snapshot in query.select([]).limit(limit).stream(transaction=transaction)]
+
+
+def uncertain_mutations_are_deletes(key: PartitionKey, revision: int, *, firestore_client: Any | None = None) -> bool:
+    """Whether every uncertain operation at ``revision`` is a delete.
+
+    Account-purge verification only; migration still requires reconciliation.
+    """
+    client = _client(firestore_client)
+    return _uncertain_mutations_are_deletes(client.transaction(), _document(client, key), key, revision)
+
+
+@_transactional
+def _uncertain_mutations_are_deletes(transaction: Any, ref: Any, key: PartitionKey, revision: int) -> bool:
+    row = _read(ref, key, transaction)
+    expected = row['uncertain_count']
+    if row['revision'] != revision or row['pending']:
+        return False
+    refs = _uncertain_operation_refs(ref, transaction, expected + 1)
+    if len(refs) != expected:
+        return False
+    return all((op.get(transaction=transaction).to_dict() or {}).get('operation_kind') == 'delete' for op in refs)
+
+
 def _is_digest(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in '0123456789abcdef' for char in value)
 

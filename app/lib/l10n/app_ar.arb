@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "عندما يشتري 3 أصدقاء آخرين",
     "referralClaimShort": "استلام",
     "paymentDeclinedTitle": "تم رفض بطاقتك",
+    "paymentDeclinedMonthlyMessage": "حدّثها، أو استعد {plan} مقابل {price} شهريًا",
     "paymentDeclinedMessage": "حدّث بطاقتك لاستعادة {plan}",
     "hasLinkedTasksLabel": "توجد مهام مرتبطة",
     "hasTasksFilter": "بها مهام",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "التبديل إلى الاشتراك الشهري",
+    "monthlySwitchPlanValue": "{plan}، {price} شهريًا",
+    "monthlySwitchNote": "يحل محل الرسوم السنوية غير المدفوعة البالغة {yearly}. يتجدد شهريًا. يمكنك الإلغاء في أي وقت.",
+    "monthlySwitchDeclined": "تم رفض الدفع. لم تتغير خطتك.",
+    "monthlySwitchUnavailable": "التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.",
+    "monthlySwitchDoneTitle": "أصبحت على الدفع الشهري",
+    "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا."
 }

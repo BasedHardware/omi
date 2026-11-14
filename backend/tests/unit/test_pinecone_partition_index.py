@@ -89,6 +89,7 @@ def harness(monkeypatch):
         '_begin_mutation',
         '_finish_mutation',
         '_mark_mutation_uncertain',
+        '_uncertain_mutations_are_deletes',
         '_begin_migration',
         '_cancel_migration',
         '_cutover',
@@ -630,6 +631,63 @@ def test_purge_attempts_known_erasures_despite_uncertainty_but_never_claims_done
     assert len([call for call in raw.calls if call[0] == 'delete']) == 2
     assert state.get_route(key, firestore_client=db).uncertain_count == 1
     with pytest.raises(state.PartitionBusy):
+        scoped.verify_empty_all_copies(namespace=key.family, filter={'uid': key.uid})
+
+
+class UrlLimitedIndex(RecordingIndex):
+    """Pinecone's gateway rejects an oversized fetch query string (prod: 1,000 ids -> 413)."""
+
+    def fetch(self, **kwargs):
+        if sum(len('&ids=') + len(vector_id) for vector_id in kwargs['ids']) > 60_000:
+            raise PineconeApiException(status=413, reason='Request Entity Too Large')
+        return super().fetch(**kwargs)
+
+
+def test_account_wipe_sized_delete_fetches_owner_check_in_url_bounded_batches(harness):
+    _, _, key, db = harness
+    raw = UrlLimitedIndex()
+    uid = 'U' * 28  # production UID length
+    scoped = adapter.owner_index(raw, uid, index_name=key.index_name, firestore_client=db)
+    ids = [f'{uid}-{uuid4()}' for _ in range(1000)]  # vector_db's account-wipe chunk size
+    scoped.delete(namespace='ns1', ids=ids)
+    fetches = [call[2]['ids'] for call in raw.calls if call[0] == 'fetch']
+    assert len(fetches) > 2
+    assert all(sum(len('&ids=') + len(i) for i in batch) <= adapter._FETCH_QUERY_BUDGET_BYTES for batch in fetches)
+    assert sorted(i for batch in fetches for i in batch) == sorted(ids * 2)  # both copies checked
+    assert [call[2]['ids'] for call in raw.calls if call[0] == 'delete'] == [ids, ids]
+    route = state.get_route(state.PartitionKey(key.index_name, 'ns1', uid), firestore_client=db)
+    assert route.pending_count == route.uncertain_count == 0
+
+
+def test_account_purge_completes_after_its_own_delete_outcome_was_lost(harness):
+    scoped, raw, key, db = harness
+    raw.failure = ConnectionError('connection reset before the delete acknowledgement')
+    with pytest.raises(ConnectionError):
+        scoped.delete_all_copies(namespace=key.family, filter={'uid': key.uid})
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+    raw.failure = None
+    for _ in range(2):  # the wipe retry, then an idempotent repeat
+        scoped.delete_all_copies(namespace=key.family, filter={'uid': key.uid})
+        scoped.verify_empty_all_copies(namespace=key.family, filter={'uid': key.uid})
+    # The lost delete still blocks migration until an operator reconciles it.
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, uuid4().hex, firestore_client=db)
+
+
+@pytest.mark.parametrize('method', ['upsert', 'update'])
+def test_account_purge_still_waits_for_an_uncertain_write(harness, method):
+    scoped, raw, key, db = harness
+    raw.fetch_records['owner-a-record'] = Vector(**record())
+    raw.failure = TimeoutError('provider may still apply this write')
+    with pytest.raises(TimeoutError):
+        if method == 'upsert':
+            scoped.upsert(namespace=key.family, vectors=[record()])
+        else:
+            scoped.update('owner-a-record', namespace=key.family, set_metadata={'category': 'work'})
+    raw.failure = None
+    scoped.delete_all_copies(namespace=key.family, filter={'uid': key.uid})
+    with pytest.raises(state.PartitionBusy, match='outstanding vector work'):
         scoped.verify_empty_all_copies(namespace=key.family, filter={'uid': key.uid})
 
 
