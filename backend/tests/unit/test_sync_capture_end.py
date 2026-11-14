@@ -65,6 +65,18 @@ def test_proof_needs_no_pending_files_content_through_last_speech_and_nothing_af
     assert capture_end.proof({}, stored) == 'absent'
 
 
+def test_a_stop_with_no_detected_speech_is_stored_honestly_and_never_proves_the_end():
+    stored = marker(last_speech_at=None)
+    assert stored['last_speech_at'] is None and stored['end_type'] == 'user_initiated'
+    assert stored['end_at'] == 4992.0
+    # An accepted upload is not yet a transcript: with no speech time nothing shows the content landed.
+    assert capture_end.proof({'finished_at': 999.0}, stored) == 'no_speech_clock'
+    assert capture_end.proof({}, stored) == 'no_speech_clock'
+    assert capture_end.proof({'finished_at': 999.0}, {**stored, 'pending_wals': 1}) == 'pending'
+    with pytest.raises(ValueError):
+        marker(last_speech_at=None, end_decided_at=1.0, sent_at=900000.0)
+
+
 def test_trace_header_is_parsed_with_a_closed_gate_and_never_raises():
     assert capture_end.parse_trace('sealed=100;first=110;gate=background;attempts=3', received_at=400) == (
         'background',

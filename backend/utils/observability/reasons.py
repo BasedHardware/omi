@@ -186,6 +186,7 @@ class CaptureEndProofOutcome(StrEnum):
     ABSENT = 'absent'
     PENDING = 'pending'
     CONTENT_BEHIND = 'content_behind'
+    NO_SPEECH_CLOCK = 'no_speech_clock'
     RESUMED = 'resumed'
 
 

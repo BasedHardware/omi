@@ -5722,7 +5722,7 @@ export interface SyncBatchRequest {
 export interface SyncCaptureEndRequest {
   end_decided_at: number;
   end_type: "user_initiated" | "silence_backstop" | "disconnect";
-  last_speech_at: number;
+  last_speech_at?: number | null;
   pending_wals: number;
   recording_session_id: string;
   sent_at: number;

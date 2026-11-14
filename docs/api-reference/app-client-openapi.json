@@ -35184,9 +35184,16 @@
             "type": "string"
           },
           "last_speech_at": {
-            "exclusiveMinimum": 0.0,
-            "title": "Last Speech At",
-            "type": "number"
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Speech At"
           },
           "pending_wals": {
             "maximum": 100000.0,
@@ -35209,7 +35216,6 @@
         "required": [
           "recording_session_id",
           "end_type",
-          "last_speech_at",
           "end_decided_at",
           "sent_at",
           "pending_wals"

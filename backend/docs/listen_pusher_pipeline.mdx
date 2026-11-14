@@ -9262,7 +9262,8 @@ mark clears the deferral and uses the updated notes/transcript fingerprint.
 **End-of-recording proof (2026-11-14).** A phone that knows its recording ended says so with
 `POST /v2/sync-capture-end`: `recording_session_id`, `end_type` (`user_initiated`, `silence_backstop`,
 `disconnect`), `last_speech_at`, `end_decided_at`, `sent_at` and `pending_wals`, all device-clock epoch
-seconds and counts. The marker is stored as `capture_end` on the recording's own session document; it never
+seconds and counts. `last_speech_at` is null when the phone detected no speech; such a marker types the end but can
+never prove it (`no_speech_clock`). The marker is stored as `capture_end` on the recording's own session document; it never
 creates a session, changes a binding, finalizes or deletes anything, or alters custody. A recording with no
 session document answers `accepted: false, retry: true`, and the phone resends after its last accepted file.
 
@@ -9274,7 +9275,7 @@ the row holds another recording). Both comparisons are on the recorded device cl
 and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
 `omi_sync_capture_end_total{end_type,outcome}` counts markers and
 `omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
-`content_behind`, `resumed`).
+`no_speech_clock`, `content_behind`, `resumed`).
 
 `SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
 reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,

@@ -107,7 +107,7 @@ def _number(value: Any) -> float | None:
 def normalize(
     *,
     end_type: str,
-    last_speech_at: float,
+    last_speech_at: float | None,
     end_decided_at: float,
     sent_at: float,
     pending_wals: int,
@@ -117,19 +117,22 @@ def normalize(
 
     ``last_speech_at`` and ``end_decided_at`` stay on the device clock: recorded
     time on the conversation is on that clock too, so the proof compares like
-    with like. ``end_at`` is the same instant mapped to server time through the
+    with like. ``last_speech_at`` is ``None`` when the phone detected no speech;
+    it is stored as ``None`` and such a marker can type the end but never prove
+    it. ``end_at`` is the end instant mapped to server time through the
     send/receive offset, clamped so a fast phone clock cannot place the end in
     the future. ``end_observed_at`` is when the server learned of it.
     """
     kind = CLIENT_END_TYPES.get(end_type)
-    speech, decided, sent = _number(last_speech_at), _number(end_decided_at), _number(sent_at)
-    if kind is None or speech is None or decided is None or sent is None:
+    decided, sent = _number(end_decided_at), _number(sent_at)
+    speech = None if last_speech_at is None else _number(last_speech_at)
+    if kind is None or decided is None or sent is None or (last_speech_at is not None and speech is None):
         raise ValueError('invalid capture end')
     if type(pending_wals) is not int or pending_wals < 0:
         raise ValueError('invalid capture end')
-    if speech > decided + TOLERANCE_SECONDS or decided > sent + TOLERANCE_SECONDS:
+    if (speech is not None and speech > decided + TOLERANCE_SECONDS) or decided > sent + TOLERANCE_SECONDS:
         raise ValueError('capture end clocks are out of order')
-    if sent - speech > MAX_CLOCK_SPAN_SECONDS:
+    if sent - (speech if speech is not None else decided) > MAX_CLOCK_SPAN_SECONDS:
         raise ValueError('capture end is too old')
     return {
         'end_type': kind,
@@ -153,15 +156,19 @@ def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
     ``proven`` needs all three: the phone has no file left to upload; the
     content assigned to the row reaches the phone's last speech; and nothing on
     the row is later than the end, which would mean the recording resumed and
-    this marker describes an earlier stop.
+    this marker describes an earlier stop. A marker with no speech time
+    (``no_speech_clock``) cannot show the content has landed, since an accepted
+    upload is not yet a transcript, so it never proves anything.
     """
     if not marker or marker.get('end_type') not in {'user_initiated', 'silence_backstop', 'unknown'}:
         return 'absent'
     if int(marker.get('pending_wals') or 0) > 0:
         return 'pending'
-    finished = _seconds(row.get('finished_at'))
     speech, decided = _number(marker.get('last_speech_at')), _number(marker.get('end_decided_at'))
-    if not finished or speech is None or decided is None:
+    if speech is None:
+        return 'no_speech_clock'
+    finished = _seconds(row.get('finished_at'))
+    if not finished or decided is None:
         return 'absent'
     if finished < speech - TOLERANCE_SECONDS:
         return 'content_behind'
