@@ -10927,6 +10927,19 @@
     "@unableToDetermineFirmwareVersion": {
         "description": "Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable."
     },
+    "applyCodeToCurrentPlan": "Apply to Current Plan",
+    "@applyCodeToCurrentPlan": {
+        "description": "Apply a code only to the existing subscription, regardless of highlighted checkout plan; never changes plans."
+    },
+    "subscriptionCodeResult": "{result, select, applied{Code applied to your current plan.} refused{This code cannot be applied. Check the code and its required plan.} conflict{Code already used, or your plan already has a discount.} rateLimited{Too many tries. Please wait and try again later.} other{Could not apply this code. Please try again.}}",
+    "@subscriptionCodeResult": {
+        "description": "Existing-subscription code application result; never promises payment or entitlement. result: applied, refused, conflict, rateLimited, other.",
+        "placeholders": {
+            "result": {
+                "type": "String"
+            }
+        }
+    },
     "promoCode": "Promo code",
     "enterPromoCode": "Enter promo code",
     "invalidPromotionCode": "Invalid promotion code.",
@@ -16486,6 +16499,10 @@
             }
         }
     },
+    "attentionRerunNotes": "Re-run notes",
+    "@attentionRerunNotes": {
+        "description": "Activity Needs attention button: retry notes only, preserving saved tasks and events"
+    },
     "attentionSummaryFailed": "Couldn't summarize this conversation",
     "@attentionSummaryFailed": {
         "description": "Needs attention row: the server gave up summarizing a conversation"
@@ -18764,6 +18781,18 @@
     "@paymentDeclinedTitle": {
         "description": "Home row title when the renewal charge for the user's plan failed"
     },
+    "paymentDeclinedMonthlyMessage": "Update it, or get {plan} back for {price} a month",
+    "@paymentDeclinedMonthlyMessage": {
+        "description": "Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
     "paymentDeclinedMessage": "Update it to get {plan} back",
     "@paymentDeclinedMessage": {
         "description": "Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro"
@@ -18786,5 +18815,51 @@
     },
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Switch to Monthly",
+    "@monthlySwitchTitle": {
+        "description": "Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly"
+    },
+    "monthlySwitchPlanValue": "{plan}, {price} a month",
+    "@monthlySwitchPlanValue": {
+        "description": "Value of the Plan row in the switch-to-monthly sheet, e.g. \"Omi Pro, US$29.99 a month\"",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "monthlySwitchNote": "Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.",
+    "@monthlySwitchNote": {
+        "description": "Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91",
+        "placeholders": {
+            "yearly": {
+                "type": "String"
+            }
+        }
+    },
+    "monthlySwitchDeclined": "Payment declined. Your plan didn't change.",
+    "@monthlySwitchDeclined": {
+        "description": "Switch-to-monthly sheet: the monthly charge was declined; nothing changed"
+    },
+    "monthlySwitchUnavailable": "Switching isn't available right now. Update your card instead.",
+    "@monthlySwitchUnavailable": {
+        "description": "Switch-to-monthly sheet: the server refused the switch for this subscription"
+    },
+    "monthlySwitchDoneTitle": "You're on monthly",
+    "@monthlySwitchDoneTitle": {
+        "description": "Switch-to-monthly sheet title after a successful switch"
+    },
+    "monthlySwitchDoneBody": "{price} paid today. Renews monthly.",
+    "@monthlySwitchDoneBody": {
+        "description": "Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    }
 }

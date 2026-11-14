@@ -1,0 +1,182 @@
+{
+  "policy": {
+    "rule": "Every new Firestore collection that stores queue, job, lease, dispatch, retry, progress or recovery state must declare a read budget here in the same pull request that introduces it (M8, firestore-reads-program).",
+    "program": "omi-knowledge-base/projects/admin-omi-tv-dashboard/firestore-reads-program.md",
+    "guard": ".github/scripts/check_firestore_collection_budget.py",
+    "surfaces": "Python under backend/ (.collection, .collection_group) and TypeScript/JavaScript under web/ (db.collection, db.collectionGroup, collection(db, ...), doc(db, ...)).",
+    "kill_switch": "FIRESTORE_COLLECTION_BUDGET_GUARD_ENABLED=0 disables the guard for an approved rollback and requires FIRESTORE_COLLECTION_BUDGET_GUARD_DISABLE_REASON.",
+    "note": "The guard is diff-scoped: a collection or computed site that already exists at the merge base is grandfathered, so these lists start empty and grow one reviewed entry per new work-state collection. A grandfathered computed site whose literal namespace tuple grows keeps its site::expression key, so the guard also compares the enumerable collection family between revisions and requires a budget or exemption for each new member. Offline fixtures in .github/scripts/test_check_firestore_collection_budget.py prove both directions for literal and computed names on both surfaces, for computed-family expansion, and for Python collection_group_id.",
+    "entry_fields": {
+      "collection": "Firestore collection id, snake_case or camelCase",
+      "owner": "lane that owns the collection and its budget",
+      "unit": "unit of work the per-unit budget divides by (job, batch unit, active user-day, ...)",
+      "reads_per_unit_budget": "positive integer, reads per unit of work",
+      "reads_per_day_budget": "positive integer, reads per day at the expected volume",
+      "basis": "measured (settled billing or a caller counter) or planning-bound (an estimate, never booked as a saving)",
+      "source": "where the number came from: query, dashboard, or document",
+      "reviewed": "YYYY-MM-DD date the budget was reviewed"
+    },
+    "dynamic_entry_fields": {
+      "site": "repository-relative path of the file that computes the name",
+      "expression": "the computed argument exactly as the scanner prints it (for example f'new_{stage}_jobs')",
+      "collection_pattern": "the collection family the expression can produce (for example new_*_jobs)",
+      "owner": "lane that owns the family and its budget",
+      "unit": "unit of work the per-unit budget divides by",
+      "reads_per_unit_budget": "positive integer, reads per unit of work for the whole family",
+      "reads_per_day_budget": "positive integer, reads per day for the whole family",
+      "basis": "measured or planning-bound",
+      "source": "where the number came from",
+      "reviewed": "YYYY-MM-DD date the budget was reviewed"
+    }
+  },
+  "budgets": [
+    {
+      "collection": "conversation_erasure_jobs",
+      "owner": "backend conversation deletion (accepted-delete erasure obligations)",
+      "unit": "conversation delete accepted behind a busy account gate",
+      "reads_per_unit_budget": 25,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "collection": "batch_pipeline_prod_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    },
+
+    {
+      "collection": "batch_pipeline_dev_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    }
+  ],
+  "dynamic": [
+    {
+      "site": "backend/database/batch_pipeline_fresh_guard.py",
+      "expression": "f'{namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline fresh-delivery guard",
+      "unit": "one maintenance-leader sample at up to 100,000 fresh results per window per environment",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 576000,
+      "basis": "planning-bound",
+      "source": "SCA-2012: two count aggregations per 60s per prod/dev leader; each costs max(1, ceil(index entries/1000)); 100,000 total and <=100,000 pending => 200/sample, 288,000/day/environment. Not a throughput cap; revisit budget if cohorts exceed this planning envelope. Normally empty/small windows cost 2/sample. Existing lease check adds <=1 metadata read per maintenance call outside this count budget.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{namespace}_control'",
+      "collection_pattern": "batch_pipeline_*_control",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "serving process-minute or backfill page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 80000,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/projection-finish-backfill.md: 35 replicas x 1440 negative-marker checks/day plus up to 10000 backfill pages x 2 checkpoint reads. Completed marker is read once per process lifetime; lever off reads zero.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{store.namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "historical finish row stamped (including page query)",
+      "reads_per_unit_budget": 4,
+      "reads_per_day_budget": 2000000,
+      "basis": "planning-bound",
+      "source": "SCA-2024 census ~478000 persisted/ready rows: one page-query read plus one transactional fence read per row, allowing one repeated pass/retry (~1.912M). Operator-only, capped at 200 rows/page and 10000 pages/invocation; normal serving never invokes stamping.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "historical current allowance-hold row migrated",
+      "reads_per_unit_budget": 64,
+      "reads_per_day_budget": 64000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195 round-1 correction: production FirestoreTransaction/flush tests measure 6 reads per migrated row without conversation, 8 with a conversation and 12 with two redirects, including discovery. Reserve 64/row for one retry (two attempts), short conversation redirects and shadow refresh; <=1M initial candidates gives 64M for one migration pass. Pages <=100, <=10000/operator invocation. Planning envelope, not a hard cap: >2 redirects, >2 attempts or repeated passes require remeasurement/rebudgeting before rollout go. Not a recurring scan.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_migrations'",
+      "collection_pattern": "batch_pipeline_*_migrations",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "migration page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one checkpoint read and one checkpoint CAS read/page; <=10000 pages/invocation with room for one replay. Dry run reads only COUNTs, never this collection.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{self.namespace}_allowance_holds'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "owner-index metadata poll or release-state page of at most 100 rows",
+      "reads_per_unit_budget": 6406,
+      "reads_per_day_budget": 65000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195 round-1 correction: <=6 metadata reads/owner poll; 20 owners/30s = <=57600/day/environment, <=691200/day across prod/dev. Production FirestoreTransaction/flush tests measure release at 9 reads/row without conversation, 16 for distinct held/tail conversations, 24 for two redirects each, including discovery. Reserve 64/row for one retry (two attempts), short redirects and shadow refresh: a 100-row page plans 6400+6, a one-1M-row generation burst plus metadata polls <65M/day. Initial parking belongs to the separate migration budget. Planning envelope, not a hard cap; >2 redirects, >2 attempts, repeated bursts require remeasurement/rebudgeting before rollout go. Unchanged generations never fetch held rows; empty owners retire. This state-transition budget excludes existing funded-allowance usage-ledger reads and subsequent normal admission/projection work; measure those separately on SCA-2173, never treat them as zero.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "hourly leader-only allowance-held COUNT at <=1M held rows",
+      "reads_per_unit_budget": 1000,
+      "reads_per_day_budget": 48000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_purge.py",
+      "expression": "f'{namespace}_{ALLOWANCE_OWNERS}'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "parked job erased by an authorized conversation/account purge",
+      "reads_per_unit_budget": 8,
+      "reads_per_day_budget": 8000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one hold-counter read in the existing job-erasure transaction plus its shadow refresh. Reserve eight incremental reads/job for two attempts and counter refresh overhead; one 1M-job purge/day plans 8M reads. Other job/queue/control/privacy reads retain their existing family budgets. No recurring scan; only allowance_held jobs read this counter. More retries, repeated bulk purges or over 1M/day require remeasurement before accepting this planning envelope.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_delivered_share.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline delivered-share signal (SCA-2117)",
+      "unit": "one maintenance-leader sample of the admitted-unit cohort",
+      "reads_per_unit_budget": 5000,
+      "reads_per_day_budget": 1440000,
+      "basis": "planning-bound",
+      "source": "One bounded metadata page per 300s per prod/dev leader, ordered by enqueued_at and capped at PAGE_LIMIT=5000 document reads: 5,000 x 288 = 1,440,000/day/environment. Normal cohort is ~2,800 units at the 2026-11 peak (~800k/day); a saturated page is reported by omi_batch_pipeline_delivered_share_truncated. Metadata only: no transcript, audio, user id or email. Revisit if admission volume triples or the cohort grows.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/scripts/batch_pipeline_delivered_share_report.py",
+      "expression": "f'{namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline delivered-share backfill report (operator-run)",
+      "unit": "one unstamped job in a backfill cohort, including a legacy timestamp-leaf fallback",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 1000000,
+      "basis": "planning-bound",
+      "source": "Operator-run only, never scheduled. One result read selects projection_state, projection.persisted_at and projection_part_count. A completed legacy receipt without a summary timestamp gets one additional read selecting projection_state and explicit projection_parts.<index>.persisted_at leaves for 1..5000 parts; unsupported counts abort the report. At most two result reads per admitted unstamped unit (~800k reads at 400k units/day). Job pages stay capped at 5000 rows per 900-second UTC cohort. No whole receipt map or identifiers are selected. The release operator must declare the complete target/baseline query budget before reading production.",
+      "reviewed": "2026-11-14"
+    }
+  ],
+  "exempt": []
+}

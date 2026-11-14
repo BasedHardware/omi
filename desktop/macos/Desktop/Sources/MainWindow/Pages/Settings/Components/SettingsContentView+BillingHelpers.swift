@@ -759,8 +759,8 @@ extension SettingsContentView {
       isToggling = false
     }
 
-    // Persist the setting
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    // Persist the setting. A later account sync must not turn a user off back on.
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(enabled)
   }
 
   func startGlowPreview() {

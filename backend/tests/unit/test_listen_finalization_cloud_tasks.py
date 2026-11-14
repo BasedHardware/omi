@@ -864,7 +864,7 @@ async def test_worker_retries_processing_failure_before_final_attempt(monkeypatc
 
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
-    retryable.assert_called_once_with('job-1', 1, 1, 'processing_failed')
+    retryable.assert_called_once_with('job-1', 1, 1, 'deterministic_processing_failed')
 
 
 @pytest.mark.anyio
@@ -942,7 +942,7 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
-    dead_letter.assert_called_once_with('job-1', 1, 1, 3, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 1, 1, 3, failure_code='deterministic_processing_failed')
 
 
 @pytest.mark.anyio
@@ -998,7 +998,12 @@ async def test_recovery_minimum_ends_on_first_failure_only_when_enabled(
     else:
         assert response.status_code == 500
         terminal.assert_not_called()
-        retryable.assert_called_once_with('job-1', 1, 3, 'processing_failed')
+        failure_code = (
+            'transient_processing_failed'
+            if isinstance(source_error, TimeoutError)
+            else 'deterministic_processing_failed'
+        )
+        retryable.assert_called_once_with('job-1', 1, 3, failure_code)
 
 
 @pytest.mark.anyio
@@ -1069,7 +1074,7 @@ async def test_worker_durable_failure_budget_survives_a_new_task_generation(monk
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
     assert finalizer.await_args.kwargs['final_attempt'] is True
-    dead_letter.assert_called_once_with('job-1', 9, 8, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 9, 8, 5, failure_code='deterministic_processing_failed')
     retryable.assert_not_called()
 
 
@@ -1530,11 +1535,11 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    retryable.assert_called_once_with('job-1', 3, 4, 'worker_failed')
+    retryable.assert_called_once_with('job-1', 3, 4, 'deterministic_processing_failed')
     retries.assert_called_once_with()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -1567,11 +1572,11 @@ async def test_pusher_does_not_dead_letter_a_job_whose_only_claims_were_session_
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    retryable.assert_called_once_with('job-1', 3, 9, 'processing_failed')
+    retryable.assert_called_once_with('job-1', 3, 9, 'deterministic_processing_failed')
     dead_letter.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -1605,11 +1610,11 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='deterministic_processing_failed')
     retryable.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': True,
     }
 
@@ -1636,10 +1641,10 @@ async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(m
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='deterministic_processing_failed')
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -2615,10 +2620,13 @@ async def test_first_budget_exhaustion_acknowledges_with_a_delayed_requeue(monke
     monkeypatch.setattr(
         jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
     )
+    # A delayed second budget requires evidence of a transient failure.
+    error = ConversationFinalizationError('processing_failed')
+    error.__context__ = TimeoutError('synthetic provider timeout')
     monkeypatch.setattr(
         finalization_router,
         'finalize_persisted_conversation',
-        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+        AsyncMock(side_effect=error),
     )
     requeued = MagicMock(return_value='requeued')
     retryable = MagicMock()
@@ -2632,7 +2640,7 @@ async def test_first_budget_exhaustion_acknowledges_with_a_delayed_requeue(monke
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'delayed_requeue'}
-    requeued.assert_called_once_with('job-1', 1, 1, 5, failure_code='processing_failed')
+    requeued.assert_called_once_with('job-1', 1, 1, 5, failure_code='transient_processing_failed')
     retryable.assert_not_called()
 
 

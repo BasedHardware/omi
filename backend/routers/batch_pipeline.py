@@ -13,6 +13,7 @@ from starlette.responses import Response, JSONResponse
 
 from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
@@ -220,7 +221,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
 async def redrive_dead(body: RedriveRequest):
     try:
         accepted = await run_blocking(db_executor, body.service().queue().redrive_dead, body.segment_id, time.time())
-    except BatchPrivacyBlocked:
+    except (BatchPrivacyBlocked, ProjectionBlocked):
         accepted = False
     return {'accepted': accepted}
 

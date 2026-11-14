@@ -844,5 +844,939 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-firestore-caller-overflow",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - caller label set overflowed into other",
+    "condition": "F",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 || $B > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "vector(1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$C * $D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "F",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "F"
+                ],
+                "type": "query"
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "E",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-12T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The Firestore read caller label set has overflowed into other: a new call site is no longer named, so by-caller attribution is silently folding.",
+      "user_impact": "No direct user impact; this is an attribution and cost-visibility signal. Reads keep being served, but a new or changed read path stops being named in the by-caller counter, so a read regression on it can no longer be attributed to a call site.",
+      "scope": "omi_firestore_billed_reads_by_caller_total{caller=\"other\"} and omi_firestore_caller_label_overflow_total from the Python Firestore read probe (backend/database/firestore_document_probe.py), queried on the managed gmp-cloud-run datasource so Cloud Run and GKE are both covered. The cap is MAX_CALLERS (1536) distinct module:function labels per process.",
+      "verification": "Run sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) and sum(rate(omi_firestore_caller_label_overflow_total[5m])) on gmp-cloud-run. A non-zero overflow rate means a well-formed new caller arrived after the cap filled; a non-zero other read rate without overflow means a malformed or frame-less caller label. Both are folding. Confirm the probe image is current before changing the cap. An empty result on both arms is the expected healthy state, because the caller=other bucket only exists after a fold; report it as \"no series\" and never as a measured clean zero.",
+      "safe_next_action": "Identify the folded call site from the deploy that started serving just before the first overflow, then either raise MAX_CALLERS in a reviewed PR with the measured function count, or fix the malformed label. Never add a uid, document id or query text as a label. Kill switch: set node D (vector(1)) to vector(0) and re-provision; restore vector(1) to re-enable. The rule also ships isPaused=false; pausing it is the operational switch.",
+      "threshold": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) > 0 OR sum(rate(omi_firestore_caller_label_overflow_total[5m])) > 0, sustained 5m, gated by the enable selector node D vector(1).",
+      "evaluated_bad": "Fixture, not a live backtest: the counter is new in this program and no production overflow window exists yet. With MAX_CALLERS=1 a second well-formed caller folds to other and omi_firestore_caller_label_overflow_total increments by 1; the rule evaluates to 1. See backend/tests/unit/test_firestore_caller_overflow_alert.py.",
+      "evaluated_good": "Fixture: with the caller set not full, bound_caller returns the named label, the overflow counter does not move, and the rule evaluates to 0. Same test file.",
+      "kill_switch": "Enable selector node D vector(1) in this rule, enabled by default. Disable: set node D to vector(0) and run python3 backend/scripts/provision_monitoring_alerts.py --apply. Re-enable: restore vector(1) and re-provision. Operational switch: isPaused (ships false). No actuator flips either automatically."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-caller-overflow",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability",
+      "kill_switch": "omi-firestore-caller-overflow"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed reads above 3% of billed reads",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($B - $A) / $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.03
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-13T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Unattributed Firestore reads are above 3% of billed reads on a 30m window: the instrumented read counters cover less than 97% of the native document/read_count.",
+      "threshold": "($B - $A) / $B > 0.03 for 30m, where A = sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0), B = avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60, and the same 30m window is used on both sides. The rule resolves at or below 0.03. The denominator's completeness and per-type freshness are guarded independently by omi-firestore-unattributed-reads-blind.",
+      "user_impact": "No direct user impact. A blind spot in read attribution means a read regression can grow without a named caller, so the next cost cut cannot be proven and the bill can rise unseen.",
+      "scope": "based-hardware, both Firestore databases, all read types (LOOKUP, QUERY, NOT_FOUND). A is the complete instrumented counter on the GMP datasource (Cloud Run and GKE); B is the native Cloud Monitoring document/read_count, which tracked the settled bill to 0.3% on the 2026-11-09 cross-check. A missing instrumented series reads as zero through or vector(0) and fires. The separate guard rule fires when the billed series is incomplete, stale or absent, so this rule's NoData is covered.",
+      "verification": "Exact expression replayed on GMP query_range 2026-11-02T06:51Z..2026-11-12T06:51Z at 1h steps (241 points): 0.134-0.568, mean 0.321. Daily means: 11-09 0.274, 11-10 0.196, 11-11 0.163, 11-12 0.162. No retained hour is at or below 0.03, so the resolve side is proven by fixtures, not by live history. The 95% acceptance figure in backend/docs/firestore-read-attribution.md is historical; the fresh measurement is 84% attributed.",
+      "evaluated_bad": "Live 2026-11-11T00:00Z..2026-11-12T00:00Z: 0.136-0.183 (mean 0.163), above 0.03 in every hour.",
+      "evaluated_good": "Fixture: instrumented 980/s against billed 1000/s (gap 0.02) for 2h produces no episode, and a firing episode resolves on the first chronological tick at exactly 0.03.",
+      "safe_next_action": "Read the by-caller coverage per kind on the Firestore dashboard, then confirm the instrumented fleet is on a probe build that exports by_caller. If omi-firestore-unattributed-reads-blind is firing, fix the billed series before reading this ratio. This rule reports the gap; it does not explain it, and the closed QUERY undercount RCA is not reopened here.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production. The guard rule has its own isPaused switch and its own gate UID."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed-reads guard: billed series incomplete or stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((count(count by (type) (firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"})) == bool 3) or vector(0)) * ((min((max by (type) (time() - timestamp(firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"}))) < bool 900)) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-13T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The billed Firestore read series is incomplete, stale or absent, so the unattributed-reads ratio is blind.",
+      "threshold": "A < 1 for 30m, where A = (count of LOOKUP|QUERY|NOT_FOUND == 3) * (min per expected type of (max by type (time() - timestamp(...)) < 900)); the selectors name LOOKUP, QUERY and NOT_FOUND explicitly, so an unknown type cannot replace an expected type. NoData is Alerting.",
+      "user_impact": "No direct user impact. A blind denominator means the unattributed-reads alert cannot tell a real attribution gap from a vanished or stale billed series, so a read regression could pass unmeasured.",
+      "scope": "based-hardware, the three expected billed types (LOOKUP, QUERY, NOT_FOUND) on the gmp-cloud-run datasource. The guard is 1 only when all three expected types are present and every expected type is younger than 900s. An unknown type is excluded from both the count and the freshness check, so it cannot replace a missing expected type. Partial type loss, one stale type, total loss and a missing metric all drive the guard to 0; NoData is Alerting as a final fail-closed layer.",
+      "verification": "Measured 2026-11-13T10:39Z on GMP: count by type = 3, max age 143s, guard = 1. Fixtures exercise all three expected types fresh (guard 1), one stale type with two fresh (guard 0), an absent series (guard 0), and each of LOOKUP/QUERY/NOT_FOUND replaced by a fresh unknown type (guard 0).",
+      "evaluated_bad": "Fixture: LOOKUP 100s, QUERY 2000s, NOT_FOUND 100s -> guard 0 -> fires. Absent metric -> guard 0 -> fires. Each expected type replaced by FUTURE_TYPE at 100s -> guard 0 -> fires (unknown types cannot substitute). NoData is Alerting.",
+      "evaluated_good": "Fixture: all three types at 100s -> guard 1 -> no episode.",
+      "safe_next_action": "Check the GMP series for a missing type or a stale sample before reading the ratio. Do not treat the ratio's NoData as healthy.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads-blind",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-batch-reads-audio-hour",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "FirestoreBatchReadsPerAudioHourHigh",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h])) / clamp_min((sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($A > 60000) && ($B >= 50)",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Batch reads exceed 60,000 per completed audio-hour with at least 50 completed audio-hours in the hour. Budget: 45,000.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "threshold": "Batch reads exceed 60,000 per completed audio-hour with at least 50 completed audio-hours in the hour. Budget: 45,000. Sustained for 2h.",
+      "severity": "ticket",
+      "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
+      "scope": "Production fleet on gmp-cloud-run; Cloud Run and GKE. Native billed reads include all read types and both databases.",
+      "verification": "Compare sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h])) with the same query offset 1d. GMP live evaluation is required before release; fixtures are not production measurements.",
+      "evaluated_bad": "Fixture: 78,000 reads/audio-hour at 100 audio-hours fires.",
+      "evaluated_good": "Fixture: Exactly 60,000 reads/audio-hour or fewer than 50 audio-hours does not fire.",
+      "safe_next_action": "Firestore cost owner (SCA-2173): inspect reads by caller against the same hour yesterday and completed audio-hours. Do not change runtime settings from this alert alone.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "Enabled by default: isPaused=false; disable with isPaused=true and re-import. Keep ticket severity until the ratio has been below the 45,000 budget once; promotion requires an explicit follow-up change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-batch-reads-audio-hour",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "firestore-cost-owner",
+      "owner_issue": "SCA-2173"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-batch-reads-no-output",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "FirestoreBatchReadsWithNoOutput",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($A > 10000000) && ($B < 50)",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Batch reads exceed 10M/hour with fewer than 50 completed audio-hours.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "threshold": "Batch reads exceed 10M/hour with fewer than 50 completed audio-hours. Sustained for 2h.",
+      "severity": "ticket",
+      "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
+      "scope": "Production fleet on gmp-cloud-run; Cloud Run and GKE. Native billed reads include all read types and both databases.",
+      "verification": "Compare sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total{caller=~\"(database|utils)\\\\.batch.*\"}[1h])) with the same query offset 1d. GMP live evaluation is required before release; fixtures are not production measurements.",
+      "evaluated_bad": "Fixture: 10,000,001 reads and 49 audio-hours fires; absent output is zero-filled.",
+      "evaluated_good": "Fixture: Exactly 10M reads or 50 completed audio-hours does not fire.",
+      "safe_next_action": "Firestore cost owner (SCA-2173): inspect reads by caller against the same hour yesterday and completed audio-hours. Do not change runtime settings from this alert alone.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "Enabled by default: isPaused=false; disable with isPaused=true and re-import. Keep ticket severity until the ratio has been below the 45,000 budget once; promotion requires an explicit follow-up change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-batch-reads-no-output",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "firestore-cost-owner",
+      "owner_issue": "SCA-2173"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-billed-reads-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "FirestoreBilledReadsStep",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h])",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(quantile(0.5, label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 1d), \"day\", \"1\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 2d), \"day\", \"2\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 3d), \"day\", \"3\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 4d), \"day\", \"4\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 5d), \"day\", \"5\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 6d), \"day\", \"6\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 7d), \"day\", \"7\", \"\", \"\"))) and (count(label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 1d), \"day\", \"1\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 2d), \"day\", \"2\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 3d), \"day\", \"3\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 4d), \"day\", \"4\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 5d), \"day\", \"5\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 6d), \"day\", \"6\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 7d), \"day\", \"7\", \"\", \"\")) == 7) and (quantile(0.5, label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 1d), \"day\", \"1\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 2d), \"day\", \"2\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 3d), \"day\", \"3\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 4d), \"day\", \"4\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 5d), \"day\", \"5\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 6d), \"day\", \"6\", \"\", \"\") or label_replace(last_over_time((sum(sum_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) and (min(count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms)) >= 58) and (count(count by (type) (count_over_time(firestore_googleapis_com:document_read_count[1h] offset 1ms))) == 3))[1h:1h] offset 7d), \"day\", \"7\", \"\", \"\")) > 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A / $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1.25
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-14T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Last full UTC hour of billed reads exceeds 1.25x the median of the same hour on the previous seven days. Incomplete current/history coverage or a zero median is an agent-tier telemetry ticket.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "threshold": "Last full UTC hour of billed reads exceeds 1.25x the median of the same hour on the previous seven days. Incomplete current/history coverage or a zero median is an agent-tier telemetry ticket. Sustained for 2h.",
+      "severity": "ticket",
+      "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
+      "scope": "Production fleet on gmp-cloud-run; Cloud Run and GKE. Native billed reads include all read types and both databases.",
+      "verification": "Compare sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total[1h])) with the same query offset 1d. GMP live evaluation is required before release; fixtures are not production measurements.",
+      "evaluated_bad": "Fixture: 126M reads against a 100M same-hour median fires.",
+      "evaluated_good": "Fixture: Exactly 1.25x or less does not fire; one daily outlier does not move the median.",
+      "safe_next_action": "Firestore cost owner (SCA-2173): compare caller reads against the same hour yesterday. If NoData, require all three native read types and at least 58 raw minute samples per series in the current hour and each of seven baseline hours, plus a positive median, before interpreting the step. Do not change runtime settings from this alert alone.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "Enabled by default: isPaused=false; disable with isPaused=true and re-import. Keep ticket severity until the ratio has been below the 45,000 budget once; promotion requires an explicit follow-up change."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-billed-reads-step",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "firestore-cost-owner",
+      "owner_issue": "SCA-2173"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

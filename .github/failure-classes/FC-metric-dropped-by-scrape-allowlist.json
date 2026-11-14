@@ -5,7 +5,8 @@
   "canonical_prevention": "Name every Cloud Run application metric with the omi_ prefix, and pin each feature metric that an alert or rollout check depends on with a unit test that reads the sidecar's keep regex from the deploy YAML and asserts the metric name matches it, so a rename or a new metric outside the allowlist fails in CI instead of at ingestion.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_relevance_metric_is_scraped.py",
-    "backend/tests/unit/test_quiet_check_metrics_are_scraped.py"
+    "backend/tests/unit/test_quiet_check_metrics_are_scraped.py",
+    "backend/tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

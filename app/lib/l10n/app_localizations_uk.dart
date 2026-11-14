@@ -9192,6 +9192,24 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Не вдається визначити поточну версію мікропрограми';
 
   @override
+  String get applyCodeToCurrentPlan => 'Застосувати до поточного плану';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код застосовано до вашого поточного плану.',
+        'refused': 'Неможливо застосувати цей код. Перевірте код і потрібний план.',
+        'conflict': 'Код уже використано або ваш план уже має знижку.',
+        'rateLimited': 'Забагато спроб. Зачекайте й повторіть пізніше.',
+        'other': 'Не вдалося застосувати код. Спробуйте ще раз.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Промокод';
 
   @override
@@ -13684,6 +13702,9 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Створити нотатки знову';
+
+  @override
   String get attentionSummaryFailed => 'Не вдалося підсумувати цю розмову';
 
   @override
@@ -15410,6 +15431,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашу картку відхилено';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Оновіть картку або поверніть $plan за $price на місяць';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Оновіть картку, щоб повернути $plan';
   }
@@ -15434,4 +15460,31 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перейти на щомісячний';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price на місяць';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замінює неоплачений річний платіж $yearly. Подовжується щомісяця. Скасувати можна будь-коли.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Платіж відхилено. Ваш план не змінився.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Перехід зараз недоступний. Натомість оновіть картку.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Тепер ви платите щомісяця';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сьогодні сплачено $price. Подовжується щомісяця.';
+  }
 }

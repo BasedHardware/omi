@@ -118,6 +118,21 @@ def test_lookup_wrap_up_and_dismiss(client, monkeypatch):
     assert http.post('/v1/episodes/missing/wrap-up').status_code == 404
 
 
+def test_opening_the_episode_page_triggers_the_deferred_compose(client, monkeypatch):
+    _, http = client
+    closed = {**EPISODE, 'status': 'closed', 'close_reason': 'idle', 'closed_at': T0}
+    monkeypatch.setattr(router_module.service, 'episode_by_id', lambda uid, eid: closed if eid == 'e1' else None)
+    opened = []
+    monkeypatch.setattr(
+        router_module.home_read, 'schedule_opened_compose', lambda uid, ep: opened.append(ep['id']) or True
+    )
+    assert http.get('/v1/episodes/e1').status_code == 200
+    assert opened == ['e1']
+    # A missing episode never reaches the trigger.
+    assert http.get('/v1/episodes/missing').status_code == 404
+    assert opened == ['e1']
+
+
 def test_idle_closed_recap_is_discoverable_and_directly_reachable(client, monkeypatch):
     _, http = client
     closed = {**EPISODE, 'status': 'closed', 'close_reason': 'idle', 'closed_at': T0}

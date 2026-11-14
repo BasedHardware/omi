@@ -9167,6 +9167,24 @@ class AppLocalizationsEt extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Praeguse püsivara versiooni ei õnnestunud tuvastada';
 
   @override
+  String get applyCodeToCurrentPlan => 'Rakenda praegusele paketile';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kood rakendati sinu praegusele paketile.',
+        'refused': 'Seda koodi ei saa rakendada. Kontrolli koodi ja nõutavat paketti.',
+        'conflict': 'Koodi on juba kasutatud või paketil on juba soodustus.',
+        'rateLimited': 'Liiga palju katseid. Oota ja proovi hiljem uuesti.',
+        'other': 'Koodi ei saanud rakendada. Proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Sooduskood';
 
   @override
@@ -13647,6 +13665,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Loo märkmed uuesti';
+
+  @override
   String get attentionSummaryFailed => 'Seda vestlust ei õnnestunud kokku võtta';
 
   @override
@@ -15369,6 +15390,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paymentDeclinedTitle => 'Sinu kaart lükati tagasi';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Uuenda kaarti või saa $plan tagasi hinnaga $price kuus';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Uuenda kaarti, et $plan tagasi saada';
   }
@@ -15393,4 +15419,31 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Mine üle igakuisele';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price kuus';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Asendab tasumata aastamakse $yearly. Uueneb igakuiselt. Tühista igal ajal.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Makse lükati tagasi. Sinu pakett ei muutunud.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Üleminek pole praegu saadaval. Uuenda selle asemel kaarti.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Maksad nüüd igakuiselt';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Täna makstud $price. Uueneb igakuiselt.';
+  }
 }

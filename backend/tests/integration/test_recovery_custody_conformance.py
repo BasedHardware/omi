@@ -15,6 +15,7 @@ from unittest.mock import ANY, Mock, call
 import wave
 
 import pytest
+from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from testing.store_fixtures import store_backend  # noqa: F401
@@ -233,3 +234,34 @@ def test_pl050_expired_lease_cannot_attach_evidence(h):
         worker_vad_receipt=vad_receipt(item.audio_uri, DURATION * 16000, 1.25),
     )
     assert job(h) == before
+
+
+def test_record_lease_metadata_never_consumes_recovery_audio(h, monkeypatch):
+    item, recovery, artifacts, provider, second = held_recovery(h, monkeypatch, speech=0)
+    h.customer.add_conversation(item.owner_id, 'record-lease')
+    ref = (
+        h.customer.client.collection('users')
+        .document(item.owner_id)
+        .collection('conversations')
+        .document('record-lease')
+    )
+    tokens = {
+        's': {
+            'pod': 'synthetic-pusher',
+            'process_started_at': 1,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'custody_append',
+        }
+    }
+
+    @firestore.transactional
+    def attach(tx):
+        tx.update(ref, {'record_upload_sessions': tokens})
+
+    attach(h.customer.client.transaction())
+    assert recovery.recover(item.segment_id, item.owner_id) == 'recovered'
+    assert ref.get().to_dict()['record_upload_sessions'] == tokens
+    assert job(h)['audio_uri'] == item.audio_uri
+    provider.assert_not_called()
+    second.assert_not_called()

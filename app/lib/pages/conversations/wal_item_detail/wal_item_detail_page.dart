@@ -25,6 +25,7 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
+  bool _waveformLoadFailed = false;
   SyncProvider? _syncProvider;
 
   /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
@@ -55,20 +56,27 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _generateWaveform() async {
-    if (!mounted) return;
+    if (!mounted || _isProcessingWaveform) return;
 
     setState(() {
       _isProcessingWaveform = true;
+      _waveformLoadFailed = false;
     });
 
-    final syncProvider = context.read<SyncProvider>();
-    final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
-
-    if (mounted) {
-      setState(() {
-        _waveformData = waveformData;
-        _isProcessingWaveform = false;
-      });
+    try {
+      final waveformData = await context.read<SyncProvider>().getWaveformForWal(widget.wal.id);
+      if (!mounted) return;
+      _waveformData = waveformData;
+      _waveformLoadFailed = waveformData == null;
+    } catch (e) {
+      // A WAL can disappear from discovery or fail decoding while this page is open.
+      // A visualization failure must not strand loading or disable playback/export.
+      Logger.debug('WalItemDetailPage: waveform generation failed (${e.runtimeType})');
+      if (!mounted) return;
+      _waveformData = null;
+      _waveformLoadFailed = true;
+    } finally {
+      if (mounted) setState(() => _isProcessingWaveform = false);
     }
   }
 
@@ -359,13 +367,28 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               flex: 6,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: WaveformSection(
-                  seconds: widget.wal.seconds,
-                  waveformData: _waveformData,
-                  isProcessingWaveform: _isProcessingWaveform,
-                  playbackState: playbackState,
-                  isPlaying: isPlaying,
-                ),
+                child: _waveformLoadFailed
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(context.l10n.errorLoadingAudio, style: OmiType.body),
+                            const SizedBox(height: OmiSpacing.sm),
+                            OmiButton.secondary(
+                              key: const Key('wal-waveform-retry'),
+                              label: context.l10n.tryAgain,
+                              onPressed: _generateWaveform,
+                            ),
+                          ],
+                        ),
+                      )
+                    : WaveformSection(
+                        seconds: widget.wal.seconds,
+                        waveformData: _waveformData,
+                        isProcessingWaveform: _isProcessingWaveform,
+                        playbackState: playbackState,
+                        isPlaying: isPlaying,
+                      ),
               ),
             ),
 

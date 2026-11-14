@@ -9,14 +9,16 @@ import pytz
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db
+from ._client import db, get_firestore_client
 from . import monthly_usage_totals
 from .firestore_read_origin import read_origin
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
+from .firestore_retry import FIRESTORE_NO_RETRY
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
 from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
+from utils.read_cache_shadow import ShadowSkipped, compare_hit
 
 logger = logging.getLogger(__name__)
 
@@ -591,9 +593,9 @@ def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], in
 
 
 def _s4_valid_month_stats(value) -> bool:
-    fields = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
     return isinstance(value, dict) and all(
-        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0 for key in fields
+        type(value.get(key)) in (int, float) and math.isfinite(value[key]) and value[key] >= 0
+        for key in monthly_usage_totals.FIELDS
     )
 
 
@@ -602,6 +604,7 @@ def _s4_month_cache(since=False):
         @wraps(fn)
         def read(uid, date, *args, **kwargs):
             variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:all'
+            start_date = None
             if since:
                 start_date = args[0] if args else kwargs['start_date']
                 variant = f'{plane_id(db)}:{date.year}-{date.month:02d}:since:{start_date.date().isoformat()}'
@@ -612,11 +615,37 @@ def _s4_month_cache(since=False):
                 lambda: fn(uid, date, *args, **kwargs),
                 seconds=ttl('FSR_USAGE_MONTH_TTL_SECONDS', 60),
                 cacheable=_s4_valid_month_stats,
+                on_hit=lambda value: compare_hit(
+                    'usage_month',
+                    value,
+                    lambda timeout: _fresh_month_stats(uid, date, start_date, timeout),
+                ),
             )
 
         return read
 
     return decorate
+
+
+def _fresh_month_stats(uid, date, start_date, timeout, *, firestore_client=None):
+    # Read the authoritative hourly totals; never rebuild/write a monthly projection.
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection('users')
+        .document(uid)
+        .collection('hourly_usage')
+        .where(filter=FieldFilter('year', '==', date.year))
+        .where(filter=FieldFilter('month', '==', date.month))
+    )
+    if start_date is not None:
+        start_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
+        query = query.where(filter=FieldFilter('id', '>=', start_id))
+    with read_origin('job:read_cache_shadow'):
+        stats, count = _aggregate_stats_with_count(query.limit(744).stream(timeout=timeout, retry=FIRESTORE_NO_RETRY))
+        record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, count)
+    if count >= 744:
+        raise ShadowSkipped('hourly document limit reached')
+    return stats
 
 
 @_s4_month_cache()

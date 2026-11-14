@@ -63,9 +63,33 @@ def test_serving_podmonitoring_render(chart, values_suffix, stage):
             },
         }
     ]
+    roles = [doc for doc in default if doc['kind'] == 'Role']
+    bindings = [doc for doc in default if doc['kind'] == 'RoleBinding']
+    assert len(roles) == len(bindings) == 1
+    role, binding = roles[0], bindings[0]
+    for resource in (role, binding):
+        assert resource['apiVersion'] == 'rbac.authorization.k8s.io/v1'
+        assert resource['metadata']['name'] == 'synthetic-serving-metrics-scrape'
+        assert resource['metadata']['namespace'] == f'{stage}-omi-backend'
+    assert role['rules'] == [
+        {
+            'apiGroups': [''],
+            'resources': ['secrets'],
+            'resourceNames': [monitor['spec']['endpoints'][0]['authorization']['credentials']['secret']['name']],
+            'verbs': ['get', 'list', 'watch'],
+        }
+    ]
+    assert binding['roleRef'] == {
+        'apiGroup': 'rbac.authorization.k8s.io',
+        'kind': 'Role',
+        'name': role['metadata']['name'],
+    }
+    assert binding['subjects'] == [{'kind': 'ServiceAccount', 'name': 'collector', 'namespace': 'gmp-system'}]
     assert not any(doc['kind'] == 'Secret' for doc in default)
     assert render('--set', 'podMonitoring.enabled=true') == default
-    assert render('--set', 'podMonitoring.enabled=false') == [doc for doc in default if doc['kind'] != 'PodMonitoring']
+    assert render('--set', 'podMonitoring.enabled=false') == [
+        doc for doc in default if doc['kind'] not in {'PodMonitoring', 'Role', 'RoleBinding'}
+    ]
     overridden = next(
         doc for doc in render('--set-string', 'podMonitoring.interval=30s') if doc['kind'] == 'PodMonitoring'
     )

@@ -53,6 +53,7 @@ from utils.other import endpoints as auth
 from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import delete_canonical_memory_maintenance_registry_entry
+from utils.other.lake_wipe import destroy_owner_lake_keys, purge_owner_lake_content
 from utils.other.storage import delete_all_conversation_recordings, delete_all_user_storage_objects
 from utils.retrieval.frame_request_storage import (
     delete_all_frame_request_pixels_for_user,
@@ -442,6 +443,9 @@ def background_wipe_user_data(
             current_operation = 'cell_directory_purge'
             heartbeat()
             purge_owner_planes(uid)
+        current_operation = 'lake_prefix_purge'
+        heartbeat()
+        purge_owner_lake_content(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
@@ -456,6 +460,9 @@ def background_wipe_user_data(
         current_operation = 'memory_maintenance_registry'
         heartbeat()
         _delete_memory_maintenance_registry(uid)
+        current_operation = 'lake_key_destroy'
+        heartbeat()
+        destroy_owner_lake_keys(uid)
         logger.info('delete_account background wipe complete')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')

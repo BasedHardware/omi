@@ -498,18 +498,21 @@ def mark_update(
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         backfill = row['summary_lane'] == 'backfill' and not first_summary_pending(row)
-        if (old is None or old.get('dormant')) and not backfill and not effects_only and recent is None:
+        # Reserved slots serve first summaries only; refreshes need no clock lookup.
+        if (old is None or old.get('dormant')) and first_summary_pending(row) and recent is None:
             recent = _recent_conversation(uid, conversation_id, current)
+        # A CAS retry may observe a completed summary after caching its recency.
+        fresh = first_summary_pending(row) and bool(recent)
         if old is None:
             row.update(
                 task_token=uuid.uuid4().hex,
                 task_due_at=row['due_at'],
                 lease_until=0,
                 dispatch=(new_dispatch() if new_dispatch else None)
-                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent)),
+                or dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh),
             )
         elif old.get('dormant'):
-            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=bool(recent))
+            row['dispatch'] = dispatch_binding(backfill=backfill, effects_only=effects_only, recent=fresh)
         elif not valid_dispatch_binding(row.get('dispatch')):
             row['dispatch'] = None
         wake = old is None
@@ -942,16 +945,15 @@ def sweep(
             row = dict(old)
             promoted = False
             # A valid old wake can wait hours behind historical enrichment.
-            # Promote only idle user-facing work, retaining the handler/auth
+            # Promote only idle pending first summaries, retaining the handler/auth
             # identity. Rotate the token in this CAS so old deliveries are stale.
-            # Effects and backfill keep their original binding and custody.
+            # Effects and completed-summary backfill keep their binding and custody.
             fresh_queue = enrichment_config.fresh_queue()
             if (
                 not injected
                 and fresh_queue
                 and enrichment_config.route() == 'enrichment_queue'
-                and not row.get('effects_only')
-                and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
+                and first_summary_pending(row)
                 and valid_dispatch_binding(row.get('dispatch'))
                 and row['dispatch']['queue'] == enrichment_config.primary_queue()
             ):
@@ -992,9 +994,7 @@ def sweep(
                     backfill=row.get('summary_lane') == 'backfill' and not first_summary_pending(row),
                     effects_only=bool(row.get('effects_only')),
                     recent=(
-                        not row.get('effects_only')
-                        and (row.get('summary_lane') != 'backfill' or first_summary_pending(row))
-                        and _recent_conversation(row['uid'], row['conversation_id'], current)
+                        first_summary_pending(row) and _recent_conversation(row['uid'], row['conversation_id'], current)
                     ),
                 )
                 if binding is None:

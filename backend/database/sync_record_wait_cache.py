@@ -1,4 +1,4 @@
-"""Short per-conversation memo of a registered-record custody wait.
+"""Short Redis memos of registered-record custody waits.
 
 Owns one bounded Redis key per (uid, conversation) whose record is still
 waiting on conversation-level state (no record jobs yet, owner reservation
@@ -7,6 +7,10 @@ with the same retryable wait before any file save, archive or decode, so a hot
 client loop costs almost nothing. It never pauses the account and never
 releases audio: a hit only repeats a 503 that keeps local audio. Redis errors
 fail open to the full check (a pure cache miss, no mode change).
+
+Coverage waits use a separate hashed (owner, conversation, WAL, record jobs)
+key. Only a completed negative comparison writes it, once per 30-second TTL;
+coverage hits never refresh expiry or affect other WALs.
 """
 
 from typing import Optional
@@ -66,3 +70,32 @@ def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
             outcome='degraded',
         )
         return True
+
+
+def cached_coverage_wait(key: str) -> bool:
+    """A negative coverage result only; Redis expiry is the validity boundary."""
+    try:
+        return _marker_client().get(f'sync:record_coverage_wait:v1:{key}') in (b'1', '1')
+    except Exception:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='coverage_wait_memo',
+            to_mode='coverage_check',
+            reason='unavailable',
+            outcome='degraded',
+        )
+        return False
+
+
+def remember_coverage_wait(key: str) -> None:
+    """Write at most once per TTL, including concurrent checks; never slide expiry."""
+    try:
+        _marker_client().set(f'sync:record_coverage_wait:v1:{key}', '1', ex=RECORD_WAIT_CACHE_SECONDS, nx=True)
+    except Exception:
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='coverage_wait_memo',
+            to_mode='coverage_check',
+            reason='unavailable',
+            outcome='degraded',
+        )

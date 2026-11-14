@@ -1,0 +1,31 @@
+{{- if .Values.podMonitoring.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "pusher.fullname" . }}-metrics-scrape
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["metrics-scrape-token"]
+    # resourceNames requires a metadata.name field selector for list/watch; plain list is denied, and the live collector needs watch (it failed with "watch unknown" before).
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "pusher.fullname" . }}-metrics-scrape
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "pusher.fullname" . }}-metrics-scrape
+subjects:
+  - kind: ServiceAccount
+    name: collector
+    namespace: gmp-system
+{{- end }}

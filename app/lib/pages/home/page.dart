@@ -499,6 +499,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await ForegroundUtil.stopForegroundTask();
       }
       if (mounted) {
+        final owner = SharedPreferencesUtil().uid;
+        final localRecordings = context.read<LocalRecordingsProvider>();
+        final syncProvider = context.read<SyncProvider>();
+        unawaited(localRecordings.refresh().then((_) async {
+          if (mounted && SharedPreferencesUtil().uid == owner) await syncProvider.refreshWals();
+        }).catchError((Object error) {
+          Logger.debug('Home: pending recordings refresh deferred: $error');
+        }));
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {

@@ -228,6 +228,7 @@ extension AppState {
   func deleteConversation(_ conversationId: String) async -> Bool {
     do {
       try await conversationRepository.delete(id: conversationId)
+      HomeFailurePlacementStore.shared.forget(conversationId)
       return true
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)

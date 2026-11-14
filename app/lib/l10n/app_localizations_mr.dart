@@ -9183,6 +9183,24 @@ class AppLocalizationsMr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही';
 
   @override
+  String get applyCodeToCurrentPlan => 'सध्याच्या योजनेवर लागू करा';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'कोड तुमच्या सध्याच्या योजनेवर लागू झाला.',
+        'refused': 'हा कोड लागू होऊ शकत नाही. कोड आणि आवश्यक योजना तपासा.',
+        'conflict': 'कोड आधीच वापरला आहे किंवा तुमच्या योजनेवर आधीच सवलत आहे.',
+        'rateLimited': 'खूप प्रयत्न झाले. थांबा आणि नंतर पुन्हा प्रयत्न करा.',
+        'other': 'कोड लागू झाला नाही. पुन्हा प्रयत्न करा.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'प्रोमो कोड';
 
   @override
@@ -13658,6 +13676,9 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'नोट्स पुन्हा तयार करा';
+
+  @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
 
   @override
@@ -15384,6 +15405,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paymentDeclinedTitle => 'तुमचे कार्ड नाकारले गेले';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'कार्ड अपडेट करा, किंवा $plan महिन्याला $price मध्ये परत मिळवा';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan परत मिळवण्यासाठी कार्ड अपडेट करा';
   }
@@ -15408,4 +15434,31 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'मासिकवर स्विच करा';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, महिन्याला $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly च्या न भरलेल्या वार्षिक शुल्काऐवजी. दर महिन्याला नूतनीकरण होते. कधीही रद्द करा.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'पेमेंट नाकारले गेले. तुमचा प्लॅन बदललेला नाही.';
+
+  @override
+  String get monthlySwitchUnavailable => 'सध्या स्विच उपलब्ध नाही. त्याऐवजी कार्ड अपडेट करा.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'तुम्ही आता मासिक प्लॅनवर आहात';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'आज $price भरले. दर महिन्याला नूतनीकरण होते.';
+  }
 }

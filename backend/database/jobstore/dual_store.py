@@ -65,7 +65,9 @@ PURGE_TIMEOUT_S = 30.0
 PURGE_CHUNK = 200
 # Second-scan delay: longer than a mirror copy's pool wait plus one primary get_all in practice.
 PURGE_SETTLE_S = 2.0
-MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts'})
+MIRRORED_TABLES = frozenset(
+    {'jobs', 'queues', 'owners', 'control', 'results', 'gpus', 'intakes', 'artifacts', 'allowance_holds'}
+)
 # The original-capture lineage a missing-input repair restages with (geolocation, capture claims) stays
 # Firestore-only: the mirror does not follow the intake receipt TTL (Luna #24366 r3), and a repair that
 # finds no record holds rather than guessing.

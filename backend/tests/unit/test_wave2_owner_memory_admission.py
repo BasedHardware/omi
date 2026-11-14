@@ -21,7 +21,9 @@ def segment(sid, voice, *, owner=False, status='unknown', label_source=None):
         id=sid,
         speaker_id=voice,
         speaker_id_scope='synthetic:0',
-        text=f'Synthetic statement from {sid}.',
+        # Long enough to clear the separate L1 noise/short-speech admission floor,
+        # so these tests measure owner admission only.
+        text=f'Synthetic statement from {sid}. ' + ' '.join(['word'] * 40),
         is_user=owner,
         speaker_identity_status=status,
         speaker_match_source='conversation_voice' if status == 'user' else None,

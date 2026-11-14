@@ -9167,6 +9167,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Unable to determine current firmware version';
 
   @override
+  String get applyCodeToCurrentPlan => 'Apply to Current Plan';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code applied to your current plan.',
+        'refused': 'This code cannot be applied. Check the code and its required plan.',
+        'conflict': 'Code already used, or your plan already has a discount.',
+        'rateLimited': 'Too many tries. Please wait and try again later.',
+        'other': 'Could not apply this code. Please try again.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promo code';
 
   @override
@@ -13638,6 +13656,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Re-run notes';
+
+  @override
   String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
 
   @override
@@ -15361,6 +15382,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paymentDeclinedTitle => 'Your card was declined';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Update it, or get $plan back for $price a month';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Update it to get $plan back';
   }
@@ -15385,4 +15411,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Switch to Monthly';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price a month';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Replaces the unpaid $yearly yearly charge. Renews monthly. Cancel anytime.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Payment declined. Your plan didn\'t change.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Switching isn\'t available right now. Update your card instead.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'You\'re on monthly';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price paid today. Renews monthly.';
+  }
 }

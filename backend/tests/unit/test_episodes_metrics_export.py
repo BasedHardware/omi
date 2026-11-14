@@ -22,6 +22,16 @@ def test_shared_metrics_export_includes_episode_moment_families():
     assert 'uid=' not in exported
 
 
+def test_compose_mode_metrics_are_exported_without_identity_labels():
+    from utils.episodes.metrics import record_compose_reply
+
+    record_compose_reply('full', 10, 1)
+    exported = metrics_response().body.decode()
+    assert '# HELP omi_episode_compose_input_tokens_total ' in exported
+    assert '# HELP omi_episode_compose_tool_calls ' in exported
+    assert 'uid=' not in exported
+
+
 def test_pending_batch_dwell_counter_is_exported_without_identity_labels():
     from utils.episodes.metrics import record_batch_pending_overdue
 

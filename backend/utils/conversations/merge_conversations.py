@@ -926,9 +926,21 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
+def delete_conversation_with_sync_sources(
+    uid: str,
+    conversation_id: str,
+    *,
+    merged_into: Optional[str] = None,
+    conversation_row: Optional[Dict] = None,
+) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
-    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    # An explicit lake purge may already have removed the transcript object.
+    # Reuse its raw inventory rather than losing donors through decoded reads.
+    row = (
+        conversation_row
+        if conversation_row is not None
+        else conversations_db.get_conversation(uid, conversation_id) or {}
+    )
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments

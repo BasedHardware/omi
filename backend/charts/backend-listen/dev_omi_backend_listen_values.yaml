@@ -56,6 +56,7 @@ podAnnotations:
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels:
   env: dev
+  service_name: backend-listen
   # Reconnect and circuit-breaker aggregates are emitted by backend-listen.
   # Keep those scrape targets in the same development-only evidence plane as
   # the Pusher targets.
@@ -106,6 +107,22 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -122,6 +139,10 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
+  - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
+    value: "false"
+  - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
+    value: "24"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED
@@ -271,6 +292,8 @@ env:
     value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
     value: "true"
+  - name: SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED
+    value: "off"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
   # Keep these aligned with the development GitHub environment variables used
@@ -484,6 +507,8 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED

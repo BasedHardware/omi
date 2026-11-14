@@ -30,7 +30,12 @@ class Metrics:
             return Gauge('omi_record_seal_' + suffix, help_text, labels, registry=self.registry).labels(*values)
 
         self.backlog = gauge('backlog', 'Unsealed completed record_pending rows, including claims and backoff')
-        self.oldest = gauge('oldest_age_seconds', 'Oldest unsealed finish age in the completed sample')
+        self.oldest = Gauge(
+            'omi_record_seal_oldest_age_seconds',
+            'Oldest unsealed finish age in the completed sample',
+            labels,
+            registry=self.registry,
+        ).labels(*values)
         self.invalid_clocks = gauge(
             'invalid_clock_rows', 'Unsealed rows with invalid finish clocks in the completed sample'
         )
