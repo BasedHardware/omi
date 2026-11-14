@@ -11,6 +11,7 @@ module.exports = {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        Authorization: 'Bearer {{bundle.authData.token}}',
       },
       method: 'DELETE',
       removeMissingValuesFrom: { body: false, params: false },
@@ -21,6 +22,7 @@ module.exports = {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        Authorization: 'Bearer {{bundle.authData.token}}',
       },
       method: 'POST',
       params: { uid: '{{bundle.authData.uid}}' },

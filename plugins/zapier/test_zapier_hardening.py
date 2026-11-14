@@ -94,10 +94,18 @@ def _stub_fastapi():
     def Form(default=None, **kwargs):
         return default
 
+    def Depends(dependency=None, **kwargs):
+        return dependency
+
+    def Query(default=None, **kwargs):
+        return default
+
     fa.HTTPException = HTTPException
     fa.APIRouter = APIRouter
     fa.Request = Request
     fa.Form = Form
+    fa.Depends = Depends
+    fa.Query = Query
     sys.modules["fastapi"] = fa
 
     far = types.ModuleType("fastapi.responses")
@@ -158,29 +166,38 @@ def _stub_db_and_models():
     if "models" not in sys.modules:
         models_mod = types.ModuleType("models")
 
-        class Conversation:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
+        try:
+            from pydantic import BaseModel as _PydBaseModel
+            class Conversation(_PydBaseModel):
+                id: str = "conv_test"
+            class ExternalIntegrationCreateConversation(_PydBaseModel):
+                pass
+            class EndpointResponse(_PydBaseModel):
+                message: str = ""
+            class Geolocation(_PydBaseModel):
+                pass
+        except ImportError:
+            class Conversation:
+                def __init__(self, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+            class ExternalIntegrationCreateConversation:
+                def __init__(self, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+                def model_dump(self, mode="json"):
+                    return self.__dict__.copy()
+            class EndpointResponse:
+                def __init__(self, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+            class Geolocation:
+                pass
 
-        class ExternalIntegrationCreateConversation:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
+        from enum import Enum
 
-            def model_dump(self, mode="json"):
-                return self.__dict__.copy()
-
-        class EndpointResponse:
-            def __init__(self, **kwargs):
-                for k, v in kwargs.items():
-                    setattr(self, k, v)
-
-        class ExternalIntegrationConversationSource:
-            pass
-
-        class Geolocation:
-            pass
+        class ExternalIntegrationConversationSource(str, Enum):
+            other = "other"
 
         models_mod.Conversation = Conversation
         models_mod.ExternalIntegrationCreateConversation = ExternalIntegrationCreateConversation
