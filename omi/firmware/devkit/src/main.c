@@ -273,6 +273,12 @@ int main(void)
     set_led_green(true);
     set_led_green(false);
 
+    // Finish the boot chime before advertising allows PCM writes into the
+    // same slab buffer.
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+    play_boot_sound();
+#endif
+
     // Start transport
     int transportErr;
     transportErr = transport_start();
@@ -293,10 +299,6 @@ int main(void)
 
         return transportErr;
     }
-
-#ifdef CONFIG_OMI_ENABLE_SPEAKER
-    play_boot_sound();
-#endif
 
     LOG_PRINTK("\n");
     LOG_INF("Initializing codec...\n");
