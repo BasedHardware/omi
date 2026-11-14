@@ -612,10 +612,15 @@ class ListenPusherSession:
                                 if envelope.start_wall is not None:
                                     envelope.start_wall += shift
                     conversation = envelope.conversation_id
-                    if conversation and conversation != self.last_synced_conversation_id:
+                    if conversation != self.last_synced_conversation_id and (
+                        conversation or self.record_close_supported
+                    ):
                         header = bytearray()
                         header.extend(struct.pack("I", 103))
-                        header.extend(bytes(conversation, "utf-8"))
+                        # Close-v2 may keep a socket alive between recordings.
+                        # Empty 103 restores pusher's existing unlinked custody
+                        # route instead of attributing new input to a closed id.
+                        header.extend(bytes(conversation or '', "utf-8"))
                         await pusher_ws.send(cast(bytes, header))
                         self.last_synced_conversation_id = conversation
                     data = bytearray()

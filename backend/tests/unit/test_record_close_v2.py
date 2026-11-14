@@ -43,6 +43,8 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
     server_input, listen_input = asyncio.Queue(), asyncio.Queue()
     preparing, release_prepare, read_entered, sealed = (asyncio.Event() for _ in range(4))
     release_read = threading.Event()
+    unlinked = asyncio.Event()
+    unlinked_receipts = []
     loop = asyncio.get_running_loop()
     read = pusher.read_pcm
     payloads = []
@@ -72,6 +74,11 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
             pass
 
         async def send_bytes(self, data):
+            if struct.unpack('<I', data[:4])[0] == 203:
+                receipt = json.loads(data[4:])['receipt']
+                if not receipt.get('conversation_id'):
+                    unlinked_receipts.append(receipt)
+                    unlinked.set()
             listen_input.put_nowait(data)
 
         async def receive_bytes(self):
@@ -136,6 +143,17 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
         assert b''.join(payloads) == b'\x01\x00' * 2 + b'\x02\x00' * 2
         assert client.rows[path]['record_audio_closed']
         assert client.rows[job]['available_at'] == 0
+        # The same socket must remain usable for audio between conversations.
+        binding['cid'] = None
+        session.audio_bytes_send(b'\x03\x00', 102)
+        await session._audio_bytes_flush()
+        binding['cid'] = 'next'
+        await session._audio_bytes_flush()  # Flush the unlinked custody window.
+        await asyncio.wait_for(unlinked.wait(), 5)
+        from utils.other.audio_outbox import AudioReceipt
+
+        assert read('owner', AudioReceipt(**unlinked_receipts[-1])) == b'\x03\x00'
+        assert not handler.done() and client.rows[path]['record_audio_closed']
     finally:
         release_prepare.set()
         release_read.set()
