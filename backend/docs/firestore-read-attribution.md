@@ -170,6 +170,43 @@ Which code produced the QUERY reads:
 topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_total{kind="query"}[30m])))
 ```
 
+## Unattributed-reads alert
+
+`omi-firestore-unattributed-reads` in
+`backend/charts/monitoring/alerts/firestore.json` fires when the same-window
+coverage gap is above 3% for 30 minutes and resolves at or below 3%:
+
+```promql
+# A, instrumented reads/s (complete counter, GMP datasource)
+sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)
+# B, billed reads/s (native Cloud Monitoring DELTA published as a gauge)
+avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60
+# C, unattributed share; D fires when C > 0.03
+($B - $A) / $B
+```
+
+Both sides use the same 30m window. `A` is the complete counter on the
+`gmp-cloud-run` datasource (Cloud Run and GKE); the in-cluster Prometheus only
+scrapes GKE, so a ratio computed there is not the fleet ratio. A missing
+instrumented series reads as zero through `or vector(0)` and fires; a missing
+billed series is NoData and is covered by `omi-firestore-metric-absent`.
+
+Measured 2026-11-12T06:51Z on GMP `query_range`, 2026-11-02T06:51Z through
+2026-11-12T06:51Z at 1h steps (241 points): the gap ranged 0.134-0.568 with a
+mean of 0.321. Daily means were 0.274 (11-09), 0.196 (11-10), 0.163 (11-11) and
+0.162 (11-12). No retained hour is at or below 0.03, so the alert is firing on
+the current fleet; the resolve side is proven by fixtures, not by live history.
+The 95% acceptance figure below is historical and is not the current
+measurement.
+
+The switch is the rule's committed `isPaused` flag: `false` (enabled) by
+default, `true` to disable, `false` to re-enable, and the import path enforces
+exact paused parity. The alert-rule selector is membership of the UID in
+`backend/charts/monitoring/live-alert-gate.json` `uids[]`; it is present by
+default and is listed in `PRODUCTION_ONLY_IMPORT_UIDS` because the
+`gmp-cloud-run` datasource exists only in production. Neither switch changes
+runtime read behaviour.
+
 ## Acceptance
 
 For dashboard investigation only, after deploy each of the three type ratios
