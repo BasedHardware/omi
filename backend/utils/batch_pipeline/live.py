@@ -598,6 +598,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             return None
         lease = now + lease_seconds
         latest['available_at'] = lease
+        latest.pop('record_intake_retry_at', None)
         tx.put('jobs', segment, latest)
         return lease
 
@@ -676,6 +677,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             # admission (or another replica's newer lease) is kept.
             current = latest.get('available_at', 0)
             latest['available_at'] = max(0 if current == lease else current, now + delay)
+            if current == lease:
+                # Certify this exact value as a retry, not an active claim.
+                # Claiming changes available_at, so even an older replica that
+                # does not know this marker invalidates it automatically.
+                latest['record_intake_retry_at'] = latest['available_at']
             tx.put('jobs', segment, latest)
             return False, expired
 
