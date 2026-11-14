@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -41,6 +42,19 @@ class _MockListener implements IWalSyncListener {
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) => syncedWals.add(wal);
+}
+
+class _UploadGateSpy implements SyncUploadGate {
+  int calls = 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #upload) {
+      calls++;
+      return Future.value(UploadFilesResult.queued('accepted'));
+    }
+    return super.noSuchMethod(invocation);
+  }
 }
 
 Wal _makeWal({
@@ -123,6 +137,31 @@ void main() {
     SyncRateLimiter.instance.clear();
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
+
+  for (final liveOnly in [false, true]) {
+    test('cancel during queued flush prevents the real ${liveOnly ? 'live' : 'fallback'} phone drain reaching its gate',
+        () async {
+      final gate = _UploadGateSpy();
+      final phone = LocalWalSyncImpl(listener, uploadGate: gate);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final wal = _makeWal(timerStart: now - (liveOnly ? 60 : 86400));
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+      phone.testWals = [wal];
+      final blocked = Completer<void>();
+      final queued = phone.testQueueWalIo(blocked.future);
+      final pass = liveOnly ? phone.syncLiveCaptureOnly() : phone.syncAll();
+      phone.cancelSync(); // The real drain has entered and is waiting on the buffer queue.
+      blocked.complete();
+      await queued;
+      await pass;
+      expect(gate.calls, 0);
+      expect(wal.status, WalStatus.miss);
+      expect(wal.isSyncing, isFalse);
+      expect(await File('${tempDir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
+      await phone.syncAll(); // Only a deliberately new pass may upload again.
+      expect(gate.calls, 1);
+    });
+  }
 
   // -------------------------------------------------------------------------
   // getMissingWals — status filter

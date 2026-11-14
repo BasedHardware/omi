@@ -414,8 +414,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   Future<void> get testWalIoQuiescent => _bufferQueue;
 
+  @visibleForTesting
+  Future<void> testQueueWalIo(Future<void> barrier) => _enqueueBuffer(() => barrier);
+
+  int _syncCancellationEpoch = 0;
+
   @override
   void cancelSync() {
+    _syncCancellationEpoch++;
     _isCancelled = true;
   }
 
@@ -2013,9 +2019,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
     final generation = _sessionGeneration;
-    await _enqueueBuffer(() => _flush(generation));
-    if (!_isCurrent(generation)) return null;
+    final cancellationEpoch = _syncCancellationEpoch;
+    bool passCancelled() => cancellationEpoch != _syncCancellationEpoch;
+    // Start the pass before yielding to queued IO. A cancel during the flush
+    // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
+    await _enqueueBuffer(() => _flush(generation));
+    if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -2074,7 +2084,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _drainGroupBatchCounts.removeWhere((group, _) => (_drainGroupCountedAt[group] ?? 0) < shareWindowStart);
     _drainGroupCountedAt.removeWhere((_, countedAt) => countedAt < shareWindowStart);
     while (true) {
-      if (!_isCurrent(generation)) break;
+      if (!_isCurrent(generation) || passCancelled()) break;
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -2228,6 +2238,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
         if (!await reserveRefusalRetries(batchWals, generation, batchNowSeconds)) return resp;
+        if (!_isCurrent(generation) || passCancelled()) {
+          for (final wal in batchWals) {
+            wal.isSyncing = false;
+          }
+          break;
+        }
         final audioBounds = syncUploadAudioBounds(batchWals);
         final result = await _uploadGate.upload(
           files,
