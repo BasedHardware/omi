@@ -54,3 +54,11 @@ def barrier_retry_delay(age_seconds: float) -> int:
         if age_seconds < limit:
             return delay
     return BARRIER_RETRY_MAX_SECONDS
+
+
+def record_drain_idle_without_progress_enabled() -> bool:
+    """A full page that admitted nothing keeps the idle wait instead of rescanning at once.
+
+    Kill switch: RECORD_DRAIN_IDLE_WITHOUT_PROGRESS=off restores "every full page runs again".
+    """
+    return os.getenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'on').strip().lower() != 'off'

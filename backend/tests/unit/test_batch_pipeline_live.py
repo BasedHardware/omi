@@ -93,6 +93,8 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
     monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
+    # Paging/shuffle test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for segment in ('first', 'second', 'third'):
         store.rows['jobs', segment] = {
@@ -229,6 +231,8 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    # Page-size test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for i in range(count):
         store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
