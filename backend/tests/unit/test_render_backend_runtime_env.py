@@ -1330,14 +1330,18 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2173 / SCA-2222 (2026-11-14): finish backoff is on for prod backend-integration, which runs
-        # the finish sweep, and for prod backend-sync, which can reach the same sweep through its
-        # reconcile and batch metrics routes (review SCA-2270), now that the stamping marker is
-        # complete. No other service or environment declares it (SCA-1993).
+        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
+        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
+        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
+        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
         if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
+        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
+        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
+        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
         expected = {}
         if environment == 'prod':
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
@@ -1419,7 +1423,10 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name
-        epoch = 'c2fs_20261026_r1' if enabled else 'v1'
+        # SCA-1750: prod listen/pusher read the same monthly doc as the Cloud Run billing
+        # gate (allowance watch), so they share its epoch while their levers stay 0.
+        epoch_aligned = enabled or (environment == 'prod' and name in {'gke/backend-listen', 'gke/pusher'})
+        epoch = 'c2fs_20261026_r1' if epoch_aligned else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
         if name.startswith('cloud_run/'):
             rendered = {
@@ -1438,7 +1445,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
-        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
