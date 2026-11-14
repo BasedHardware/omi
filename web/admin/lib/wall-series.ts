@@ -1214,26 +1214,44 @@ export function healthFrames(
     // A fresh meter wins; otherwise show this day's live or settled margin.
     // The separate visible source label names the mode and date. Never skip
     // a missing latest-day book to borrow an older non-null point.
-    variableMargin: variable.map((p, i, all) => ({
-      date: ts(p.date),
-      marginPct:
-        i === all.length - 1 && meterFresh
-          ? round(meter!.variableMarginPct, 1)
-          : round(p.marginPct, 1),
-      // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
-      live: p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
-      costPerMonth: round(p.costPerMonth, 0),
-      mrr: p.mrr == null ? null : round(p.mrr, 0),
-      goalCost: round(p.goalCost, 0),
-      gcpPerMonth: round(p.gcpPerMonth, 0),
-      vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
-      pineconePerMonth: round(p.pineconePerMonth, 0),
-      openaiPerMonth: round(p.openaiPerMonth, 0),
-      sonioxPerMonth: round(p.sonioxPerMonth, 0),
-      modulatePerMonth: round(p.modulatePerMonth, 0),
-      feesPerMonth: round(p.feesPerMonth, 0),
-      missing: p.missing.length ? p.missing.join("+") : null,
-    })),
+    variableMargin: variable
+      .map<Row>((p, i, all) => ({
+        date: ts(p.date),
+        marginPct:
+          i === all.length - 1 && meterFresh
+            ? round(meter!.variableMarginPct, 1)
+            : round(p.marginPct, 1),
+        // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
+        live:
+          p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
+        costPerMonth: round(p.costPerMonth, 0),
+        mrr: p.mrr == null ? null : round(p.mrr, 0),
+        goalCost: round(p.goalCost, 0),
+        gcpPerMonth: round(p.gcpPerMonth, 0),
+        vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+        pineconePerMonth: round(p.pineconePerMonth, 0),
+        openaiPerMonth: round(p.openaiPerMonth, 0),
+        sonioxPerMonth: round(p.sonioxPerMonth, 0),
+        modulatePerMonth: round(p.modulatePerMonth, 0),
+        feesPerMonth: round(p.feesPerMonth, 0),
+        missing: p.missing.length ? p.missing.join("+") : null,
+      }))
+      .concat(
+        // The hourly meter is independent of daily cost coverage. Do not hide
+        // its fresh headline when no complete daily window can be rendered.
+        !variable.length && meterFresh
+          ? [
+              {
+                date: meter!.asOf,
+                marginPct: round(meter!.variableMarginPct, 1),
+                live: 1,
+                costPerMonth: null,
+                mrr: null,
+                goalCost: null,
+              },
+            ]
+          : []
+      ),
     variableMarginSource: [{ text: marginSource }],
     marginLive: liveHead
       ? [

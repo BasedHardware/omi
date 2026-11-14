@@ -1831,6 +1831,49 @@ describe("variable margin frames (David 2026-10-23)", () => {
     );
   });
 
+  it.each([0, 6])(
+    "shows a fresh hourly meter with only %s daily cost rows",
+    async (costDays) => {
+      const s = sources();
+      s.billing = vi.fn(async () => ({
+        ...(await billing()),
+        daily: costDays ? billingDays.slice(-costDays) : [],
+      }));
+      const withoutMeter = await all(null, s);
+      expect(withoutMeter.health.variableMargin).toEqual([]);
+      const asOf = new Date(now.getTime() - 3_600_000).toISOString();
+      s.meter = vi.fn(async () => ({
+        asOf,
+        variableMarginPct: 12.34,
+        basisVersion: null,
+      }));
+      const f = await all(null, s);
+      expect(f.health.variableMargin).toEqual([
+        expect.objectContaining({
+          date: asOf,
+          marginPct: 12.3,
+          live: 1,
+          costPerMonth: null,
+          mrr: null,
+          goalCost: null,
+        }),
+      ]);
+      expect(f.health.variableMarginSource[0].text).toContain("Hourly meter");
+      expect(f.health.marginLive).toEqual([]);
+
+      s.meter = vi.fn(async () => ({
+        asOf: new Date(now.getTime() - 4 * 3_600_000).toISOString(),
+        variableMarginPct: 12.34,
+        basisVersion: null,
+      }));
+      const stale = await all(null, s);
+      expect(stale.health.variableMargin).toEqual([]);
+      expect(stale.health.variableMarginSource[0].text).toBe(
+        "No complete cost window"
+      );
+    }
+  );
+
   it("a fresh meter row wins over a metered live day for the headline", async () => {
     const cutoff = isoDay(shiftDay(end, -2));
     const s = sources();
