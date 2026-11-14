@@ -255,6 +255,8 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
+    'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
+    'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
 
 # Retained application entry-point recipes. Their query bodies now belong to
@@ -3567,6 +3569,25 @@ for entry in (
 ):
     _add(entry)
 
+
+# Account-purge verification: bounded single-field read of one route's operation journal.
+_add(
+    DriverEntry(
+        'database.pinecone_partition_state._uncertain_operation_refs',
+        base={'ref': ref_document('pinecone_partition_routes/route-1'), 'transaction': ref_transaction()},
+        neutrals={'limit': (2, 'uncertain_count + 1 overflow bound; not filter-affecting')},
+    )
+)
+for _name in ('_uncertain_mutations_are_deletes', 'uncertain_mutations_are_deletes'):
+    _add(
+        CoveredByEntry(
+            f'database.pinecone_partition_state.{_name}',
+            covered_by=('database.pinecone_partition_state._uncertain_operation_refs',),
+            reason='transactional wrapper; its only query is _uncertain_operation_refs',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[f'database.pinecone_partition_state.{_name}'],
+        )
+    )
 
 _add(
     DriverEntry(

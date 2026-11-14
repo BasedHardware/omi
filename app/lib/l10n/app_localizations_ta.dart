@@ -15500,6 +15500,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paymentDeclinedTitle => 'உங்கள் கார்டு நிராகரிக்கப்பட்டது';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'கார்டைப் புதுப்பிக்கவும், அல்லது $plan ஐ மாதம் $priceக்கு மீண்டும் பெறவும்';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்';
   }
@@ -15524,4 +15529,31 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'மாதாந்திரத்துக்கு மாறவும்';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, மாதத்துக்கு $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'செலுத்தப்படாத $yearly ஆண்டுக் கட்டணத்துக்குப் பதிலாக. மாதந்தோறும் புதுப்பிக்கப்படும். எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'கட்டணம் நிராகரிக்கப்பட்டது. உங்கள் திட்டம் மாறவில்லை.';
+
+  @override
+  String get monthlySwitchUnavailable => 'இப்போது மாற்ற இயலாது. அதற்குப் பதிலாக கார்டைப் புதுப்பிக்கவும்.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'இன்று $price செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.';
+  }
 }

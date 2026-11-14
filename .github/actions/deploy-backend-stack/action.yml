@@ -967,6 +967,42 @@ runs:
           --max-attempts=5 \
           --min-backoff=5s --max-backoff=60s
 
+    - name: Configure production conversation-erasure Cloud Tasks queue
+      if: ${{ inputs.runtime_env == 'prod' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Conversation batch purges and accepted-delete erasures, kept off the
+        # account-deletion queue (4 dispatches) so account wipes never wait
+        # behind them. 2026-11-14: a 533-conversation cleanup queued ~760 units
+        # there, draining 2-3/min; users' accepted deletes waited up to 40 min.
+        # 20 dispatches is ~5x that drain (~400 units/h arming at the cleanup's
+        # peak). Units serialize per account on its gate and each purge unit is
+        # at most 10 rows per 1.5 s, so the load stays far below Firestore write
+        # limits, and 20 fits one backend-sync instance (concurrency 20) and the
+        # handler's 20-worker erasure pool. Listing must succeed:
+        # permission/transport errors never imply absence.
+        queue=conversation-erasure
+        name="projects/${{ inputs.project_id }}/locations/${{ inputs.region }}/queues/$queue"
+        existing=$(gcloud tasks queues list \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --filter="name=$name" --format='value(name)')
+        operation=create
+        if [[ "$existing" == "$name" || "$existing" == "$queue" ]]; then
+          operation=update
+        elif [[ -n "$existing" ]]; then
+          echo 'Unexpected conversation-erasure queue inventory' >&2
+          exit 1
+        fi
+        gcloud tasks queues "$operation" "$queue" \
+          --location="${{ inputs.region }}" \
+          --project="${{ inputs.project_id }}" \
+          --max-concurrent-dispatches=20 \
+          --max-dispatches-per-second=5 \
+          --max-attempts=5 \
+          --min-backoff=5s --max-backoff=300s
+
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
