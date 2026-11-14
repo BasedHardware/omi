@@ -228,3 +228,10 @@ unchanged for unbound stores. Added restored-admission/epoch cases first failed
 against the inherited legacy callback; the real binding now refuses before any
 object bytes. Original source is rechecked after I/O. No retry/deadline policy
 or original paid admission was weakened or replaced.
+
+Published ordinary results now join actual retained-copy account/conversation
+purge independently of the paid terminal seal. Exact original upload row/hash,
+deadline and generation bind object absence and original artifact-reference
+progress. Production orchestration/runtime selection, nonpublished and other
+upload cohorts, remote C4, cold conversion of session journal and final typed
+PG/journal custody retirement remain gates; readiness=false.

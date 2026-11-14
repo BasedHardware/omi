@@ -249,3 +249,10 @@ unchanged for unbound stores. Added restored-admission/epoch cases first failed
 against the inherited legacy callback; the real binding now refuses before any
 object bytes. Original source is rechecked after I/O. No retry/deadline policy
 or original paid admission was weakened or replaced.
+
+Same first FIX, published-original continuation: 0021 binds the actual original
+result/session custodian into mode-independent account/conversation purge,
+including publication before paid terminal COMMIT. Original-generation absence
+precedes the real reference deleting COMMIT; immutable upload-bound progress
+uses the existing durable cancellation/unknown-COMMIT adapter. No final custody
+release, new review, runtime activation, deadline policy change or savings.

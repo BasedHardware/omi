@@ -162,6 +162,11 @@ class RetainedCopies:
             self.retire_private(
                 uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
             )
+            from database.jobstore.published_copies import PublishedCopies
+
+            PublishedCopies(self).retire(
+                uid, identity, authority, conversation=conversation, fs_generation=fs_generation
+            )
             from database.jobstore.original_copies import OriginalCopies
 
             OriginalCopies(self).retire(

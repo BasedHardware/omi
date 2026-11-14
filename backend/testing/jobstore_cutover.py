@@ -153,6 +153,7 @@ def races(args):
         'tests/integration/test_jobstore_provider_projection.py',
         'tests/integration/test_jobstore_provider_effect.py',
         'tests/integration/test_jobstore_result_sessions.py',
+        'tests/integration/test_jobstore_published_copies.py',
         'tests/integration/test_jobstore_retained_copies.py',
         'tests/integration/test_jobstore_original_copies.py',
         'tests/integration/test_jobstore_original_metadata_crashes.py',

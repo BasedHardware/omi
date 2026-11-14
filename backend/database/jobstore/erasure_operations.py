@@ -39,7 +39,34 @@ class ErasureOperations:
             if not census or census['owner_key'] != owner_key(uid) or census['phase'] != 'private_erased':
                 raise AuthorityRefused('original erase requires durable private retirement')
             source = self.handoff._required_row(conn, identity)
-            if source['owner_key'] != owner_key(uid) or source['completion_hash'] != payload.get('completion_hash'):
+            if source['owner_key'] != owner_key(uid):
+                raise AuthorityRefused('original source ownership changed')
+            if purpose in {'published_object', 'published_reference'}:
+                from database.jobstore.published_copies import payload as upload_payload
+
+                upload = row_dict(
+                    conn,
+                    'SELECT * FROM queue_provider_uploads WHERE namespace=%s AND unit_id=%s',
+                    (self.handoff.ticket.namespace, payload.get('unit_id')),
+                )
+                if (
+                    not upload
+                    or upload['recording_id'] != identity
+                    or upload['owner_key'] != owner_key(uid)
+                    or upload['phase'] != 'published'
+                    or str(upload['admission_id']) != source['admission']['admission_id']
+                    or upload_payload(upload) != payload
+                ):
+                    raise AuthorityRefused('published object outside original upload custody')
+                if (
+                    purpose == 'published_reference'
+                    and not conn.execute(
+                        "SELECT 1 FROM queue_original_erasure_operations WHERE namespace=%s AND recording_id=%s AND purpose='published_object' AND state='committed' AND payload=%s LIMIT 1",
+                        (self.handoff.ticket.namespace, identity, jsonb(payload)),
+                    ).fetchone()
+                ):
+                    raise AuthorityRefused('published original object proof required before reference erasure')
+            elif source['completion_hash'] != payload.get('completion_hash'):
                 raise AuthorityRefused('original completion binding changed')
             uris = sorted(
                 {
@@ -48,7 +75,9 @@ class ErasureOperations:
                     for uri in (unit['source']['audio_uri'], unit['result']['result_uri'])
                 }
             )
-            if purpose == 'object':
+            if purpose in {'published_object', 'published_reference'}:
+                pass
+            elif purpose == 'object':
                 if set(payload) != {'uri', 'completion_hash'} or payload['uri'] not in uris:
                     raise AuthorityRefused('object outside original recording census')
             elif purpose == 'metadata':

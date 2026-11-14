@@ -503,3 +503,10 @@ absence-probe SDK failure as unresolved, including raw deadline and 412 errors.
 A generic per-request error classification cannot settle this whole multi-step
 proof or clear its gate. Only terminal-session plus original-version absence
 returns normally; the registry and last original custodian stay retained.
+
+Published-result custody continuation (0021): the real account/conversation purge
+now joins immutable published upload originals before requiring a terminal unit
+seal. Actual generation-pinned retention delete plus absence, original reference
+FS deletion and durable progress/cancellation receipts cover publication before
+paid terminal COMMIT. Upload/journal/typed custody remains retained; no all-copy,
+remote C4 or final erasure certificate. See d-retained-copy-lifetimes.md.

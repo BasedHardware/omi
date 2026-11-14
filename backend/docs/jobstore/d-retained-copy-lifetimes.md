@@ -325,3 +325,38 @@ absence-probe SDK failure as unresolved, including raw deadline and 412 errors.
 A generic per-request error classification cannot settle this whole multi-step
 proof or clear its gate. Only terminal-session plus original-version absence
 returns normally; the registry and last original custodian stay retained.
+
+## Published originals before paid terminal COMMIT (0021)
+
+The actual account/conversation retained-copy adapter now enumerates immutable
+`queue_provider_uploads` custody independently of the recording terminal seal.
+A successful original result publication can precede a discarded or crashed paid
+terminal COMMIT; the upload row and its exact original deadline remain the source,
+not an inferred result URI from a missing terminal unit. No original manifest is
+rewritten and no unique intake repair context is copied or removed.
+
+`PublishedCopies` verifies the original artifact reference under real hold/unit
+token, namespace epoch and deletion intent (exact advanced F generation for an
+account). It uses the production retention path to delete only the published
+positive original generation, then probes that same generation for absence.
+Any delete/probe error is unknown ConnectionError and pins the actual remote gate.
+No SQL pool slot or owner guard spans storage/FS I/O. A committed immutable
+`published_object` operation receipt is required before reference deletion; its
+own FS COMMIT rechecks authority. `published_reference` progress then commits
+through the existing prepared/committed/cancelled operation barrier and recovery
+route. The operation binds the complete immutable upload fingerprint and URI;
+it never borrows a restored admission or treats source absence as rollback.
+The published lease janitor remains unchanged and never erases a winning COMPLETE.
+
+Upload rows, original deadlines, typed PG source/attempt/effect identities,
+reference census and journal remain retained. These are original-phase receipts,
+not a terminal-session/all-copy certificate or authority for final destructive PG
+cleanup. Nonpublished session custody refuses this phase pending its drain and
+full lifecycle adapter. Unique intake/staging/late audio capabilities, real remote
+C4, new journal-family cold conversion, final journal/custody barriers, production
+account orchestration, paging and scheduling remain gates. Readiness stays false.
+
+One artifact point read per actual verification/deletion transaction attempt is
+a planning bound; the uncontended two-phase path performs three such reads.
+Production remains unselected (0 expected/day, existing sentinel1/day). No new
+TTL, funding or fleet budget policy; retries/redeliveries count separately.
