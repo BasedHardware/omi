@@ -73,7 +73,7 @@ def _empty_storage_proof(transaction: Any, uid: str, cid: str, *, firestore_clie
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
-        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(cid,), snapshots={})
+        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(cid,))
         return not list_audio_chunks(
             uid, cid, max_count=4096, require_archive=True, include_raw=True, source_metadata=True
         )

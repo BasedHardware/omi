@@ -103,7 +103,13 @@ def owner_privacy_read(tx, uid, expected_generation=None):
     generation = assert_batch_write_allowed(
         tx.client, tx.transaction, uid, expected_generation=expected_generation, snapshots=snapshots
     )
-    if not snapshots['user'].get('private_cloud_sync_enabled', True):
+    # A certified memo decision serves no rows; read the one row this caller
+    # needs in the same transaction. The token read that certified the decision
+    # already enrolled the owner's authority in this transaction's conflict set.
+    user = snapshots.get('user')
+    if user is None:
+        user = tx.client.collection('users').document(uid).get(transaction=tx.transaction).to_dict() or {}
+    if not user.get('private_cloud_sync_enabled', True):
         raise BatchPrivacyBlocked('recording_privacy_changed')
     return generation
 

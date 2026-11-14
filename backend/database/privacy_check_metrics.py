@@ -274,7 +274,11 @@ def comparison_labels(live, candidate):
         'true' if any(live.markers[k] != candidate.markers[k] for k in common) else ('false' if common else 'unknown')
     )
     return (
-        candidate.source if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'fresh_read'} else 'unknown',
+        (
+            candidate.source
+            if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'owner_hit', 'fresh_read'}
+            else 'unknown'
+        ),
         age_bucket(candidate.age),
         version_relation(live.token, candidate.token) if observed else 'unknown',
         version_relation(live.generation, candidate.generation) if observed else 'unknown',

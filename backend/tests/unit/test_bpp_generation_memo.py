@@ -131,10 +131,22 @@ def test_actual_sync_durable_status_path_counts_and_identical_results(monkeypatc
     assert results[0] == results[1]
 
 
-@pytest.mark.parametrize('raw', [None, '{}', '{"bpp_generation_memo": 0}'])
+def test_owner_memo_ships_on_so_an_empty_lever_map_is_no_longer_the_off_path(monkeypatch):
+    # Ruling 2026-11-14 (SCA-2190): the owner-level memo is default on behind the
+    # privacy_decision_cache kill switch. The exact off path below therefore needs
+    # bpp_owner_memo set to 0 explicitly; an absent or empty map turns it on.
+    for raw in (None, '{}', '{"bpp_generation_memo": 0}'):
+        if raw is None:
+            monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+        else:
+            monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+        assert levers.lever_percent('bpp_owner_memo') == 100
+        assert levers.lever_enabled('bpp_owner_memo', UID)
+
+
+@pytest.mark.parametrize('raw', ['{"bpp_owner_memo": 0}', '{"bpp_generation_memo": 0, "bpp_owner_memo": 0}'])
 def test_exact_off_path_reads_and_rows_byte_identical(monkeypatch, reads, raw):
-    if raw is not None:
-        monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
     assert 'bpp_generation_memo' in levers.KNOWN_LEVERS
     assert levers.lever_percent('bpp_generation_memo') == 0
     db = database()

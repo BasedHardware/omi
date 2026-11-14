@@ -128,7 +128,10 @@ class ProjectionSession:
         return False
 
     def guard(self, transaction, conversation_ids=()):
-        snapshots: dict[str, Any] = {}
+        # Decision-only: the fence budget counts the distinct ids this prepare
+        # has asked about (plus any refusing id below); the walk's own 256 cap
+        # bounds redirect chains. No full-row export, so a certified memo
+        # decision can serve the check with one live token read.
         try:
             return assert_batch_write_allowed(
                 self.client,
@@ -136,19 +139,19 @@ class ProjectionSession:
                 self.binding.owner_id,
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
-                snapshots=snapshots,
             )
         except BatchPrivacyBlocked as error:
-            if error.conversation_id:
-                # A tombstone refuses before the conversation snapshot exists.
-                snapshots.setdefault('conversations', {})[error.conversation_id] = {}
+            if error.conversation_id and self._privacy_fence_ids is not None:
+                # A tombstone refuses before any row is read; the refusing id
+                # (possibly a redirect survivor) still counts against the budget.
+                self._privacy_fence_ids.add(error.conversation_id)
             raise
         finally:
             # Input/output checks have separate refusal semantics, but share
             # the same distinct-document ceiling during prepare. Later plan
             # validations retain their existing independent walk budgets.
             if self._privacy_fence_ids is not None:
-                self._privacy_fence_ids.update(snapshots.get('conversations', {}))
+                self._privacy_fence_ids.update(conversation_ids)
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
