@@ -113,7 +113,9 @@ def committed_frames(bucket, blob, uid: str, *, deadline=None) -> tuple[list[dic
     return manifest['frames'], rate
 
 
-def unframed_frames(bucket, blob, uid: str, manifest_path: str, *, deadline=None) -> tuple[list[dict], int]:
+def unframed_frames(
+    bucket, blob, uid: str, manifest_path: str, *, deadline=None, metadata=None
+) -> tuple[list[dict], int]:
     """Frame positions for a pack whose writer did not declare a frame schema.
 
     ``commit_capture`` always writes the custody manifest beside the media, but
@@ -122,7 +124,7 @@ def unframed_frames(bucket, blob, uid: str, manifest_path: str, *, deadline=None
     sits on the capture clock, so it is the only truthful source for a gapped
     pack's internal gap positions.
     """
-    metadata = blob.metadata or {}
+    metadata = metadata if metadata is not None else (blob.metadata or {})
     manifest = _manifest(bucket, uid, manifest_path, deadline=deadline, require_frame_schema=False)
     if manifest['media'] != {
         'bucket': bucket.name,
@@ -141,6 +143,25 @@ def media_name(blob_name: str, uid: str) -> str:
     if not blob_name.startswith(prefix):
         raise ValueError('capture pack owner mismatch')
     return blob_name[len(prefix) :].rsplit('/', 1)[0]
+
+
+def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tuple[list[dict], int]:
+    """The writer's own frame positions for one gapped, unframed pack.
+
+    ``commit_capture`` names the manifest directory exactly like the media
+    directory, so one prefix listing maps a pack to its own manifest without a
+    per-pack list. A missing or ambiguous manifest is an error: the pack's
+    internal gaps are unknowable without it.
+    """
+    prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
+    candidates = [
+        candidate
+        for candidate in bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)
+        if (candidate.metadata or {}).get('format') == 'audio-custody-manifest-v1'
+    ]
+    if len(candidates) != 1:
+        raise ValueError('gapped capture has no unique custody manifest')
+    return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline, metadata=metadata)
 
 
 def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[list[dict], int]:

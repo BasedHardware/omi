@@ -221,6 +221,23 @@ def test_retained_zero_sample_frame_is_kept_but_contributes_no_audio(remote, mon
     assert raw_audio_read.read_pack(remote, receipt.path, UID) == decode_packets(packets)
 
 
+def test_retained_proof_reads_a_pack_with_a_zero_sample_frame(remote, monkeypatch, native_opus):
+    wire(remote, monkeypatch)
+    frames = [(1000.0, tone(320, 1)), (1000.02, b''), (1000.04, tone(320, 2))]
+    build_pack(remote, frames)
+    monkeypatch.setattr(repair, 'privacy_read', lambda *args, **kwargs: None)
+    store = SimpleNamespace(run=lambda fn: fn(None))
+    artifacts = SimpleNamespace(key_for_owner=lambda uid: b'x' * 32)
+    # The proof reads through read_reference, not read_pack: the retained
+    # zero-sample packet is not decodable, so the manifest frames must drive it.
+    proof = repair.retained_proof(store, UID, CID, 1, client(remote), artifacts)
+    assert proof['audio_seconds'] == pytest.approx(0.04)
+    # The unit still spans the 20 ms gap between the two captured runs.
+    assert proof['stt_seconds'] == pytest.approx(0.06)
+    assert proof['start'] == pytest.approx(1000.0)
+    assert proof['end'] == pytest.approx(1000.06)
+
+
 def test_kill_switch_restores_the_previous_skip(remote, monkeypatch, native_opus):
     wire(remote, monkeypatch)
     receipt, _, _, packets = build_pack(remote, gapped_frames())

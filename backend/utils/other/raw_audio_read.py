@@ -10,11 +10,12 @@ from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
-from utils.other.raw_audio import decode_capture, decode_capture_frames
+from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
     committed_frames,
     entries,
+    gapped_frames,
     media_name,
     unframed_frames,
     validate_frames,
@@ -67,27 +68,17 @@ def _custody_manifests(bucket, uid: str, conversation_id: str, *, deadline=None,
     without a per-pack list.
     """
     prefix = f'audio-outbox/{uid}/{conversation_id}/'
+    owner_prefix = f'audio-outbox/{uid}/'
     manifests = {}
     for index, blob in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline, timeout), retry=None)):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture manifest index budget exhausted')
         if (blob.metadata or {}).get('format') != 'audio-custody-manifest-v1':
             continue
-        manifests[f'{conversation_id}/{blob.name[len(prefix) :].rsplit("/", 1)[0]}'] = blob
+        # Key by the writer's shared name, exactly as media_name derives it from
+        # the media path, so a single-segment pack name matches too.
+        manifests[blob.name[len(owner_prefix) :].rsplit('/', 1)[0]] = blob
     return manifests
-
-
-def _pack_frames(bucket, blob, uid: str, *, deadline=None):
-    """The writer's own frame positions for one gapped, unframed pack."""
-    prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
-    candidates = [
-        candidate
-        for candidate in bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)
-        if (candidate.metadata or {}).get('format') == 'audio-custody-manifest-v1'
-    ]
-    if len(candidates) != 1:
-        raise ValueError('gapped capture has no unique custody manifest')
-    return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline)
 
 
 def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
@@ -256,7 +247,7 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> b
     elif _gapped_unframed(metadata) and raw_live_gapped_packs_enabled():
         # A gapped pack's decoded length is the sum of its recorded frames, not
         # its wall span. The manifest is the only truthful source for both.
-        frames, rate = _pack_frames(bucket, blob, uid, deadline=deadline)
+        frames, rate = gapped_frames(bucket, blob, uid, deadline=deadline)
         expected = resampled_samples(sum(int(frame['samples']) for frame in frames), rate, sample_rate) * 2
     else:
         expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
@@ -269,7 +260,10 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int) -> b
     if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
         raise ChecksumMismatch('capture checksum mismatch')
     try:
-        if frames is not None and metadata.get('frame_schema') != FRAME_SCHEMA:
+        if frames is not None and metadata.get('frame_schema') != FRAME_SCHEMA and metadata.get('format') == WAL_FORMAT:
+            # Only the omi-wal container carries per-packet byte ranges. A
+            # gapped flac/pcm16 pack encodes the captured PCM contiguously, so
+            # the ordinary decoder already returns exactly the recorded samples.
             pcm = decode_capture_frames(raw, metadata, frames, sample_rate)
         else:
             pcm = decode_capture(raw, metadata, sample_rate)

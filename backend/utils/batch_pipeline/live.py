@@ -252,6 +252,9 @@ def retained_record_units(
             pcm = pcm[source_skip * 2 : (source_skip + count) * 2]
             if len(pcm) != count * 2:
                 raise ValueError('raw fragment exceeds its source pack')
+            # The next overlap compares against this fragment's tail, not the
+            # whole pack the fragment was selected from.
+            comparison_pcm = pcm
         capture = float(chunk['timestamp'])
         if capture_origin is None:
             capture_origin = capture
