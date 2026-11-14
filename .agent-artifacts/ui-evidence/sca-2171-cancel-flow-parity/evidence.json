@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-plans-confirm-before-desktop.png",
+      "platform": "web",
+      "description": "Before: the web PlansSheet cancel path is a plain confirm dialog with no reason and no offer (desktop width).",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-plans-confirm-before-mobile.png",
+      "platform": "web",
+      "description": "Before: the same plain confirm dialog at 390px width.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "003-web-plans-entry-before-desktop.png",
+      "platform": "web",
+      "description": "Before: Cancel Subscription in the PlansSheet opens the plain confirm; entry point label and position unchanged.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "004-web-plans-entry-after-desktop.png",
+      "platform": "web",
+      "description": "After: the same Cancel Subscription button opens the reason-first flow (flag on).",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "005-web-cancel-reason-desktop.png",
+      "platform": "web",
+      "description": "After: web reason step, seven mobile reasons, Continue disabled until one is chosen.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "006-web-cancel-feedback-desktop.png",
+      "platform": "web",
+      "description": "After: web feedback step for too_expensive with the mobile title, subtitle and 300-character field.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "007-web-cancel-offer-desktop.png",
+      "platform": "web",
+      "description": "After: web consequences step with the existing 50%-off-3-months stay offer and the destructive confirm.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "008-web-cancel-done-desktop.png",
+      "platform": "web",
+      "description": "After: web success state after the reason-carrying DELETE succeeds.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "009-web-cancel-no-offer-desktop.png",
+      "platform": "web",
+      "description": "After: web offer-ineligible path, Keep Subscription primary and Cancel Subscription still reachable.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "010-web-cancel-reason-mobile.png",
+      "platform": "web",
+      "description": "After: web reason step at 390px width.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "011-web-cancel-offer-mobile.png",
+      "platform": "web",
+      "description": "After: web offer step at 390px width.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "012-desktop-macos-manage-only-before.png",
+      "platform": "desktop-macos",
+      "description": "Before: the macOS current-plan card exposes Manage only; cancellation is the Stripe portal. Composed from the shipped card controls.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-desktop-macos-cancel-entry-after.png",
+      "platform": "desktop-macos",
+      "description": "After: the new Cancel Subscription row under the plan card, one click from the plan. Composed from the shipped card controls.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-desktop-macos-cancel-reason.png",
+      "platform": "desktop-macos",
+      "description": "After: macOS reason step rendered from the shipped SwiftUI sheet.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-desktop-macos-cancel-feedback.png",
+      "platform": "desktop-macos",
+      "description": "After: macOS feedback step for too_expensive.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-desktop-macos-cancel-offer.png",
+      "platform": "desktop-macos",
+      "description": "After: macOS consequences step with the existing stay offer and the destructive confirm.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-desktop-macos-cancel-no-offer.png",
+      "platform": "desktop-macos",
+      "description": "After: macOS offer-ineligible path, Keep Subscription primary and Cancel Subscription still reachable.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-desktop-macos-cancel-done.png",
+      "platform": "desktop-macos",
+      "description": "After: macOS success state after the reason-carrying DELETE succeeds.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

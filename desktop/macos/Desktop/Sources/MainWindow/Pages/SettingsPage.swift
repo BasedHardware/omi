@@ -330,6 +330,7 @@ struct SettingsContentView: View {
   @State var isLoadingOverage: Bool = false
   @State var planUsageDetailsRequestID: Int = 0
   @State var showOverageExplainer: Bool = false
+  @State var showCancelSubscriptionFlow: Bool = false
   @State var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State var activeCheckoutPriceId: String?
   @State var selectedPlanIdForCheckout: String?
