@@ -14,7 +14,7 @@ from database.batch_pipeline_leader import LeaseLost
 from tests.integration.test_batch_upload_coalescing_firestore import runtime, upload_args
 from tests.unit.test_batch_pipeline_leader import Clock
 from utils.batch_pipeline import upload_coalescing, intake, artifact_policy
-from utils.batch_pipeline.leader import LeaderLease
+from utils.batch_pipeline.leader import LEASE_EVENTS, LeaderLease
 
 pytestmark = pytest.mark.integration
 
@@ -77,6 +77,16 @@ async def test_35_contenders_one_scanner_and_fixed_operation_budget(runtime, mon
     record_property('steady_attempt_operations', json.dumps(dict(counts), sort_keys=True))
     record_property('contenders', 35)
     record_property('successful_empty_scans', 1)
+    # Renewal is the steady-state write that must not move the storm to leases.
+    errors = LEASE_EVENTS.labels(role=UPLOAD_COALESCING_SCAN, outcome='error')._value.get()
+    clock.now += 4
+    counts.clear()
+    with ThreadPoolExecutor(max_workers=35) as pool:
+        renewed = list(pool.map(lambda candidate: candidate.acquire(), candidates))
+    assert sum(renewed) == 1 and candidates[renewed.index(True)] is elected
+    assert LEASE_EVENTS.labels(role=UPLOAD_COALESCING_SCAN, outcome='error')._value.get() == errors
+    assert store.run(lambda tx: tx.get('leases', UPLOAD_COALESCING_SCAN))['expires_at'] == clock.now + 6
+    record_property('renewal_with_35_contenders', 'PASS')
     # Death/takeover: only the replacement can advance the cursor or heartbeat.
     stale = elected.guard()
     clock.now += 7
