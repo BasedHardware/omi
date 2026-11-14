@@ -497,8 +497,6 @@ _add(
     )
 )
 
-_add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
-
 _add(
     DriverEntry(
         'database.action_item_sync.get_action_items_sync_page',
