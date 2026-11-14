@@ -178,7 +178,7 @@ def test_a_lapse_between_pieces_stops_the_next_provider_request(prod_scope, monk
     """A long hold dispatches several pieces; each new request rereads the entitlement."""
     paid = iter([True, False])
     monkeypatch.setattr(funded_processing, 'paid_owner', lambda uid: next(paid))
-    monkeypatch.setattr(cap_hold_recovery, 'sync_allowed', lambda uid, lane: True)
+    monkeypatch.setattr(cap_hold_recovery, 'sync_allowed', lambda uid, lane, backfill=False: True)
     monkeypatch.setattr(cap_hold_recovery, 'get_hard_restriction_status', lambda uid: (False, None))
     monkeypatch.setattr(cap_hold_recovery, 'is_daily_audio_ceiling_exceeded', lambda uid: False)
     monkeypatch.setattr(cap_hold_recovery, 'enabled', lambda uid, lane: True)
