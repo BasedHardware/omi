@@ -89,6 +89,7 @@ def allowance_decision_reason(allowance) -> DispatchReason:
         else {
             'plan_allowance_exhausted': DispatchReason.ALLOWANCE_EXHAUSTED,
             'usage_budget_exhausted': DispatchReason.BUDGET_EXHAUSTED,
+            'unlimited_v2_backfill_day_tx_hours_cap': DispatchReason.ALLOWANCE_EXHAUSTED,
             'allowance_unavailable': DispatchReason.ALLOWANCE_UNAVAILABLE,
             'usage_invalid': DispatchReason.ALLOWANCE_UNAVAILABLE,
         }.get(allowance.reason, DispatchReason.ACCESS_DENIED)

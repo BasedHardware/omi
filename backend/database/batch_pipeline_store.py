@@ -27,6 +27,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -67,6 +68,7 @@ class Transaction(Protocol):
 
 class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def projection_finish_backfill_complete(self) -> bool: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -435,6 +437,9 @@ class FirestoreStore:
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_complete(self.client, self.namespace)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
