@@ -23,6 +23,7 @@ FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
 @pytest.fixture
 def anchors(monkeypatch):
     store = StrictFirestore()
+    monkeypatch.setattr(receipt_clock, 'time', lambda: RECEIVED)
 
     def transactional(fn):
         def commit(tx):
@@ -163,3 +164,15 @@ def test_trimmed_collision_upload_keeps_original_run_and_full_decode_anchor(anch
     [older] = units(tmp_path / 'older', [FUTURE - 10], device='phone', run='one')
     assert older.stored_capture_at == RECEIVED - 12
     assert anchors.rows == before and len(before) == 1
+
+
+def test_pending_job_with_frozen_receipt_can_drain_when_server_time_catches_up(anchors, tmp_path, monkeypatch):
+    units(tmp_path / 'first', [FUTURE])
+    before = deepcopy(anchors.rows)
+    with pytest.raises(HTTPException, match='capture_clock_anchor_pending'):
+        units(tmp_path / 'pending', [FUTURE + 1000], received=RECEIVED + 1)
+    monkeypatch.setattr(receipt_clock, 'time', lambda: RECEIVED + 1001)
+    [unit] = units(tmp_path / 'retry', [FUTURE + 1000], received=RECEIVED + 1)
+    assert unit.stored_capture_at == RECEIVED + 999
+    assert unit.stored_capture_at + unit.duration_seconds <= receipt_clock.time()
+    assert anchors.rows == before

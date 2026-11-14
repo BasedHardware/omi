@@ -1,12 +1,13 @@
 """Cross-request placement of admitted untrusted audio without changing identity.
 
 A frozen affine offset retains the device clock's order and gaps. It never
-slides after a later request; an interval ahead of its receipt waits instead.
+slides after a later request; an interval ahead of trusted server time waits.
 """
 
 import hashlib
 import json
 import math
+from time import time
 
 from fastapi import HTTPException
 
@@ -52,10 +53,13 @@ def receipt_clock_offsets(
         scope = clock_scope((source_paths or {}).get(key, key), origin, device_id)
         groups.setdefault(scope, []).append((key, start, duration))
     offsets = {}
+    # Receipt creates the immutable anchor. Processing time only releases a
+    # deferred interval when due; replaying its frozen receipt must not wedge it.
+    trusted_now = max(received_at, time())
     for scope, members in groups.items():
         raw_end = max(start + duration for _, start, duration in members)
         offset = frozen_offset(uid, scope, raw_end, received_at)
-        if raw_end - offset > received_at + 0.000001 or min(start - offset for _, start, _ in members) < 0:
+        if raw_end - offset > trusted_now + 0.000001 or min(start - offset for _, start, _ in members) < 0:
             # Re-clamping one request would reverse/overlap earlier intervals.
             # Keep all custody and retry when the immutable mapping is due.
             raise HTTPException(status_code=503, detail='capture_clock_anchor_pending')

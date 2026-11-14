@@ -32,10 +32,12 @@ batch's end on trusted receipt, preserves device-clock differences and gaps
 across requests, and preserves nonoverlap of the device's source intervals in
 any arrival order. VAD/coverage derivatives inherit the original file's scope
 and offset; a trim cannot choose a new anchor. The anchor has no TTL and later
-requests never rewrite it. A mapped span ahead of its own receipt, or before
-epoch zero, waits with audio retained (`capture_clock_anchor_pending`), rather
+requests never rewrite it. A mapped span ahead of trusted server processing
+time, or before epoch zero, waits with audio retained (`capture_clock_anchor_pending`), rather
 than re-clamping or sliding earlier intervals. A discontinuous clock needs a
-new explicit run nonce. Offset storage failure likewise fails closed.
+new explicit run nonce. Processing time may release an interval when due; it
+never changes its offset, including on a retry with the original frozen receipt.
+Offset storage failure likewise fails closed.
 
 Future uploads without a stable client device return retryable 503
 `capture_clock_identity_required`; an account-wide default would mix devices.
