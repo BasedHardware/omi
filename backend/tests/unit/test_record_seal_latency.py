@@ -222,3 +222,35 @@ async def test_seal_wake_wins_over_inflight_barrier_refusal(monkeypatch, wake, e
     await live.drain_recordings(store)
     assert store.rows['jobs', 'record']['available_at'] == (wake if enabled else NOW + 900)
     assert store.rows['jobs', 'record']['state'] == 'record_pending'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fresh_repair,dead_letter', [(False, False), (False, True), (True, False), (True, True)])
+async def test_merge_preserves_claim_clock_and_retry_marker_contract(monkeypatch, fresh_repair, dead_letter):
+    monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', str(fresh_repair).lower())
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', str(dead_letter).lower())
+    monkeypatch.setenv('RECORD_DRAIN_BARRIER_BACKOFF', 'off')
+    monkeypatch.setattr(live.time, 'time', lambda: NOW)
+    store = MemoryStore()
+    store.rows['jobs', 'record'] = {
+        'owner_id': 'synthetic-owner',
+        'segment_id': 'record',
+        'state': 'record_pending',
+        'available_at': 0,
+        'record_intake_retry_at': 0,
+        'enqueued_at': NOW - 700,
+    }
+
+    async def barrier_refusal(store, pending):
+        claimed = store.rows['jobs', 'record']
+        assert claimed['record_intake_claimed_at'] == NOW
+        assert 'record_intake_retry_at' not in claimed
+        raise ValueError(live.BARRIER_NOT_CLOSED)
+
+    monkeypatch.setattr(live, 'admit_recording', barrier_refusal)
+    await live.drain_recordings(store)
+    row = store.rows['jobs', 'record']
+    assert row['available_at'] == NOW + 60
+    assert ('record_intake_retry_at' in row) is (fresh_repair and dead_letter)
+    if fresh_repair and dead_letter:
+        assert row['record_intake_retry_at'] == row['available_at']

@@ -12,6 +12,7 @@ import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import '../../support/on_device_fakes.dart';
@@ -195,6 +196,81 @@ void main() {
       [1],
       [0]
     ]);
+  });
+
+  test('speech is reported with its capture time, and the two-second seal does not un-report it', () async {
+    final heard = <(String?, DateTime)>[];
+    lane.onSpeech = (recording, at) => heard.add((recording, at));
+    lane.authorize(true);
+    await lane.pendingInitialization;
+    vad.value = 0.9;
+    final spoke = clock;
+    expect(lane.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    vad.value = 0;
+    clock = clock.add(const Duration(seconds: 3));
+    expect(lane.route([2], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    expect(heard, [('rec', spoke)]);
+  });
+
+  test('an end report observes unregistered audio and never seals or moves a chunk boundary', () async {
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+      post: (signal, {required pendingWals, required sentAt}) async {
+        sent.add(pendingWals);
+        return true;
+      },
+      // The production count: audio this buffer has not yet registered as a file.
+      pendingWals: (signal) => buffer
+          .unregisteredStarts(signal.recordingSessionId)
+          .where((start) => start <= signal.decidedAt.millisecondsSinceEpoch ~/ 1000)
+          .length,
+      disabled: () async => false,
+    );
+    lane.authorize(true);
+    await lane.pendingInitialization;
+    vad.value = 0.9; // speech throughout, so the VAD's own 2 s silence seal never fires
+    expect(lane.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    expect(buffer.unregisteredStarts('rec'), hasLength(1));
+    expect(buffer.unregisteredStarts('other'), isEmpty);
+
+    // The end is reported while the final chunk is still open.
+    final end = CaptureEndSignal(
+        recordingSessionId: 'rec', type: CaptureEndType.userInitiated, lastSpeechAt: clock, decidedAt: clock);
+    await reporter.report(end);
+    expect(sent, [1], reason: 'the open chunk is pending; the marker cannot say zero');
+    expect(published, isEmpty, reason: 'reporting an end sealed nothing');
+
+    // Capture goes on untouched: the next frame lands in the same chunk.
+    expect(lane.route([2], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1], reason: 'still open, still pending, nothing resent');
+    expect(published, isEmpty);
+
+    // The capture lifecycle seals; only then does the audio become a file.
+    buffer.seal();
+    await buffer.pending;
+    expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
+      [1],
+      [2]
+    ]);
+    expect(buffer.unregisteredStarts('rec'), isEmpty);
+    await reporter.uploadAccepted('rec');
+    expect(sent, [1, 0], reason: 'zero only after the final audio is registered and accepted');
+  });
+
+  test('a chunk whose publish fails stays counted as unregistered', () async {
+    final failing =
+        MobileBatchBuffer(directory: directory, publish: (wal) async => throw StateError('index unavailable'));
+    await failing.initialize();
+    expect(failing.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'rec'), true);
+    failing.seal();
+    await failing.pending;
+    expect(failing.failed, isTrue);
+    expect(failing.unregisteredStarts('rec'), hasLength(1), reason: 'its audio is in the journal, not the file index');
   });
 
   test('bounded capacity preserves backlog and refuses new batch admission', () async {

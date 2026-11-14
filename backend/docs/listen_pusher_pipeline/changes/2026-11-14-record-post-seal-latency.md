@@ -97,7 +97,8 @@ retries within those runs retain existing budgets; this change does not claim
 an absolute cap on all paid model calls for a recording.
 
 All four independent controls have rendered true/false bindings on both dev
-and prod CPU serving hosts and the dedicated worker chart. The helper flag
+and prod CPU serving hosts and the dedicated worker chart. Fresh stamping is
+explicitly staged OFF in both deployed environments; the other three cuts stay ON. The helper flag
 budget adds four owned registry exceptions reviewed by 2026-12-14, leaving the
 seeded budget at 161. The worker must include the unconditional sibling guard
 before the fresh-classification change activates on CPU hosts; no GPU image
@@ -137,3 +138,85 @@ remain on the existing finish-discovery page. A restart continues with unprepare
 outputs, never creating another version for prepared outputs. This keeps the
 128-sibling completion and notes writes within Firestore's commit ceiling.
 Single-output captures add no checkpoint write or additional read.
+
+
+## Integration and staged enablement (2026-11-15)
+
+Integration source is `lane/q12-integration` at `d0d81aba1875`, containing main
+`8614ee4cad33`. The pending-job claim clears `record_intake_retry_at` and writes
+the claim clock together. Deferral preserves a concurrent due-now seal wake;
+otherwise its existing lease can become a certified retry only when both
+`RECORD_SEAL_REPAIR_FRESH_ENABLED` and `BATCH_HELD_DEAD_LETTER_ENABLED` are on.
+
+`RECORD_FRESH_MERGE_ENABLED=false` is explicit in dev/prod runtime overlays
+for Cloud Run backend, backend-integration, backend-sync, backend-sync-backfill,
+and GKE backend-listen, and in worker defaults plus both stage values files.
+The code default remains on. This is staged enablement: the GPU worker image
+will not roll tonight, so no newly broadened fresh class may reach its old
+merge writer. The union flag inventory is 290 declarations with the seeded
+budget unchanged at 161 and four separately owned helper-backed exceptions;
+no budget increase or combined rollback control is needed.
+
+There are two live merge/commit implementations of the same source:
+
+- `main.py:247` starts serving on all five CPU hosts. `Serving` constructs
+  `OrderedMerge` and `Projector` (`utils/batch_pipeline/serving.py:91`, `:412`).
+  These services currently consume `gcr.io/<compute-project>/backend`, built
+  from `backend/Dockerfile`; role-specific image declarations are not proof
+  that those separate role images serve traffic.
+- `diarizer/batch_pipeline_runtime.py:259` builds `Pump` with a direct
+  `Scheduler` and no projection callback. `pump.py:109` constructs its own
+  `OrderedMerge`, committing directly to Firestore. Its image is
+  `gcr.io/<compute-project>/batch-pipeline-worker`, built from
+  `backend/diarizer/Dockerfile.batch-pipeline`; all L4/T4/Spot/borrow variants
+  and every supervised child process share that image.
+
+Cut 2 (complete-record notes dispatch) and cut 3 (bounded projection follow-up
+wake) run only through CPU `Projector`/`ProjectionStore`/owner drains. The
+dedicated GPU pump has neither a projector nor an `on_committed` callback.
+They remain enabled in CPU configuration, as does cut 1 (intake due-now guard);
+unused worker bindings are harmless and retained for uniform rollback. Long
+records outside the existing unit-based 600-second fresh class do not gain
+cut 4 tonight. Notes eager eligibility still requires the existing fresh class.
+
+Before any later enablement, qualify a worker image built from a commit
+containing `_record_sibling_pending` and its common commit-path call, and run
+`test_record_seal_latency.py` and `test_record_complete_notes.py` against that
+source/image. Read back build provenance/source SHA for each immutable digest.
+Then list every running worker pod (including fallback/Spot/borrow variants),
+its declared image AND `status.containerStatuses[].imageID`, and exported
+`BATCH_PIPELINE_WORKER_RELEASE`; all must resolve to the qualified digest/source
+with the guard. Do the corresponding readback for every traffic-receiving
+Cloud Run revision (traffic percentages, revision image and
+`OMI_BACKEND_RELEASE_SHA`) and every backend-listen pod. A service spec or the
+newest revision alone is insufficient. Keep stamping false while any old
+merge writer remains; chart rendering here is not that runtime proof.
+
+Only after that readback, flip `RECORD_FRESH_MERGE_ENABLED` to `'true'` in
+both runtime overlays (all five CPU hosts per stage), both backend-listen env
+lists, and `worker.RECORD_FRESH_MERGE_ENABLED: true` in the worker defaults and
+both stage values files. Regenerate `runtime_env.yaml`, deploy the admitted
+CPU/worker configuration, and read back the actual revision/pod env values.
+Rollback is the same values to false; already stamped jobs retain their class,
+so the sibling guard must remain deployed when disabling.
+
+### #25311 clocks
+
+#25311 (`4566cfb42aaf`) is the client half only. Its payload sends
+`last_speech_at`, `end_decided_at`, `sent_at`, and `pending_wals` to
+`/v2/sync-capture-end` (`app/lib/backend/http/api/capture_end.dart:25-34`).
+The reporter is observational and never seals or uploads
+(`app/lib/services/capture/capture_end.dart:111-117`). At this integration
+head there is no server `/v2/sync-capture-end` route or watermark reader; the
+server half #25309 is not present. It therefore changes none of this lane's
+`finished_at`, recording recency, ledger `end_at`, or `home_ready_at` clocks.
+Admission reuses the existing conversation `finished_at` as
+`job.record_finished_at` (`database/batch_pipeline_intake.py:193`) so no
+parallel end timestamp is introduced. `record_sealed_at` measures the actual
+server barrier closure, not the client end decision. The existing ledger
+`home_ready_at` defaults to the NOTED transition time
+(`database/pipeline_ledger.py:246`); it is reused for that availability clock.
+The Home histogram uses existing `notes_written_at` and observes the first
+READY read per process/revision, a different event that includes request idle
+time and excludes client rendering. No new Firestore read or document write
+is added for these clocks.

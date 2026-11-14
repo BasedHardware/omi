@@ -465,3 +465,72 @@ def test_moving_retry_wake_cannot_extend_stock_lease_in_plan_or_apply(source, mo
     assert result['entries'][0]['disposition'] == 'eligible'
     source[1].rows[JOB_PATH]['available_at'] = 20000
     assert repair.apply_seals(source[0], result, result['plan_sha256']) == {'sealed': 1}
+
+
+@pytest.mark.parametrize(
+    'age,enabled,wake', [(90, True, True), (7201, True, False), (-1, True, False), (90, False, False)]
+)
+def test_only_fresh_proven_seals_wake_admission_ahead_of_retry_backlog(source, monkeypatch, age, enabled, wake):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=10000 - age, available_at=10900, record_intake_retry_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    if not enabled:
+        monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'false')
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[JOB_PATH]['available_at'] == (0 if wake else 10900)
+    assert client.rows[JOB_PATH]['state'] == 'record_pending'
+
+
+@pytest.mark.parametrize('claim_between_plan_and_commit', [False, True])
+def test_seal_preserves_a_live_claim_including_claims_acquired_after_planning(
+    source, monkeypatch, claim_between_plan_and_commit
+):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=10900, record_intake_retry_at=10900)
+    if not claim_between_plan_and_commit:
+        client.rows[JOB_PATH]['available_at'] = 11000
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    # Claiming (including by an older binary) changes available_at but does
+    # not certify that new value as a retry. This races the planning snapshot.
+    client.rows[JOB_PATH]['available_at'] = 11000
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[JOB_PATH]['available_at'] == 11000
+
+
+def test_plain_deferred_retry_added_after_planning_is_still_woken(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=0)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    client.rows[JOB_PATH].update(available_at=10900, record_intake_retry_at=10900)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[JOB_PATH]['available_at'] == 0
+    assert client.rows[JOB_PATH]['record_intake_retry_at'] is None
+
+
+def test_unmarked_future_wake_is_preserved_during_a_rolling_upgrade(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[JOB_PATH]['available_at'] == 10900
+
+
+def test_fresh_wake_never_runs_when_seal_privacy_recheck_refuses(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+
+    def revoked(*args, **kwargs):
+        raise BatchPrivacyBlocked('account_deleted')
+
+    monkeypatch.setattr(repair, 'assert_batch_write_allowed', revoked)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'privacy_refused': 1}
+    assert not client.rows[PATH].get('record_audio_closed')
+    assert client.rows[JOB_PATH]['available_at'] == 10900

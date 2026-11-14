@@ -559,6 +559,7 @@ async def test_producer_pending_legacy_close_stops_at_existing_retry_budget_with
 
 
 async def test_producer_pending_durable_close_preserves_existing_capped_backoff(records, monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED', 'false')
     clock = [100.0]
     monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: high)
@@ -572,6 +573,49 @@ async def test_producer_pending_durable_close_preserves_existing_capped_backoff(
         clock[0] = barrier.close_retry_at['record']
     assert records.rows[PATH]['record_upload_sessions'] == {'other': True}
     assert not records.rows[PATH].get('record_audio_closed')
+
+
+async def test_producer_pending_releases_retained_capacity_without_sealing_other_producer(records, monkeypatch):
+    from utils import pusher_record_finish as finish_module
+
+    monkeypatch.delenv('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED', raising=False)
+    monkeypatch.setattr(finish_module, 'MAX_CLOSED_RECORD_DRAINS', 1)
+    monkeypatch.setattr(finish_module, '_closed_record_drains', set())
+    clock = [100.0]
+    monkeypatch.setattr(barrier_module, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(barrier_module.random, 'uniform', lambda low, high: high)
+    barrier = PusherRecordBarrier('uid-at')
+    barrier.keep_close_pending = True
+    await barrier.begin_recording('record')
+    set_record_upload_pending('uid-at', 'record', 'other', True, firestore_client=records)
+    start = asyncio.Event()
+    release_fresh = asyncio.Event()
+
+    async def old_drain():
+        await start.wait()
+        for _ in range(barrier_module.PRODUCER_PENDING_RETRY_BUDGET):
+            if await barrier.finish_recording('record'):
+                return
+            clock[0] = barrier.close_retry_at['record']
+        pytest.fail('seal-only retries retained the old drain indefinitely')
+
+    old = asyncio.create_task(old_drain())
+    fresh = asyncio.create_task(release_fresh.wait())
+    try:
+        assert finish_module.retain_closed_record_drain(old)
+        assert not finish_module.retain_closed_record_drain(fresh)
+        start.set()
+        await asyncio.wait_for(old, 5)
+        await asyncio.sleep(0)  # Run the retained-owner completion callbacks.
+        assert finish_module.retain_closed_record_drain(fresh)
+        assert records.rows[PATH]['record_upload_sessions'] == {'other': True}
+        assert records.rows[PATH]['record_audio_closed'] is False
+        assert not barrier.upload_sessions and not barrier.pending_clears
+        assert not barrier.close_failures and not barrier.close_retry_at and not barrier.producer_pending_attempts
+    finally:
+        start.set()
+        release_fresh.set()
+        await asyncio.gather(old, fresh, return_exceptions=True)
 
 
 def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, monkeypatch):

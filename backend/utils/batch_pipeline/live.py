@@ -56,6 +56,7 @@ from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
+from config.record_seal_repair import fresh_enabled as fresh_seal_repair_enabled
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -600,6 +601,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
         lease = now + lease_seconds
         latest['available_at'] = lease
         latest['record_intake_claimed_at'] = now
+        latest.pop('record_intake_retry_at', None)
         tx.put('jobs', segment, latest)
         return lease
 
@@ -682,6 +684,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
                 # Its wake wins over this stale attempt's 60/900/3600s defer.
                 return False, expired
             latest['available_at'] = max(0 if current == lease else current, now + delay)
+            if current == lease and fresh_seal_repair_enabled() and batch_held_dead_letter_enabled():
+                # Certify this exact value as a retry, not an active claim.
+                # Claiming changes available_at, so even an older replica that
+                # does not know this marker invalidates it automatically.
+                latest['record_intake_retry_at'] = latest['available_at']
             tx.put('jobs', segment, latest)
             return False, expired
 

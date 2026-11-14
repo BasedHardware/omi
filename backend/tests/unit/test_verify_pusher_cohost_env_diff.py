@@ -395,3 +395,17 @@ def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkey
         gate.LISTEN_ONLY_ALLOWED['prod'] - {'SERVER_BATCH_ONLY_WEB_PERCENT'},
     )
     assert any('SERVER_BATCH_ONLY_WEB_PERCENT' in error for error in gate.validate_preflight(REPO_ROOT))
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'chart,key',
+    [
+        ('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+        ('backend-listen', 'RECORD_SEAL_REPAIR_FRESH_ENABLED'),
+    ],
+)
+def test_quality_switch_binding_cannot_disappear_from_its_owning_cohost(gate, chart_fixture, environment, chart, key):
+    values = chart_fixture / 'backend/charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    replace_once(values, f'  - name: {key}\n    value: "true"\n', '')
+    assert any(key in error and 'no longer' in error for error in gate.validate_preflight(chart_fixture))

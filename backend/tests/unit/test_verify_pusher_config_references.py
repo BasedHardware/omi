@@ -196,6 +196,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SYNC_RECORD_COVERAGE_WAIT_MEMO": "true",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
+        "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",
+        "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
+        "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
@@ -526,4 +529,6 @@ def test_post_seal_controls_are_listen_only_rendered_bindings(environment, prefl
     pusher = yaml.safe_load((root / f'backend/charts/pusher/{environment}_omi_pusher_values.yaml').read_text())
     assert set(flags).isdisjoint(entry['name'] for entry in pusher['env'])
     assert set(flags).isdisjoint(preflight.literal_pusher_values(preflight.rendered_pusher_deployment(environment)))
-    assert {key: listen[key] for key in flags} == dict.fromkeys(flags, 'true')
+    expected = dict.fromkeys(flags, 'true')
+    expected['RECORD_FRESH_MERGE_ENABLED'] = 'false'
+    assert {key: listen[key] for key in flags} == expected

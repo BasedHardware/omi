@@ -60,7 +60,7 @@ borrowedNodePools:
   priority: -1
 worker:
   # Post-seal rollback controls, shared with the CPU serving hosts.
-  RECORD_FRESH_MERGE_ENABLED: true
+  RECORD_FRESH_MERGE_ENABLED: false
   RECORD_NOTES_EAGER_ENABLED: true
   RECORD_FOLLOWUP_WAKE_ENABLED: true
   RECORD_SEAL_WAKE_PRESERVED_ENABLED: true
@@ -239,6 +239,11 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Serving hosts also need the matching runtime-env/listen overlay switch.
+  freshEnabled: true
+  # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.
+  schedule: "* * * * *"
   projectionDebtDurableEnabled: true
   mode: apply
   workers: 8

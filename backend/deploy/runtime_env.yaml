@@ -371,7 +371,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           RECORD_FRESH_MERGE_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_NOTES_EAGER_ENABLED:
             value: 'true'
@@ -387,6 +387,15 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_REPAIR_FRESH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -549,6 +558,15 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -1164,7 +1182,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -1180,6 +1198,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -1508,7 +1535,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -1524,6 +1551,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -1837,7 +1873,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -1853,6 +1889,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -2129,7 +2174,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -2145,6 +2190,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -2831,7 +2885,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           RECORD_FRESH_MERGE_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_NOTES_EAGER_ENABLED:
             value: 'true'
@@ -2848,6 +2902,15 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_REPAIR_FRESH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -3118,6 +3181,15 @@ environments:
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -3754,7 +3826,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -3774,6 +3846,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -4231,7 +4312,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -4255,6 +4336,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -4701,7 +4791,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -4728,6 +4818,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -5116,7 +5215,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             RECORD_FRESH_MERGE_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
               value: 'true'
@@ -5147,6 +5246,15 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'

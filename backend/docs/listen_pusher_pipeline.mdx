@@ -192,6 +192,26 @@ transactional job claims and recovery cadence are unchanged. See
 
 ## Retained seal proof rules
 
+`RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
+it). The repair coordinator borrows up to half of its existing slots for
+newest-first `record_pending` jobs enqueued 60 seconds to two hours ago, polling
+the live head every 15 seconds independently of the saved sweep frontier.
+Fresh attempts and ordinary backlog loans have a 90-second limit; fresh retry
+spacing is 120 seconds. Pending-job discovery retains half the original worker
+budget, its urgent deadline ordering and its ordinary-job reserve. Conversation
+discovery retains the other half plus unused job capacity. The checkpointed
+initial worker group starts before fresh borrowing, and idle fresh capacity
+returns to backlog work. With one worker the existing
+sweep runs alone. Successful fresh seals atomically set `available_at=0` so
+intake's due query sees them before ordinary retry wakes. Admission still checks
+the sealed barrier, retained audio, privacy generation, and provider policy.
+The seal transaction preserves live intake claims. Serving intake certifies its
+own retry clock only while fresh repair and dead-letter handling are enabled;
+disabled flags add no retry marker, and claiming removes any old marker.
+The CronJob uses minute ticks with `Forbid`, bounding scheduled restart gaps
+without overlapping repair pods. Disable the switch and restore
+`recordSealRepair.schedule="*/5 * * * *"` to restore previous scheduling.
+
 Retained admission and seal repair keep the earlier retained object's bytes on
 divergent overlaps and reference only the later object's uncovered tail. The
 manifest reader verifies each complete decoded source digest and reads those
@@ -624,6 +644,11 @@ projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
 are audio receipts; `capture_committed` remains transcript coverage.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED` defaults to `true`; only literal `true`
+enables optional lossless FLAC for new mono PCM16 custody writes. Other values
+retain PCM. Both formats retain the same decoded samples and frame positions;
+media hashes pin stored plaintext, while `pcm_sha256` pins original samples.
+Existing FLAC readers remain available with this writer switch off.
 `AUDIO_CUSTODY_FRAMED_PERCENT` defaults to `0`, independently of archive percent.
 Admitted v2 16 kHz pusher windows retain frame starts, sample counts and gap
 markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
@@ -3269,9 +3294,24 @@ restores stored status/title at conversation API exits. Desktop batch completion
 atomically stamps `home_transcription_pending_at` and
 `home_transcription_deadline_at`. `HOME_TRANSCRIPTION_DEADLINE_SECONDS` defaults
 to 7200 (invalid, blank or nonpositive values use 7200), matching the batch SLA.
-Readers do not renew the clock. A stamped completed batch capture without
-transcript/title or a projection receipt presents `processing` / `Transcribing…`
-until the deadline, then `completed` / `Couldn't transcribe` so it stays visible.
+`HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED` defaults on. Reads compute the effective
+bound from the server's stamped pending clock plus `HOME_TRANSCRIPTION_MAX_AGE_SECONDS` (default 86400,
+invalid/nonpositive values use 86400), healing existing two-hour stamps without
+writes or additional Firestore reads. If pending_at is absent, the stamped
+deadline minus `HOME_TRANSCRIPTION_DEADLINE_SECONDS` recovers the wait start;
+creation is the fallback when both stamps are absent. Capture end never starts
+the wait: offline uploads and backfill can arrive days after capture. Readers
+and same-generation replays never renew it. A writer re-stamping pending for a
+new upload revision starts a new window bounded by 24 hours for that revision;
+there is no lifetime bound across genuinely new revisions. Set the queue
+hold switch to `off` / `false` / `0` / `no` to restore the stamped deadlines and
+two-hour unstamped fallback. Explicit failed status, dead letter and upload
+failure still fail immediately. Conversation and episode members show
+`processing` / `Transcribing…` until the effective bound; an episode consisting
+only of these captures shares their title. After the bound the conversation
+shows `completed` / `Couldn't transcribe` with `home_step=failed`; episode
+members show `failed`. Confirmed Home placement hides failures; Activity retains
+them (R-20261110-06). Queued captures suppress `summary_retryable` on the wire.
 Firestore status and custody remain unchanged; populated or unstamped rows keep
 their existing presentation. Main conversation list conditional 304 responses
 are disabled while the gate is on because expiry does not bump writer versions.
@@ -9216,7 +9256,9 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 `sync_processing_hold.pending_since` and `last_content_at` in the existing
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
-rechecks the current row before any full notes/title/memory/task work. The
+rechecks the current row before any full notes/title/memory/task work.
+`SYNC_PROCESSING_QUIET_SECONDS` tunes that quiet window per call (default 600, clamped to 120 to 600; a
+malformed value keeps the default), so clients that send no end-of-recording proof can be moved without a release. The
 shared outbox remains production/emulator-only; dev hosts keep local eager
 processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account

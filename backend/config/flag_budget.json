@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 289,
+  "count": 290,
   "names": {
     "RECORD_FRESH_MERGE_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "RECORD_NOTES_EAGER_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
@@ -117,6 +117,7 @@
     "BATCH_PULL_BUSY_BORROW_ENABLED": {"owner": "cl2-gpueff / batch rollout lead", "review_by": "2026-12-04"},
     "BATCH_SKIP_UNCHANGED_CONTROL_WRITE_ENABLED": {"owner": "pinecone2 / batch rollout lead", "review_by": "2026-12-05"},
     "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},
+    "SYNC_PROCESSING_QUIET_SECONDS": {"owner": "lifecycle-owner (SCA-1766)", "review_by": "2026-12-14"},
     "SYNC_OPUS_RAW_FRAME_WRITES": {"owner": "synceff / backend-sync efficiency", "review_by": "2026-12-04"},
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-14"},
     "BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED": {"owner": "intakefallback / batch rollout lead", "review_by": "2026-11-29"},

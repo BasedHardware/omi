@@ -1450,8 +1450,8 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize('chart', ['backend-listen', 'batch-pipeline-worker'])
-@pytest.mark.parametrize('disabled', [False, True])
-def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, disabled, tmp_path):
+@pytest.mark.parametrize('mode', ['staged', 'disabled', 'qualified'])
+def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, mode, tmp_path):
     chart_dir = _SCRIPT.parents[1] / 'charts' / chart
     stem = 'batch-pipeline-worker' if chart == 'batch-pipeline-worker' else 'backend_listen'
     values = chart_dir / f'{environment}_omi_{stem}_values.yaml'
@@ -1478,14 +1478,14 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
     if chart == 'batch-pipeline-worker':
         command += ['--set', 'enabled=true']
         command += ['--namespace', f'{environment}-omi-backend']
-        if disabled:
+        if mode != 'staged':
             for key in flags:
-                command += ['--set', f'worker.{key}=false']
-    elif disabled:
+                command += ['--set', f'worker.{key}={str(mode == "qualified").lower()}']
+    elif mode != 'staged':
         source = yaml.safe_load(values.read_text())
         for entry in source['env']:
             if entry['name'] in flags:
-                entry['value'] = 'false'
+                entry['value'] = str(mode == 'qualified').lower()
         override = tmp_path / 'disabled.yaml'
         override.write_text(yaml.safe_dump({'env': source['env']}))
         command += ['-f', str(override)]
@@ -1503,4 +1503,50 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
         for key in flags:
-            assert env[key] == ('false' if disabled else 'true')
+            expected = (
+                'false' if mode == 'disabled' or (mode == 'staged' and key == 'RECORD_FRESH_MERGE_ENABLED') else 'true'
+            )
+            assert env[key] == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['pusher', 'backend-listen'])
+def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            f'{environment}-{chart}',
+            str(chart_dir),
+            '-f',
+            str(values),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.tag=',
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert len(deployments) == 1
+    containers = deployments[0]['spec']['template']['spec']['containers']
+    expected = {
+        'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED': 'true',
+        'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
+    }
+    if chart == 'pusher':
+        expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+    else:
+        expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
+        expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
+    contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
+    for key, value in expected.items():
+        entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
+        assert entries == [{'name': key, 'value': value}]
+        assert contract[key]['value'] == value
