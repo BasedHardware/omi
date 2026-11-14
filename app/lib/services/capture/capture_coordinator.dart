@@ -2612,27 +2612,12 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
 }
 
 CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
-  if (env.silencePaused) return _reduceSilenceResume(state, env);
-  if (state.phase == CapturePhase.phonePaused || state.phase == CapturePhase.phoneBatchPaused) {
-    return _reduceResume(state, env);
+  // A live phone owns the channel even if a pendant is suspended behind it.
+  // A paused phone delegates to the same resume path as the Home control.
+  if (state.phoneOwns && state.phase != CapturePhase.phonePaused && state.phase != CapturePhase.phoneBatchPaused) {
+    return CaptureTransition(state, const []);
   }
-  if (state.phoneOwns) return CaptureTransition(state, const []);
-  final nextPhase = switch (state.phase) {
-    CapturePhase.pendantPaused => CapturePhase.pendantLive,
-    CapturePhase.pendantBatchPaused => CapturePhase.pendantBatchLive,
-    _ => state.phase,
-  };
-  if (nextPhase != state.phase) {
-    return CaptureTransition(state.copyWith(phase: nextPhase), const [
-      RunStage(PersistDeviceMuteStage(false)),
-      PolicyWrite(false),
-      RunStage(ResumeDeviceTailStage()),
-    ]);
-  }
-  if (state.pendantSuspension != null) {
-    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)), const []);
-  }
-  return CaptureTransition(state, const []);
+  return _reduceResume(state, env);
 }
 
 CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment env) {
