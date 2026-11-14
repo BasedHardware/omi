@@ -1,0 +1,21 @@
+{
+ "schema_version": 1,
+ "id": "FC-user-intent-queued-behind-account-exclusive-work",
+ "violated_contract": "A user request whose intent can be recorded durably must not wait behind, or be refused by, other same-account work that an exclusive account gate serializes. When each same-account delete holds the gate for seconds and its peers wait a bounded time and then answer a retryable 409, a multi-select burst gets a few successes and a wall of failures that the released client never retries.",
+ "canonical_prevention": "Commit the intent (tombstone and hidden row) together with a durable, leased obligation, answer success at once, and let one owner perform the exclusive work in order under the gate while still honouring legal holds and account deletion. Keep the synchronous path only for a free gate, and decide 'busy' from a lock-free read or a single-attempt acquisition, never from SDK contention backoff.",
+ "evidence_prs": [
+  24988,
+  25124
+ ],
+ "scope_hints": [
+  "backend/routers/conversations.py",
+  "backend/database/conversation_tombstones.py",
+  "backend/database/conversation_batch_purge_jobs.py",
+  "backend/database/legal_holds.py",
+  "backend/utils/conversations/deletion_batch_purge.py"
+ ],
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_conversation_delete_accept.py"
+ ],
+ "status": "open"
+}

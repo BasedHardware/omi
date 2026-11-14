@@ -1244,7 +1244,8 @@ use the same `in` filter on the declared results composite index
 
 `BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
 enable) bounds the replay the finish page does for already-projected work. Off,
-the page is exactly the one above and no result field is written.
+the page is exactly the one above and no no-change deferral transaction runs.
+State transitions maintain additive clock fields even with the lever off.
 
 On, a finish walk that changed nothing writes `projection_finish_due_at` and
 `projection_finish_backoff_step` on the row. The page then asks for
@@ -1257,17 +1258,20 @@ so new work is never delayed.
 The range filter must lead the ordering, so that page uses the second declared
 results index `(projection_state, projection_finish_due_at, committed_at,
 __name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
-before the lever have no clock and are outside every range filter: the first
-pass after enablement is the unfiltered legacy page, which stamps them, and
-only then does the page filter. Every `projection_state` write (session
-receipts and part summaries, quarantine hold and restore, release, sibling
-wake, completion) writes both fields in the same transaction: a move into
-`persisted`/`ready` stamps due now and step 0, and any other state deletes
-them, so no obligation waits on a stale clock. A blocked or failed survey walk
-also stamps the row, because the filtered page cannot see a row without a
-clock. A failed stamp keeps the survey open and restarts the unfiltered walk
-from the front. Rollback is the one switch; the fields are additive and unread
-when off, so no backfill is needed.
+before the lever have no clock and are outside every range filter. A bounded
+operator [backfill](runbooks/projection-finish-backfill.md) stamps missing clocks
+and atomically checkpoints progress in a shared, versioned control document.
+Until that marker is complete, serving processes use the legacy page without
+adding stamp transactions. New replicas trust the same completion marker and
+filter immediately; a negative marker read is cached for 60 seconds.
+
+Every transition into `persisted`/`ready` writes due now and step 0 in the same
+transaction, regardless of this lever or whether the host runs the serving loop.
+Session receipts, part summaries, privacy restore, quarantine release, sibling
+wake, and the ghost-hold repair script all use the shared clock helpers. Other
+state transitions retire the clock. Deploy these writers everywhere before
+finishing the backfill. Rollback of the read lever restores the legacy query;
+clock maintenance continues, so re-enable does not require another survey.
 
 The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
 introduced by this lever: the oldest-age max is already saturated by a
@@ -1435,3 +1439,21 @@ The [policy contract](../config/policy/README.md) owns the read map, unchanged
 legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
 exceptions, replay commands and revert procedure. This change alters no environment
 values; deployment remains part of the two-lane train.
+
+The maintenance leader also samples the fresh-delivery guard at most once per
+minute using two Firestore count aggregations, never streamed documents: fresh
+results committed in the inclusive interval 10–20 minutes ago, and that cohort's
+`projection_state=pending` subset. The merge transaction alone stamps the stored
+class `results.fresh_capture` from the job's exact `True` value (missing means
+`False`); no existing routing reader changes. The gauges
+`omi_batch_pipeline_fresh_committed_window_total`,
+`omi_batch_pipeline_fresh_unprojected_window_total`,
+`omi_batch_pipeline_fresh_unprojected_ratio` and
+`omi_batch_pipeline_fresh_guard_sample_age_seconds` expose the pair and its age;
+the ratio is absent for empty/failed samples, both counts and ratio expire after
+120 s, and a failed query leaves age advancing from the last successful pair.
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED=off` stops the queries and removes all guard
+gauges. Counts use declared prod/dev indexes, cost roughly one read per 1,000
+index entries per count (minimum two reads per sample), and do not alter merge,
+projection or enrichment order. See the 2026-11-13 fresh-delivery change note
+for the complete reader inventory and release-owner live acceptance procedure.

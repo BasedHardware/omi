@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -165,6 +166,21 @@ class PostgresTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
+        return self._locked_query_row(*row) if row else None
+
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        state = "AND state = 'result_ready' " if ready else ''
+        row = self.conn.execute(
+            "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+            f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1",
+            (self.store.namespace, owner_key),
+        ).fetchone()
         return self._locked_query_row(*row) if row else None
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
@@ -495,6 +511,11 @@ class PostgresStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_page(
         self,

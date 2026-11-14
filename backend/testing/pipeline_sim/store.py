@@ -30,6 +30,7 @@ import hashlib
 from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -146,6 +147,28 @@ class SimTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
+
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        # Filter borrowed rows before copying: a held owner can retain hundreds of
+        # backlog jobs, and neither fresh query needs to materialize their payloads.
+        rows = (
+            self.writes.get(('jobs', segment), self.store.rows.get(('jobs', segment), {}))
+            for segment in self.store._pending_by_owner.get(owner_key, ())
+        )
+        rows = [
+            row
+            for row in rows
+            if row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.store.ready_predecessor(owner_key, priority, segment_id)
@@ -387,6 +410,9 @@ class SimStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""

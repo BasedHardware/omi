@@ -149,6 +149,15 @@ def record_seal_repair_age_order() -> bool:
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
 
 
+def raw_live_gapped_packs_enabled() -> bool:
+    """Read gapped, unframed raw-live packs through their custody manifest.
+
+    Off restores the pre-existing skip: a pack without a declared frame schema
+    and a nonzero ``gap_count`` is not listed and cannot be decoded.
+    """
+    return default_on('RAW_LIVE_GAPPED_PACKS_ENABLED')
+
+
 def batch_input_expiring_enabled() -> bool:
     """Stop held staging inputs at day 29; off restores the existing held lifecycle."""
     return default_on('BATCH_INPUT_EXPIRING_ENABLED')

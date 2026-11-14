@@ -172,3 +172,26 @@ Guard: `test/unit/sync_attention_policy_test.dart` and
 - [x] Legacy positional indexes are invalidated after attempted deletion without treating a rejected command as success.
 - [x] Regression coverage: `capture_transcript_coverage_test`, `l5_capture_committed_test`, `offline_sync_recording_blocks_test`, and device deletion protocol suites.
 - [ ] App release containing the verified fix (tracked separately from source merge).
+
+## Reauthentication recovery (#24777)
+
+The ledger outlives the authentication screen. After Home mounts for an authenticated
+session, its explicit local-recordings refresh scans native migration receipts, then
+reconciles active, parked and retired inventory for that owner. Only afterward does
+Offline Sync refresh its view. Ordinary inventory reads never restore retired rows:
+sign-out clears providers before clearing the old UID, so read-time restoration can
+republish the retiring account. Refresh work captures the session generation and UID
+before awaiting disk access; a successor session cannot adopt that work.
+
+Existing batch rows resolve their legacy/Watch owner before admission. Ambiguous
+ownership remains parked with the source audio and migration evidence intact. The
+legacy job receipt and quarantine preference survive sign-out; a migrated uploaded
+row retains its job ID and hold so the shared reconciler delivers its result without
+another upload. Recovery does not change automatic-upload or local-only choices.
+
+- [x] Same-owner cold start and in-session reauthentication restore parked inventory.
+- [x] Foreign accounts and unresolved batch ownership remain hidden and recoverable.
+- [x] Accepted legacy jobs survive preference clearing and resume as processing.
+- [x] Regression suites exercise real WAL persistence, retained bytes and repeated intake.
+- [x] Native iOS simulator persistence/reauthentication verification with disposable PCM audio, real preferences and index.
+- [ ] Store release and original-customer recording recovery, tracked separately from source verification.

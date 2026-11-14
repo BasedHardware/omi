@@ -93,6 +93,34 @@ the probe (`users/*/memory_items` becomes `users/memory_items`).
 sum(rate(omi_firestore_caller_label_overflow_total[30m]))
 ```
 
+The Grafana rule `omi-firestore-caller-overflow` (warning, agent tier) fires when
+the label set folds: either `omi_firestore_caller_label_overflow_total` moves or
+`omi_firestore_billed_reads_by_caller_total{caller="other"}` carries reads, held
+for five minutes. The second arm also catches a malformed or frame-less caller
+label, which folds to `other` without incrementing the overflow counter. Both
+queries run on the managed `gmp-cloud-run` datasource: the in-cluster Cloud Run
+bridge keeps only `omi_firestore_documents_per_operation` and
+`omi_firestore_read_operations_total`, so a rule on the local `prometheus`
+datasource would be blind to Cloud Run. The rule's enable selector is node D,
+`vector(1)`, enabled by default; flipping it to `vector(0)` and re-provisioning
+disables the alert, and restoring `vector(1)` re-enables it. The rule also ships
+`isPaused: false`; pausing it is the operational switch. No actuator flips
+either automatically. Fixtures that drive the real probe and evaluate the
+committed rule live in `backend/tests/unit/test_firestore_caller_overflow_alert.py`.
+
+An empty result on both arms is the expected healthy state: the
+`caller="other"` bucket is created only after a fold, so the series is normally
+absent. Absence is not a measured zero. When you run the verification query,
+record `no series` rather than `0`, and do not report an empty result as a clean
+live reading — the live attestation for this rule is a fresh consumed series from
+the running alert consumer after the approved roll, not an empty query.
+
+Custom-registry processes (the batch pipeline worker and the record-seal worker)
+serve `utils/observability/firestore_probe_export.py`'s `COLLECTORS`, not the
+default registry, so `omi_firestore_caller_label_overflow_total` is in that tuple
+and in `COUNTER_SAMPLES`. Without it the precise overflow arm is blind to the
+batch pipeline, which is the dominant reader.
+
 ## PromQL dashboard guidance (not the bill reconcile)
 
 The stackdriver exporter publishes
@@ -141,6 +169,43 @@ Which code produced the QUERY reads:
 ```promql
 topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_total{kind="query"}[30m])))
 ```
+
+## Unattributed-reads alert
+
+`omi-firestore-unattributed-reads` in
+`backend/charts/monitoring/alerts/firestore.json` fires when the same-window
+coverage gap is above 3% for 30 minutes and resolves at or below 3%:
+
+```promql
+# A, instrumented reads/s (complete counter, GMP datasource)
+sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)
+# B, billed reads/s (native Cloud Monitoring DELTA published as a gauge)
+avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60
+# C, unattributed share; D fires when C > 0.03
+($B - $A) / $B
+```
+
+Both sides use the same 30m window. `A` is the complete counter on the
+`gmp-cloud-run` datasource (Cloud Run and GKE); the in-cluster Prometheus only
+scrapes GKE, so a ratio computed there is not the fleet ratio. A missing
+instrumented series reads as zero through `or vector(0)` and fires; a missing
+billed series is NoData and is covered by `omi-firestore-metric-absent`.
+
+Measured 2026-11-12T06:51Z on GMP `query_range`, 2026-11-02T06:51Z through
+2026-11-12T06:51Z at 1h steps (241 points): the gap ranged 0.134-0.568 with a
+mean of 0.321. Daily means were 0.274 (11-09), 0.196 (11-10), 0.163 (11-11) and
+0.162 (11-12). No retained hour is at or below 0.03, so the alert is firing on
+the current fleet; the resolve side is proven by fixtures, not by live history.
+The 95% acceptance figure below is historical and is not the current
+measurement.
+
+The switch is the rule's committed `isPaused` flag: `false` (enabled) by
+default, `true` to disable, `false` to re-enable, and the import path enforces
+exact paused parity. The alert-rule selector is membership of the UID in
+`backend/charts/monitoring/live-alert-gate.json` `uids[]`; it is present by
+default and is listed in `PRODUCTION_ONLY_IMPORT_UIDS` because the
+`gmp-cloud-run` datasource exists only in production. Neither switch changes
+runtime read behaviour.
 
 ## Acceptance
 

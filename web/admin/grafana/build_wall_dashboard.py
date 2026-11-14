@@ -259,6 +259,9 @@ PLATFORM_COLUMNS = [("mobile", "Mobile", "number"), ("macos", "macOS", "number")
                     ("other", "Other", "number")]
 PLATFORM_OVERRIDES = [color(n, h) for n, h in PLATFORM.items()]
 DATE = ("date", "date", "timestamp")
+# The uptime sidecar emits the UTC day as epoch milliseconds (a number); a plain "timestamp"
+# column parses it to null and the panel reads "Data outside time range".
+UPTIME_DATE = ("date", "date", "timestamp_epoch")
 
 
 MATURING = ("The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days "
@@ -374,13 +377,13 @@ def columns():
         stat("Revenue", "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR ÷ monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon–Sun week vs the prior week. Relative % change.",
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
-        (5, chart("MRR by plan",
+        (6, chart("MRR by plan",
                    "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
                    overrides=[color(n, h) for n, h in PLANS.items()], extra=mrr_extra)),
-        (6, chart("Shopify sales per week",
+        (5, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -424,7 +427,7 @@ def columns():
                    UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
                    "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
                    "failures for the last 7 days are in the Health stat's source frame `journeys`.",
-                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                   [target("uptime", "daily", [UPTIME_DATE, ("all", "All journeys", "number"),
                                                ("capture", "Live capture", "number"),
                                                ("saved", "Conversation saved", "number"),
                                                ("chat", "Chat answer", "number"),
