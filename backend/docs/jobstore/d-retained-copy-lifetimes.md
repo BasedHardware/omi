@@ -366,3 +366,11 @@ the original intent/paid target census. Reference comparison uses the full
 original source-derived document, so an unexpected retained reference cannot be
 silently discarded. The absence probe refuses dispatch after the unit deadline
 and clamps its socket timeouts to the remaining deadline without SDK retries.
+
+Main integration: main's `0006_transactional_fresh_gate.sql` now occupies version6.
+The unmerged dark migrations formerly0006–0021 are resequenced to0007–0022,
+with every SQL body/checksum preserved byte for byte. Main0006 remains unchanged.
+Earlier section numbers describe their original delivery; the published-original
+purpose expansion is now0022. These source changes were exercised only through
+disposable local fixture clusters in this task, not deployed migrations. Existing
+applied-checksum refusal remains unchanged; no live migration/rewrite is performed.

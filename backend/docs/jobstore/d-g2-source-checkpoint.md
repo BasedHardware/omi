@@ -510,3 +510,11 @@ seal. Actual generation-pinned retention delete plus absence, original reference
 FS deletion and durable progress/cancellation receipts cover publication before
 paid terminal COMMIT. Upload/journal/typed custody remains retained; no all-copy,
 remote C4 or final erasure certificate. See d-retained-copy-lifetimes.md.
+
+Current-main integration preserves main0006 transactional fresh indexes and
+resequences the still-unmerged dark0006–0021 SQL bodies to0007–0022 without
+changing their checksums. The earlier section numbers remain historical delivery
+labels. No deployed migration is applied or rewritten. The deployment guard
+fixture now locates the actual Firestore-readiness control checkout by its
+immutable path, retaining its unconditional/source-before-build assertions when
+main also includes a separate conditional worker-control checkout.

@@ -308,7 +308,11 @@ def test_worker_deploy_gates_selected_source_before_build_or_helm():
     assert not gate.get('continue-on-error', False)
     assert gate['with']['source_sha'] == '${{ steps.vars.outputs.source_sha }}'
     assert gate['with']['project_id'] == '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
-    controls = steps[gate_index - 1]
+    # Main also checks out the conditional image-only worker controls. Select
+    # the actual Firestore readiness controls by their immutable destination.
+    controls = next(
+        step for step in steps[:gate_index] if step.get('with', {}).get('path') == '.github/firestore-workflow'
+    )
     assert 'if' not in controls
     assert controls['with']['ref'] == '${{ github.workflow_sha }}'
     assert controls['with']['path'] == '.github/firestore-workflow'
