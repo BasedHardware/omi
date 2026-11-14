@@ -69,7 +69,9 @@ from utils.retrieval.tools import (
     process_recent_conversations,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from functools import partial
 from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
+from utils.llm.user_voice import build_propose_message_voice_prompt_for_turn
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.turn_refs import initialize_turn_refs
 from utils.retrieval.safety import (
@@ -1679,6 +1681,13 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     if device_tools:
         device_tool_list = ', '.join(sorted(t.name for t in device_tools))
         logger.info('Device tools available uid=%s tools=%s', uid, device_tool_list)
+        voice_block = ''
+        if any(t.name == 'propose_message' for t in device_tools):
+            voice_prompt = await run_blocking(
+                db_executor, partial(build_propose_message_voice_prompt_for_turn, uid, messages=messages)
+            )
+            if voice_prompt:
+                voice_block = f'\n\n{voice_prompt}'
         system_prompt += f"""
 
 <device_tools>
@@ -1686,7 +1695,7 @@ These tools run on the user's own device, not on the server: {device_tool_list}
 
 propose_message opens the system compose sheet — it does NOT send. Only report a
 message as sent when the tool result says status=sent. If it says cancelled, the
-user chose not to send; acknowledge that rather than retrying.
+user chose not to send; acknowledge that rather than retrying.{voice_block}
 </device_tools>"""
 
     tool_schemas, tool_registry = _convert_tools(core_tools + device_tools, app_tools)
