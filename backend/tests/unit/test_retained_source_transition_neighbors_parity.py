@@ -139,7 +139,7 @@ def test_observe_recovery_records_quarantined(caplog):
         serving = True
 
     with caplog.at_level(logging.ERROR, logger='utils.batch_pipeline.retry_policy'):
-        observe_recovery(('quarantined', 2.0, Decision()), Metrics())
+        observe_recovery(('quarantined', 2.0, Decision(), (3, None)), Metrics())
     assert 'quarantined' in recorded and 'recovery_held' in recorded
 
 
@@ -153,7 +153,7 @@ def test_observe_recovery_logs_the_held_outcome(caplog):
         serving = True
 
     with caplog.at_level(logging.WARNING, logger='utils.batch_pipeline.retry_policy'):
-        observe_recovery(('quarantined', 2.0, Decision()), Metrics())
+        observe_recovery(('quarantined', 2.0, Decision(), (3, None)), Metrics())
     assert any(
         'event=batch_recovery outcome=held reason=awaiting_fenced_recovery' in line for line in caplog.text.splitlines()
     )
@@ -164,7 +164,7 @@ def test_observe_recovery_records_the_duration_for_correctness(monkeypatch):
     from utils.batch_pipeline import retry_policy
 
     monkeypatch.setattr(retry_policy, 'record_correctness', lambda name, **kw: events.append((name, kw)))
-    observe_recovery(('quarantined', 2.5, None), None)
+    observe_recovery(('quarantined', 2.5, None, (3, None)), None)
     assert events and events[0][0] == 'failed'
 
 
@@ -173,7 +173,7 @@ def test_observe_recovery_swallows_metric_failures():
         def record(self, name):
             raise RuntimeError('metrics down')
 
-    observe_recovery(('quarantined', 2.0, None), Exploding())
+    observe_recovery(('quarantined', 2.0, None, (3, None)), Exploding())
 
 
 # --- The evidence validators' shape rules (post-token addition) --------------------------

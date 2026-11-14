@@ -18,6 +18,9 @@ BACKEND = Path(__file__).resolve().parents[2]
 WORKER_SOURCE = inspect.getsource(worker_module)
 SCHEDULER_SOURCE = inspect.getsource(scheduler_module)
 ERRORS_SOURCE = inspect.getsource(errors_module)
+# Both scheduler-side terminals book through the shared terminal report, so
+# the demotion surface's source of truth lives there.
+REPORT_SOURCE = inspect.getsource(errors_module.report_terminal_quarantine)
 DOC = (BACKEND / "docs" / "empty-ladder-recovery-channel-parity.md").read_text()
 
 
@@ -27,8 +30,8 @@ def test_doc_token_event_batch_empty_ladder_worker_source_count():
 
 
 def test_doc_token_event_batch_empty_ladder_scheduler_source_count():
-    """event=batch_empty_ladder appears 1 time in SCHEDULER_SOURCE."""
-    assert SCHEDULER_SOURCE.count("event=batch_empty_ladder") == 1
+    """event=batch_empty_ladder appears 1 time in the shared scheduler-side report."""
+    assert REPORT_SOURCE.count("event=batch_empty_ladder") == 1
 
 
 def test_doc_token_outcome_recovery_handoff_worker_source_count():
@@ -42,8 +45,8 @@ def test_doc_token_outcome_recovery_handoff_worker_source_count():
 
 
 def test_doc_token_outcome_held_for_recovery_scheduler_source_count():
-    """outcome=held_for_recovery appears 1 time in SCHEDULER_SOURCE."""
-    assert SCHEDULER_SOURCE.count("outcome=held_for_recovery") == 1
+    """outcome=held_for_recovery appears 1 time in the shared scheduler-side report."""
+    assert REPORT_SOURCE.count("outcome=held_for_recovery") == 1
 
 
 def test_doc_token_event_batch_worker_failed_worker_source_count():
@@ -52,8 +55,8 @@ def test_doc_token_event_batch_worker_failed_worker_source_count():
 
 
 def test_doc_token_event_batch_quarantined_scheduler_source_count():
-    """event=batch_quarantined appears 1 time in SCHEDULER_SOURCE."""
-    assert SCHEDULER_SOURCE.count("event=batch_quarantined") == 1
+    """event=batch_quarantined appears 1 time in the shared scheduler-side report."""
+    assert REPORT_SOURCE.count("event=batch_quarantined") == 1
 
 
 def test_doc_token_event_batch_language_guard_worker_source_count():
@@ -62,8 +65,8 @@ def test_doc_token_event_batch_language_guard_worker_source_count():
 
 
 def test_doc_token_event_batch_language_guard_scheduler_source_count():
-    """event=batch_language_guard appears 1 time in SCHEDULER_SOURCE."""
-    assert SCHEDULER_SOURCE.count("event=batch_language_guard") == 1
+    """event=batch_language_guard appears 1 time in the shared scheduler-side report."""
+    assert REPORT_SOURCE.count("event=batch_language_guard") == 1
 
 
 def test_doc_worker_field_error_class_in_the_format_string():
@@ -117,17 +120,17 @@ def test_doc_scheduler_field_attempt_in_the_format_string():
 
 
 def test_doc_scheduler_field_recovery_in_the_format_string():
-    assert "recovery=" in SCHEDULER_SOURCE
+    assert "recovery=" in REPORT_SOURCE
     assert "recovery=" in DOC
 
 
 def test_doc_scheduler_field_stage_in_the_format_string():
-    assert "stage=" in SCHEDULER_SOURCE
+    assert "stage=" in REPORT_SOURCE
     assert "stage=" in DOC
 
 
 def test_doc_scheduler_field_worker_reason_in_the_format_string():
-    assert "worker_reason=" in SCHEDULER_SOURCE
+    assert "worker_reason=" in REPORT_SOURCE
     assert "worker_reason=" in DOC
 
 
@@ -137,7 +140,7 @@ def test_doc_event_token_absent_from_every_other_backend_module():
         for p in list((BACKEND / "utils").rglob("*.py")) + list((BACKEND / "diarizer").rglob("*.py"))
         if "event=batch_empty_ladder" in p.read_text()
     ]
-    assert sorted(hits) == ["diarizer/batch_pipeline.py", "utils/batch_pipeline/scheduler.py"]
+    assert sorted(hits) == ["diarizer/batch_pipeline.py", "utils/batch_pipeline/errors.py"]
 
 
 def test_doc_names_the_demoted_severity_as_info_at_the_worker():
@@ -146,8 +149,9 @@ def test_doc_names_the_demoted_severity_as_info_at_the_worker():
 
 
 def test_doc_names_the_demoted_severity_as_info_at_the_scheduler():
-    assert "outcome=held_for_recovery attempt=" in SCHEDULER_SOURCE
-    assert "logger.info" in SCHEDULER_SOURCE
+    assert "outcome=held_for_recovery attempt=" in REPORT_SOURCE
+    assert "logger.info" in REPORT_SOURCE
+    assert "report_terminal_quarantine(" in SCHEDULER_SOURCE
 
 
 def test_doc_names_the_stage_gate_token():
@@ -177,10 +181,10 @@ def test_doc_unchanged_accounting_quarantine_token_still_worker_failed():
 
 
 def test_doc_unchanged_accounting_warning_after_both_branches():
-    guard_index = SCHEDULER_SOURCE.index("outcome=held_for_redrive")
-    ladder_index = SCHEDULER_SOURCE.index("outcome=held_for_recovery")
-    fault_index = SCHEDULER_SOURCE.index("reason=worker_failed attempt=%d recovery=held")
-    warning_index = SCHEDULER_SOURCE.index("awaiting_fenced_recovery")
+    guard_index = REPORT_SOURCE.index("outcome=held_for_redrive")
+    ladder_index = REPORT_SOURCE.index("outcome=held_for_recovery")
+    fault_index = REPORT_SOURCE.index("reason=worker_failed attempt=%d recovery=held")
+    warning_index = REPORT_SOURCE.index("awaiting_fenced_recovery")
     assert guard_index < warning_index and ladder_index < warning_index and fault_index < warning_index
 
 

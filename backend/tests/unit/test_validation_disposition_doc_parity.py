@@ -19,6 +19,9 @@ BACKEND = Path(__file__).resolve().parents[2]
 WORKER_SOURCE = inspect.getsource(worker_module)
 SCHEDULER_SOURCE = inspect.getsource(scheduler_module)
 ERRORS_SOURCE = inspect.getsource(errors_module)
+# Both scheduler-side terminals book through the shared terminal report, so
+# the demotion surface's source of truth lives there.
+REPORT_SOURCE = inspect.getsource(errors_module.report_terminal_quarantine)
 DOC = (BACKEND / "docs/validation-disposition-demotion-parity.md").read_text()
 
 
@@ -42,7 +45,7 @@ def test_doc_names_the_worker_event():
 def test_doc_names_the_scheduler_event():
     """The doc names the scheduler-side event."""
     assert "event=batch_validation_disposition outcome=held_for_disposition" in DOC
-    assert SCHEDULER_SOURCE.count("event=batch_validation_disposition") == 1
+    assert REPORT_SOURCE.count("event=batch_validation_disposition") == 1
 
 
 def test_worker_fault_line_is_still_exactly_one_emitter():
@@ -52,26 +55,26 @@ def test_worker_fault_line_is_still_exactly_one_emitter():
 
 def test_scheduler_quarantine_line_is_still_exactly_one_emitter():
     """The demotion adds no second quarantine emitter."""
-    assert SCHEDULER_SOURCE.count("event=batch_quarantined") == 1
+    assert REPORT_SOURCE.count("event=batch_quarantined") == 1
 
 
 def test_sibling_empty_ladder_channel_unchanged():
     """The empty ladder keeps its two sites."""
     assert WORKER_SOURCE.count("event=batch_empty_ladder") == 1
-    assert SCHEDULER_SOURCE.count("event=batch_empty_ladder") == 1
+    assert REPORT_SOURCE.count("event=batch_empty_ladder") == 1
 
 
 def test_sibling_language_guard_channel_unchanged():
     """The language guard keeps its two sites."""
     assert WORKER_SOURCE.count("event=batch_language_guard") == 1
-    assert SCHEDULER_SOURCE.count("event=batch_language_guard") == 1
+    assert REPORT_SOURCE.count("event=batch_language_guard") == 1
 
 
 def test_doc_names_the_disposition_switch():
     """The doc names the rollout switch; the code reads it through the config helper."""
     assert "BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED" in DOC
     assert "worker_validation_disposition_enabled" in ERRORS_SOURCE
-    assert "worker_validation_disposition_enabled" in SCHEDULER_SOURCE
+    assert "worker_validation_disposition_enabled" in REPORT_SOURCE
 
 
 def test_doc_names_the_flagged_arm():
@@ -160,7 +163,7 @@ def test_doc_names_the_outside_admitted_source_exception():
 def test_doc_names_the_awaiting_recovery_warning_as_unchanged():
     """The doc pins the awaiting-fenced-recovery warning."""
     assert "awaiting_fenced_recovery" in DOC
-    assert SCHEDULER_SOURCE.count("awaiting_fenced_recovery") == 1
+    assert REPORT_SOURCE.count("awaiting_fenced_recovery") == 1
 
 
 def test_doc_names_the_sibling_families():

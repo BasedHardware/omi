@@ -235,11 +235,14 @@ def test_worker_duration_30_never_books_the_fault_error(monkeypatch, caplog):
 
 
 def test_scheduler_fault_format_is_only_reachable_after_both_demotions():
-    source = scheduler_module.__dict__ and __import__("inspect").getsource(scheduler_module)
+    source = scheduler_module.__dict__ and __import__("inspect").getsource(
+        __import__("utils.batch_pipeline.errors", fromlist=["x"]).report_terminal_quarantine
+    )
     guard_index = source.index("outcome=held_for_redrive")
     ladder_index = source.index("outcome=held_for_recovery")
     fault_index = source.index("reason=worker_failed attempt=%d recovery=held")
     assert guard_index < fault_index and ladder_index < fault_index
+    assert "report_terminal_quarantine(" in __import__("inspect").getsource(scheduler_module)
 
 
 def test_worker_fault_format_is_only_reachable_after_the_demotion():

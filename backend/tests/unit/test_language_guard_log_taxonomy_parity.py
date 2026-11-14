@@ -1,6 +1,6 @@
 """The taxonomy moved two log lines and nothing else.
 
-This suite reads the live source and the classification doc and pins the demotion surface: one guard line per site, the fault lines still present, the predicate referenced only by the two logging files, the shadow branch still ahead of the classification, the recovery warning still after both branches, every format token, and every fact the doc states about severity, stages, kept-ERROR reasons, and unchanged accounting.
+This suite reads the live source and the classification doc and pins the demotion surface: one guard line per site, the fault lines still present, the predicate and the shared terminal report referenced by exactly the logging files, the shadow branch still ahead of the classification, the recovery warning still after both branches, every format token, and every fact the doc states about severity, stages, kept-ERROR reasons, and unchanged accounting.
 
 Failure-Class: FC-language-guard-redrive-misclassified-as-worker-fault
 """
@@ -17,6 +17,11 @@ import diarizer.batch_pipeline as worker_module
 BACKEND = Path(__file__).resolve().parents[2]
 WORKER_SOURCE = inspect.getsource(worker_module)
 SCHEDULER_SOURCE = inspect.getsource(scheduler_module)
+# Both scheduler-side terminals -- the worker-verdict terminal in
+# Scheduler.fail and the recover sweep's lease-expiry cap terminal via
+# observe_recovery -- book through the shared report, so the demotion
+# surface's source of truth lives there and the schedulers only delegate.
+REPORT_SOURCE = inspect.getsource(errors_module.report_terminal_quarantine)
 DOC = (BACKEND / 'docs' / 'batch-language-guard-redrive-classification.md').read_text()
 
 WORKER_FIELDS = [
@@ -71,9 +76,9 @@ def test_worker_boundary_emits_the_guard_transition_once():
 
 
 def test_scheduler_emits_the_guard_hold_once():
-    """Exactly one demotion site exists on the scheduler terminal hold."""
-    assert SCHEDULER_SOURCE.count('event=batch_language_guard') == 1
-    assert 'outcome=held_for_redrive' in SCHEDULER_SOURCE
+    """Exactly one demotion site exists on the shared scheduler-side report."""
+    assert REPORT_SOURCE.count('event=batch_language_guard') == 1
+    assert 'outcome=held_for_redrive' in REPORT_SOURCE
 
 
 def test_worker_boundary_keeps_the_fault_line():
@@ -81,23 +86,25 @@ def test_worker_boundary_keeps_the_fault_line():
 
 
 def test_scheduler_keeps_the_quarantine_line():
-    assert 'event=batch_quarantined' in SCHEDULER_SOURCE
+    """The attributed fault line lives on the shared report both terminals call."""
+    assert 'event=batch_quarantined' in REPORT_SOURCE
+    assert 'report_terminal_quarantine(' in SCHEDULER_SOURCE
 
 
 def test_the_demotion_constant_is_defined_once():
-    """The scheduler calls the predicate once; the worker reads the reason set directly."""
-    assert SCHEDULER_SOURCE.count('language_guard_redrive_failure(') == 1
+    """The shared report calls the predicate once; the worker reads the reason set directly."""
+    assert REPORT_SOURCE.count('language_guard_redrive_failure(') == 1
     assert 'LANGUAGE_GUARD_REDRIVE_REASONS' in WORKER_SOURCE
 
 
-def test_the_predicate_is_referenced_by_exactly_the_two_logging_files():
-    """No third module consults the demotion predicate."""
+def test_the_predicate_is_referenced_by_exactly_the_shared_report():
+    """No module outside the shared report consults the demotion predicate."""
     hits = [
         p.name
         for p in (BACKEND / 'utils' / 'batch_pipeline').glob('*.py')
         if 'language_guard_redrive_failure' in p.read_text() and p.name != '__init__.py'
     ]
-    assert sorted(hits) == ['errors.py', 'scheduler.py']
+    assert sorted(hits) == ['errors.py']
 
 
 def test_guard_event_appear_only_in_the_two_source_files():
@@ -106,7 +113,7 @@ def test_guard_event_appear_only_in_the_two_source_files():
         for p in list((BACKEND / 'utils').rglob('*.py')) + list((BACKEND / 'diarizer').rglob('*.py'))
         if 'event=batch_language_guard' in p.read_text()
     ]
-    assert sorted(hits) == ['diarizer/batch_pipeline.py', 'utils/batch_pipeline/scheduler.py']
+    assert sorted(hits) == ['diarizer/batch_pipeline.py', 'utils/batch_pipeline/errors.py']
 
 
 def test_demotion_branch_sits_after_the_shadow_branch():
@@ -117,9 +124,9 @@ def test_demotion_branch_sits_after_the_shadow_branch():
 
 
 def test_the_awaiting_recovery_warning_follows_both_branches():
-    guard_at = SCHEDULER_SOURCE.find("event=batch_language_guard")
-    error_at = SCHEDULER_SOURCE.find("event=batch_quarantined")
-    warn_at = SCHEDULER_SOURCE.find("awaiting_fenced_recovery")
+    guard_at = REPORT_SOURCE.find("event=batch_language_guard")
+    error_at = REPORT_SOURCE.find("event=batch_quarantined")
+    warn_at = REPORT_SOURCE.find("awaiting_fenced_recovery")
     assert error_at < warn_at and guard_at < error_at
 
 
@@ -170,52 +177,52 @@ def test_worker_guard_format_carries_owned_words():
 
 def test_scheduler_guard_format_carries_attempt():
     """The scheduler hold record carries attempt."""
-    assert 'attempt=' in SCHEDULER_SOURCE.split('event=batch_language_guard')[1][:300]
+    assert 'attempt=' in REPORT_SOURCE.split('event=batch_language_guard')[1][:300]
 
 
 def test_scheduler_guard_format_carries_recovery():
     """The scheduler hold record carries recovery."""
-    assert 'recovery=' in SCHEDULER_SOURCE.split('event=batch_language_guard')[1][:300]
+    assert 'recovery=' in REPORT_SOURCE.split('event=batch_language_guard')[1][:300]
 
 
 def test_scheduler_guard_format_carries_stage():
     """The scheduler hold record carries stage."""
-    assert 'stage=' in SCHEDULER_SOURCE.split('event=batch_language_guard')[1][:300]
+    assert 'stage=' in REPORT_SOURCE.split('event=batch_language_guard')[1][:300]
 
 
 def test_scheduler_guard_format_carries_worker_reason():
     """The scheduler hold record carries worker_reason."""
-    assert 'worker_reason=' in SCHEDULER_SOURCE.split('event=batch_language_guard')[1][:300]
+    assert 'worker_reason=' in REPORT_SOURCE.split('event=batch_language_guard')[1][:300]
 
 
 def test_quarantine_error_format_keeps_event_batch_quarantined():
     """The fault line format is unchanged."""
-    assert 'event=batch_quarantined' in SCHEDULER_SOURCE
+    assert 'event=batch_quarantined' in REPORT_SOURCE
 
 
 def test_quarantine_error_format_keeps_reason_worker_failed():
     """The fault line format is unchanged."""
-    assert 'reason=worker_failed' in SCHEDULER_SOURCE
+    assert 'reason=worker_failed' in REPORT_SOURCE
 
 
 def test_quarantine_error_format_keeps_attempt_pctd():
     """The fault line format is unchanged."""
-    assert 'attempt=%d' in SCHEDULER_SOURCE
+    assert 'attempt=%d' in REPORT_SOURCE
 
 
 def test_quarantine_error_format_keeps_recovery_held():
     """The fault line format is unchanged."""
-    assert 'recovery=held' in SCHEDULER_SOURCE
+    assert 'recovery=held' in REPORT_SOURCE
 
 
 def test_quarantine_error_format_keeps_stage_pcts():
     """The fault line format is unchanged."""
-    assert 'stage=%s' in SCHEDULER_SOURCE
+    assert 'stage=%s' in REPORT_SOURCE
 
 
 def test_quarantine_error_format_keeps_worker_reason_pcts():
     """The fault line format is unchanged."""
-    assert 'worker_reason=%s' in SCHEDULER_SOURCE
+    assert 'worker_reason=%s' in REPORT_SOURCE
 
 
 def test_worker_fault_format_keeps_event_batch_worker_failed():

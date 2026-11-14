@@ -3,6 +3,7 @@
 import os
 import traceback
 
+from config.batch_pipeline import worker_validation_disposition_enabled
 from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage, reason_values
 
 WORKER_VALIDATION_STAGES = reason_values(WorkerValidationStage)
@@ -44,9 +45,10 @@ WORKER_VALIDATION_REASON_TOKENS = frozenset(member.value for member in WorkerVal
 # through the fault channels misbooks every guarded unit as a production
 # error: the vad_windows unsupported_language family is a top sensor
 # signature purely because the redrive handoff reuses the ERROR worker-fault
-# lines. Both logging sites (the worker boundary and the scheduler's terminal
-# quarantine line) consult this set so the guard demotes together and nothing
-# else does.
+# lines. All three logging sites (the worker boundary, the scheduler's
+# verdict terminal and the recover sweep's lease-expiry cap terminal, which
+# share ``report_terminal_quarantine``) consult this set so the guard demotes
+# together and nothing else does.
 LANGUAGE_GUARD_REDRIVE_REASONS = frozenset({'unsupported_language'})
 
 
@@ -83,9 +85,11 @@ def language_guard_redrive_failure(failure: object) -> bool:
 # scheduler's ``batch_quarantined reason=worker_failed ... recovery=held
 # stage=assemble_words worker_reason=empty_asr`` and the worker's
 # ``batch_worker_failed error_class=BatchValidationError stage=assemble_words``
-# fires for the same unit). Both logging sites (the worker boundary and the
-# scheduler's terminal quarantine line) consult this family so the empty
-# ladder demotes together and nothing else does. The demotion rechannels the
+# fires for the same unit). All three logging sites (the worker boundary,
+# the scheduler's verdict terminal and the recover sweep's lease-expiry cap
+# terminal, which share ``report_terminal_quarantine``) consult this family
+# so the empty ladder demotes together and nothing else does. The demotion
+# rechannels the
 # report only: durable state, evidence, metrics, custody and the
 # awaiting-fenced-recovery warning are unchanged.
 #
@@ -136,7 +140,8 @@ def empty_ladder_recovery_failure(failure: object) -> bool:
 # error_class=BatchValidationError stage=word_clocks`` and the scheduler's
 # ``batch_quarantined reason=worker_failed ... recovery=held
 # stage=word_clocks worker_reason=word_sequence`` fire for the same settled
-# unit). Both logging sites consult this family so the disposition demotes
+# unit). All three logging sites consult this family so the disposition
+# demotes
 # together and nothing else does; the flagged arm demotes only while the
 # same ``worker_validation_disposition_enabled`` switch that decided the
 # durable disposition is on — a ladder still walking its retries keeps its
@@ -227,6 +232,92 @@ def validate_worker_failure_evidence(failure):
         or failure['reason'] not in WORKER_VALIDATION_REASON_TOKENS
     ):
         raise ValueError('closed worker failure evidence required')
+
+
+def report_terminal_quarantine(logger, *, attempt, diagnosis) -> None:
+    """Book one terminal-quarantine report for either scheduler terminal.
+
+    The worker-verdict terminal (``Scheduler.fail``) and the recover sweep's
+    lease-expiry cap terminal (``expire_lease`` -> ``observe_recovery``) end
+    the same durable transition -- state=quarantined, recovery_state=held,
+    the fenced recovery lane waiting below -- so both book the same report:
+    the designed-handoff families answer on their INFO transition events, a
+    real worker fault keeps the attributed worker-fault ERROR line naming
+    the stage and reason the ladder actually collected, and the
+    awaiting-recovery warning follows every booking. Before the shared
+    report the expiry terminal booked every cap-reached unit -- designed
+    handoffs included -- on a bare anonymous ``reason=lease_expired`` ERROR
+    line that contradicted the ``quarantine_reason='worker_failed'`` the
+    same transition had just written and carried no diagnosis at all, so
+    the family demotions stopped at the verdict terminal and the sensor saw
+    one fault class as two, one of them unattributable. Durable state,
+    evidence, metrics and custody are written by the callers; this helper
+    only rechannels the report. ``diagnosis`` may be any hostile shape
+    (evidence rides on the job across ladder attempts and an older worker's
+    write is read back unvalidated here): the classifiers never raise and a
+    non-dict falls back to the anonymous unknown/unclassified attribution.
+
+    Failure-Class: FC-lease-expiry-cap-quarantine-misbooked-as-anonymous-worker-fault
+    """
+    if not isinstance(diagnosis, dict):
+        diagnosis = {}
+    terminal_stage = diagnosis.get('stage', 'unknown')
+    terminal_reason = diagnosis.get('reason', 'unclassified')
+    if language_guard_redrive_failure(diagnosis):
+        # The language guard is the designed redrive handoff: a typed,
+        # evidence-backed terminal hold that the fenced
+        # independent-recognizer lane settles. It keeps the same durable
+        # state and the awaiting-recovery warning below, but it is not a
+        # worker fault, so it leaves the ERROR quarantine channel to
+        # faults -- at the expiry terminal exactly as at the verdict
+        # terminal.
+        logger.info(
+            'event=batch_language_guard outcome=held_for_redrive attempt=%d recovery=held stage=%s worker_reason=%s',
+            attempt,
+            terminal_stage,
+            terminal_reason,
+        )
+    elif empty_ladder_recovery_failure(diagnosis):
+        # The empty ladder's handoff is the designed recovery hold: a typed
+        # empty recognition the bounded context-bearing retry already ran,
+        # booked with the worker_empty_evidence the ladder kept, and the
+        # fenced quarantine-recovery lane waiting below. It keeps the same
+        # durable state and the awaiting-recovery warning below, but it is
+        # not a worker fault, so it leaves the ERROR quarantine channel to
+        # faults -- at the expiry terminal exactly as at the verdict
+        # terminal.
+        logger.info(
+            'event=batch_empty_ladder outcome=held_for_recovery attempt=%d recovery=held stage=%s worker_reason=%s',
+            attempt,
+            terminal_stage,
+            terminal_reason,
+        )
+    elif validation_disposition_failure(diagnosis, disposition_enabled=worker_validation_disposition_enabled()):
+        # The terminal worker-validation disposition is the designed
+        # recovery hold: typed deterministic faults and closed vad/word
+        # verdicts no GPU retry can repair, booked with the preserved
+        # evidence and the fenced quarantine-recovery lane waiting below.
+        # It keeps the same durable state and the awaiting-recovery warning
+        # below, but it is not a worker fault, so it leaves the ERROR
+        # quarantine channel to faults. The flagged verdicts demote only
+        # under the same disposition switch that decided the durable chain
+        # end; a ladder still walking its retries keeps its ERROR line --
+        # at the expiry terminal under the same switch, so both terminals
+        # demote together and nothing else does.
+        logger.info(
+            'event=batch_validation_disposition outcome=held_for_disposition attempt=%d recovery=held stage=%s worker_reason=%s',
+            attempt,
+            terminal_stage,
+            terminal_reason,
+        )
+    else:
+        logger.error(
+            'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
+            attempt,
+            terminal_stage,
+            terminal_reason,
+        )
+    logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
 
 
 class FatalGpuError(RuntimeError):

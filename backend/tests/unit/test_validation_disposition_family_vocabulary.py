@@ -465,15 +465,16 @@ def test_switch_monotonicity_trio_decoded_duration_mismatch():
 
 
 def test_both_logging_sites_import_the_same_predicate():
-    """The worker boundary and the scheduler consult the one predicate."""
+    """The worker boundary and the shared scheduler-side report consult the one predicate."""
     assert "validation_disposition_failure" in WORKER_SOURCE
-    assert "validation_disposition_failure" in SCHEDULER_SOURCE
+    assert "validation_disposition_failure" in Path(errors_module.__file__).read_text()
+    assert "report_terminal_quarantine(" in SCHEDULER_SOURCE
 
 
 def test_both_logging_sites_read_the_same_switch():
     """Both sites read worker_validation_disposition_enabled at the call boundary."""
     assert "worker_validation_disposition_enabled" in WORKER_SOURCE
-    assert "worker_validation_disposition_enabled" in SCHEDULER_SOURCE
+    assert "worker_validation_disposition_enabled" in Path(errors_module.__file__).read_text()
 
 
 def test_parse_true_is_on():

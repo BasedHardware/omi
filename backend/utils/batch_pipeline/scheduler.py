@@ -22,7 +22,6 @@ from config.batch_pipeline import (
     pull_multi_lease_enabled,
     scheduler_control_key,
     shard_spread_enabled,
-    worker_validation_disposition_enabled,
 )
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -37,12 +36,10 @@ from utils.batch_pipeline.capacity import within_unit_ceiling
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import activation_surface, activate, field, migrate_legacy, read_control
 from utils.batch_pipeline.errors import (
-    empty_ladder_recovery_failure,
     error_site_field,
-    language_guard_redrive_failure,
+    report_terminal_quarantine,
     validate_worker_failure,
     validate_worker_failure_evidence,
-    validation_disposition_failure,
 )
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
@@ -1133,67 +1130,13 @@ class Scheduler:
                     # preserved on the job (the exhausting attempt may arrive
                     # evidence-less), else the historical
                     # unknown/unclassified shape for a never-diagnosed unit.
+                    # The booking itself is the shared terminal report, so
+                    # the recover sweep's lease-expiry cap terminal books the
+                    # exact same taxonomy for the same durable transition:
+                    # designed handoffs demote to their INFO transition
+                    # events and a real fault keeps the attributed ERROR.
                     diagnosis = worker_failure or worker_failure_evidence or preserved_diagnosis or {}
-                    terminal_stage = diagnosis.get('stage', 'unknown')
-                    terminal_reason = diagnosis.get('reason', 'unclassified')
-                    if language_guard_redrive_failure(diagnosis):
-                        # The language guard is the designed redrive handoff:
-                        # a typed, evidence-backed terminal hold that the
-                        # fenced independent-recognizer lane settles. It keeps
-                        # the same durable state and the awaiting-recovery
-                        # warning below, but it is not a worker fault, so it
-                        # leaves the ERROR quarantine channel to faults.
-                        logger.info(
-                            'event=batch_language_guard outcome=held_for_redrive attempt=%d recovery=held stage=%s worker_reason=%s',
-                            attempt,
-                            terminal_stage,
-                            terminal_reason,
-                        )
-                    elif empty_ladder_recovery_failure(diagnosis):
-                        # The empty ladder's handoff is the designed recovery
-                        # hold: a typed empty recognition the bounded
-                        # context-bearing retry already ran, booked with the
-                        # worker_empty_evidence this commit kept, and the
-                        # fenced quarantine-recovery lane waiting below. It
-                        # keeps the same durable state and the
-                        # awaiting-recovery warning below, but it is not a
-                        # worker fault, so it leaves the ERROR quarantine
-                        # channel to faults.
-                        logger.info(
-                            'event=batch_empty_ladder outcome=held_for_recovery attempt=%d recovery=held stage=%s worker_reason=%s',
-                            attempt,
-                            terminal_stage,
-                            terminal_reason,
-                        )
-                    elif validation_disposition_failure(
-                        diagnosis, disposition_enabled=worker_validation_disposition_enabled()
-                    ):
-                        # The terminal worker-validation disposition is the
-                        # designed recovery hold: typed deterministic faults
-                        # and closed vad/word verdicts no GPU retry can
-                        # repair, booked with this commit's evidence and the
-                        # fenced quarantine-recovery lane waiting below. It
-                        # keeps the same durable state and the
-                        # awaiting-recovery warning below, but it is not a
-                        # worker fault, so it leaves the ERROR quarantine
-                        # channel to faults. The flagged verdicts demote only
-                        # under the same disposition switch that decided the
-                        # durable chain end; a ladder still walking its
-                        # retries keeps its ERROR line.
-                        logger.info(
-                            'event=batch_validation_disposition outcome=held_for_disposition attempt=%d recovery=held stage=%s worker_reason=%s',
-                            attempt,
-                            terminal_stage,
-                            terminal_reason,
-                        )
-                    else:
-                        logger.error(
-                            'event=batch_quarantined reason=worker_failed attempt=%d recovery=held stage=%s worker_reason=%s',
-                            attempt,
-                            terminal_stage,
-                            terminal_reason,
-                        )
-                    logger.warning('event=batch_recovery outcome=held reason=awaiting_fenced_recovery')
+                    report_terminal_quarantine(logger, attempt=attempt, diagnosis=diagnosis)
                 except Exception:
                     pass
         return bool(outcome)
@@ -1320,7 +1263,7 @@ class Scheduler:
                             control = read_control(tx, scheduler_control_key(job['owner_key']))
                             job['state'] = 'ready'
                             _append(tx, control, job, now, seeds.get(int(job['priority']), 0.0))
-                            outcome = ('requeued', 0, None)
+                            outcome = ('requeued', 0, None, None)
                         else:
                             return None
                         tx.put('jobs', segment_id, job)

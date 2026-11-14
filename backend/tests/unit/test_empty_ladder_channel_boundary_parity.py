@@ -17,6 +17,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[2]
 
 import diarizer.batch_pipeline as worker_module
+import utils.batch_pipeline.errors as errors_module
 import utils.batch_pipeline.scheduler as scheduler_module
 from utils.batch_pipeline.errors import (
     EMPTY_LADDER_RECOVERY_REASONS,
@@ -26,6 +27,9 @@ from utils.batch_pipeline.errors import (
 
 WORKER_SOURCE = inspect.getsource(worker_module)
 SCHEDULER_SOURCE = inspect.getsource(scheduler_module)
+# Both scheduler-side terminals book through the shared terminal report, so
+# the demotion surface's source of truth lives there.
+REPORT_SOURCE = inspect.getsource(errors_module.report_terminal_quarantine)
 
 
 def test_oracle_fetch_decode_staged_audio_invalid_is_false():
@@ -718,8 +722,11 @@ def test_worker_source_has_exactly_one_empty_ladder_line():
 
 
 def test_scheduler_source_calls_the_predicate_once():
-    assert SCHEDULER_SOURCE.count("empty_ladder_recovery_failure(") == 1
-    assert "outcome=held_for_recovery" in SCHEDULER_SOURCE
+    """The scheduler delegates to the shared report; the report calls the predicate."""
+    assert SCHEDULER_SOURCE.count("empty_ladder_recovery_failure(") == 0
+    assert "report_terminal_quarantine(" in SCHEDULER_SOURCE
+    assert REPORT_SOURCE.count("empty_ladder_recovery_failure(") == 1
+    assert "outcome=held_for_recovery" in REPORT_SOURCE
 
 
 def test_worker_source_has_exactly_one_guard_line():
@@ -727,7 +734,8 @@ def test_worker_source_has_exactly_one_guard_line():
 
 
 def test_scheduler_source_has_exactly_one_guard_line():
-    assert SCHEDULER_SOURCE.count("event=batch_language_guard") == 1
+    assert SCHEDULER_SOURCE.count("event=batch_language_guard") == 0
+    assert REPORT_SOURCE.count("event=batch_language_guard") == 1
 
 
 def test_worker_source_keeps_the_fault_line():
@@ -735,7 +743,8 @@ def test_worker_source_keeps_the_fault_line():
 
 
 def test_scheduler_source_keeps_the_quarantine_line():
-    assert "event=batch_quarantined" in SCHEDULER_SOURCE
+    assert "event=batch_quarantined" in REPORT_SOURCE
+    assert "report_terminal_quarantine(" in SCHEDULER_SOURCE
 
 
 def test_predicate_is_referenced_only_by_errors_and_scheduler():
@@ -744,7 +753,7 @@ def test_predicate_is_referenced_only_by_errors_and_scheduler():
         for p in (BACKEND / "utils" / "batch_pipeline").glob("*.py")
         if "empty_ladder_recovery_failure" in p.read_text() and p.name != "__init__.py"
     ]
-    assert sorted(hits) == ["errors.py", "scheduler.py"]
+    assert sorted(hits) == ["errors.py"]
 
 
 def test_empty_ladder_event_appears_only_in_the_two_source_files():
@@ -753,7 +762,7 @@ def test_empty_ladder_event_appears_only_in_the_two_source_files():
         for p in list((BACKEND / "utils").rglob("*.py")) + list((BACKEND / "diarizer").rglob("*.py"))
         if "event=batch_empty_ladder" in p.read_text()
     ]
-    assert sorted(hits) == ["diarizer/batch_pipeline.py", "utils/batch_pipeline/scheduler.py"]
+    assert sorted(hits) == ["diarizer/batch_pipeline.py", "utils/batch_pipeline/errors.py"]
 
 
 def test_oracle_uppercase_stage_is_false():

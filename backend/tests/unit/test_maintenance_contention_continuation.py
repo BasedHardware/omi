@@ -2210,14 +2210,20 @@ async def test_recover_privacy_blocked_item_is_not_counted_as_recovered(monkeypa
     assert make_scheduler(store).recover(100) == 0
 
 
-async def test_recover_quarantine_lands_the_lease_expired_signature(monkeypatch, caplog):
+async def test_recover_quarantine_lands_the_attributed_cap_signature(monkeypatch, caplog):
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
     monkeypatch.delenv(GATE, raising=False)
     store = RecoverStore()
     seed(store, leased_job('l1', attempt=99))
     make_scheduler(store).recover(100)
     messages = [r.getMessage() for r in caplog.records if 'event=batch_quarantined' in r.getMessage()]
-    assert any('reason=lease_expired recovery=held' in m for m in messages)
+    # The cap terminal books the same attributed fault line as the verdict
+    # terminal -- never the bare anonymous lease_expired label the durable
+    # transition contradicts.
+    assert any(
+        'reason=worker_failed attempt=99 recovery=held stage=unknown worker_reason=unclassified' in m for m in messages
+    )
+    assert not any('reason=lease_expired' in m for m in messages)
 
 
 async def test_recover_quarantined_item_counts_as_a_landed_transition(monkeypatch):

@@ -78,6 +78,54 @@ Failure-Class: FC-immediate-retry-loses-shared-cas
 - The maintenance loop's catch-all log remains the last-resort net for
   failures outside the isolated steps.
 
+## Report channel: the cap terminal books the shared terminal report
+
+The sweep's lease-expiry recovery decides the same durable end the
+worker-verdict terminal decides — `expire_lease` quarantines a unit whose
+attempt cap is reached (`quarantine_job(..., 'worker_failed')`,
+`recovery_state='held'`, the fenced recovery lane waiting) — but it used to
+book that end on its own anonymous ERROR line,
+`event=batch_quarantined reason=lease_expired recovery=held`, written by
+`utils/batch_pipeline/retry_policy.py`. The label named the trigger, not
+the transition: the durable record it contradicts carries
+`quarantine_reason='worker_failed'`, and the line carried no diagnosis at
+all — no `stage=`, no `worker_reason=` — while the verdict terminal for
+the same transition consults the designed-handoff families (language-guard
+redrive, empty-ladder recovery, terminal validation disposition) and names
+the preserved diagnosis. A unit whose worker diagnosed a designed handoff
+and whose leases then expired reached the cap with that diagnosis riding
+on the job, and the expiry terminal booked it as an anonymous production
+error the verdict terminal would have demoted.
+
+Both scheduler-side terminals now book one shared report
+(`report_terminal_quarantine` in `utils/batch_pipeline/errors.py`):
+
+- A preserved designed-handoff diagnosis demotes at the cap terminal to
+  the same INFO transition event the verdict terminal books
+  (`event=batch_language_guard outcome=held_for_redrive`,
+  `event=batch_empty_ladder outcome=held_for_recovery`,
+  `event=batch_validation_disposition outcome=held_for_disposition`),
+  carrying `attempt`, `stage` and `worker_reason` from the preserved
+  evidence. The flagged disposition arm demotes only under the same
+  `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` switch that the
+  verdict terminal reads; the unconditional trio and the persist refusal
+  demote under either posture.
+- Every other diagnosis keeps the attributed fault line the verdict
+  terminal books — `event=batch_quarantined reason=worker_failed
+  attempt=N recovery=held stage=S worker_reason=R` — instead of the
+  anonymous unattributable `reason=lease_expired` label. Evidence-less and
+  hostile payloads fall back to the historical `unknown`/`unclassified`
+  attribution.
+- The `event=batch_recovery outcome=held reason=awaiting_fenced_recovery`
+  warning follows every booking, exactly as before.
+
+The demotion rechannels the report only: durable state, preserved
+evidence, the correctness `failed` meter, the queue metrics
+(`quarantined`, `recovery_held`) and custody are unchanged, and the
+below-cap expiry keeps deferring with no terminal report at all.
+
+Failure-Class: FC-lease-expiry-cap-quarantine-misbooked-as-anonymous-worker-fault
+
 ## Rollback
 
 Flip `BATCH_PIPELINE_MAINTENANCE_CONTINUATION_ENABLED=false` (env) or revert
