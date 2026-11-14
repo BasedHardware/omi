@@ -1482,6 +1482,20 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'conversation_llm_input_dedupe_skipped_total',
         'conversation_llm_input_dedupe_misses_total',
         'conversation_llm_input_dedupe_checkpoint_errors_total',
+        # Enrichment LLM cost/usage (SCA-2067, 2026-11-13): the SCA-1960 guardrail
+        # regression readout — attributable calls, shaped input tokens, notes-agent
+        # cost and episode-moment cost. Estimates, not billed dollars.
+        'omi_conversation_llm_calls_total',
+        'omi_shaped_agent_input_tokens_total',
+        'omi_notes_agent_runs_total',
+        'omi_notes_agent_estimated_cost_usd_bucket',
+        'omi_notes_agent_estimated_cost_usd_count',
+        'omi_notes_agent_estimated_cost_usd_sum',
+        'omi_notes_agent_tokens_total',
+        'omi_notes_agent_transport_skips_total',
+        'omi_episode_moment_cost_usd_total',
+        'omi_episode_moment_tokens_total',
+        'omi_episode_moment_updates_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
