@@ -7,17 +7,33 @@ import httpx
 import pytest
 
 from tests.unit.test_soniox_batch import FILE, TRANSCRIPTION, TRANSCRIPT, client as sync_client
-from utils.stt import soniox_batch as module
-
-# SCA-1998: first-call CPU cost flakes under load; keep coverage on every main
-# push in backend-slow-timing-tests.yml until the deterministic rewrite lands.
-pytestmark = pytest.mark.slow
+from utils import executors as _executors  # noqa: F401
+from utils.stt import allowance_watch, soniox_batch as module
 
 
 @pytest.fixture(autouse=True)
 def configured(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
+    # Keep unrelated subscription/executor first-use imports in setup, not in
+    # the first retry test's call-phase CPU measurement.
+    allowance_watch.observe_request('prerecorded', 'soniox')
+
+
+@pytest.fixture
+def recovery_clock():
+    now = [0.0]
+
+    def clock():
+        return now[0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    async def async_sleep(seconds):
+        sleep(seconds)
+
+    return clock, sleep, async_sleep
 
 
 def provider(stage, failures, status=503):
@@ -66,20 +82,30 @@ def provider(stage, failures, status=503):
     ],
 )
 @pytest.mark.asyncio
-async def test_transient_rejection_recovers_with_bounded_backoff(asynchronous, stage, status, caplog):
+async def test_transient_rejection_recovers_with_bounded_backoff(asynchronous, stage, status, caplog, recovery_clock):
     handler, calls = provider(stage, 2, status)
+    clock, advance, advance_async = recovery_clock
     sleeps = []
     semaphore = asyncio.Semaphore(1)
 
-    async def sleep(seconds):
+    def sync_sleep(seconds):
+        advance(seconds)
+        sleeps.append(seconds)
+
+    async def async_sleep(seconds):
         assert semaphore._value == 1
+        await advance_async(seconds)
         sleeps.append(seconds)
 
     if asynchronous:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            words, _ = await module.transcribe_async(b'synthetic', 5, client=client, semaphore=semaphore, sleep=sleep)
+            words, _ = await module.transcribe_async(
+                b'synthetic', 5, client=client, semaphore=semaphore, clock=clock, sleep=async_sleep
+            )
     else:
-        words, _ = module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), sleep=sleeps.append)
+        words, _ = module.transcribe(
+            b'synthetic', 5, client_factory=sync_client(handler), clock=clock, sleep=sync_sleep
+        )
     assert len(words) == 2
     assert calls[stage] == 3
     assert calls['create'] == (3 if stage == 'create' else 1)
@@ -92,15 +118,18 @@ async def test_transient_rejection_recovers_with_bounded_backoff(asynchronous, s
     'status,kind', [(401, 'error'), (402, 'credit_refusal'), (429, 'rate_limited'), (503, 'error_5xx')]
 )
 @pytest.mark.asyncio
-async def test_exhausted_or_permanent_error_remains_typed_and_never_empty(asynchronous, status, kind, caplog):
+async def test_exhausted_or_permanent_error_remains_typed_and_never_empty(
+    asynchronous, status, kind, caplog, recovery_clock
+):
     handler, calls = provider('transcript', 100, status)
+    clock, sync_sleep, async_sleep = recovery_clock
     if asynchronous:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             with pytest.raises(module.SonioxBatchError) as raised:
-                await module.transcribe_async(b'synthetic', 5, client=client, sleep=lambda _: asyncio.sleep(0))
+                await module.transcribe_async(b'synthetic', 5, client=client, clock=clock, sleep=async_sleep)
     else:
         with pytest.raises(module.SonioxBatchError) as raised:
-            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), sleep=lambda _: None)
+            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), clock=clock, sleep=sync_sleep)
     assert raised.value.kind == kind
     assert raised.value.submitted is True
     assert calls['transcript'] == (3 if status in {429, 503} else 1)
@@ -110,30 +139,32 @@ async def test_exhausted_or_permanent_error_remains_typed_and_never_empty(asynch
 
 @pytest.mark.parametrize('asynchronous', [False, True])
 @pytest.mark.asyncio
-async def test_uncertain_paid_submit_is_never_reissued(asynchronous):
+async def test_uncertain_paid_submit_is_never_reissued(asynchronous, recovery_clock):
     handler, calls = provider('create', 100, 'timeout')
+    clock, sync_sleep, async_sleep = recovery_clock
     if asynchronous:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             with pytest.raises(module.SonioxBatchError) as raised:
-                await module.transcribe_async(b'synthetic', 5, client=client, sleep=lambda _: asyncio.sleep(0))
+                await module.transcribe_async(b'synthetic', 5, client=client, clock=clock, sleep=async_sleep)
     else:
         with pytest.raises(module.SonioxBatchError) as raised:
-            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), sleep=lambda _: None)
+            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), clock=clock, sleep=sync_sleep)
     assert calls['create'] == 1
     assert raised.value.kind == 'timeout' and raised.value.submitted is True
 
 
 @pytest.mark.parametrize('asynchronous', [False, True])
 @pytest.mark.asyncio
-async def test_paid_submit_5xx_is_uncertain_and_never_reissued(asynchronous):
+async def test_paid_submit_5xx_is_uncertain_and_never_reissued(asynchronous, recovery_clock):
     handler, calls = provider('create', 100, 503)
+    clock, sync_sleep, async_sleep = recovery_clock
     if asynchronous:
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             with pytest.raises(module.SonioxBatchError) as raised:
-                await module.transcribe_async(b'synthetic', 5, client=client, sleep=lambda _: asyncio.sleep(0))
+                await module.transcribe_async(b'synthetic', 5, client=client, clock=clock, sleep=async_sleep)
     else:
         with pytest.raises(module.SonioxBatchError) as raised:
-            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), sleep=lambda _: None)
+            module.transcribe(b'synthetic', 5, client_factory=sync_client(handler), clock=clock, sleep=sync_sleep)
     assert calls['create'] == 1
     assert raised.value.kind == 'error_5xx' and raised.value.submitted is True
 
