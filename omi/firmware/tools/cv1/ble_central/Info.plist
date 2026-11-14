@@ -11,6 +11,6 @@
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Bench-test an Omi CV1: scan matching advertisements, connect and read firmware, serial, features and diagnostics. The audio command subscribes to at most three seconds of audio notifications. Results stay in the selected local receipt; audio is saved locally only when explicitly requested. Nothing is uploaded.</string>
+    <string>Bench-test an Omi CV1: scan matching advertisements, connect and read firmware, serial, features and diagnostics. The audio command subscribes to at most three seconds of audio notifications. Image commands use SMP to inspect image state; image-upload writes firmware, marks test/confirm, and resets unless disabled. Bonds and pairing are never used. Results stay in the selected local receipt; audio is saved locally only when explicitly requested. Nothing is sent over the network.</string>
 </dict>
 </plist>

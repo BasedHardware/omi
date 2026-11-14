@@ -15147,6 +15147,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '更新银行卡，或恢复使用 $plan，每月 $price';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
@@ -15171,4 +15176,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '改为按月付费';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan，每月 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '替代未支付的年费 $yearly。按月续订。可随时取消。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '付款被拒。你的计划没有变化。';
+
+  @override
+  String get monthlySwitchUnavailable => '目前无法切换。请改为更新银行卡。';
+
+  @override
+  String get monthlySwitchDoneTitle => '已改为按月付费';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '今日已支付 $price。按月续订。';
+  }
 }

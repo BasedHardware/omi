@@ -52,7 +52,12 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
    or when a Watch copy is proven redundant (invariant 5).
    With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
-   source-frame receipts replace the live transcript heuristic. Unknown/false keeps the heuristic.
+   source-frame receipts replace the live transcript heuristic for Omi audio sessions. Live Custom STT
+   uses HTTP transcript submission instead of frame receipts: only a confirmation carrying the
+   captured session mode may use saved transcript coverage for its stamped phone safety copies.
+   Current preferences never supply this authority. Partial/interrupted, held, on-device and
+   unlinked copies remain recoverable, and the transfer coordinator still honors the upload choice.
+   Unknown/false keeps the heuristic.
    Receipt ranges are journaled durably per owner even in shadow; comparisons emit
    `event=refactor_shadow lane=L5 check=custody_release outcome=agree|disagree`. The union must cover
    the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
@@ -157,3 +162,36 @@ not imply success or renew a pending span. All backlog counts remain available.
 
 Guard: `test/unit/sync_attention_policy_test.dart` and
 `test/providers/sync_provider_needs_attention_retry_test.dart`.
+
+## Offline Sync cleanup acceptance (#24783)
+
+- [x] Saved Custom STT coverage uses the recorded session mode, independent of later preferences.
+- [x] Covered phone copies enter synced retention; partial, held, on-device and unlinked audio remains recoverable.
+- [x] Targeted/grouped and bulk cleanup check selected identities, report retained/unconfirmed entries, and refresh after partial failure.
+- [x] Unsupported pending flash-page cleanup retains the row and reports failure; processed-page ACK errors propagate.
+- [x] Legacy positional indexes are invalidated after attempted deletion without treating a rejected command as success.
+- [x] Regression coverage: `capture_transcript_coverage_test`, `l5_capture_committed_test`, `offline_sync_recording_blocks_test`, and device deletion protocol suites.
+- [ ] App release containing the verified fix (tracked separately from source merge).
+
+## Reauthentication recovery (#24777)
+
+The ledger outlives the authentication screen. After Home mounts for an authenticated
+session, its explicit local-recordings refresh scans native migration receipts, then
+reconciles active, parked and retired inventory for that owner. Only afterward does
+Offline Sync refresh its view. Ordinary inventory reads never restore retired rows:
+sign-out clears providers before clearing the old UID, so read-time restoration can
+republish the retiring account. Refresh work captures the session generation and UID
+before awaiting disk access; a successor session cannot adopt that work.
+
+Existing batch rows resolve their legacy/Watch owner before admission. Ambiguous
+ownership remains parked with the source audio and migration evidence intact. The
+legacy job receipt and quarantine preference survive sign-out; a migrated uploaded
+row retains its job ID and hold so the shared reconciler delivers its result without
+another upload. Recovery does not change automatic-upload or local-only choices.
+
+- [x] Same-owner cold start and in-session reauthentication restore parked inventory.
+- [x] Foreign accounts and unresolved batch ownership remain hidden and recoverable.
+- [x] Accepted legacy jobs survive preference clearing and resume as processing.
+- [x] Regression suites exercise real WAL persistence, retained bytes and repeated intake.
+- [x] Native iOS simulator persistence/reauthentication verification with disposable PCM audio, real preferences and index.
+- [ ] Store release and original-customer recording recovery, tracked separately from source verification.

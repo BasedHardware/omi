@@ -77,12 +77,26 @@ describe("macOS release CI", () => {
       new URL("../../scripts/prepare-agent-runtime.sh", import.meta.url),
       "utf8"
     );
+    const signedSmokeScript = readFileSync(
+      new URL("../../scripts/smoke-signed-desktop-artifact.sh", import.meta.url),
+      "utf8"
+    );
 
-    expect(prepareRuntimeScript).toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"');
+    expect(prepareRuntimeScript).toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.23.5}"');
     expect(prepareRuntimeScript).toContain('NODE_MIN_VERSION="v22.19.0"');
+    expect(prepareRuntimeScript).toContain(
+      'NODE_DARWIN_ARM64_SHA256="e7131995759b61a0170b646010d2ad35a5d37b4cb0d471f3e8317eac6f742f3d"'
+    );
+    expect(prepareRuntimeScript).toContain(
+      'NODE_DARWIN_X64_SHA256="c53383238206b9ae4db23c5d8a63645e2e753bec8ab51a49cc81939aa64e9422"'
+    );
     expect(prepareRuntimeScript).toContain("node_version_at_least()");
     expect(prepareRuntimeScript).toContain('node_version_at_least "$staged_version" "$NODE_MIN_VERSION"');
     expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"');
+    expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"');
+    expect(signedSmokeScript).toContain("expected_bundled_node_version()");
+    expect(signedSmokeScript).toContain("bundled node version mismatch: expected $expected_node_version");
+    expect(signedSmokeScript).toContain("bundled node binary is missing $node_arch architecture");
   });
 
   it("runs the pi-mono package harness under the maintained Node runtime", () => {

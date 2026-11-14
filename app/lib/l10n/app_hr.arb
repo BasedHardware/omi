@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "Kad još 3 prijatelja kupe",
     "referralClaimShort": "Preuzmi",
     "paymentDeclinedTitle": "Vaša kartica je odbijena",
+    "paymentDeclinedMonthlyMessage": "Ažurirajte karticu ili vratite {plan} za {price} mjesečno",
     "paymentDeclinedMessage": "Ažurirajte karticu kako biste vratili {plan}",
     "hasLinkedTasksLabel": "Ima povezane zadatke",
     "hasTasksFilter": "Sa zadacima",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Prijeđi na mjesečno",
+    "monthlySwitchPlanValue": "{plan}, {price} mjesečno",
+    "monthlySwitchNote": "Zamjenjuje neplaćenu godišnju naplatu od {yearly}. Obnavlja se mjesečno. Otkažite bilo kada.",
+    "monthlySwitchDeclined": "Plaćanje je odbijeno. Vaš plan nije promijenjen.",
+    "monthlySwitchUnavailable": "Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.",
+    "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
+    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno."
 }

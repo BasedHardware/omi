@@ -4674,11 +4674,19 @@
     "referralRewardSecondDetail": "Saat 3 teman lagi membeli",
     "referralClaimShort": "Klaim",
     "paymentDeclinedTitle": "Kartu Anda ditolak",
+    "paymentDeclinedMonthlyMessage": "Perbarui kartu, atau dapatkan kembali {plan} seharga {price} per bulan",
     "paymentDeclinedMessage": "Perbarui kartu untuk mendapatkan kembali {plan}",
     "hasLinkedTasksLabel": "Memiliki tugas tertaut",
     "hasTasksFilter": "Dengan tugas",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Beralih ke Bulanan",
+    "monthlySwitchPlanValue": "{plan}, {price} per bulan",
+    "monthlySwitchNote": "Menggantikan tagihan tahunan {yearly} yang belum dibayar. Diperpanjang tiap bulan. Batalkan kapan saja.",
+    "monthlySwitchDeclined": "Pembayaran ditolak. Paket Anda tidak berubah.",
+    "monthlySwitchUnavailable": "Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.",
+    "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
+    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan."
 }

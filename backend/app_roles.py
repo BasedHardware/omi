@@ -65,6 +65,7 @@ from routers import (
     payment,
     retention_offer,
     yearly_switch,
+    monthly_switch,
     redeem_code,
     storefront,
     integration,
@@ -221,7 +222,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(notifications),
     Mount(integration),
     Mount(agents),
-    Mount(users, roles=API_WORKERS),  # Cloud Tasks: /v1/users/account-deletion-wipes/run
+    Mount(users, roles=API_WORKERS),  # Cloud Tasks: account-deletion wipes + conversation batch purges
     Mount(support),
     Mount(referrals),
     Mount(csat),
@@ -253,6 +254,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(payment),
     Mount(retention_offer),
     Mount(yearly_switch),
+    Mount(monthly_switch),
     Mount(redeem_code),
     Mount(storefront),
     Mount(api_key_management, attr='mcp_router'),

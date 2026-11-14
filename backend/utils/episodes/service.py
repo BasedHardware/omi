@@ -119,6 +119,10 @@ SYNC_UPDATE = 'sync_update'
 FINALIZE_MIN_WORDS = 8
 
 
+class AdmissionClosed(Exception):
+    """The audio close already owns the capture: a late admission attached nothing."""
+
+
 @dataclass
 class Collaborators:
     """Seams for tests; production uses the module defaults."""
@@ -1667,7 +1671,18 @@ def _no_owner(rows, started, finished):
 
 
 def attach_recorded(
-    uid, conversation_id, row, started, finished, c, *, pending_transcription=False, new_occasion=False
+    uid,
+    conversation_id,
+    row,
+    started,
+    finished,
+    c,
+    *,
+    pending_transcription=False,
+    new_occasion=False,
+    deadline_floor=None,
+    detach_from=None,
+    admission=False,
 ) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
@@ -1688,8 +1703,13 @@ def attach_recorded(
         new_episode=template,
         firestore_client=c.firestore_client,
         pending_at=template['created_at'] if pending_transcription else None,
+        deadline_floor=deadline_floor,
+        detach_from=detach_from,
         attach_row=row,
+        admission=admission,
     )
+    if isinstance(placed, str):
+        raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
 

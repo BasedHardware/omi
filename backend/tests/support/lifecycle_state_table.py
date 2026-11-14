@@ -162,7 +162,7 @@ PATCH_CONTRACTS = {
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'conversation_span'),
-                'd04053702f344798afcdaf665c967d325084a1bf8dd4009b0a0576898350c993',
+                'fc65ea6d28331e9fdb075178b84bca85d3d47a28aecf4155d0d11f314e6cab92',
             ),
             (
                 Writer('models/recorded_span.py', 'RecordedSpan'),
@@ -364,7 +364,20 @@ EPISODE_PHASES = ('live', 'closing', 'closed', 'composed', 'redirected')
 # Derived conversation rows are reader vocabulary, not automatic entry sites.
 # The underlying obligations below each receive the full four-clause verdict.
 STATES = (
-    tuple(
+    (
+        row(
+            'batch',
+            'allowance_held',
+            ('state',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'),
+            metric='omi_batch_allowance_held_units',
+            alert_required=False,
+            deadline_exemption='SCA-2195: allowance policy parking has no recording expiry; owner generation releases it.',
+            entry_writers=(Writer('database/batch_pipeline_allowance_hold.py', 'park'),),
+            note='Current held/allowance_exhausted only; custody retained, outside retry and pending-work sweeps.',
+        ),
+    )
+    + tuple(
         row(
             'conversation_phase',
             name,

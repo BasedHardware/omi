@@ -63,6 +63,9 @@ def chat():
     usage_tracker.set_usage_context = MagicMock()
     usage_tracker.reset_usage_context = MagicMock()
 
+    users = MagicMock()
+    users.get_user_language_preference = MagicMock(return_value='')
+    users.get_user_transcription_preferences = MagicMock(return_value={})
     fakes: dict[str, object] = {
         "database._client": MagicMock(),
         "stripe": MagicMock(),
@@ -70,7 +73,7 @@ def chat():
         "database.notifications": MagicMock(),
         "database.apps": MagicMock(),
         "database.auth": MagicMock(),
-        "database.users": MagicMock(),
+        "database.users": users,
         "utils.apps": MagicMock(),
         "utils.llm.chat": MagicMock(),
         "utils.llm.persona": MagicMock(),

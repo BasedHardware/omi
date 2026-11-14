@@ -24,7 +24,7 @@ import requests
 from google.auth.transport.requests import AuthorizedSession
 from google.cloud import firestore
 
-from database._client import db, run_transactional
+from database._client import get_firestore_client, run_transactional
 from database.announcements import compare_versions
 from database.cache import get_memory_cache
 from utils.metrics import (
@@ -36,9 +36,11 @@ from utils.metrics import (
 from utils.observability.reasons import (
     AppReviewConfigOutcome,
     AppReviewConfigReason,
+    FallbackReason,
     ReasonFamily,
     reason_label,
 )
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +313,7 @@ def report_lifecycle_alert(platform: str, reason: str, message: str) -> None:
 
 
 def _firestore_config(platform: str) -> dict[str, Any]:
-    snapshot = db.collection('app_review_config').document(platform).get()
+    snapshot = get_firestore_client().collection('app_review_config').document(platform).get()
     if not getattr(snapshot, 'exists', False):
         return {}
     raw = snapshot.to_dict()
@@ -319,7 +321,8 @@ def _firestore_config(platform: str) -> dict[str, Any]:
 
 
 def _update_config(platform: str, transform: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
-    reference = db.collection('app_review_config').document(platform)
+    client = get_firestore_client()
+    reference = client.collection('app_review_config').document(platform)
 
     @firestore.transactional
     def update(transaction: Any) -> dict[str, Any]:
@@ -331,7 +334,7 @@ def _update_config(platform: str, transform: Callable[[dict[str, Any]], dict[str
             transaction.set(reference, updated, merge=True)
         return updated
 
-    updated = run_transactional(db, update, transient=True)
+    updated = run_transactional(client, update, transient=True)
     get_memory_cache().delete(f"{_CACHE_KEY_PREFIX}{platform}")
     return updated
 
@@ -555,6 +558,13 @@ def run_app_review_config_sweep(*, now: datetime | None = None) -> dict[str, int
                 'credentials_unavailable',
                 'using TTL-only cleanup for this platform',
             )
+            record_fallback(
+                component='app_review_config',
+                from_mode='store_api',
+                to_mode='ttl_only',
+                reason=FallbackReason.STORE_CREDENTIALS_UNAVAILABLE,
+                outcome='degraded',
+            )
             logger.warning(
                 'app_review_config store credentials unavailable platform=%s; TTL continues',
                 platform,
@@ -562,6 +572,13 @@ def run_app_review_config_sweep(*, now: datetime | None = None) -> dict[str, int
         except Exception:
             summary['store_errors'] += 1
             report_lifecycle_alert(platform, 'store_api_error', 'using TTL-only cleanup for this platform')
+            record_fallback(
+                component='app_review_config',
+                from_mode='store_api',
+                to_mode='ttl_only',
+                reason=FallbackReason.STORE_API_ERROR,
+                outcome='degraded',
+            )
             logger.exception(
                 'app_review_config store read failed platform=%s; TTL continues',
                 platform,

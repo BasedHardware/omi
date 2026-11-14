@@ -1405,9 +1405,15 @@ def test_production_native_queries_never_cross_into_development(verifier):
     development = verifier.load_live_stt_import_rules(production=False)
     for uid in verifier.PRODUCTION_ONLY_IMPORT_UIDS:
         assert uid in production and uid not in development
-        model = production[uid]['data'][0]['model']
-        assert model['promQLQuery']['projectName'] == 'based-hardware'
-        assert model['timeSeriesList']['projectName'] == 'based-hardware'
+        node = production[uid]['data'][0]
+        model = node['model']
+        if 'promQLQuery' in model:
+            assert model['promQLQuery']['projectName'] == 'based-hardware'
+            assert model['timeSeriesList']['projectName'] == 'based-hardware'
+        else:
+            # Prometheus-shaped production-only rules read a datasource that only
+            # the production overlay creates (the GMP Cloud Run shadow).
+            assert node['datasourceUid'] == 'gmp-cloud-run'
     # The production filter is a detached transformation, including when used
     # by the read-back gate rather than the importer.
     transformed = verifier._development_rules(production)

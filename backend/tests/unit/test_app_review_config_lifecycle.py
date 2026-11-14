@@ -216,6 +216,35 @@ def test_replayed_receipt_does_not_extend_an_active_submission_lease():
     assert row["owns_hidden_version"] is True
 
 
+def test_firestore_helpers_resolve_the_client_at_call_time(monkeypatch):
+    client = Mock()
+    reference = Mock()
+    snapshot = Mock(exists=True)
+    snapshot.to_dict.return_value = {"existing": True}
+    client.collection.return_value.document.return_value = reference
+    reference.get.return_value = snapshot
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+
+    assert lifecycle._firestore_config("ios") == {"existing": True}
+
+    monkeypatch.setattr(lifecycle.firestore, "transactional", lambda callback: callback)
+    transaction = Mock()
+    cache = Mock()
+    monkeypatch.setattr(lifecycle, "get_memory_cache", lambda: cache)
+
+    def run_transactional(resolved_client, callback, *, transient):
+        assert resolved_client is client
+        assert transient is True
+        return callback(transaction)
+
+    monkeypatch.setattr(lifecycle, "run_transactional", run_transactional)
+    updated = lifecycle._update_config("ios", lambda current: {**current, "added": True})
+
+    assert updated == {"existing": True, "added": True}
+    transaction.set.assert_called_once_with(reference, updated, merge=True)
+    cache.delete.assert_called_once_with("app_review_config:ios")
+
+
 def test_store_api_failures_still_run_ttl_and_keep_unexpired_hides(monkeypatch):
     configs = {
         'ios': {
@@ -248,6 +277,8 @@ def test_store_api_failures_still_run_ttl_and_keep_unexpired_hides(monkeypatch):
     )
     sweep_counter = Mock()
     monkeypatch.setattr(lifecycle, "OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL", sweep_counter)
+    fallbacks = Mock()
+    monkeypatch.setattr(lifecycle, "record_fallback", fallbacks)
 
     summary = lifecycle.run_app_review_config_sweep(now=NOW)
 
@@ -256,6 +287,31 @@ def test_store_api_failures_still_run_ttl_and_keep_unexpired_hides(monkeypatch):
     assert configs['android']['hidden_versions'] == []
     assert configs['android']['review_submission_entries'][0]['state'] == 'expired'
     sweep_counter.labels.assert_called_once_with(outcome="error")
+    assert {call.kwargs['reason'] for call in fallbacks.call_args_list} == {
+        lifecycle.FallbackReason.STORE_API_ERROR,
+        lifecycle.FallbackReason.STORE_CREDENTIALS_UNAVAILABLE,
+    }
+    assert all(call.kwargs['to_mode'] == 'ttl_only' for call in fallbacks.call_args_list)
+
+
+def test_app_review_alert_metrics_are_scraped_and_use_the_unmuted_paging_receiver():
+    metrics = json.loads((BACKEND_ROOT / 'charts/monitoring/metric-inventory.prod.json').read_text())[
+        'declared_metrics'
+    ]
+    assert 'omi_app_review_config_sweep_total' in metrics
+
+    expected_uids = {'omi-app-review-config-alert', 'omi-app-review-config-sweep-silent'}
+    split = json.loads((BACKEND_ROOT / 'charts/monitoring/alerts/app-review-config.json').read_text())
+    combined = json.loads((BACKEND_ROOT / 'charts/monitoring/alert-rules.json').read_text())
+    for rules in (split, combined):
+        app_review_rules = {rule['uid']: rule for rule in rules if rule.get('uid') in expected_uids}
+        assert set(app_review_rules) == expected_uids
+        for rule in app_review_rules.values():
+            settings = rule['notification_settings']
+            assert settings['receiver'] == 'Omi - Services Alerting (Telegram)'
+            assert not settings.get('mute_time_intervals')
+            assert rule['labels']['tier'] == 'page'
+            assert rule['labels']['audience'] == 'human'
 
 
 def test_reconciliation_persists_dropped_tombstone_even_when_no_hide_was_cleared(
@@ -312,6 +368,21 @@ def test_sweep_alerts_after_clearing_a_preexisting_build_qualified_ios_hide(
     assert summary["cleared"] == 1
     assert configs["ios"]["hidden_versions"] == ["unmatched-legacy"]
     alerts.assert_any_call("ios", "live_hide_cleared", "count=1")
+
+
+def test_clearing_one_build_qualified_hide_preserves_other_builds():
+    config = {
+        "hidden_versions": ["2.1.0+22", "2.1.0+23"],
+        "review_submission_entries": [active_entry("ios", "2.1.0+22")],
+    }
+
+    updated, repairs, clears = lifecycle.reconcile_ios_config(
+        config, version_states={"2.1.0+22": "READY_FOR_SALE"}, now=NOW
+    )
+
+    assert updated["hidden_versions"] == ["2.1.0+23"]
+    assert updated["review_submission_entries"] == []
+    assert (repairs, clears) == (0, 1)
 
 
 def test_play_reader_uses_only_production_track_and_deletes_temporary_edit(monkeypatch):

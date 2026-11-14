@@ -596,6 +596,7 @@ FLAGS: Final[Mapping[str, tuple[str, str]]] = {
     'BATCH_VENDOR_HELD_REDRIVE_ENABLED': ('D', 'ops_kill, on unless false; false parks holds without redrive'),
     'BATCH_VENDOR_HELD_REDRIVE_SECONDS': ('D', 'runtime hold redrive interval'),
     'BATCH_VENDOR_HELD_STALE_GRACE_SECONDS': ('D', 'runtime grace past redrive_at before a hold counts as a wedge'),
+    'BATCH_VENDOR_MIN_SPEECH_SECONDS': ('D', 'strict-VAD speech below which a unit skips the vendor as silence; 2'),
 }
 
 # --- frozen metric names --------------------------------------------------------------------------
@@ -623,5 +624,9 @@ METRIC_AUDIO_HOURS_CAP: Final = 'omi_batch_pipeline_vendor_audio_hours_cap'  # {
 METRIC_CAP_HITS: Final = 'omi_batch_pipeline_vendor_cap_hits_total'  # {provider, reason}  C
 # Billed vendor audio seconds for units routed over a capable GPU, i.e. overflow (the $50/day spend alert).
 METRIC_OVERFLOW_AUDIO: Final = 'omi_batch_pipeline_vendor_overflow_audio_seconds_total'  # {route}  B (overflow)
+# Unit audio answered as local silence because its measured speech was under the minimum (D).
+METRIC_SHORT_SPEECH_SKIPPED_AUDIO: Final = (
+    'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'  # {provider}
+)
 BREAKER_STATES: Final[frozenset[str]] = frozenset({'closed', 'degraded', 'open', 'half_open'})
 LATE_RESULT_OUTCOMES: Final[frozenset[str]] = frozenset({'ignored', 'reconciled'})

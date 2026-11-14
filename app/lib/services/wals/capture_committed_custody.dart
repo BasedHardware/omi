@@ -74,6 +74,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     List<(int, int)>? transcriptSpans,
     int? conversationStartSeconds,
     String? failClosedReason,
+    bool allowTranscriptCoverageFallback = false,
   }) async {
     final generation = _sessionGeneration;
     final useCommits = await ClientRefactorFlags.custodyRelease();
@@ -92,17 +93,23 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
       // Only phone-side pending copies and transport-only synced ones (socket sends, never
       // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
       final eligible = !wal.holdForUser &&
+          !wal.onDeviceOnly &&
           !wal.isSyncing &&
           (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
           (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
-      if (!eligible || useCommits && wal.onDeviceOnly) continue;
+      if (!eligible) continue;
       final legacyCovered =
           spans != null && walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds);
       final committed = await captureCommits.covers(_currentWalOwnerUid(), wal);
       if (!_isCurrent(generation)) return (released: 0, kept: 0);
       ClientRefactorFlags.compare('custody_release', legacyCovered == committed);
       // refactor: superseded by CaptureCommittedJournal when custody_capture_committed_release=true
-      if (useCommits ? committed : legacyCovered) {
+      // Live custom STT sends suggested_transcript segments from the client's primary STT socket
+      // without server audio-frame receipts, so verified transcript span coverage still releases it.
+      final isCovered = useCommits
+          ? committed || (allowTranscriptCoverageFallback && wal.ownerUid == _currentWalOwnerUid() && legacyCovered)
+          : legacyCovered;
+      if (isCovered) {
         wal.status = WalStatus.synced;
         wal.syncedAt = nowSeconds;
         wal.keptForTranscriptRecovery = false;
