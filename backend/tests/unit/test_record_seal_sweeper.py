@@ -57,6 +57,19 @@ def test_live_pod_or_mixed_sidecar_token_is_never_cleared(source, proof, pods, s
         assert not any(tx.updates for tx in client.transactions)
 
 
+def test_aged_capture_past_grace_clears_a_live_token(source, proof, monkeypatch):
+    # The sweeper is the always-on seal path: it must honour the chart knob.
+    monkeypatch.setenv('RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS', '600')
+    client = source[1]
+    tokens = {'token': {'pod': 'old', 'process_started_at': 900}}
+    client.rows[PATH]['record_upload_sessions'] = tokens
+    report = run(source, proof([pod('old', 800)]))  # Live pod, failed pod proof.
+    assert report['outcome'] == 'ok'
+    assert report['dispositions'] == {'sealed': 1}
+    assert client.rows[PATH]['record_upload_sessions'] == {}
+    assert client.rows[PATH]['record_audio_closed'] is True
+
+
 def test_stale_inventory_refuses_before_any_discovery_or_writes(source, proof):
     snapshot = proof()
     snapshot['captured_at'] = 699

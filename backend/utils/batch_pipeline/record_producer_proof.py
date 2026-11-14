@@ -124,8 +124,9 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
 def producers_quiesced(row, tokens, now=None):
     """Aged completed capture whose identified producers can no longer append.
 
-    Repair-only exemption from the pod-restart proof. Pre-identity (bare True)
-    tokens still require the explicit operator attestation.
+    Exemption from the pod-restart proof for every seal path that consults
+    `seal_refusal` (repair job, sweeper, no-job backfill). Pre-identity (bare
+    True) tokens still require the explicit operator attestation.
     """
     from config.record_seal_rules import live_producer_grace_seconds
 

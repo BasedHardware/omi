@@ -96,7 +96,8 @@ def refusal(row, producer_proof, *, repair_upload_failed=False):
     tokens = row.get('record_upload_sessions')
     if tokens and (not isinstance(tokens, dict) or len(tokens) > 128):
         return 'upload_pending'
-    # Never offer a producers-stopped escape hatch: token rows need pod proof.
+    # Never offer a producers-stopped escape hatch: token rows need pod proof or
+    # an aged completed capture past the live-producer grace.
     return seal_refusal(
         {'state': 'record_pending', 'record_content_id': 'candidate'},
         row,

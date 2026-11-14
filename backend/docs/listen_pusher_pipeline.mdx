@@ -188,10 +188,6 @@ object span, retaining the earlier accepted bytes within that span. A wholly
 covered object does not replace this comparison history.
 
 Only the independent repair job opts into retrying `record_upload_failed` rows.
-A completed capture finished more than `RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS`
-(default 3600; 0 disables) ago no longer waits for its producer pod to restart:
-seal repair treats identified producer tokens as quiesced and still requires the
-full retained-tail proof. Partial arming keeps the pod-restart rule.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full
 proof of retained audio and dead producers, repair clears the failure flag and
 seals in the same transaction, fenced by the unchanged row, job and upload
@@ -199,6 +195,15 @@ revision. Every failure mark increments `record_upload_revision`, including a
 repeated mark while the flag is true; inline finish and the sweeper still refuse
 the flag. Repair emits the closed `upload_failed_cleared` disposition and the
 numeric `trimmed_divergent_overlaps` row field, with no source identifiers.
+
+A completed capture finished more than `RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS`
+(default 3600; 0 disables) ago no longer waits for its producer pod to restart:
+seal repair treats identified producer tokens as quiesced and still requires the
+full retained-tail proof. This applies on every seal path that consults the
+shared refusal rule (sweeper, repair job and no-job backfill); the chart knob is
+`recordSealRules.liveProducerGraceSeconds`, and `0` restores the pod-restart
+rule everywhere. Pre-identity tokens still need the operator
+`--producers-stopped` attestation, and partial arming keeps the pod-restart rule.
 
 Worker chart `recordSealRules.overlapTrimEnabled` and
 `recordSealRules.uploadFailedRepairEnabled` are independent default-on rollback

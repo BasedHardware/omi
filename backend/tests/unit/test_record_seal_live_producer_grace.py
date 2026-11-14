@@ -1,6 +1,6 @@
 """Aged completed captures stop waiting on a long-lived pusher pod's restart."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -27,7 +27,17 @@ JOB = {'state': 'record_pending', 'record_content_id': 'synthetic-content'}
 
 
 @pytest.mark.parametrize(
-    'raw,expected', [(None, 3600.0), ('0', 0.0), ('600', 600.0), ('bad', 3600.0), ('-5', 3600.0), ('nan', 3600.0)]
+    'raw,expected',
+    [
+        (None, 3600.0),
+        ('0', 0.0),
+        ('600', 600.0),
+        ('bad', 3600.0),
+        ('-5', 3600.0),
+        ('nan', 3600.0),
+        ('inf', 3600.0),
+        ('6048000', 604800.0),  # long graces clamp to the seven-day maximum
+    ],
 )
 def test_grace_setting_is_bounded(monkeypatch, raw, expected):
     if raw is None:

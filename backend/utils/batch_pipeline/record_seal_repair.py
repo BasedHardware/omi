@@ -293,7 +293,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             )
             patch: dict[str, Any] = {'record_audio_closed': True}
             if row.get('record_upload_sessions'):
-                patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
+                patch['record_upload_sessions'] = {}  # Exact proven-dead or aged-quiesced map.
             if row.get('record_upload_failed'):
                 patch['record_upload_failed'] = False
             check_budget()

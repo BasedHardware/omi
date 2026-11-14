@@ -5,7 +5,8 @@ recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
   uploadFailedRepairEnabled: true
-  # Completed captures older than this stop waiting on a live pusher pod restart; 0 restores that rule.
+  # Completed captures older than this stop waiting on a live pusher pod restart;
+  # 0 restores that rule. Wired to the worker, sweeper and repair jobs.
   liveProducerGraceSeconds: 3600
 image:
   repository: ""

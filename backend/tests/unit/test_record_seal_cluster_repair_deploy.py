@@ -58,7 +58,12 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
 
 def test_seal_rules_have_independent_chart_rollback_switches():
     docs = documents(
-        '--set', 'recordSealRules.overlapTrimEnabled=false', '--set', 'recordSealRules.uploadFailedRepairEnabled=false'
+        '--set',
+        'recordSealRules.overlapTrimEnabled=false',
+        '--set',
+        'recordSealRules.uploadFailedRepairEnabled=false',
+        '--set',
+        'recordSealRules.liveProducerGraceSeconds=0',
     )
 
     def env(name):
@@ -69,6 +74,13 @@ def test_seal_rules_have_independent_chart_rollback_switches():
     assert env('record-seal-repair')['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'false'
     assert env('record-seal-sweeper')['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == 'false'
     assert 'RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED' not in env('record-seal-sweeper')
+    # The kill switch must reach every seal path that consults seal_refusal,
+    # including the always-on sweeper.
+    for name in ('record-seal-repair', 'record-seal-sweeper'):
+        assert env(name)['RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS'] == '0'
+    worker = docs[('Deployment', 'record-seal-worker')]['spec']['template']['spec']['containers'][0]
+    worker_env = {e['name']: e.get('value') for e in worker['env']}
+    assert worker_env['RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS'] == '0'
 
 
 def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart():

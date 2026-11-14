@@ -1,6 +1,9 @@
 """Independent default-on rollback switches for approved seal proof rules."""
 
+import math
 import os
+
+MAX_LIVE_PRODUCER_GRACE_SECONDS = 7 * 86400.0
 
 
 def overlap_trim_enabled():
@@ -23,7 +26,11 @@ def live_producer_grace_seconds() -> float:
         value = float(os.getenv('RECORD_SEAL_LIVE_PRODUCER_GRACE_SECONDS', '3600'))
     except ValueError:
         return 3600.0
-    return value if value == value and 0 <= value <= 7 * 86400 else 3600.0
+    if not math.isfinite(value) or value < 0:
+        return 3600.0
+    # Clamp long graces to the maximum instead of silently reverting to the
+    # default, which would turn the exemption on at one hour.
+    return min(value, MAX_LIVE_PRODUCER_GRACE_SECONDS)
 
 
 def refused_stamp_enabled():
