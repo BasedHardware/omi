@@ -147,7 +147,7 @@ def ceremony(monkeypatch, world):
         utils.observability utils.observability.fallback utils.other utils.other.endpoints utils.other.storage
         utils.memory utils.memory.canonical_memory_adapter utils.memory.memory_service utils.memory.memory_system
         utils.retrieval utils.retrieval.frame_request_storage utils.twilio_service utils.integration_telemetry
-        utils.sync utils.sync.cap_hold services.users.agent_vm_account_cleanup'''.split()
+        utils.sync utils.sync.cap_hold'''.split()
     fakes = {name: AutoMockModule(name) for name in names}
     for module in fakes.values():
         module.__path__ = []
@@ -176,7 +176,6 @@ def ceremony(monkeypatch, world):
     for name, event in {
         'acquire_destructive_operation': 'legal_hold',
         '_cancel_subscription_for_account_deletion': 'billing',
-        'delete_agent_vm_for_account': 'agent_vm',
         'delete_account_credentials': 'credentials',
         'delete_user_caller_ids': 'twilio',
         'purge_owner_planes': 'cell',
@@ -234,7 +233,6 @@ def test_o1_wipe_coverage_gate_and_crash_retry(world, ceremony):
             'legal_hold',
             'running',
             'billing',
-            'agent_vm',
             'messaging',
             'credentials',
             'firebase_auth',

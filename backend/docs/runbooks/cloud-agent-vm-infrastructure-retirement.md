@@ -623,16 +623,26 @@ account-deletion cleanup path alive, so they go before that path is retired.
 | `markers` | `account_deletions/{uid}.late_agent_vm_cleanup` |
 | `leases` | the standalone `agent_vm_reconciler_leases` collection |
 
+`--project` is required: the run never inherits an ambient project. The client
+is built for exactly that project and the run refuses, before any read or
+write, when the live client resolves elsewhere. Every receipt line names the
+project and separates `queued` batch operations from `committed` ones, so a
+failed batch shows up as `failed_ops`/`failed_batches` and the run exits
+non-zero with `INCOMPLETE` instead of looking successful.
+
 The script is a dry run unless `--apply` is passed, prints aggregate counts
 only (never uids or VM names), and is idempotent. Run it from the backend
 directory with the production Admin SDK credentials:
 
 ```bash
 cd backend
-python scripts/sweep_agent_vm_firestore.py                       # dry run, all targets
-python scripts/sweep_agent_vm_firestore.py --target users --limit 100
-python scripts/sweep_agent_vm_firestore.py --apply               # execute
+python scripts/sweep_agent_vm_firestore.py --project based-hardware                       # dry run, all targets
+python scripts/sweep_agent_vm_firestore.py --project based-hardware --target users --limit 100
+python scripts/sweep_agent_vm_firestore.py --project based-hardware --apply               # execute
 ```
+
+A run whose receipts report `failed_batches>0` is incomplete; re-run it before
+treating the target as swept.
 
 Expected dry-run shape at hand-off (2026-11-10): `users` matched 9,366;
 `migrations`, `markers`, and `leases` matched 0. Re-run the dry run after

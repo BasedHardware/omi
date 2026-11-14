@@ -17,17 +17,26 @@ Targets, in the order the runbook runs them:
 
 Safety properties:
 
+  * `--project` is required. There is no ambient default: the operator names the
+    Firestore project on the command line, the client is built for exactly that
+    project, and the run aborts before any read or write when the live client
+    resolves to a different project.
   * Dry run is the default. Nothing is written without `--apply`.
+  * Every receipt line carries the selected project, and separately reports the
+    operations `queued` into batches versus the operations `committed` by a
+    successful batch commit. A batch whose commit fails moves its queued
+    operations to `failed_ops`; they are never reported as written.
   * Output is aggregate counts only. Firebase uids and VM names are never
     printed, because the legacy VM naming embeds `uid[:12]`.
   * Every target is idempotent: a second run reports zero and writes nothing.
+    A failed batch is re-scanned and retried by the next run.
   * Writes are batched (Firestore caps a batch at 500 operations) and each
     target is independently resumable via `--target`.
 
 Usage:
-    python scripts/sweep_agent_vm_firestore.py                    # dry run, all targets
-    python scripts/sweep_agent_vm_firestore.py --target users --limit 100
-    python scripts/sweep_agent_vm_firestore.py --apply            # execute
+    python scripts/sweep_agent_vm_firestore.py --project based-hardware
+    python scripts/sweep_agent_vm_firestore.py --project based-hardware --target users --limit 100
+    python scripts/sweep_agent_vm_firestore.py --project based-hardware --apply
 """
 
 from __future__ import annotations
@@ -61,33 +70,59 @@ TARGETS = ('users', 'migrations', 'markers', 'leases')
 
 
 class _Counter:
+    """Per-target accounting.
+
+    ``queued`` counts operations staged into a batch; ``committed`` counts
+    operations whose batch commit returned successfully. They are only equal
+    when every batch committed. ``failed_ops`` are queued operations that never
+    reached the service because their batch commit raised.
+    """
+
     def __init__(self) -> None:
         self.scanned = 0
         self.matched = 0
-        self.written = 0
-        self.failed = 0
+        self.queued = 0
+        self.committed = 0
+        self.failed_ops = 0
+        self.failed_batches = 0
 
-    def report(self, target: str, *, applied: bool) -> None:
+    @property
+    def failed(self) -> bool:
+        return self.failed_batches > 0
+
+    def report(self, target: str, *, project: str, applied: bool) -> None:
         mode = 'APPLIED' if applied else 'DRY-RUN'
         print(
-            f'{mode} {target}: scanned={self.scanned} matched={self.matched} '
-            f'written={self.written} failed={self.failed}'
+            f'{mode} project={project} target={target} scanned={self.scanned} matched={self.matched} '
+            f'queued={self.queued} committed={self.committed} '
+            f'failed_ops={self.failed_ops} failed_batches={self.failed_batches}'
         )
 
 
-def _flush(db: Any, batch: Any, counter: _Counter, *, applied: bool) -> Any:
-    """Commit a batch when it is full, returning a fresh one."""
+def _flush(db: Any, batch: Any, counter: _Counter, pending: int, *, project: str, applied: bool) -> Any:
+    """Commit a full batch, returning a fresh one.
+
+    A failed commit is not fatal to the sweep, but it is never counted as a
+    write: the batch's queued operations move to ``failed_ops`` and the caller
+    gets an empty batch so the remaining documents still get their attempt.
+    """
     if not applied:
         return batch
     try:
         batch.commit()
     except Exception as exc:  # noqa: BLE001 — one bad batch must not abort the sweep
-        counter.failed += 1
-        print(f'WARN batch commit failed: {type(exc).__name__}', file=sys.stderr)
+        counter.failed_batches += 1
+        counter.failed_ops += pending
+        print(
+            f'WARN project={project} batch commit failed ({pending} ops): {type(exc).__name__}',
+            file=sys.stderr,
+        )
+    else:
+        counter.committed += pending
     return db.batch()
 
 
-def _sweep_users(db: Any, *, applied: bool, limit: int) -> _Counter:
+def _sweep_users(db: Any, *, project: str, applied: bool, limit: int) -> _Counter:
     counter = _Counter()
     batch = db.batch()
     pending = 0
@@ -123,20 +158,20 @@ def _sweep_users(db: Any, *, applied: bool, limit: int) -> _Counter:
             if applied:
                 batch.update(snapshot.reference, update)
                 pending += 1
-                counter.written += 1
+                counter.queued += 1
                 if pending >= BATCH_LIMIT:
-                    batch = _flush(db, batch, counter, applied=applied)
+                    batch = _flush(db, batch, counter, pending, project=project, applied=applied)
                     pending = 0
 
-        if counter.scanned % 5000 == 0:
-            print(f'  users: scanned={counter.scanned} matched={counter.matched}')
+        if counter.scanned and counter.scanned % 5000 == 0:
+            print(f'  project={project} target=users scanned={counter.scanned} matched={counter.matched}')
 
     if applied and pending:
-        _flush(db, batch, counter, applied=applied)
+        _flush(db, batch, counter, pending, project=project, applied=applied)
     return counter
 
 
-def _sweep_migrations(db: Any, *, applied: bool, limit: int) -> _Counter:
+def _sweep_migrations(db: Any, *, project: str, applied: bool, limit: int) -> _Counter:
     """Delete every `users/{uid}/agentVmMigrations` document.
 
     A collection-group query finds the journals without walking all 100K+ user
@@ -155,17 +190,17 @@ def _sweep_migrations(db: Any, *, applied: bool, limit: int) -> _Counter:
         if applied:
             batch.delete(snapshot.reference)
             pending += 1
-            counter.written += 1
+            counter.queued += 1
             if pending >= BATCH_LIMIT:
-                batch = _flush(db, batch, counter, applied=applied)
+                batch = _flush(db, batch, counter, pending, project=project, applied=applied)
                 pending = 0
 
     if applied and pending:
-        _flush(db, batch, counter, applied=applied)
+        _flush(db, batch, counter, pending, project=project, applied=applied)
     return counter
 
 
-def _sweep_markers(db: Any, *, applied: bool, limit: int) -> _Counter:
+def _sweep_markers(db: Any, *, project: str, applied: bool, limit: int) -> _Counter:
     counter = _Counter()
     batch = db.batch()
     pending = 0
@@ -194,17 +229,17 @@ def _sweep_markers(db: Any, *, applied: bool, limit: int) -> _Counter:
             if applied:
                 batch.update(snapshot.reference, {'late_agent_vm_cleanup': fs.DELETE_FIELD})
                 pending += 1
-                counter.written += 1
+                counter.queued += 1
                 if pending >= BATCH_LIMIT:
-                    batch = _flush(db, batch, counter, applied=applied)
+                    batch = _flush(db, batch, counter, pending, project=project, applied=applied)
                     pending = 0
 
     if applied and pending:
-        _flush(db, batch, counter, applied=applied)
+        _flush(db, batch, counter, pending, project=project, applied=applied)
     return counter
 
 
-def _sweep_leases(db: Any, *, applied: bool, limit: int) -> _Counter:
+def _sweep_leases(db: Any, *, project: str, applied: bool, limit: int) -> _Counter:
     counter = _Counter()
     batch = db.batch()
     pending = 0
@@ -217,13 +252,13 @@ def _sweep_leases(db: Any, *, applied: bool, limit: int) -> _Counter:
         if applied:
             batch.delete(snapshot.reference)
             pending += 1
-            counter.written += 1
+            counter.queued += 1
             if pending >= BATCH_LIMIT:
-                batch = _flush(db, batch, counter, applied=applied)
+                batch = _flush(db, batch, counter, pending, project=project, applied=applied)
                 pending = 0
 
     if applied and pending:
-        _flush(db, batch, counter, applied=applied)
+        _flush(db, batch, counter, pending, project=project, applied=applied)
     return counter
 
 
@@ -235,8 +270,29 @@ _SWEEPERS = {
 }
 
 
+def _client_project(db: Any) -> str:
+    """The project the live client resolves to, or an empty string when unknown."""
+    project = getattr(db, 'project', None)
+    return project if isinstance(project, str) else ''
+
+
+def _refuse_project_mismatch(requested: str, actual: str) -> int:
+    """Abort before any read or write when the client is not on the selected project."""
+    print(
+        f'REFUSED: --project={requested} but the Firestore client resolves to project={actual or "unknown"}. '
+        'Nothing was read or written.',
+        file=sys.stderr,
+    )
+    return 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        '--project',
+        required=True,
+        help='Firestore/GCP project id to sweep. Required: the run never inherits an ambient project.',
+    )
     parser.add_argument(
         '--apply',
         action='store_true',
@@ -251,22 +307,48 @@ def main() -> int:
     parser.add_argument('--limit', type=int, default=0, help='Max documents to scan per target (0 = all)')
     args = parser.parse_args()
 
+    project = args.project.strip()
+    if not project:
+        print('REFUSED: --project must name a Firestore project.', file=sys.stderr)
+        return 2
+
     if not fa._apps:
         fa.initialize_app()
-    db: Any = fs.client()
+    # Pin the client to the operator's selection instead of inheriting whatever
+    # project the ambient credentials happen to resolve to.
+    db: Any = fs.client(project=project)
+    actual_project = _client_project(db)
+    if actual_project != project:
+        return _refuse_project_mismatch(project, actual_project)
 
     selected = tuple(args.target) if args.target else TARGETS
-    print(f'{"APPLY" if args.apply else "DRY-RUN"}: targets={",".join(selected)} limit={args.limit or "all"}')
+    mode = 'APPLY' if args.apply else 'DRY-RUN'
+    print(f'{mode} project={project} targets={",".join(selected)} limit={args.limit or "all"}')
 
-    failed = 0
+    failed_targets: list[str] = []
+    totals = _Counter()
     for target in selected:
-        counter = _SWEEPERS[target](db, applied=args.apply, limit=args.limit)
-        counter.report(target, applied=args.apply)
-        failed += counter.failed
+        counter = _SWEEPERS[target](db, project=project, applied=args.apply, limit=args.limit)
+        counter.report(target, project=project, applied=args.apply)
+        totals.scanned += counter.scanned
+        totals.matched += counter.matched
+        totals.queued += counter.queued
+        totals.committed += counter.committed
+        totals.failed_ops += counter.failed_ops
+        totals.failed_batches += counter.failed_batches
+        if counter.failed:
+            failed_targets.append(target)
 
+    totals.report('TOTAL', project=project, applied=args.apply)
+    if failed_targets:
+        print(
+            f'INCOMPLETE project={project} targets_with_failed_batches={",".join(failed_targets)} '
+            'retry before treating the sweep as complete.',
+            file=sys.stderr,
+        )
     if not args.apply:
-        print('Dry run only. Re-run with --apply to delete.')
-    return 1 if failed else 0
+        print(f'Dry run only. Re-run with --project {project} --apply to delete.')
+    return 1 if failed_targets else 0
 
 
 if __name__ == '__main__':
