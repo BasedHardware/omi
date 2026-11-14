@@ -4,6 +4,7 @@ import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { Slider } from '../controls/Slider'
 import type { AssistantSettingsView } from '../../../../../shared/types'
+import { useAuth } from '../../../hooks/useAuth'
 
 // Frequency levels 0–5, mirroring Mac's stepped slider labels and the interval
 // table in main/assistants/core/notify.ts (LEVEL_INTERVALS_MS).
@@ -28,6 +29,7 @@ const FREQUENCY_CAPTIONS = [
  * setting is the whole action: the proactive coordinator re-syncs on any write.
  */
 export function NotificationsTab(): React.JSX.Element {
+  const { user } = useAuth()
   const [settings, setSettings] = useState<AssistantSettingsView | null>(null)
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export function NotificationsTab(): React.JSX.Element {
 
   const patch = (p: Partial<AssistantSettingsView>): void => {
     setSettings((cur) => (cur ? { ...cur, ...p } : cur)) // optimistic
-    void window.omi.assistantsSetSettings(p).then(setSettings)
+    const req = user?.uid
+      ? window.omi.assistantsSetSettings(p, user.uid)
+      : window.omi.assistantsSetSettings(p)
+    void req.then(setSettings)
   }
 
   const notifOn = !!settings?.notificationsEnabled

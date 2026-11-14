@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="electron-vite/node" />
 
 interface ImportMetaEnv {
   /** Public share origin for conversation links (#4339). Default https://h.omi.me */

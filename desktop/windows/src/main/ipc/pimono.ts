@@ -9,11 +9,9 @@
 
 import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
-import {
-  ensurePiMonoAdapterRegistered,
-  setControlPlaneOwner
-} from '../agentKernel/controlPlane'
+import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
+import { setAssistantSettingsOwner } from './assistantSettingsOwner'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
@@ -35,13 +33,19 @@ export function registerPiMonoHandlers(): void {
     // kernel chat + control tools. Fail closed, never fall back to the decode path.
     // On sign-out (session === null) it resets to default.
     const current = getPiMonoSession()
+    setControlPlaneOwner(null)
+    setAssistantSettingsOwner(null)
     const uid = current ? await verifyFirebaseIdToken(current.token) : null
+    // configurePiMonoSession creates a new admitted session object even when
+    // signing back into the same UID/token. An older verifier cannot rebind
+    // either owner after a newer credential or sign-out replaced that object.
+    if (getPiMonoSession() !== current) return
     setControlPlaneOwner(uid)
+    setAssistantSettingsOwner(uid)
     // Register the managed-cloud pi-mono adapter into the kernel now that a
     // session may be present. Idempotent, and a no-op when signed out (returns
     // false), so the registry stays empty until a real Firebase session exists.
     // DARK: registration only — nothing routes chat to pi-mono until PR-E.
     ensurePiMonoAdapterRegistered()
   })
-
 }

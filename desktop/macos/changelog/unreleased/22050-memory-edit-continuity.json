@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Keep failed memory-edit drafts, show the saved canonical record immediately and prevent settings sync from crossing sign-in sessions"
+  ]
+}
