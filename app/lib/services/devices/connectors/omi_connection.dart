@@ -13,6 +13,7 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/voice_playback/device_speaker_pcm.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -398,6 +399,25 @@ class OmiDeviceConnection extends DeviceConnection {
       return subscription;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error setting up button listener: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<StreamSubscription?> performGetBleButtonTapsListener({
+    required void Function(List<int>) onTapsReceived,
+  }) async {
+    // Native BLE creates a stream even when a characteristic is absent. Probe
+    // discovery first so legacy firmware never loses its button actions.
+    if (!transport.hasCharacteristic(buttonServiceUuid, buttonTapsCharacteristicUuid)) return null;
+    try {
+      final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTapsCharacteristicUuid);
+      Logger.debug('Subscribed to button taps stream from Omi Device');
+      return stream.listen((value) {
+        if (value.isNotEmpty) onTapsReceived(value);
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error setting up button taps listener: $e');
       return null;
     }
   }
@@ -933,6 +953,145 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('OmiDeviceConnection: Error playing haptic: $e');
       return false;
     }
+  }
+
+  int _pcmSpeakerGeneration = 0;
+
+  @override
+  bool get supportsPcmSpeakerPlayback => transport.hasCharacteristic(omiServiceUuid, audioSpeakerPcmCharacteristicUuid);
+
+  /// Stream mono PCM16LE @ 8 kHz to the DevKit 2 speaker over BLE.
+  ///
+  /// Protocol (see `omi/firmware/devkit/src/speaker.c`):
+  /// 1. Subscribe for notifications on the speaker PCM characteristic
+  /// 2. Write a 4-byte little-endian length header
+  /// 3. On each notify, write the next ≤400-byte PCM chunk
+  /// 4. Version 2 notifies drain completion; legacy firmware needs a fixed wait
+  ///
+  /// Long audio is split into [DeviceSpeakerPcm.maxMonoBytesPerCycle] frames
+  /// because the firmware I2S block is only 10 KB of stereo samples.
+  @override
+  Future<bool> performPlayPcmToSpeaker(Uint8List pcm16leMono8k) async {
+    if (pcm16leMono8k.isEmpty) return false;
+    if (!supportsPcmSpeakerPlayback) {
+      Logger.debug('OmiDeviceConnection: speaker PCM characteristic not present');
+      return false;
+    }
+
+    final generation = ++_pcmSpeakerGeneration;
+    var reportsDrain = false;
+    try {
+      final protocol = await transport.readCharacteristic(omiServiceUuid, audioSpeakerPcmCharacteristicUuid);
+      reportsDrain = protocol.length == 1 && protocol[0] == 2;
+    } catch (_) {
+      // Legacy speaker firmware has a write-only characteristic.
+    }
+    final frames = DeviceSpeakerPcm.frameForDevice(pcm16leMono8k);
+    if (frames.isEmpty) return false;
+
+    StreamSubscription<List<int>>? notifySub;
+    try {
+      final notifyStream = transport.getCharacteristicStream(omiServiceUuid, audioSpeakerPcmCharacteristicUuid);
+      // Give CCCD subscribe a beat before the length write (matches host script).
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      for (final frame in frames) {
+        if (generation != _pcmSpeakerGeneration) return false;
+        final ok =
+            await _streamOnePcmFrame(frame, reportsDrain: reportsDrain, notifyStream: notifyStream, onSubscribe: (sub) {
+          notifySub?.cancel();
+          notifySub = sub;
+        });
+        if (!ok) return false;
+        if (generation != _pcmSpeakerGeneration) return false;
+        // Version 2 completes only after DMA releases the block. Old firmware
+        // has no completion event and still needs its original safe delay.
+        if (!reportsDrain) await Future<void>.delayed(const Duration(milliseconds: 4200));
+      }
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error playing PCM to speaker: $e');
+      return false;
+    } finally {
+      await notifySub?.cancel();
+    }
+  }
+
+  /// Cancel an in-flight [performPlayPcmToSpeaker] stream (best-effort).
+  void cancelPcmSpeakerPlayback() {
+    _pcmSpeakerGeneration++;
+  }
+
+  Future<bool> _streamOnePcmFrame(
+    Uint8List frame, {
+    required bool reportsDrain,
+    required Stream<List<int>> notifyStream,
+    required void Function(StreamSubscription<List<int>> sub) onSubscribe,
+  }) async {
+    var offset = 0;
+    final total = frame.length;
+    final ready = Completer<void>();
+    var finished = false;
+    // Serialize notify-driven writes so overlapping CCCD events cannot interleave chunks.
+    var writeChain = Future<void>.value();
+
+    late final StreamSubscription<List<int>> sub;
+    sub = notifyStream.listen((data) {
+      if (finished) return;
+      if (reportsDrain && data.length == 1) {
+        if (data[0] == 3) {
+          finished = true;
+          if (!ready.isCompleted) ready.completeError(StateError('PCM speaker DMA failed'));
+        } else if (data[0] == 2 && offset >= total) {
+          finished = true;
+          if (!ready.isCompleted) ready.complete();
+        }
+        return;
+      }
+      // Flow-control notifications are a little-endian uint16 credit of 400.
+      if (data.length != 2 || data[0] != 0x90 || data[1] != 0x01) return;
+      writeChain = writeChain.then((_) async {
+        if (finished) return;
+        try {
+          if (offset >= total) {
+            if (reportsDrain) return;
+            finished = true;
+            if (!ready.isCompleted) ready.complete();
+            return;
+          }
+          final end = (offset + DeviceSpeakerPcm.packetSize).clamp(0, total);
+          final chunk = frame.sublist(offset, end);
+          offset = end;
+          await transport.writeCharacteristic(
+            omiServiceUuid,
+            audioSpeakerPcmCharacteristicUuid,
+            chunk,
+          );
+          if (!reportsDrain && offset >= total && !ready.isCompleted) {
+            finished = true;
+            ready.complete();
+          }
+        } catch (e, st) {
+          finished = true;
+          if (!ready.isCompleted) ready.completeError(e, st);
+        }
+      });
+    });
+    onSubscribe(sub);
+
+    await transport.writeCharacteristic(
+      omiServiceUuid,
+      audioSpeakerPcmCharacteristicUuid,
+      DeviceSpeakerPcm.lengthHeader(total),
+    );
+
+    await ready.future.timeout(
+      Duration(milliseconds: 2000 + (total * 2)),
+      onTimeout: () {
+        throw TimeoutException('PCM speaker stream stalled at offset=$offset/$total');
+      },
+    );
+    return true;
   }
 
   @override

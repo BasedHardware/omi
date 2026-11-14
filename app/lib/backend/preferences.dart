@@ -701,10 +701,22 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
-  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
+  // Remappable device button gestures (#2825).
+  // Single: 0 ask (default), 1 end, 2 mute, 3 star.
+  int get singleTapAction => getInt('singleTapAction');
+
+  set singleTapAction(int value) => saveInt('singleTapAction', value);
+
+  // Double: 0 = end conversation (default), 1 = mute, 2 = star, 3 = off.
+  // Keep the unset-key behavior so upgrading never remaps an existing gesture.
   int get doubleTapAction => getInt('doubleTapAction');
 
   set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  // Triple: 0 end (default), 1 mute, 2 star, 3 off.
+  int get tripleTapAction => getInt('tripleTapAction');
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
 
   // Keep backward compatibility
   bool get doubleTapPausesMuting => doubleTapAction == 1;
@@ -816,6 +828,10 @@ class SharedPreferencesUtil {
   //   0 = off (never speak)
   //   1 = headphones only — AirPods / wired / USB / AirPlay (default)
   //   2 = always, including the phone speaker
+  //   3 = Omi device — DevKit 2 wearable speaker when a speaker-capable
+  //       device is connected; skips entirely when the probe fails (no phone
+  //       blast). Mid-stream BLE failure for that sentence falls back to
+  //       system TTS.
   // Default is 1 so Omi never blasts a private answer out of the speaker
   // in public unless the user explicitly opts in.
   set voiceResponseMode(int value) => saveInt('voiceResponseMode', value);

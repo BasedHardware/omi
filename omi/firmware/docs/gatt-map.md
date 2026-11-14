@@ -19,7 +19,7 @@ change; discover by UUID.
 
 | Service | Characteristic / descriptor order |
 | --- | --- |
-| Button `23BA7924-0000-1000-7450-346EAC492E92` | `23BA7925` with same suffix, CCC |
+| Button `23BA7924-0000-1000-7450-346EAC492E92` | `23BA7925` with same suffix, CCC; progressive taps `23BA7926`, CCC |
 | Haptic `CAB1AB95-2EA5-4F4D-BB56-874B72CFC984` | `CAB1AB96` with same suffix |
 | Audio `19B10000` | Data `01`, CCC; codec `02`; optional speaker `03`, CCC |
 | Settings `19B10010` | Dim ratio `11`; mic gain `12`; charging `13`, CCC; capture mute `15`; power control `16`; device name `14` |
@@ -146,7 +146,12 @@ payload size. See [safe mode](safe-mode.md) for lifecycle, test plan and limits.
 ## Allocations and reserved claims
 
 Device name `14` uses feature bit 9; capture mute `15` uses bit 10; power control
-`16` uses bit 11. Device-name duplicates #14289, #23938 and #13704 must converge;
+`16` uses bit 11. Progressive button taps use bit 12 and characteristic
+`23BA7926-0000-1000-7450-346EAC492E92` (notify): `[1, n]` reports tap count
+`n` after release, and `[2, n]` ends the sequence after the gap or a hold.
+Presses over 300 ms do not count as taps; the three-second power-off hold stays
+on the legacy path. The legacy `23BA7925` events remain available to older apps.
+Bit 9 belongs to device naming and must never identify progressive taps. Device-name duplicates #14289, #23938 and #13704 must converge;
 #10604 cannot reuse these slots. #20483 contributes battery behavior, with no
 additional diagnostics characteristic.
 
@@ -162,3 +167,20 @@ shutdown, not completed shutdown.
 `06` belong to image characteristics. The app also uses `19B10010`–`12` for
 omiGlass OTA; do not reuse image slots on CV1. Future additions must allocate a
 free UUID here and append attributes after existing members.
+
+## DevKit 2 speaker drain protocol
+
+DevKit 2 exposes PCM at `19B10003` on the audio service. Read `[2]` to
+negotiate drain notifications; older firmware has a write-only characteristic.
+Each frame starts with a four-byte little-endian mono byte length (even,
+1–5000 bytes), followed by writes of up to 400 bytes of 8 kHz PCM16LE.
+Two-byte notifications `[0x90, 0x01]` grant the next packet. One-byte `[2]`
+means the DMA buffer was released; `[3]` means playback failed. Send the next
+frame only after `[2]`, including after the last data-packet credit.
+
+Playback runs on a dedicated speaker thread. It waits for I2S to release its
+single slab block, bounded to one second, rather than blocking Bluetooth RX
+for four seconds. The last frame writes only its real stereo byte length.
+This removes the fixed four-second gaps; BLE transfer time still separates
+frames. Older apps keep their conservative wait on new firmware, and new apps
+keep that wait on old firmware. Low-latency playback requires both updates.

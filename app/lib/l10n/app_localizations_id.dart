@@ -8935,6 +8935,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get voiceResponseAlways => 'Selalu';
 
   @override
+  String get voiceResponseOmiDevice => 'Perangkat Omi';
+
+  @override
   String get agreeAndContinue => 'Setuju & Lanjutkan';
 
   @override
@@ -11201,6 +11204,18 @@ class AppLocalizationsId extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
+
+  @override
+  String get singleTap => 'Ketuk Tunggal';
+
+  @override
+  String get singleTapAction => 'Aksi Ketuk Tunggal';
+
+  @override
+  String get tripleTap => 'Ketuk Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Aksi Ketuk Tiga Kali';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Dengarkan jawaban Omi';

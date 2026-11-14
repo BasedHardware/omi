@@ -19,6 +19,7 @@ typedef enum {
     OMI_FEATURE_DEVICE_NAME = (1 << 9),
     OMI_FEATURE_CAPTURE_MUTE = (1 << 10),
     OMI_FEATURE_POWER_CONTROL = (1 << 11),
+    OMI_FEATURE_BUTTON_TAPS = (1 << 12),
 } omi_feature_t;
 
 #endif // FEATURES_H

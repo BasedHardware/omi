@@ -88,6 +88,15 @@ static struct bt_uuid_128 audio_characteristic_format_uuid =
 static struct bt_uuid_128 audio_characteristic_speaker_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10003, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+static ssize_t
+speaker_protocol_read(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset)
+{
+    const uint8_t version = 2;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &version, sizeof(version));
+}
+#endif
+
 static struct bt_gatt_attr audio_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&audio_service_uuid),
     BT_GATT_CHARACTERISTIC(&audio_characteristic_data_uuid.uuid,
@@ -105,9 +114,9 @@ static struct bt_gatt_attr audio_service_attr[] = {
                            NULL),
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
     BT_GATT_CHARACTERISTIC(&audio_characteristic_speaker_uuid.uuid,
-                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
-                           BT_GATT_PERM_WRITE,
-                           NULL,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           speaker_protocol_read,
                            audio_data_write_handler,
                            NULL),
     BT_GATT_CCC(audio_ccc_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE), //
@@ -321,13 +330,23 @@ static ssize_t audio_data_write_handler(struct bt_conn *conn,
                                         uint16_t offset,
                                         uint8_t flags)
 {
-    uint16_t amount = 400;
-    int16_t *int16_buf = (int16_t *) buf;
-    uint8_t *data = (uint8_t *) buf;
-    bt_gatt_notify(conn, attr, &amount, sizeof(amount));
-    amount = speak(len, buf);
-    return len;
+    if (offset != 0)
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    int amount = speak(len, buf, conn);
+    if (amount < 0)
+        return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
+    const uint16_t credit = 400;
+    bt_gatt_notify(conn, attr, &credit, sizeof(credit));
+    return amount;
 }
+
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+void speaker_notify_complete(struct bt_conn *conn, bool success)
+{
+    const uint8_t status = success ? 2 : 3;
+    bt_gatt_notify(conn, &audio_service_attr[7], &status, sizeof(status));
+}
+#endif
 
 //
 // DFU Service Handlers
@@ -437,6 +456,10 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
 
 static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 {
+#ifdef CONFIG_OMI_ENABLE_SPEAKER
+    speaker_reset_stream();
+#endif
+
     is_connected = false;
     storage_is_on = false;
 
