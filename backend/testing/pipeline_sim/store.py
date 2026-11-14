@@ -154,7 +154,12 @@ class SimTransaction:
         return self._fresh_first(owner_key, ready=True)
 
     def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
-        rows = [self.get('jobs', segment) for segment in self.store._pending_by_owner.get(owner_key, ())]
+        # Filter borrowed rows before copying: a held owner can retain hundreds of
+        # backlog jobs, and neither fresh query needs to materialize their payloads.
+        rows = (
+            self.writes.get(('jobs', segment), self.store.rows.get(('jobs', segment), {}))
+            for segment in self.store._pending_by_owner.get(owner_key, ())
+        )
         rows = [
             row
             for row in rows
