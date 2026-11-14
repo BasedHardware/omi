@@ -4,16 +4,17 @@ The emulator conformance suite (lane 12, ``tests/integration/test_outbox_conform
 persistence; this file pins the row semantics and their compatibility with ``mark``/``run``.
 """
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from database.outbox import Claim, Outcome
-from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, firestore_outbox
-from database.outbox import OutboxKind
+from database.outbox import Claim, Outcome, OutboxKind
+from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, FirestoreOutbox, firestore_outbox
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.enrichment import scan as enrichment_scan
 
 KEY = reprocess.key('u', 'c')
 PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
@@ -386,7 +387,12 @@ def _install_paged_due_query(state_rows, monkeypatch):
 
     class _Collection(_Query):
         def document(self, doc_id):
-            return SimpleNamespace(id=doc_id)
+            def _get(transaction=None):
+                if doc_id in state_rows:
+                    return _Snapshot(doc_id, state_rows[doc_id])
+                return SimpleNamespace(exists=False, to_dict=lambda: None)
+
+            return SimpleNamespace(id=doc_id, get=_get)
 
     monkeypatch.setattr(
         reprocess,
@@ -533,3 +539,82 @@ def test_due_rows_passes_real_firestore_document_snapshot_cursor_across_pages():
     assert seen_queries[1].start_at.before is False
     assert seen_queries[1].start_at.values[0].double_value == 11.0
     assert seen_queries[1].start_at.values[1].reference_value.endswith(f'/{reprocess.COLLECTION}/{1:064x}')
+
+
+def test_pl004_failed_wakes_are_errors_until_a_repair_actually_succeeds(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    monkeypatch.setattr(enrichment_scan, 'observe', lambda *_: None)
+
+    wakes: list[tuple[str, str, float]] = []
+    fail_wakes = [False]
+
+    def create_wake(row_id: str, token: str, available_at: float) -> None:
+        if fail_wakes[0]:
+            raise RuntimeError('simulated Cloud Tasks outage')
+        wakes.append((row_id, token, available_at))
+
+    injected = FirestoreOutbox(
+        OutboxKind.ENRICHMENT,
+        privacy_blocked=lambda *_args: False,
+        create_wake=create_wake,
+    )
+    t0 = 1000.0
+    tx = SimpleNamespace(set=lambda ref, value: state_rows.__setitem__(ref.id, dict(value)))
+    queued = {
+        injected.enqueue(
+            reprocess.key('u', f'pending-{i}'),
+            'u',
+            {'conversation_id': f'pending-{i}', 'language': 'en'},
+            t0 - 10 + i,
+            tx=tx,
+            now=t0,
+        ).row_id
+        for i in range(3)
+    }
+    assert wakes == []
+
+    fail_wakes[0] = True
+    failed = injected.sweep(now=t0 + 1, limit=2)
+    assert (failed.rewoken, failed.expired_leases, failed.discarded, failed.errors) == (0, 0, 0, 3)
+    assert wakes == []
+    assert all(state_rows[row_id].get('wake_check_after', 0) == 0 for row_id in queued)
+    assert len(stream_calls) == 2
+
+    fail_wakes[0] = False
+    repaired = injected.sweep(now=t0 + 2, limit=2)
+    assert (repaired.rewoken, repaired.expired_leases, repaired.discarded, repaired.errors) == (3, 0, 0, 0)
+    assert {row_id for row_id, _, _ in wakes} == queued
+    assert len(stream_calls) == 4
+
+    wakes.clear()
+    settled = injected.sweep(now=t0 + 3, limit=2)
+    assert (settled.rewoken, settled.expired_leases, settled.discarded, settled.errors) == (0, 0, 0, 0)
+    assert wakes == []
+
+
+def test_due_rows_cursor_survives_page_boundary_row_deletion_mid_scan(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    ordered_ids = []
+    for i in range(4):
+        cid = f'boundary-{i}'
+        res = outbox.enqueue(
+            reprocess.key('u', cid),
+            'u',
+            {'conversation_id': cid, 'language': 'en'},
+            t0 + i,
+            now=t0,
+        )
+        ordered_ids.append(res.row_id)
+
+    seen_ids = []
+    for row_id, _row in reprocess.due_rows(now=t0 + 10, limit=2):
+        seen_ids.append(row_id)
+        if row_id == ordered_ids[1]:
+            # Delete page 1's boundary row before advancing to page 2.
+            state_rows.pop(row_id)
+
+    assert seen_ids == ordered_ids
+    assert len(stream_calls) == 3
