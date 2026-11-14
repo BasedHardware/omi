@@ -76,6 +76,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int resumes = 0;
   int phoneStarts = 0;
   Object? phoneStartFailure;
+  int finishes = 0;
+  Object? finishFailure;
 
   @override
   String? get liveCaptureSource => switch (live) {
@@ -169,6 +171,13 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   Future<void> streamRecording({bool resumeCapture = true}) async {
     phoneStarts++;
     final failure = phoneStartFailure;
+    if (failure != null) throw failure;
+  }
+
+  @override
+  Future<void> finishCapture() async {
+    finishes++;
+    final failure = finishFailure;
     if (failure != null) throw failure;
   }
 
@@ -719,6 +728,27 @@ void main() {
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));
       expect(find.bySemanticsLabel(en.stopRecording), findsOneWidget);
       expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
+    });
+
+    testWidgets('a tap while the phone records finishes the capture', (tester) async {
+      final capture = _Capture(_Live.phone);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.pump();
+      expect(capture.finishes, 1);
+      expect(capture.phoneStarts, 0);
+      expect(find.text(en.somethingWentWrong), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a stop that fails says so instead of an unhandled error', (tester) async {
+      final capture = _Capture(_Live.phone)..finishFailure = StateError('stop refused');
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.pump();
+      expect(capture.finishes, 1);
+      expect(find.text(en.somethingWentWrong), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'the failure is handled, not dropped by the tap handler');
     });
   });
 

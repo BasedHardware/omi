@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +22,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -328,7 +331,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       builder: (sheetContext) => PendantListeningSheet(
         onRecordWithPhone: () {
           Navigator.pop(sheetContext);
-          _startPhoneRecording(context);
+          unawaited(_startPhoneRecording(context));
         },
         onPhoneCall: PhoneCallsFeature.visible
             ? () {
@@ -362,7 +365,14 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      try {
+        await captureProvider.finishCapture();
+      } catch (e) {
+        Logger.debug('BatteryInfoWidget: stopping the phone recording failed: $e');
+        // The recording is still running: say so, as the start path below does.
+        if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
@@ -413,13 +423,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
           enabled: !isInitialising,
           // The child's gestures are excluded below, so the actions (tap, and long-press for the
           // record options) are declared here where assistive tech can reach them.
-          onTap: isInitialising ? null : () => _startRecording(context),
+          onTap: isInitialising ? null : () => unawaited(_startRecording(context)),
           onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
           onLongPressHint: canShowOptions ? l10n.moreOptions : null,
           excludeSemantics: true,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _startRecording(context),
+            onTap: () => unawaited(_startRecording(context)),
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
             // "Record with this phone": a neutral circle with a white dot, a stop square while the
             // phone records. The ⌄ badge opens the other ways to record.
