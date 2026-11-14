@@ -30,3 +30,12 @@ No audio, identifiers or user content: durations and protocol shape only. Archiv
 durability are proved at admission against storage and are not modeled here.
 
 Add one trace per record-path incident, in the PR that fixes it.
+
+## Orphan repair trace (`orphan-repair-trace/1`)
+
+`orphan_sealed_registered.json` is replayed by `test_record_orphan_repair.py`
+through retained-span proof, real canonical registration and the strict Firestore
+transaction fixture. Its numeric spans contain no user audio or identities.
+It asserts the window/content stamp, completed capture barrier and canonical
+`record_pending` job. The corpus guard validates this schema separately from
+websocket traces; the pusher session runner continues to replay `record-trace/1`.

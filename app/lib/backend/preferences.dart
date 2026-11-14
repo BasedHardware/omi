@@ -30,6 +30,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/conversation_cache_decode.dart';
 import 'package:omi/env/physical_qualification.dart';
 
+part 'preferences_memory_deletes.dart';
+
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
@@ -1373,43 +1375,24 @@ class SharedPreferencesUtil {
     saveInt('cachedMessagesSchema', 1);
   }
 
-  /// Last owner-scoped memory projection used for offline/restart rendering.
-  /// Memory.toJson deliberately includes optional temporal fields so a cached
-  /// assessment is never mistaken for a newly computed one after restart.
-  List<Memory> get cachedMemories {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return [];
-    _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(
-      _userScopedKey('cachedMemories', ownerUid),
-      (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
-  }
-
-  set cachedMemories(List<Memory> value) {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return;
-    saveStringList(
-      _userScopedKey('cachedMemories', ownerUid),
-      value.map((memory) => jsonEncode(memory.toJson())).toList(),
-    );
-  }
-
   // Pending memories - memories created offline that need to be synced
   List<Memory> get pendingMemories {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
+    final deleted = confirmedMemoryDeletionIds;
     return _decodeCachedList(
       _userScopedKey('pendingMemories', ownerUid),
       (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
+    ).where((memory) => memory.uid == ownerUid && !deleted.contains(memory.id)).toList();
   }
 
   set pendingMemories(List<Memory> value) {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return;
-    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    final deleted = confirmedMemoryDeletionIds;
+    final List<String> memories =
+        value.where((row) => !deleted.contains(row.id)).map((row) => jsonEncode(row.toJson())).toList();
     saveStringList(_userScopedKey('pendingMemories', ownerUid), memories);
   }
 

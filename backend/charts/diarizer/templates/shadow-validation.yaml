@@ -1,0 +1,28 @@
+{{- if .Values.shadowCanary }}
+{{- if or (ne .Release.Name "prod-omi-diarizer-batch-canary") (ne (include "diarizer.fullname" .) .Release.Name) }}
+{{- fail "shadowCanary requires the distinct release/fullname prod-omi-diarizer-batch-canary" }}
+{{- end }}
+{{- if or (not .Values.image.digest) .Values.image.tag }}
+{{- fail "shadowCanary requires image.digest and an empty image.tag" }}
+{{- end }}
+{{- if or .Values.autoscaling.enabled .Values.warmFallback.enabled .Values.maintenanceMode (ne (int .Values.replicaCount) 1) }}
+{{- fail "shadowCanary requires exactly one replica, no HPA, warm fallback or maintenance mode" }}
+{{- end }}
+{{- if or .Values.gateway.enabled .Values.ingress.enabled .Values.backendConfig.enabled .Values.podMonitoring.enabled (ne .Values.service.type "ClusterIP") }}
+{{- fail "shadowCanary requires ClusterIP only, no gateway, ingress, BackendConfig or PodMonitoring" }}
+{{- end }}
+{{- if ne (index .Values.podLabels "omi.ai/diarizer-batch-route") "canary" }}
+{{- fail "shadowCanary must never carry the production route label" }}
+{{- end }}
+{{- if ne (index .Values.service.selectorLabels "omi.ai/diarizer-batch-route") "canary" }}
+{{- fail "shadowCanary Service must select only the canary route" }}
+{{- end }}
+{{- if ne (index .Values.service.selectorLabels "app.kubernetes.io/instance") .Release.Name }}
+{{- fail "shadowCanary Service must select its own release instance" }}
+{{- end }}
+{{- range $key, $value := .Values.podLabels }}
+{{- if hasKey (include "diarizer.selectorLabels" $ | fromYaml) $key }}
+{{- fail "shadowCanary podLabels must not override controller identity" }}
+{{- end }}
+{{- end }}
+{{- end }}

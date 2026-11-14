@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime
 import hashlib
 import json
+import logging
 import math
 from typing import Any
 
@@ -14,8 +15,11 @@ from database._client import run_transactional
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
+from utils.batch_pipeline.metrics import RECORD_SEAL_ORPHAN_PARKED
 from utils.batch_pipeline.record_barrier import validate_record_tail
-from utils.batch_pipeline.record_producer_proof import producer_tokens_dead
+from utils.batch_pipeline.record_producer_proof import producer_tokens_dead, leases_would_release
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
@@ -68,7 +72,12 @@ def seal_refusal(
     if row.get('record_upload_failed') and not (repair_upload_failed and upload_failed_repair_enabled()):
         return 'upload_failed'
     if row.get('record_upload_sessions') and not producer_tokens_dead(
-        row['record_upload_sessions'], producer_proof, producers_stopped=producers_stopped
+        row['record_upload_sessions'],
+        producer_proof,
+        producers_stopped=producers_stopped,
+        uid=job.get('owner_id'),
+        row=row,
+        job=job,
     ):
         return 'upload_pending'
     if row.get('record_audio_closed') and not repair_closed:
@@ -78,6 +87,22 @@ def seal_refusal(
     if row.get('deleted') or row.get('discarded') or not row.get('private_cloud_sync_enabled'):
         return 'privacy_refused'
     return None
+
+
+def observe_orphan_parked(job, row, refusal, *, seal_path):
+    """Aggregate-only telemetry; no identities, dispositions or writes change."""
+    if row is None:
+        # A deleted conversation has no discarded state to observe; never raise here.
+        return
+    if refusal == 'privacy_refused' and row.get('discarded') and job.get('registration_origin') == 'restore':
+        try:
+            logging.getLogger(__name__).info(
+                'event=record_seal_refused outcome=orphan_parked seal_path=%s count=1', seal_path
+            )
+            RECORD_SEAL_ORPHAN_PARKED.labels(seal_path).inc()
+        except Exception:
+            # Observability failure must never alter a seal disposition.
+            pass
 
 
 def retained_tail_proof(job, row, storage_client, artifacts, *, check_budget=lambda: None, diagnostics=None):
@@ -194,7 +219,8 @@ def plan_seals(
         entry = {'job_id': job_id, 'disposition': 'unavailable'}
         diagnostics = {}
         try:
-            job = _job_state(store.run(lambda tx: tx.get('jobs', job_id)))
+            current_job = store.run(lambda tx: tx.get('jobs', job_id))
+            job = _job_state(current_job)
             check_budget()
             uid, cid = job.get('owner_id'), job.get('conversation_id')
             if not uid or not cid or '/' in uid or '/' in cid:
@@ -204,7 +230,7 @@ def plan_seals(
             check_budget()
             entry.update(job=job, row=seal_row_state(row))
             refusal = seal_refusal(
-                job,
+                current_job,
                 row,
                 producer_proof=producer_proof,
                 producers_stopped=producers_stopped,
@@ -213,6 +239,17 @@ def plan_seals(
             )
             if refusal:
                 entry['disposition'] = refusal
+                if refusal == 'upload_pending' and leases_would_release(
+                    row.get('record_upload_sessions'),
+                    producer_proof,
+                    uid=uid,
+                    row=row,
+                    job=current_job,
+                    producers_stopped=producers_stopped,
+                ):
+                    entry['lease_reason'] = 'lease_would_expire'
+                    lease_metrics.EXPIRED_WOULD.inc()
+                observe_orphan_parked(job, row, refusal, seal_path='repair')
             else:
                 proof = retained_tail_proof(
                     {**job, 'segment_id': job_id},
@@ -270,8 +307,11 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         ref = store.client.collection('users').document(uid).collection('conversations').document(cid)
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
+        observation = {}
+
         @firestore.transactional
         def commit(tx):
+            observation.clear()  # Only the final transaction attempt may emit.
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
             row = ref.get(transaction=tx).to_dict() or {}
@@ -286,6 +326,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 repair_closed=plan.get('repair_closed', False),
             )
             if refusal:
+                observation.update(job=current_job, row=row, refusal=refusal)
                 return refusal
             assert_batch_write_allowed(
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
@@ -300,7 +341,22 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
-            outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            result = run_transactional(store.client, commit, transient=True)
+            outcomes[result] += 1
+            if (
+                result in {'sealed', 'upload_failed_cleared'}
+                and lease.token_lease_serving(uid)
+                and leases_would_release(
+                    entry['row'].get('record_upload_sessions'),
+                    plan['producer_proof'],
+                    uid=uid,
+                    row=entry['row'],
+                    job=job,
+                )
+            ):
+                lease_metrics.EXPIRED_SEALED.inc()
+            if observation:
+                observe_orphan_parked(**observation, seal_path='repair')
         except BatchPrivacyBlocked:
             outcomes['privacy_refused'] += 1
         except Exception:

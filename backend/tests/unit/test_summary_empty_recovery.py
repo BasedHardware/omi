@@ -27,8 +27,6 @@ def load_live_writer():
 
 @pytest.fixture
 def store(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(repair, 'assert_batch_write_allowed', lambda *_args, **_kwargs: None)

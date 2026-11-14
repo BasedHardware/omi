@@ -10,11 +10,15 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+import subprocess
 from typing import Any
 
 import pytest
 
 import yaml
+
+from scripts.alert_backtest import metric_names, prometheus
+from tests.unit.test_record_seal_cluster_repair_deploy import documents as repair_documents
 
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / 'backend/charts/monitoring'
@@ -37,6 +41,86 @@ CLOUD_RUN_SYNC_EXPORTER_DEV = (
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_every_record_token_alert_metric_survives_its_producer_scrape_filters(env):
+    rules = json.loads((MONITORING / 'alerts/record-token-lease.json').read_text())
+    queried = set().union(
+        *(metric_names(node['model']['expr']) for rule in rules for node in rule['data'] if prometheus(node))
+    )
+    producers = {
+        'omi_record_token_late_append_total': {'sync', 'pusher'},
+        'omi_record_token_lease_expired_sealed_total': {'repair'},
+        'omi_record_seal_oldest_age_seconds': {'repair'},
+    }
+    assert queried == set(producers), 'new alert metrics require their actual producer ingestion path'
+
+    def passes(name, relabels):
+        labels = {'__name__': name}
+        for rule in relabels:
+            value = ';'.join(labels.get(key, '') for key in rule['sourceLabels'])
+            matched = re.fullmatch(rule['regex'], value)
+            if rule['action'] == 'keep' and not matched or rule['action'] == 'drop' and matched:
+                return False
+        return True
+
+    sync = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    sync_relabels = sync['spec']['endpoints'][0]['metricRelabeling']
+    shared = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sidecar.yaml').read_text())
+    shared_relabels = shared['spec']['endpoints'][0]['metricRelabeling']
+    # Keep the entire requested lease family, including histogram samples.
+    for metric in (
+        'omi_record_token_late_append_total',
+        'omi_record_token_lease_renewals_total',
+        'omi_record_token_lease_signal_gap_seconds_bucket',
+        'omi_record_token_lease_signal_gap_seconds_sum',
+        'omi_record_token_lease_signal_gap_seconds_count',
+        'omi_record_token_lease_active',
+        'omi_record_token_lease_expired_would_total',
+        'omi_record_token_lease_expired_sealed_total',
+    ):
+        assert passes(metric, sync_relabels), metric
+    pusher = REPO / 'backend/charts/pusher'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            'prod-omi-pusher',
+            str(pusher),
+            '-n',
+            'prod-omi-backend',
+            '-f',
+            str(pusher / 'prod_omi_pusher_values.yaml'),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    pusher_monitors = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'PodMonitoring']
+    assert len(pusher_monitors) == 1
+    repair = repair_documents()['PodMonitoring', 'record-seal-repair']
+    paths = {
+        'sync': sync_relabels,
+        'pusher': pusher_monitors[0]['spec']['endpoints'][0].get('metricRelabeling', []),
+        'repair': repair['spec']['endpoints'][0].get('metricRelabeling', []),
+    }
+    for metric in queried:
+        for producer in producers[metric]:
+            assert passes(metric, paths[producer]), (producer, metric)
+        if 'sync' in producers[metric]:
+            assert passes(metric, shared_relabels)
+            for profile in ('', 'sync_'):
+                path = (
+                    MONITORING / f'prometheus-stackdriver-exporter/{env}_{profile}omi_cloud_run_metrics_exporter.yaml'
+                )
+                prefixes = yaml.safe_load(path.read_text())['stackdriver']['metrics']['prefixes']
+                assert f'prometheus.googleapis.com/{metric}/' in prefixes, (path.name, metric)
 
 
 def _memory_mebibytes(value: object) -> float:
@@ -208,7 +292,14 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_held_expired_total/',
     'prometheus.googleapis.com/omi_batch_held_expired_units/',
     'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_backlog_state_transitions_total/',
+    'prometheus.googleapis.com/omi_capture_retry_cap_total/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
+    'prometheus.googleapis.com/omi_record_token_lease_',
+    'prometheus.googleapis.com/omi_record_token_late_append_total/',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
     'prometheus.googleapis.com/omi_capture_finalization_failures_total/',
@@ -230,6 +321,7 @@ CLOUD_RUN_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_home_rows_user_day_count_total/',
     'prometheus.googleapis.com/omi_home_rows_user_day_sum_total/',
     'prometheus.googleapis.com/omi_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_journey_failure_reason_total/',
     'prometheus.googleapis.com/omi_journey_latency_seconds/',
     'prometheus.googleapis.com/omi_journey_terminal_total/',
     'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/',
@@ -263,13 +355,25 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_batch_timeliness_',
+    'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
+    'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
+    'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',
     'prometheus.googleapis.com/omi_finalization_pair_',
     'prometheus.googleapis.com/omi_enrichment_summary_repair_',
     'prometheus.googleapis.com/omi_batch_record_pending_',
     'prometheus.googleapis.com/omi_batch_held_expired_total/',
     'prometheus.googleapis.com/omi_batch_held_expired_units/',
     'prometheus.googleapis.com/omi_batch_held_expired_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_total/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_units/',
+    'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/',
+    'prometheus.googleapis.com/omi_conversation_finalization_dead_letter_total/',
+    'prometheus.googleapis.com/omi_backlog_state_transitions_total/',
+    'prometheus.googleapis.com/omi_capture_retry_cap_total/',
     'prometheus.googleapis.com/omi_record_seal_nojob_',
+    'prometheus.googleapis.com/omi_record_token_lease_',
+    'prometheus.googleapis.com/omi_record_token_late_append_total/',
     'prometheus.googleapis.com/omi_enrichment_obligation_',
     'prometheus.googleapis.com/omi_finalization_byok_',
     'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/',
@@ -413,31 +517,78 @@ def test_cloud_run_metrics_exporter_filter_has_no_mixed_and_or(path):
         )
 
 
-def test_enforced_coverage_alert_includes_declared_jobs():
-    inventory = _load_inventory()
-    rules = _alert_rules()
-    scrape_rule = next(rule for rule in rules if rule['uid'] == 'omi-journey-scrape-missing')
-    # Grafana alert expressions live in data[].model.expr. Require it directly —
-    # a JSON-dump-the-whole-rule fallback would let the job name match an
-    # unrelated field (uid, title, a label) and pass even when the actual
-    # alerting expression is wrong or missing (cubic review on #9587).
-    expr = scrape_rule['data'][0]['model']['expr'] if scrape_rule.get('data') else ''
-    assert expr, f"omi-journey-scrape-missing has no data[].model.expr to enforce coverage against: {scrape_rule!r}"
+REVIEWED_EXEMPTIONS = frozenset()  # Today: every job is enforced.
+# The literal prefix plus inventory name is 41 characters; Grafana allows 40.
+COVERAGE_UID_OVERRIDES = {'prometheus-stackdriver-metrics': 'omi-scrape-stackdriver-metrics'}
 
+
+def test_every_scrape_job_is_enforced_by_a_named_coverage_rule():
+    inventory = _load_inventory()
+    rules = {rule['uid']: rule for rule in _alert_rules()}
     for job in inventory['scrape_jobs']:
-        if job.get('coverage_status') != 'enforced':
+        name = job['name']
+        if job.get('coverage_status') == 'exempt':
+            assert name in REVIEWED_EXEMPTIONS, f"{name}: exemption not reviewed"
+            assert job.get('coverage_exemption_reason'), name
+            assert job.get('coverage_alert') is None, name
             continue
-        assert job.get('coverage_alert') == 'omi-journey-scrape-missing'
-        assert job['name'] in expr, f"enforced job {job['name']!r} must appear in omi-journey-scrape-missing expr"
+        assert job.get('coverage_status') == 'enforced', (
+            f"{name}: coverage_status must be 'enforced' or 'exempt' with a reason "
+            "(the old silent 'declared' status is gone; KSM 2026-11-05)"
+        )
+        uid = job['coverage_alert']
+        assert uid == COVERAGE_UID_OVERRIDES.get(name, f'omi-scrape-{name}'), name
+        rule = rules.get(uid)
+        assert rule, f"{name}: coverage rule {uid} missing from alert-rules.json"
+        expr = rule['data'][0]['model']['expr'] if rule.get('data') else ''
+        assert expr, f"{uid} has no data[].model.expr"
+        # Check the actual query matcher, not a job name in unrelated metadata.
+        matcher = job.get('job_matcher') or f'job="{name}"'
+        assert f'up{{{matcher}}}' in expr, f"{name}: {uid} expr lacks matcher {matcher!r}"
+        modes = job.get('coverage_modes') or ['down', 'absent', 'empty']
+        if 'empty' in modes:
+            assert f'scrape_samples_scraped{{{matcher}}}' in expr, name
+        if 'absent' in modes:
+            assert 'absent(' in expr and rule['noDataState'] == 'Alerting', name
+        else:
+            assert 'absent(' not in expr, f"{name}: absence is legitimate"
+            assert rule['noDataState'] == 'OK', f"{name}: presence-gated rule must treat NoData as OK"
+        if 'empty' in modes:
+            # `or` is a set union, not boolean OR: healthy up=1 yields an
+            # unlabeled zero that would mask an empty-scrape one on the right.
+            down = f'(min(up{{{matcher}}}) < bool 1)'
+            samples = f'scrape_samples_scraped{{{matcher}}}'
+            if 'absent' in modes:
+                expected_expr = (
+                    f'max(absent(up{{{matcher}}}) or {down}) + '
+                    f'((min(min_over_time({samples}[15m])) or vector(0)) < bool 1)'
+                )
+            else:
+                expected_expr = f'{down} + (min(min_over_time({samples}[15m])) < bool 1)'
+            assert expr == expected_expr, f"{name}: down must not mask empty scrapes"
+        if 'empty' not in modes:
+            extra = job.get('empty_scrape_alert')
+            assert extra, f"{name}: empty mode must be owned by a named rule"
+            owner_rule = rules[extra]
+            owner_expr = owner_rule['data'][0]['model']['expr']
+            # The named owner is the only empty-mode guard, so pin it exactly; it is gated on the
+            # target being up so down/absence stays with this job's own rule (no double firing).
+            assert owner_expr == (
+                f'(min(min_over_time(scrape_samples_scraped{{{matcher}}}[15m])) < bool 1) '
+                f'and on() (max(max_over_time(up{{{matcher}}}[15m])) == 1)'
+            ), f"{name}: empty-scrape owner {extra} must alert on empty scrapes while up"
+            assert owner_rule['for'] == '30m' and owner_rule['noDataState'] == 'OK', extra
+            assert owner_rule['labels']['alert_identity'] == extra, extra
+        assert rule['for'] == '30m' and rule['labels']['tier'] == 'agent', uid
+        assert rule['labels']['alert_identity'] == uid, uid
 
 
-def test_declared_gaps_are_explicit_not_silently_enforced():
+def test_no_job_is_declared_without_coverage_any_more():
     inventory = _load_inventory()
     for job in inventory['scrape_jobs']:
-        if job.get('coverage_status') == 'declared':
-            assert (
-                job.get('coverage_alert') is None
-            ), f"{job['name']} is declared-only; do not claim a coverage_alert until one exists"
+        assert (
+            job.get('coverage_status') != 'declared'
+        ), f"{job['name']}: 'declared' was eliminated 2026-11; enforce or exempt-with-reason"
 
 
 def test_alert_rules_use_declared_receiver_and_instatus_components():
@@ -498,8 +649,14 @@ def test_every_alert_rule_declares_tier_owner_and_audience():
 def test_scrape_health_no_data_semantics_match_inventory():
     inventory = _load_inventory()
     expected = inventory['no_data_semantics']['scrape_health']
-    scrape_rule = next(rule for rule in _alert_rules() if rule['uid'] == 'omi-journey-scrape-missing')
-    assert scrape_rule['noDataState'] == expected
+    rules = {rule['uid']: rule for rule in _alert_rules()}
+    assert rules['omi-journey-scrape-missing']['noDataState'] == expected
+    for job in inventory['scrape_jobs']:
+        if job.get('coverage_status') == 'exempt':
+            continue
+        modes = job.get('coverage_modes') or ['down', 'absent', 'empty']
+        key = 'scrape_health' if 'absent' in modes else 'scrape_health_presence_gated'
+        assert rules[job['coverage_alert']]['noDataState'] == inventory['no_data_semantics'][key], job['name']
 
 
 def test_managed_gke_exclusions_are_documented():
@@ -640,3 +797,104 @@ def test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_
     rule = next(r for r in json.loads(ALERT_RULES.read_text()) if r['uid'] == 'omi-batch-held-expired-volume')
     queries = ' '.join(node['model'].get('expr', '') for node in rule['data'])
     assert all(name in queries for name in families)
+
+
+@pytest.mark.parametrize(
+    'path', [CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV]
+)
+@pytest.mark.parametrize('profile', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_record_dead_letter_alert_metrics_survive_each_ingestion_allowlist(path, profile):
+    from prometheus_client import CollectorRegistry
+    from scripts.alert_backtest import metric_names, prometheus
+    from utils.batch_pipeline.metrics import QueueMetrics
+
+    rule = next(r for r in json.loads(ALERT_RULES.read_text()) if r['uid'] == 'omi-batch-record-dead-letter-volume')
+    queried = set().union(*(metric_names(node['model']['expr']) for node in rule['data'] if prometheus(node)))
+    assert queried == {
+        'omi_batch_record_dead_letter_total',
+        'omi_batch_record_dead_letter_units',
+        'omi_batch_record_dead_letter_observed_at_seconds',
+    }
+    registry = CollectorRegistry()
+    producer = QueueMetrics(registry)
+    producer.record_dead_letter.inc()
+    producer.record_dead_letter_stock.set(101)
+    producer.record_dead_letter_observed_at.set(1000)
+    emitted = {sample.name for metric in registry.collect() for sample in metric.samples}
+    assert queried <= emitted
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    assert queried <= set(inventory['declared_metrics'])
+    imported = set(yaml.safe_load(path.read_text())['stackdriver']['metrics']['prefixes'])
+    assert {f'prometheus.googleapis.com/{name}/' for name in queried} <= imported
+    relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+        'metricRelabeling'
+    ]
+    for name in queried:
+        labels = {'__name__': name}
+        for relabel in relabels:
+            value = ';'.join(labels.get(key, '') for key in relabel['sourceLabels'])
+            matched = re.fullmatch(relabel['regex'], value)
+            if relabel['action'] == 'keep':
+                assert matched, (profile, name)
+            elif relabel['action'] == 'drop':
+                assert not matched, (profile, name)
+
+
+BACKLOG_ALERTS = MONITORING / 'alerts' / 'backlog-state-machine.json'
+
+
+def _imported(family, prefixes):
+    for prefix in prefixes:
+        name = prefix.removeprefix('prometheus.googleapis.com/')
+        if name.endswith('/') and family == name[:-1]:
+            return True
+        if not name.endswith('/') and family.startswith(name):
+            return True
+    return False
+
+
+@pytest.mark.parametrize('env', ['prod', 'dev'])
+def test_backlog_alert_metric_families_are_imported_by_the_cloud_run_exporters(env):
+    """Alert-to-importer wiring: a family no exporter imports reads as vector(0), so its alert never fires.
+
+    Batch transitions are emitted by backend (serving maintenance, intake polls,
+    operator routes) and sync caps by the sync sequencer, so every family the
+    backlog alerts query must reach in-cluster Prometheus through both releases.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('alert_backtest', MONITORING.parents[1] / 'scripts/alert_backtest.py')
+    backtest = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backtest)
+    exporters = {
+        'prod': (CLOUD_RUN_EXPORTER, CLOUD_RUN_SYNC_EXPORTER),
+        'dev': (CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    }[env]
+    rules = json.loads(BACKLOG_ALERTS.read_text(encoding='utf-8'))
+    families = set()
+    for alert in rules:
+        for node in alert['data']:
+            expr = node.get('model', {}).get('expr')
+            if expr:
+                families |= set(backtest.metric_names(expr))
+    assert families >= {'omi_backlog_state_transitions_total', 'omi_capture_retry_cap_total'}
+    for path in exporters:
+        prefixes = yaml.safe_load(path.read_text(encoding='utf-8'))['stackdriver']['metrics']['prefixes']
+        missing = sorted(family for family in families if not _imported(family, prefixes))
+        assert not missing, f'{path.name} does not import {missing}'
+
+    # Check the producer-side GMP filters too: importing a family downstream
+    # cannot recover samples discarded by the source scrape allowlist.
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        relabels = yaml.safe_load((REPO / 'backend/deploy' / profile).read_text())['spec']['endpoints'][0][
+            'metricRelabeling'
+        ]
+        for family in families:
+            labels = {'__name__': family}
+            for relabel in relabels:
+                value = ';'.join(labels.get(key, '') for key in relabel['sourceLabels'])
+                matched = re.fullmatch(relabel['regex'], value)
+                if relabel['action'] == 'keep':
+                    assert matched, (profile, family)
+                elif relabel['action'] == 'drop':
+                    assert not matched, (profile, family)

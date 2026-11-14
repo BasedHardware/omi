@@ -1617,3 +1617,13 @@ def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
     survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
     assert survivors[other_client['id']]['status'] == 'active'
     assert survivors[other_host['id']]['status'] == 'active'
+
+
+def test_registry_preserves_chatgpt_read_floor_exactly():
+    from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
+
+    assert mcp_oauth.CHATGPT_READ_SCOPE_FLOOR == frozenset(
+        {"memories.read", "conversations.read", "action_items.read", "goals.read"}
+    )
+    assert mcp_oauth.CHATGPT_READ_SCOPE_FLOOR == frozenset(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["required_scopes"])
+    assert mcp_oauth.PUBLIC_CHATGPT_CLIENT_IDS == set(CONNECTOR_ACCESS_REGISTRY["chatgpt"]["client_ids"])

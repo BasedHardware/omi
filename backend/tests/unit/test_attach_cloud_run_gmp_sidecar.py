@@ -1405,6 +1405,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert kept('omi_batch_projection_claim_busy_backoffs_total')
     assert kept('omi_batch_projection_privacy_blocked_stops_total')
     assert kept('omi_batch_projection_privacy_backoffs_total')
+    assert kept('omi_batch_projection_live_target_backoffs_total')
     assert kept('omi_batch_projection_privacy_row_changed_total')
     assert kept('omi_batch_projection_privacy_resumes_attempted_total')
     assert kept('omi_batch_projection_privacy_resumes_succeeded_total')
@@ -1434,6 +1435,9 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_accept_to_summary_seconds_sum',
         'omi_summary_terminal_total',
         'omi_summary_debt_overdue',
+        'omi_summary_debt_expired_seen',
+        'omi_summary_debt_near_expiry_admitted',
+        'omi_summary_debt_repair_total',
         'omi_summary_debt_oldest_age_seconds',
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
@@ -1478,6 +1482,20 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'conversation_llm_input_dedupe_skipped_total',
         'conversation_llm_input_dedupe_misses_total',
         'conversation_llm_input_dedupe_checkpoint_errors_total',
+        # Enrichment LLM cost/usage (SCA-2067, 2026-11-13): the SCA-1960 guardrail
+        # regression readout — attributable calls, shaped input tokens, notes-agent
+        # cost and episode-moment cost. Estimates, not billed dollars.
+        'omi_conversation_llm_calls_total',
+        'omi_shaped_agent_input_tokens_total',
+        'omi_notes_agent_runs_total',
+        'omi_notes_agent_estimated_cost_usd_bucket',
+        'omi_notes_agent_estimated_cost_usd_count',
+        'omi_notes_agent_estimated_cost_usd_sum',
+        'omi_notes_agent_tokens_total',
+        'omi_notes_agent_transport_skips_total',
+        'omi_episode_moment_cost_usd_total',
+        'omi_episode_moment_tokens_total',
+        'omi_episode_moment_updates_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
@@ -1496,7 +1514,7 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert config['metadata']['name'] == shared['metadata']['name']
     assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
-        'omi_.*|omi_listen_server_batch_suppression_total|conversation_llm_input_dedupe_.*'
+        'omi_.*|omi_listen_server_batch_suppression_total|listen_quiet_check_.*|conversation_llm_input_dedupe_.*'
         '|privacy_(checks|check_calls|check_reads|decision_mismatch|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total'
     )
     # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).

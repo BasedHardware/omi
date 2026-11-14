@@ -206,3 +206,42 @@ def test_provider_ids_cannot_escape_authenticated_path(key):
     with pytest.raises(module.SonioxBatchError):
         module.transcribe(b'synthetic', 5, client_factory=client(handler))
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('stage', ['upload', 'create', 'poll', 'transcript'])
+def test_prerecorded_failover_stops_at_first_rate_limit(key, stage):
+    calls = []
+
+    def handler(request):
+        if request.method == 'DELETE':
+            return httpx.Response(204)
+        operation = (
+            'upload'
+            if request.url.path == '/v1/files'
+            else (
+                'create'
+                if request.method == 'POST'
+                else 'transcript' if request.url.path.endswith('/transcript') else 'poll'
+            )
+        )
+        calls.append(operation)
+        if operation == stage:
+            return httpx.Response(429)
+        if operation == 'upload':
+            return httpx.Response(201, json={'id': FILE})
+        if operation == 'create':
+            return httpx.Response(201, json={'id': TRANSCRIPTION, 'status': 'queued'})
+        return httpx.Response(200, json={'status': 'completed'})
+
+    with pytest.raises(module.SonioxBatchError) as raised:
+        module.transcribe(
+            b'synthetic',
+            5,
+            language='en',
+            failover=True,
+            retry_rate_limits=False,
+            client_factory=client(handler),
+            sleep=lambda _: None,
+        )
+    assert raised.value.kind == 'rate_limited'
+    assert calls.count(stage) == 1

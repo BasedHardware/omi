@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from io import BytesIO
 from math import ceil
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import httpx
 import numpy as np
@@ -20,20 +20,23 @@ from pydub import AudioSegment  # pydub is untyped
 from config.prerecorded_stt import (
     PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
     PrerecordedSTTService,
+    SONIOX_HELD_RECOVERY_MODEL,
     TranscriptionOutcome,
     get_prerecorded_models,
     require_provider_environment,
 )
 from config.prerecorded_language import language_class, language_guard_enabled
-from config.prerecorded_vendor import vendor_fail_fast_enabled
+from config.prerecorded_vendor import soniox_failover_enabled, vendor_fail_fast_enabled
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
+    SONIOX_PROVIDER,
     STTServingSurface,
     default_models_for_surface,
     normalized_stt_language,
     parakeet_supports_language,
     provider_is_enabled,
+    soniox_accepts_language_hint,
 )
 from models.transcript_segment import TranscriptSegment
 from utils.log_sanitizer import sanitize_provider_error
@@ -43,7 +46,9 @@ from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.modulate_batch import MODULATE_TIMEOUT as _MODULATE_TIMEOUT
 from utils.stt.modulate_batch import modulate_budget_refusal as _modulate_budget_refusal
 from utils.stt.modulate_batch import wav_duration_seconds as _wav_duration_seconds
+from utils.stt.allowance_watch import observe_request
 from utils.stt.parakeet_request_metrics import observe_parakeet_request
+from utils.stt.soniox_batch import SonioxBatchError, transcribe as soniox_transcribe
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
@@ -64,6 +69,19 @@ _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _verification_deadline: ContextVar[Optional[float]] = ContextVar('verification_stt_deadline', default=None)
 
 _held_single_attempt: ContextVar[bool] = ContextVar('held_stt_single_attempt', default=False)
+_modulate_prior_failure: ContextVar[Optional[bool]] = ContextVar('modulate_prior_failure', default=None)
+
+
+@contextmanager
+def _modulate_failover_scope():
+    if _modulate_prior_failure.get() is not None:
+        yield
+        return
+    token = _modulate_prior_failure.set(False)
+    try:
+        yield
+    finally:
+        _modulate_prior_failure.reset(token)
 
 
 @contextmanager
@@ -369,6 +387,7 @@ def deepgram_prerecorded(
                 options["keywords"] = list(keywords)
 
         rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        observe_request('prerecorded', 'deepgram')
         response = rest_client.transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
 
         # Extract words from response
@@ -502,6 +521,12 @@ def deepgram_prerecorded_from_bytes(
         source: Dict[str, Any] = {"buffer": audio_buffer, "mimetype": mimetype}
 
         rest_client: Any = _deepgram_client_for_request().listen.rest.v("1")
+        duration = (
+            len(audio_bytes) / (sample_rate * channels * 2)
+            if encoding == 'linear16' and sample_rate > 0 and channels > 0
+            else _wav_duration_seconds(audio_bytes)
+        )
+        observe_request('prerecorded', 'deepgram', duration)
         response = rest_client.transcribe_file(source, options, timeout=_verification_timeout(_DG_TIMEOUT))
 
         # Extract words from response
@@ -666,7 +691,7 @@ def modulate_prerecorded_from_bytes(
                 provider=PrerecordedSTTService.MODULATE,
                 retryable=False,
             )
-        raise ModulateQuotaError('Modulate transcription failed: vendor circuit breaker open')
+        raise ModulateQuotaError('Modulate transcription failed: vendor circuit breaker open', breaker_open=True)
 
     posted = False
     post_2xx = False
@@ -687,6 +712,7 @@ def modulate_prerecorded_from_bytes(
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
             burn_seconds = _wav_duration_seconds(audio_bytes)
+            observe_request('prerecorded', 'modulate', burn_seconds)
             posted = True
             record_vendor_payload('modulate', 'stt', len(audio_bytes))
             response = client.post(url, headers=headers, files=files, data=data)
@@ -720,6 +746,9 @@ def modulate_prerecorded_from_bytes(
         # generic RuntimeError (which erases the outcome the sync job counts).
         raise
     except Exception as e:
+        # A later explicit refusal cannot undo a previous possibly billed POST.
+        if posted and _modulate_prior_failure.get() is not None:
+            _modulate_prior_failure.set(True)
         if posted and not post_2xx:
             record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
@@ -747,7 +776,101 @@ def modulate_prerecorded_from_bytes(
         raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
 
 
+def _modulate_soniox_failover_reason(error: BaseException) -> Optional[str]:
+    """Only account-state refusals and breaker openings may spend a second vendor attempt."""
+    if isinstance(error, TranscriptionFailure):
+        if error.outcome is TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED:
+            return 'provider_budget_exhausted'
+        return None
+    if isinstance(error, ModulateQuotaError):
+        return 'circuit_open' if error.breaker_open else None
+    return None
+
+
+@_modulate_failover_scope()
+def modulate_prerecorded_from_bytes_with_soniox(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    return_language: bool = False,
+    language: Optional[str] = None,
+    provider_served: Optional[Callable[[str], None]] = None,
+) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+    """Run Modulate, then one bounded Soniox submission only for credit/quota refusal."""
+    try:
+        result = modulate_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+            language=language,
+        )
+    except Exception as modulate_error:
+        reason = _modulate_soniox_failover_reason(modulate_error)
+        normalized_language = normalized_stt_language(language)
+        # Held-piece and prompt-verification coordinators own their paid attempts.
+        if (
+            reason is None
+            or _modulate_prior_failure.get()
+            or not soniox_failover_enabled()
+            or attempts >= 2
+            or _held_single_attempt.get()
+            or _verification_deadline.get() is not None
+        ):
+            raise
+        # Soniox can identify language itself when the resolved value is multi.
+        # An explicit unsupported hint keeps the original Modulate failure.
+        if normalized_language not in {'', 'multi'} and not soniox_accepts_language_hint(normalized_language):
+            raise
+        duration = _wav_duration_seconds(audio_bytes)
+        try:
+            words, detected_language = soniox_transcribe(
+                audio_bytes,
+                duration,
+                language=language,
+                failover=True,
+                diarize=diarize,
+                retry_rate_limits=False,
+            )
+        except Exception as soniox_error:
+            if isinstance(soniox_error, SonioxBatchError) and soniox_error.kind != 'refused':
+                # Local surface/duration authorization has not attempted a vendor POST.
+                record_vendor_burn(ENDPOINT_STT, 'error', duration, provider=SONIOX_PROVIDER)
+            record_fallback(
+                component='stt_prerecorded',
+                from_mode=MODULATE_PROVIDER,
+                to_mode=SONIOX_PROVIDER,
+                reason=reason,
+                outcome='exhausted',
+                log=logger,
+            )
+            # In particular, a Soniox 429 is terminal and returns the original
+            # Modulate error class. Timeouts after submission have unknown
+            # billing state too; neither case loops or tries another provider.
+            raise modulate_error
+        record_vendor_burn(ENDPOINT_STT, 'ok', duration, provider=SONIOX_PROVIDER)
+        record_fallback(
+            component='stt_prerecorded',
+            from_mode=MODULATE_PROVIDER,
+            to_mode=SONIOX_PROVIDER,
+            reason=reason,
+            outcome='recovered',
+            log=logger,
+        )
+        if provider_served is not None:
+            provider_served(SONIOX_PROVIDER)
+        if return_language:
+            return words, detected_language
+        return words
+    if provider_served is not None:
+        provider_served(MODULATE_PROVIDER)
+    return result
+
+
 @timeit
+@_modulate_failover_scope()
 def modulate_prerecorded(
     audio_url: str,
     speakers_count: Optional[int] = None,
@@ -755,6 +878,8 @@ def modulate_prerecorded(
     return_language: bool = False,
     diarize: bool = True,
     language: Optional[str] = None,
+    *,
+    provider_served: Optional[Callable[[str], None]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     logger.info(
         'modulate_prerecorded url_len=%s speakers_count=%s attempt=%s', len(audio_url), speakers_count, attempts
@@ -779,18 +904,28 @@ def modulate_prerecorded(
                 if download_attempt == 0 and attempts < 1 and not _held_single_attempt.get():
                     continue
                 raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
-        return modulate_prerecorded_from_bytes(
-            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
+        return modulate_prerecorded_from_bytes_with_soniox(
+            audio_bytes,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+            language=language,
+            provider_served=provider_served,
         )
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
             resp = client.get(audio_url)
             resp.raise_for_status()
             audio_bytes = resp.content
-        return modulate_prerecorded_from_bytes(
-            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
+        return modulate_prerecorded_from_bytes_with_soniox(
+            audio_bytes,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+            language=language,
+            provider_served=provider_served,
         )
-    except TranscriptionFailure:
+    except (TranscriptionFailure, ModulateQuotaError):
         raise
     except Exception as e:
         logger.error(
@@ -799,7 +934,15 @@ def modulate_prerecorded(
             attempts + 1,
         )
         if attempts < 1 and not _held_single_attempt.get():
-            return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
+            return modulate_prerecorded(
+                audio_url,
+                speakers_count,
+                attempts + 1,
+                return_language,
+                diarize,
+                language,
+                provider_served=provider_served,
+            )
         raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
 
 
@@ -862,6 +1005,14 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 
 
 class ModulatePrerecordedProvider(PrerecordedSTTProvider):
+    def __init__(self):
+        self.served_provider = MODULATE_PROVIDER
+        self.served_model = 'velma-2'
+
+    def _note_served(self, provider: str) -> None:
+        self.served_provider = provider
+        self.served_model = SONIOX_HELD_RECOVERY_MODEL if provider == SONIOX_PROVIDER else 'velma-2'
+
     def _normalize_lang(self, language: Optional[str]) -> str:
         if not language:
             return 'multi'
@@ -884,6 +1035,7 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
             return_language=return_language,
             diarize=diarize,
             language=self._normalize_lang(language),
+            provider_served=self._note_served,
         )
 
     def transcribe_bytes(
@@ -900,13 +1052,14 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
     ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
-        return modulate_prerecorded_from_bytes(
+        return modulate_prerecorded_from_bytes_with_soniox(
             audio_bytes,
             sample_rate=sample_rate,
             diarize=diarize,
             attempts=attempts,
             return_language=return_language,
             language=self._normalize_lang(language),
+            provider_served=self._note_served,
         )
 
 
@@ -1003,12 +1156,14 @@ def parakeet_prerecorded_from_bytes(
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
             with observe_parakeet_request('v2' if use_v2 else 'v1'):
                 record_vendor_payload('parakeet', 'v2' if use_v2 else 'v1', len(audio_bytes))
+                observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                 response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
                 with observe_parakeet_request('v1'):
                     record_vendor_payload('parakeet', 'v1', len(audio_bytes))
+                    observe_request('prerecorded', 'parakeet', _wav_duration_seconds(audio_bytes))
                     response = observe_sync_call(
                         'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
                     )
@@ -1274,7 +1429,9 @@ def prerecorded(
     keywords: Optional[Sequence[str]] = None,
     *,
     selected_service: Optional[Tuple[str, Optional[str], str]] = None,
-) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+    return_provider: bool = False,
+    on_provider_served: Optional[Callable[[str, str], None]] = None,
+) -> Any:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
     if selected_service is None and language_guard_enabled() and language_class(language) == 'unknown':
         from utils.stt.batch_language import resolve_url
@@ -1285,7 +1442,7 @@ def prerecorded(
         if selected_service is not None
         else get_prerecorded_provider(language)
     )
-    return provider.transcribe_url(
+    result = provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,
         attempts=attempts,
@@ -1294,6 +1451,15 @@ def prerecorded(
         language=language,
         keywords=keywords,
     )
+    if return_provider or on_provider_served is not None:
+        selected = selected_service or get_prerecorded_service(language)
+        served_provider = getattr(provider, 'served_provider', selected[0])
+        served_model = getattr(provider, 'served_model', selected[2] or model)
+        if on_provider_served is not None:
+            on_provider_served(served_provider, served_model)
+        if return_provider:
+            return result, served_provider, served_model
+    return result
 
 
 def prerecorded_from_bytes(
@@ -1307,7 +1473,9 @@ def prerecorded_from_bytes(
     model: str = "nova-3",
     return_language: bool = False,
     keywords: Optional[Sequence[str]] = None,
-) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
     from utils.stt.batch_language import resolve_language, select_decision
 
@@ -1317,7 +1485,7 @@ def prerecorded_from_bytes(
         resolved = language
     selected = select_decision(language, decision, get_prerecorded_service)
     provider = get_prerecorded_provider(resolved, selected_service=selected)
-    return provider.transcribe_bytes(
+    result = provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,
         diarize=diarize,
@@ -1328,6 +1496,13 @@ def prerecorded_from_bytes(
         return_language=return_language,
         keywords=keywords,
     )
+    if return_provider:
+        return (
+            result,
+            getattr(provider, 'served_provider', selected[0]),
+            getattr(provider, 'served_model', selected[2] or model),
+        )
+    return result
 
 
 def _words_cleaning(words: List[Dict[str, Any]], *, preserve_timestamps: bool = False) -> List[Dict[str, Any]]:

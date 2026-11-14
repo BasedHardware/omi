@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -221,4 +222,29 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
     return jsonResponse;
   }
   return null;
+}
+
+/// Applies only to the existing subscription. No price, interval or checkout input.
+/// Never retain the code or display/log free-form server responses.
+Future<ApiResult<bool>> redeemSubscriptionCode(String code, {ApiSend? send, bool Function()? canSend}) async {
+  final trimmed = code.trim();
+  if (trimmed.isEmpty || trimmed.length > 64) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400));
+  }
+  return executeApi<bool>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/redeem-code',
+      method: 'POST',
+      body: jsonEncode({'code': trimmed}),
+    ),
+    send: send,
+    canSend: canSend,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map || decoded['status'] != 'applied') {
+        throw const FormatException('Expected applied redemption');
+      }
+      return true;
+    },
+  );
 }

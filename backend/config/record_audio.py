@@ -3,12 +3,19 @@
 from config import record_partial
 import hashlib
 
+BARRIER_NOT_CLOSED = 'capture upload/finalization barrier not closed'
+
 PRODUCER_START_MARGIN_SECONDS = 2.0  # Integer boot seconds plus one user clock tick.
 
 
 def record_identity(uid: str, conversation_id: str) -> tuple[str, str]:
     content = hashlib.sha256(f'record-v1:{uid}:{conversation_id}'.encode()).hexdigest()
     return content, hashlib.sha256(f'{content}:0'.encode()).hexdigest()
+
+
+def restore_pending(row: dict, *obligations: dict) -> bool:
+    """Registration precedes restore metadata; only that origin fences revival."""
+    return bool(row.get('discarded') and any(job.get('registration_origin') == 'restore' for job in obligations))
 
 
 def require_record_audio_barrier(row, *, expected=None):
@@ -34,7 +41,7 @@ def require_record_audio_barrier(row, *, expected=None):
         or row.get('record_upload_sessions')
         or row.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}
     ):
-        raise ValueError('capture upload/finalization barrier not closed')
+        raise ValueError(BARRIER_NOT_CLOSED)
     if expected is not None and snapshot != expected:
         raise ValueError('capture upload barrier changed during staging')
     return snapshot

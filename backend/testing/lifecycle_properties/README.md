@@ -23,7 +23,8 @@ increment a pending durable enrichment outbox with a token and finite due time.
 The finalization job may already be completed: the rearm obligation lives in
 the outbox. A notification alone is insufficient.
 
-Producer custody has no TTL (lead2 `9d457c`, owner ruling `7a6181`). An old live
+With `RECORD_TOKEN_LEASE_MODE=off` (the default), producer custody retains the
+original no-TTL proof (lead2 `9d457c`, owner ruling `7a6181`). An old live
 producer without audio must survive recovery ticks and another session's finish;
 only its exact finish clears its token. A separate retained-tail case must keep
 the token while a fresh proof shows its producer live, then clear it through real
@@ -42,3 +43,8 @@ Local timing evidence and remaining fix ownership are recorded in the workspace
 `data/run-2026-11-04-lifecycle-invariants/README.md`. The added module must stay
 within the lead's approximately 60-second PR-tail budget. `--runxfail` is for a
 local red-reason audit and is not added to the CI invocation.
+
+Part A adds real-Firestore named-exit controls for leased → lapsed → complete
+seal, partial finish with hourly coordinator, or late-append reactivation with
+upload-revision bump. A 3600s lease requires both quiet deadlines; retained
+audio, privacy and transactional state fences remain authoritative.

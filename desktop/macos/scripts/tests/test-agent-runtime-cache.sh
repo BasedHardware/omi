@@ -89,10 +89,15 @@ arc_write_stamp "$STAMP" "$KEY" "$DIGEST"
 arc_cache_status "$STAMP" "$KEY" "$DIGEST" || fail "unchanged stamp reported MISS"
 
 # A hit is decision-only: it must not rewrite or touch prepared outputs.
-before_mtime="$(stat -f %m "$TMP_ROOT/outputs/sentinel.js" 2>/dev/null || stat -c %Y "$TMP_ROOT/outputs/sentinel.js")"
+# GNU stat -f prints filesystem metadata before failing on the BSD format;
+# capturing that output makes free-block changes look like file mutations.
+file_mtime() {
+  python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$1"
+}
+before_mtime="$(file_mtime "$TMP_ROOT/outputs/sentinel.js")"
 sleep 1
 arc_cache_status "$STAMP" "$KEY" "$(output_digest)" || fail "second unchanged check missed"
-after_mtime="$(stat -f %m "$TMP_ROOT/outputs/sentinel.js" 2>/dev/null || stat -c %Y "$TMP_ROOT/outputs/sentinel.js")"
+after_mtime="$(file_mtime "$TMP_ROOT/outputs/sentinel.js")"
 assert_eq "$after_mtime" "$before_mtime"
 
 # Source/lock, mode, and actual build toolchain metadata all participate.
@@ -155,15 +160,18 @@ run_locked() {
   printf '%s-end\n' "$name" >>"$TRACE"
   arc_release_lock "$LOCK"
 }
-run_locked one &
+(set -x; run_locked one) 2>"$TMP_ROOT/lock-one.log" &
 pid_one=$!
-run_locked two &
+(set -x; run_locked two) 2>"$TMP_ROOT/lock-two.log" &
 pid_two=$!
 wait "$pid_one" "$pid_two"
 trace="$(cat "$TRACE")"
 case "$trace" in
   $'one-start\none-end\ntwo-start\ntwo-end'|$'two-start\ntwo-end\none-start\none-end') ;;
-  *) fail "lock allowed interleaved critical sections: $trace" ;;
+  *)
+    cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" >&2
+    fail "lock allowed interleaved critical sections: $trace"
+    ;;
 esac
 
 assert_eq "$(arc_node_runtime_cache_policy "" 0)" "reuse"

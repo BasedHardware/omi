@@ -44,7 +44,6 @@ def archive(tmp_path):
         'provider_config_evidence': 'reconstructed-original-launch',
         'worker_switches': {
             'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': True,
-            'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': False,
             'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED': False,
             'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED': False,
             'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED': False,
@@ -113,7 +112,7 @@ def test_archive_rejects_changed_evidence(tmp_path, mutation):
     elif mutation == 'provider':
         receipt['provider_config'] = {'words': 'different'}
     elif mutation == 'switch':
-        receipt['worker_switches'] = {**receipt['worker_switches'], 'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': True}
+        receipt['worker_switches'] = {**receipt['worker_switches'], 'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': False}
     elif mutation == 'missing_switch':
         del receipt['worker_switches']
     elif mutation == 'switch_evidence':
@@ -129,7 +128,6 @@ def test_archive_rejects_changed_evidence(tmp_path, mutation):
     'name',
     [
         'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED',
-        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED',
         'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
         'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
         'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',

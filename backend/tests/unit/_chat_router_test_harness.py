@@ -105,6 +105,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
     handles a suite layers extra attributes onto.
     """
     sys.modules.pop('utils.chat_turn', None)
+    # These suites exercise chat responses, not the real billing observer.
+    allowance = install('utils.stt.allowance_session', ModuleType('utils.stt.allowance_session'))
+    allowance.operation = lambda *a, **kw: lambda endpoint: endpoint
+    allowance.current = SimpleNamespace(get=lambda: None)
     install('utils.messaging.app_awareness', ModuleType('utils.messaging.app_awareness'))
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
 
@@ -216,11 +220,12 @@ def wire_common_stubs(install) -> SimpleNamespace:
             self.outcomes = []
             self.__class__.instances.append(self)
 
-        def finish(self, outcome):
+        def finish(self, outcome, *, failure_reason=None, error_type=None):
             if self.finished:
                 return
             self.finished = True
             self.outcomes.append(outcome)
+            self.failure_reasons = [*getattr(self, 'failure_reasons', []), failure_reason]
 
     class ClientJourneyAttempt:
         """Stream-aware spy for the client-segmented journey wired by the router."""

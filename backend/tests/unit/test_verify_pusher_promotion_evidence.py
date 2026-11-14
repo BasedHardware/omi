@@ -1208,6 +1208,10 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         "PROACTIVITY_REDIS_HOST": config_name,
         "REDIS_DB_HOST": config_name,
         "TYPESENSE_HOST": config_name,
+        "RECORD_TOKEN_LEASE_MODE": config_name,
+        "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT": config_name,
+        "RECORD_TOKEN_LEASE_SECONDS": config_name,
+        "RECORD_TOKEN_LEASE_DEPLOYED_AT": config_name,
     }
 
 

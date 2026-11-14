@@ -6,6 +6,7 @@ import threading
 import time
 
 from config.firestore_read_levers import lever_enabled
+from config.policy.kill_switches import kill_switch
 
 from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
 
@@ -16,12 +17,27 @@ from config.batch_timeliness import (
     timeliness_epoch,
     timeliness_interval_seconds,
 )
-from database.batch_pipeline_store import Store, FirestoreStore, PROJECTION_OBLIGATION_STATES, timeliness_sample
+from database.batch_pipeline_store import (
+    Store,
+    FirestoreStore,
+    PROJECTION_OBLIGATION_STATES,
+    timeliness_all_time_counts,
+    timeliness_sample,
+)
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
+from utils.batch_pipeline.fresh_guard import FreshGuard
 
+PROJECTION_FINISH_READS = Counter(
+    'omi_batch_projection_finish_reads_total',
+    'Finish-page rows read by the projection sweep',
+)
+PROJECTION_FINISH_COMPLETED = Counter(
+    'omi_batch_projection_finish_completed_total',
+    'Finish-page rows completed by the projection sweep',
+)
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )
@@ -36,6 +52,9 @@ PROJECTION_DRAIN_PRIVACY_STOPS = Counter(
 )
 PROJECTION_DRAIN_PRIVACY_BACKOFFS = Counter(
     'omi_batch_projection_privacy_backoffs_total', 'Zero-progress privacy owner drain backoffs applied'
+)
+PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS = Counter(
+    'omi_batch_projection_live_target_backoffs_total', 'Zero-progress awaiting-live-target owner drain backoffs applied'
 )
 PROJECTION_DRAIN_PRIVACY_ROW_CHANGED = Counter(
     'omi_batch_projection_privacy_row_changed_total', 'Early owner re-requests after a blocked head row changes'
@@ -53,6 +72,13 @@ PROJECTION_PRIVACY_FALLTHROUGHS = Counter(
 )
 PROJECTION_PRIVACY_STILL_REFUSED = Counter(
     'omi_batch_projection_privacy_still_refused_total', 'Applicable privacy refusals held, including unchanged holds'
+)
+
+
+RECORD_SEAL_ORPHAN_PARKED = Counter(
+    'omi_record_seal_orphan_parked_total',
+    'Seal passes observing a parked restore obligation on a discarded row',
+    ['seal_path'],
 )
 
 
@@ -108,7 +134,9 @@ class QueueMetrics:
         oldest_min_refresh_seconds: float = 0.0,
     ):
         self.timeliness_leader = timeliness_leader
+        self.fresh_guard = FreshGuard(registry)
         self._timeliness_lock = threading.Lock()
+        self._timeliness_all_time_visible = False
         self._timeliness_visible = False
         self._timeliness_expires = 0.0
         self.scope = (worker_release, namespace)
@@ -131,6 +159,21 @@ class QueueMetrics:
         self.held_expired_observed_at = Gauge(
             'omi_batch_held_expired_observed_at_seconds', 'Last successful held-expired stock sample', registry=registry
         )
+        self.record_dead_letter = Counter(
+            'omi_batch_record_dead_letter_total',
+            'Committed record barrier aged dead letters; custody retained',
+            registry=registry,
+        )
+        self.record_dead_letter_stock = Gauge(
+            'omi_batch_record_dead_letter_units',
+            'Retained record_barrier_aged job stock',
+            registry=registry,
+        )
+        self.record_dead_letter_observed_at = Gauge(
+            'omi_batch_record_dead_letter_observed_at_seconds',
+            'Last successful record dead-letter stock sample',
+            registry=registry,
+        )
         # Serving instances share one global queue; workers keep 0 for the HPA.
         self.min_refresh_seconds = min_refresh_seconds
         self._refresh_due = 0.0
@@ -139,6 +182,11 @@ class QueueMetrics:
         self.projection_pump_last_tick = Gauge(
             'omi_batch_projection_pump_last_tick_seconds',
             'Unix timestamp of the last completed projection pump tick, including failed ticks; zero before first tick',
+            registry=registry,
+        )
+        self.projection_pump_last_success = Gauge(
+            'omi_batch_projection_pump_last_success_seconds',
+            'Unix timestamp of the last successful projection pump tick; zero before first success',
             registry=registry,
         )
         self.projection_age = Gauge(
@@ -172,12 +220,26 @@ class QueueMetrics:
             registry=registry,
             fresh=self._timeliness_sample_visible,
         )
+        self.staged_input_clock_invalid = Counter(
+            'omi_batch_staged_input_clock_invalid_total',
+            'Malformed clock observations in bounded held pages and age samples; repeated observations count again',
+            registry=registry,
+        )
         self.timeliness_over_sla = _FreshQueueGauge(
             'omi_batch_timeliness_new_over_sla_units',
             'Units admitted at or after the epoch and still unpublished past the 2h SLA, by counted leg',
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
+        )
+        self.timeliness_all_time = _FreshQueueGauge(
+            'omi_batch_timeliness_all_time_units',
+            'Unpublished stock across all epochs and ages; exact aggregate counts by projection hold leg',
+            ['leg'],
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible()
+            and self._timeliness_all_time_visible
+            and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False),
         )
         self.timeliness_backlog = _FreshQueueGauge(
             'omi_batch_timeliness_backlog_units',
@@ -188,7 +250,7 @@ class QueueMetrics:
         )
         self.timeliness_truncated = _FreshQueueGauge(
             'omi_batch_timeliness_scan_truncated',
-            '1 when a leg\'s bounded walk may hide an older unpublished unit',
+            '1 when a leg\'s bounded walk or unusable clock may hide an older unpublished unit',
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
@@ -457,6 +519,9 @@ class QueueMetrics:
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
                 return
+        # Companion counts need leader mode and this replica's lease, so a fleet
+        # never runs them on every replica. Election off means no companion counts.
+        all_time_counts = elected and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False)
         try:
             sample = timeliness_sample(
                 store.client,
@@ -472,6 +537,7 @@ class QueueMetrics:
                 'event=batch_timeliness_sample outcome=unavailable exception_type=%s', type(error).__name__
             )
             return
+        self.staged_input_clock_invalid.inc(sample.get('staged_input_clock_invalid', 0))
         self.drain_age.set(age_seconds(sample['drain_oldest'], now))
         for leg, started in sample['held_oldest'].items():
             self.held_age.labels(leg).set(age_seconds(started, now))
@@ -489,6 +555,27 @@ class QueueMetrics:
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        # Companion counts run only after the epoch gauges above are published,
+        # so a slow or failed COUNT can never delay or stale the epoch series.
+        if all_time_counts:
+            self._refresh_all_time(store)
+        else:
+            self._timeliness_all_time_visible = False
+
+    def _refresh_all_time(self, store: FirestoreStore) -> None:
+        try:
+            counts = timeliness_all_time_counts(store.client, store.namespace)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_all_time_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            counts = {}
+        # A failed leg must disappear, including a value from the previous refresh;
+        # it cannot become a fake zero or stay stale.
+        self.timeliness_all_time.clear()
+        for leg, units in counts.items():
+            self.timeliness_all_time.labels(leg).set(units)
+        self._timeliness_all_time_visible = bool(counts)
 
     def refresh_projection(self, store: FirestoreStore, now: float) -> None:
         # Reuses the indexed discovery shape, one row, including durable holds.

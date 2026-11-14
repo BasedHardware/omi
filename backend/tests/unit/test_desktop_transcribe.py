@@ -25,6 +25,9 @@ from starlette.websockets import WebSocketDisconnect
 # ``models.message_event`` can only build its models against the real
 # ``Conversation`` class.
 import utils.stt.live_failure  # noqa: F401  (import-order dependency)
+import utils.stt.allowance_session  # noqa: F401 - load real ledger before legacy google package stubs
+import utils.stt.allowance_watch  # noqa: F401 - retain metric owners across per-case module restoration
+import utils.stt_cap_dispatch  # noqa: F401 - retain metric owners across per-case module restoration
 
 # ---------------------------------------------------------------------------
 # Module-level stubs (same pattern as test_sync_transcription_prefs.py)

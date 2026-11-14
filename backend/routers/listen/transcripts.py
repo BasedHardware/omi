@@ -721,16 +721,15 @@ class TranscriptProcessor:
         speaker = self.host.speakers
         for segment in segments:
             try:
-                if match_scores.enabled():
-                    segment.speaker_match_scores = next(
-                        (
-                            row
-                            for row in getattr(speaker, 'match_scores', [])
-                            if row['speaker_id'] == segment.speaker_id
-                            and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
-                        ),
-                        None,
-                    )
+                segment.speaker_match_scores = next(
+                    (
+                        row
+                        for row in getattr(speaker, 'match_scores', [])
+                        if row['speaker_id'] == segment.speaker_id
+                        and row['speaker_id_scope'] == (segment.speaker_id_scope or '')[:128]
+                    ),
+                    None,
+                )
             except Exception:
                 match_scores.record_failure(logger, reason='malformed_doc')
             person_id = speaker.segment_assignments.get(cast(str, segment.id))

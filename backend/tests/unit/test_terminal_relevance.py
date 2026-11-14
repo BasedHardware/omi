@@ -327,7 +327,8 @@ def test_production_terminal_assessment_call_sites_are_pinned():
         'database/conversation_merge_jobs.py': 1,
         'database/conversation_terminal_title.py': 1,
         'utils/task_intelligence/chat_first_fixture_capture.py': 1,
-        'utils/conversations/lifecycle.py': 3,
+        # complete_orphan_batch_capture adds the reviewed policy-only stamp.
+        'utils/conversations/lifecycle.py': 4,
         'utils/sync/assignment.py': 1,
     }
     observed = {}

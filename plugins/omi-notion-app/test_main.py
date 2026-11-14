@@ -499,7 +499,7 @@ class OptionalIntParamTests(unittest.TestCase):
         if max_results is not _ABSENT:
             body["max_results"] = max_results
         request = Mock(json=AsyncMock(return_value=body))
-        api = Mock(return_value={"results": []})
+        api = AsyncMock(return_value={"results": []})
         with patch.object(notion, "get_valid_access_token", return_value="test-placeholder"), patch.object(notion, "log"), patch.object(notion, "notion_api_request", api):
             result = asyncio.run(getattr(notion, handler)(request))
         return result, api

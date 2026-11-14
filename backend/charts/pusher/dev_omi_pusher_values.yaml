@@ -54,6 +54,7 @@ podAnnotations:
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels:
   env: dev
+  service_name: pusher
   # The development Prometheus job keeps this target in the development
   # evidence plane as a second boundary alongside its namespace selector.
 
@@ -116,17 +117,36 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
-  # Default off. 512 MiB is a proposed canary size, not enabled here.
+  # Dev-only canary (lead2 2afa3e, 2026-11-08): 512 MiB byte-budgeted custody admission.
+  # Prod stays '0' (off). Rollback: set back to '0'. Gate: dev mem p99 <75% and no kills over 30 min.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
-    value: '0'
+    value: '512'
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
     value: "7200"
+  - name: HOME_PROCESSING_MAX_AGE_SECONDS
+    value: "21600"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
   - name: LISTEN_QUIET_FINALIZATION_ENABLED
@@ -137,10 +157,6 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
-  - name: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED
-    value: "false"
-  - name: FIRST_SUMMARY_DEADLINE_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
@@ -165,8 +181,6 @@ env:
     value: "0"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
@@ -179,8 +193,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
-    value: "true"
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
@@ -189,8 +201,6 @@ env:
     value: "0"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
-  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
-    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: BUCKET_AUDIO_DERIVED
     value: ""
   - name: AUDIO_MERGE_WORKER_URL
@@ -289,10 +299,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: 'false'
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
@@ -477,6 +483,8 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID

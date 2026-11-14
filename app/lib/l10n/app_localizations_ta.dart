@@ -9245,6 +9245,24 @@ class AppLocalizationsTa extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை';
 
   @override
+  String get applyCodeToCurrentPlan => 'தற்போதைய திட்டத்தில் பயன்படுத்தவும்';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'உங்கள் தற்போதைய திட்டத்தில் குறியீடு பயன்படுத்தப்பட்டது.',
+        'refused': 'இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது. குறியீட்டையும் தேவையான திட்டத்தையும் சரிபார்க்கவும்.',
+        'conflict': 'குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது அல்லது உங்கள் திட்டத்தில் ஏற்கனவே தள்ளுபடி உள்ளது.',
+        'rateLimited': 'அதிக முயற்சிகள். காத்திருந்து பின்னர் மீண்டும் முயற்சிக்கவும்.',
+        'other': 'குறியீட்டைப் பயன்படுத்த முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'விளம்பர குறியீடு';
 
   @override
@@ -13745,6 +13763,9 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'குறிப்புகளை மீண்டும் உருவாக்கு';
 
   @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';

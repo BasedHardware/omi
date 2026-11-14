@@ -30,6 +30,7 @@ from tests.support.firestore_query_drivers import (
     DriverEntry,
     SkipEntry,
     noop,
+    noop_true,
     ref_collection,
     ref_document,
     ref_transaction,
@@ -153,6 +154,14 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
+    'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
+    'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
+    'database.conversation_batch_purge_jobs.run_job': '4d55c5317775c5942deee67c69074f8849d2d3f9f6137d1e199900f5fd5ed4ac',
+    'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
+    'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+    'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
     'database.action_items.FirestoreActionItems.iter_all': '1bc86d38c0b932c87e130090fde9d1105a6ca0df82c636b7dca0e2fd24c9d6d3',
     'database.action_items.FirestoreActionItems.list_ids': '3948d1bcd948a5e6a36d39aef7d4a69bf19562b5fab40edf1e6775aa1165f7d7',
     'database.goals.FirestoreGoals.get_all': '9c29c7df864273b95db4bcad94948043418ce4b29c740ab0732816e2d59564e7',
@@ -170,8 +179,10 @@ BODY_DIGEST = {
     'database.lifecycle_metrics_queries._where': '51d3e38b20df6800101fbf671471d2538c487d9c702698c6a9ad221c43f89a79',
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.batch_pipeline_store.FirestoreStore.oldest_admissible_ready': '293687cc6708d7ab2f673cb2984e6bb8cbfe581fa526db8c1040fd011dc00107',
-    'database.batch_pipeline_projection_release.release_page': '342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
-    'database.batch_pipeline_projection_release.release_scan_pass': '6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
+    'database.batch_pipeline_projection_release.release_page': '15ce4bf78a33ea401c5eeb56e895c088a75ffc45471d268784f7f174e6474f30',
+    'database.batch_pipeline_projection_release.release_page_settled': 'd863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
+    'database.batch_pipeline_projection_release.release_scan_pass': '92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
+    'database.batch_pipeline_projection_release.release_scan_pass_settled': '0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': 'bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
     'database.batch_pipeline_shadow.ShadowStore.reap': '014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
@@ -181,7 +192,7 @@ BODY_DIGEST = {
     'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -194,6 +205,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
     'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
@@ -368,6 +381,68 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first, over the
+# purge obligations or the accepted-delete erasure obligations.
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs.due_jobs',
+        neutrals={'now': _NOW, 'limit': _LIMIT},
+        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+    )
+)
+# Its durable per-segment erasure work: one equality filter inside a single obligation.
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs.segment_records',
+        base={'job': 'shape-job', 'namespace': 'batch_pipeline_prod'},
+        domains={'limit': [None, 20]},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.RunProgress.pending_segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.RunProgress.pending_segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.RunProgress.segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.RunProgress.segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs._drop_segment_records',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs._drop_segment_records'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs._owes_segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs._owes_segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.run_job',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.run_job'],
+    )
+)
 _add(
     DriverEntry(
         'database.hidden_noise_counts.count_hidden_noise_by_day',
@@ -385,8 +460,42 @@ _add(
 )
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
-_add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
-_add(DriverEntry('database.processing_attention.pending_conversations', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.processing_attention.list_items',
+        base={'uid': UID},
+        domains={'limit': [None, 100], 'start_after': [None, 'doc-1']},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.processing_attention._scan_pages',
+        covered_by=('database.processing_attention.list_items',),
+        reason='bounded page generator; list_items drives every query it builds',
+    )
+)
+
+
+def _pending_owned_page(client, combo, trial):
+    client.queue_results(
+        [client.snapshot(f'users/{UID}/conversations/owned-{i}', {'status': 'processing'}) for i in range(100)]
+    )
+    client.queue_results([])
+
+
+_add(
+    DriverEntry(
+        'database.processing_attention.pending_conversations',
+        base={'uid': UID},
+        neutrals={
+            'exclude': (
+                noop_true,
+                'Caller predicate filters after the same status query; fixture exercises the continuation cursor',
+            ),
+        },
+        setup=_pending_owned_page,
+    )
+)
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
 
@@ -1026,6 +1135,31 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
+
+
+def _due_marker_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/due-marker-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/due_marker_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.finalization_due_marker_sweep.remark_missing_due_markers',
+        domains={'now': [T0]},
+        neutrals={
+            'limit': _LIMIT,
+            'stale_after': (timedelta(hours=24), 'age bound; with the pinned now the cutoff is fixed, shape unchanged'),
+        },
+        setup=_due_marker_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
@@ -1217,6 +1351,9 @@ _add(
         neutrals={
             'attach_row': (None, 'optional semantic memo; no candidate query effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
+            'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
         },
         base={
             'uid': UID,
@@ -1248,6 +1385,8 @@ _add(
             'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
             'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
         },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
@@ -3112,6 +3251,17 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
     CoveredByEntry(
         'database.monthly_usage_totals._month_rows',
         covered_by=('database.monthly_usage_totals.read_monthly_totals',),
@@ -3136,6 +3286,12 @@ _add(
     )
 )
 _add(DriverEntry('database.user_usage.get_daily_history_for_month', base={'uid': UID, 'date': T0}))
+_add(
+    DriverEntry(
+        'utils.backfill_hours_cap.transcribed_seconds_for_day',
+        base={'uid': UID, 'day': FROZEN_TODAY},
+    )
+)
 _add(DriverEntry('database.user_usage.get_hourly_history_for_today', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
@@ -3148,6 +3304,22 @@ _add(DriverEntry('database.user_usage.get_monthly_chat_usage', base={'uid': UID}
 _add(DriverEntry('database.user_usage.get_monthly_history_for_year', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
+_add(
+    CoveredByEntry(
+        'database.user_usage._s4_month_cache',
+        covered_by=('database.user_usage._fresh_month_stats',),
+        reason='decorator schedules a hit-only background callback; the fresh reader driver records both query variants',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.user_usage._s4_month_cache'],
+    )
+)
+_add(
+    DriverEntry(
+        'database.user_usage._fresh_month_stats',
+        base={'uid': UID, 'date': T0, 'timeout': 5.0},
+        domains={'start_date': [None, T0]},
+    )
+)
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(USAGE_UNITS_DRIVER)
 _add(
@@ -3897,8 +4069,57 @@ for _method in ('claim', 'sweep'):
 _add(
     DriverEntry(
         'database.summary_debt_queries.due_conversations',
-        neutrals={'now': (T0.timestamp(), 'timestamp operand only'), 'limit': _LIMIT},
-        domains={'after': [None, {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'}]},
+        neutrals={
+            'now': (T0.timestamp(), 'timestamp operand only'),
+            'limit': (500, 'per-query ceiling; shared tick budget is enforced by caller'),
+        },
+        domains={
+            'phase': ['near_expiry', 'newest'],
+            'after': [
+                None,
+                {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
+                {
+                    'phase': 'newest',
+                    'window': 0,
+                    'pending': None,
+                    'due': T0.timestamp(),
+                    'path': 'users/synthetic/conversations/c',
+                },
+                {'due': T0.timestamp(), 'pending': T0.timestamp() - 60, 'path': 'users/synthetic/conversations/c'},
+                *[
+                    {
+                        'phase': 'newest',
+                        'window': 72 * 3600,
+                        'due': due,
+                        'pending': T0.timestamp() - 60,
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for due in (0, -10, T0, float('inf'))
+                ],
+                {
+                    'due': T0.timestamp() - 300000,
+                    'pending': T0.timestamp() - 300000,
+                    'path': 'users/synthetic/conversations/c',
+                },
+                *[
+                    {
+                        'phase': phase,
+                        'window': window,
+                        'due': T0.timestamp() - 1,
+                        'pending': T0.timestamp() - (window - 100 if phase == 'near_expiry' else 60),
+                        'path': 'users/synthetic/conversations/c',
+                    }
+                    for phase in ('near_expiry', 'newest')
+                    for window in (72 * 3600, 0)
+                ],
+            ],
+        },
+        trials=2,
+        patchers=(
+            lambda _: unittest.mock.patch(
+                'database.summary_debt_queries.max_age_seconds', side_effect=cycle((72 * 3600, 0))
+            ),
+        ),
     )
 )
 
@@ -4270,5 +4491,46 @@ _add(
         base={'self': _PortRepoArgument(FirestoreActionItems)},
         domains={'updated_since': [None, T0]},
         neutrals={'limit': _LIMIT, 'cursor': (None, 'opaque keyset; first-page query shape')},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.iter_window',
+        base={'start': 0, 'end': 10**12, 'uid': 'u-driver'},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.iter_global_window',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.retention_start',
+        base={},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger.census_window',
+        base={'start': 0, 'end': 10**12, 'uid': 'u-driver'},
+        domains={'limit': [1, 5000]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census._capture_creates',
+        base={'start_epoch': 0, 'end_epoch': 10**9},
+    )
+)
+_add(
+    DriverEntry(
+        'database.pipeline_ledger_census.census',
+        base={'start': 0, 'end': 10**12},
+        domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )

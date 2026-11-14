@@ -25,6 +25,11 @@ def _psycopg():
     return psycopg
 
 
+def sql() -> Any:
+    """Return psycopg's SQL composition helpers without making the driver a package import requirement."""
+    return _psycopg().sql  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def configure(conn: Any) -> Any:
     """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
     from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]

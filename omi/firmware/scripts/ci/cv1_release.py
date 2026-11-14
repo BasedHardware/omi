@@ -13,8 +13,16 @@ import struct
 import tempfile
 import zipfile
 
+import cv1_bootloader as bootloader
+from cv1_bootloader import inspect_hex, read_hex, validate_build_bootloader, validate_release_hex, wire_memory, write_hex
+
 WORKFLOW = '.github/workflows/firmware_release.yml'
 ARTIFACT = 'cv1-qa-release'
+SIM_REPORT = 'sim-report.json'
+# The release gate needs the whole fast-lane suite plus a fuzz batch. Raise
+# these as the catalog grows; never lower them to let a candidate through.
+SIM_MIN_SCENARIOS = 40
+SIM_MIN_FUZZ_SEEDS = 20
 
 
 def require(condition, message):
@@ -83,23 +91,75 @@ def validate_signed_version(archive, ver):
     )
 
 
-def stage(build, out, ver, include_network, context):
+SIM_SCENARIOS = Path('omi/firmware/omi/sim/scenarios')
+
+
+def sim_catalog(root=SIM_SCENARIOS):
+    """Scenario ids in this checkout (the `id:` line of each scenario YAML)."""
+    ids = set()
+    for path in sorted(Path(root).rglob('*.yaml')):
+        match = re.search(r'^id:\s*(\S+)\s*$', path.read_text(), re.M)
+        require(match is not None, f'Scenario without id: {path}')
+        ids.add(match.group(1))
+    return ids
+
+
+def validate_sim_report(data, sha, ver, catalog=None):
+    """Fail closed unless the simulator gate passed in full for exactly this source and version.
+
+    The report must list exactly the scenario catalog of this checkout (the
+    tested SHA), so a report with invented or missing rows is refused.
+    """
+    catalog = sim_catalog() if catalog is None else catalog
+    require(isinstance(data, dict), 'Simulator report is not an object')
+    require(data.get('kind') == 'omi-cv1-sim-report' and data.get('schema_version') == 1, 'Unknown simulator report')
+    require(data.get('mode') == 'current', 'Simulator report must check current expectations, not --baseline')
+    require(data.get('source_sha') == sha, 'Simulator report source SHA mismatch')
+    require(data.get('firmware_version') == ver, 'Simulator report firmware version mismatch')
+    require(data.get('selection') == ['*'], 'Simulator report must cover the whole scenario suite')
+    rows = data.get('scenarios')
+    require(isinstance(rows, list) and len(rows) >= SIM_MIN_SCENARIOS, 'Simulator report has too few scenarios')
+    require(all(isinstance(r, dict) and r.get('verdict') == 'pass' for r in rows), 'Simulator scenario failed')
+    require(len({r.get('id') for r in rows}) == len(rows), 'Simulator report repeats a scenario')
+    require(catalog and {r.get('id') for r in rows} == set(catalog), 'Simulator report does not match the scenario catalog')
+    counts = data.get('counts') or {}
+    require(counts.get('failed') == 0 and counts.get('passed') == len(rows), 'Simulator report counts mismatch')
+    fuzz = data.get('fuzz') or {}
+    require(fuzz.get('verdict') == 'pass', 'Simulator fuzz batch must pass')
+    require(int(fuzz.get('seeds', 0)) >= SIM_MIN_FUZZ_SEEDS, 'Simulator fuzz batch too small')
+    require(data.get('verdict') == 'pass' and not data.get('failed'), 'Simulator gate did not pass')
+
+
+def stage(build, out, ver, include_network, context, sim_report):
+    require(sim_report is not None and Path(sim_report).is_file(), 'QA staging requires the simulator report')
+    report = json.loads(Path(sim_report).read_text())
+    validate_sim_report(report, context['sha'], ver)
     out.mkdir(parents=True, exist_ok=False)
     names = asset_names(ver)
     repackage(build / 'dfu_application.zip', out / names[0], include_network)
     with zipfile.ZipFile(out / names[0]) as archive:
         validate_signed_version(archive, ver)
-        signed_sha256 = hashlib.sha256(archive.read('omi.signed.bin')).hexdigest()
-    shutil.copyfile(build / 'merged.hex', out / names[1])
+        signed_image = archive.read('omi.signed.bin')
+        signed_sha256 = hashlib.sha256(signed_image).hexdigest()
+    # Merge only the pinned MCUboot and exact tested OTA app, excluding every
+    # other sysbuild address (storage, UICR and network are not app-core assets).
+    boot_image = validate_build_bootloader(read_hex(build / 'mcuboot/zephyr/zephyr.hex'))
+    write_hex(out / names[1], wire_memory(signed_image, boot_image))
     shutil.copyfile(build / 'merged_CPUNET.hex', out / names[2])
     require(all((out / name).stat().st_size for name in names), 'Empty release asset')
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
+    boot_regions[names[1]] = validate_release_hex(out / names[1], signed_image)
+    require(boot_regions[names[2]]['kind'] == 'bootloader-free', 'CPUNET HEX must not contain app-core boot bytes')
+    shutil.copyfile(sim_report, out / SIM_REPORT)
     provenance = dict(
         context,
         mode='build-only',
+        boot_regions=boot_regions,
         version=ver,
         include_network_core=include_network,
         signed_sha256=signed_sha256,
         sha256={name: digest(out / name) for name in names},
+        sim_report_sha256=digest(out / SIM_REPORT),
     )
     (out / 'qa-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
 
@@ -131,8 +191,15 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
         'QA provenance mismatch (mode/version/source/attempt/network)',
     )
     names = asset_names(ver)
-    require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json'}, 'Unexpected QA assets')
+    require(set(p.name for p in out.iterdir()) == {*names, 'qa-provenance.json', SIM_REPORT}, 'Unexpected QA assets')
     require(data.get('sha256') == {name: digest(out / name) for name in names}, 'QA asset checksum mismatch')
+    # Reparse the actual bytes even if an artifact's provenance was edited too.
+    boot_regions = {path.name: inspect_hex(path) for path in out.glob('*.hex')}
+    require(boot_regions[names[2]]['kind'] == 'bootloader-free', 'CPUNET HEX must not contain app-core boot bytes')
+    require(data.get('boot_regions') == boot_regions, 'QA boot-region receipt mismatch')
+    # The simulator evidence binds to the same run/attempt and source SHA as the bench receipt.
+    require(data.get('sim_report_sha256') == digest(out / SIM_REPORT), 'Simulator report checksum mismatch')
+    validate_sim_report(json.loads((out / SIM_REPORT).read_text()), run['head_sha'], ver)
     with zipfile.ZipFile(out / names[0]) as archive:
         manifest = ota_manifest(archive)
         validate_signed_version(archive, ver)
@@ -141,6 +208,7 @@ def validate_assets(out, run, ver, include_network, tested_signed_sha256):
             hashlib.sha256(archive.read('omi.signed.bin')).hexdigest() == tested_signed_sha256.lower(),
             'Bench-tested signed image SHA-256 mismatch',
         )
+        validate_release_hex(out / names[1], archive.read('omi.signed.bin'))
 
 
 def gh(*args):
@@ -225,7 +293,8 @@ def main():
             'workflow': WORKFLOW,
             'repository': env['GITHUB_REPOSITORY'],
         }
-        stage(Path(env['BUILD']), out, ver, include_network, context)
+        report = env.get('SIM_REPORT')
+        stage(Path(env['BUILD']), out, ver, include_network, context, Path(report) if report else None)
     elif args.command == 'promote':
         require(publishing, 'Promotion requires publish=publish')
         promote(
@@ -279,9 +348,10 @@ def main():
             env['BODY_FILE'],
             *(str(out / name) for name in asset_names(ver)),
         )
-        created = json.loads(gh('api', f'repos/{repo}/releases/tags/{tag}'))
-        require(created['draft'] and created['tag_name'] == tag, 'Release tag or draft mismatch')
-        tag_ref = json.loads(gh('api', f"repos/{repo}/git/ref/tags/{created['tag_name']}"))
+        # GET releases/tags/{tag} never returns drafts (404), so read the draft by tag through gh.
+        created = json.loads(gh('release', 'view', tag, '--repo', repo, '--json', 'isDraft,tagName'))
+        require(created['isDraft'] and created['tagName'] == tag, 'Release tag or draft mismatch')
+        tag_ref = json.loads(gh('api', f"repos/{repo}/git/ref/tags/{created['tagName']}"))
         require(tag_ref['object']['type'] == 'commit' and tag_ref['object']['sha'] == sha, 'Release tag SHA mismatch')
         gh('release', 'edit', tag, '--repo', repo, '--draft=false')
 
