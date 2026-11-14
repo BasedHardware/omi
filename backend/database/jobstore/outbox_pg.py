@@ -27,6 +27,7 @@ import json
 import uuid
 from typing import Any, Callable, Literal, LiteralString, Mapping
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.jobstore.connection import sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction, jsonb
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
@@ -270,15 +271,32 @@ class PostgresOutbox:
         )
 
     def defer(self, claim: Claim, available_at: float, reason: str, *, now: float) -> str | None:
+        """Re-arm a held row; ``reason`` is the consumer's custody cause when it has one.
+
+        PL-342: same reason-bound episode as ``database/outbox_firestore.py``. A cause that has deferred the
+        row past the grace polls hourly; a new cause starts a new episode at ``now``.
+        """
         wake_token = _token()
-        done = self._fenced_update(
-            claim,
-            'available_at = %s, wake_token = %s, wake_pending = true, lease_token = NULL, lease_until = 0, '
-            'done_reason = %s',
-            (available_at, wake_token, reason),
-        )
-        if done is None:
-            return None
+        with self.store.pool.connection() as conn, conn.transaction():
+            row = conn.execute(
+                'SELECT deferred_reason, deferred_since, created_at FROM outbox WHERE id = %s AND namespace = %s '
+                'AND lease_token = %s AND done_at IS NULL FOR UPDATE',
+                (int(claim.row_id), self.store.namespace, claim.lease_token),
+            ).fetchone()
+            if row is None:
+                return None
+            deferred_reason, deferred_since, created_at = row
+            since = custody_deferred_since(
+                {'deferred_reason': deferred_reason, 'deferred_since': deferred_since, 'first_pending_at': created_at},
+                reason,
+                now,
+            )
+            due = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
+            conn.execute(
+                'UPDATE outbox SET available_at = %s, wake_token = %s, wake_pending = true, lease_token = NULL, '
+                'lease_until = 0, done_reason = %s, deferred_reason = %s, deferred_since = %s WHERE id = %s',
+                (due, wake_token, reason, reason, since, int(claim.row_id)),
+            )
         self._try_wake(claim.row_id, wake_token)
         return wake_token
 

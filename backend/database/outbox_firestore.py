@@ -26,6 +26,7 @@ import dataclasses
 import functools
 import logging
 
+from config.outbox_custody import custody_defer_until, custody_deferred_since
 from database.outbox import Claim, EnqueueResult, Outbox, OutboxKind, Outcome, SweepCounts
 
 logger = logging.getLogger(__name__)
@@ -391,15 +392,14 @@ class FirestoreEnrichmentOutbox:
         the row past the grace polls hourly. The C3 consumer serves prod (ENRICHMENT_ROUTE=
         enrichment_queue), where this claim/defer loop was ~130k writes/h on 2026-11-02.
         """
-        outbox = _outbox()
 
         def rearm(old):
             if not _holds(old, claim):
                 return old, None
             pending = dict(old)
             pending.pop('summary_seen_by', None)
-            since = outbox.custody_deferred_since(old, reason, now)
-            due = outbox.custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
+            since = custody_deferred_since(old, reason, now)
+            due = custody_defer_until({'defer_reason': reason, 'defer_until': available_at}, since, now)
             pending.update(
                 deferred_reason=reason,
                 deferred_since=since,
