@@ -137,7 +137,7 @@ class Vendor:
         }
 
 
-SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
+SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 3.0}])
 SILENCE = (b'\0\0' * 16000 * 5, 5.0, [])
 
 
@@ -460,7 +460,7 @@ def test_abandoned_running_intent_settles_failed_held_without_spend(world, monke
     artifacts, vendor = Artifacts(), Vendor()
     artifacts.fail_persist = True
     stage(store, artifacts, vendor).run('p1')
-    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 0.5
+    assert job(store, 'p1')['provider_intent']['measured_vad_speech_seconds'] == 2.5
 
     def legacy_or_silence(tx):
         row = tx.get('jobs', 'p1')
@@ -496,7 +496,7 @@ def test_vad_is_durable_before_vendor_call_and_losing_start_keeps_it(world, monk
 
     def vendor(work, language, inspected, *, service):
         row = job(store, 'p1')
-        assert row['provider_intent']['measured_vad_speech_seconds'] == 0.5
+        assert row['provider_intent']['measured_vad_speech_seconds'] == 2.5
         # A concurrent delivery cannot overwrite the winning intent's evidence.
         losing = provider_stt.ProviderSttStore(store).start(
             'p1', 'loser', 201.0, service, measured_vad_speech_seconds=0.0
@@ -581,7 +581,7 @@ def test_kill_switch_off_keeps_vendor_failure_terminal(world, monkeypatch, error
     assert (row['state'], row['recovery_state'], row['merge_pending']) == ('quarantined', 'failed_held', False)
     assert row['provider_intent']['failure'] == expected
     # Held VAD evidence from the CPU Silero inspection (SPEECH: 0.5s), as quarantine recovery records it.
-    assert row['measured_held_vad_speech_seconds'] == 0.5
+    assert row['measured_held_vad_speech_seconds'] == 2.5
     assert vendor.calls == 1
 
 
@@ -1458,12 +1458,13 @@ def _real_health(clock):
     )
 
 
-def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
+def _silent_abandon(store, artifacts, vendor, health, segment_id, started, inspected=None):
+    inspected = SILENCE if inspected is None else inspected
     first = ProviderSttStage(
         store,
         artifacts,
         stt=vendor,
-        inspect=lambda *_: SILENCE,
+        inspect=lambda *_: inspected,
         clock=lambda: started,
         health=health,
         armed=lambda: True,
@@ -1473,7 +1474,13 @@ def _silent_abandon(store, artifacts, vendor, health, segment_id, started):
     artifacts.fail_persist = False
     late = started + ABANDON_SECONDS + 1
     replay = ProviderSttStage(
-        store, artifacts, stt=vendor, inspect=lambda *_: SILENCE, clock=lambda: late, health=health, armed=lambda: True
+        store,
+        artifacts,
+        stt=vendor,
+        inspect=lambda *_: inspected,
+        clock=lambda: late,
+        health=health,
+        armed=lambda: True,
     )
     return replay.run(segment_id)
 
@@ -1486,6 +1493,60 @@ def test_a_silent_unit_intent_is_marked_vendor_skipped(world, monkeypatch):
     stage(store, artifacts, vendor, inspect=lambda *_: SILENCE).run('p1')
     assert vendor.calls == 0
     assert job(store, 'p1')['provider_intent']['vendor_skipped'] is True
+
+
+SHORT_SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}, {'start': 2.0, 'end': 2.5}])
+
+
+def test_short_speech_settles_as_silence_without_a_vendor_call(world, monkeypatch):
+    # David 2026-11-13: under 2 s of strict-VAD speech in a ~31 s span is not worth a paid call.
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    before = _sample('omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total', {'provider': 'modulate'})
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1').reason == 'processed'
+    assert vendor.calls == 0
+    row = job(store, 'p1')
+    assert row['result']['outcome'] == 'silence'
+    assert row['provider_intent']['vendor_skipped'] is True
+    # Measured speech stays on the intent, so a short-speech skip is distinguishable from silence.
+    assert row['provider_intent']['measured_vad_speech_seconds'] == pytest.approx(1.0)
+    after = _sample('omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total', {'provider': 'modulate'})
+    assert after - before == pytest.approx(5.0)
+
+
+def test_short_speech_skip_threshold_zero_restores_the_no_spans_rule(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1')
+    assert vendor.calls == 1
+    assert 'vendor_skipped' not in job(store, 'p1')['provider_intent']
+
+
+@pytest.mark.parametrize('raw', ['abc', '-1', 'nan', '11'])
+def test_malformed_min_speech_keeps_the_default(monkeypatch, raw):
+    from config.batch_pipeline_vendor_failover import min_speech_seconds
+
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', raw)
+    assert min_speech_seconds() == 2.0
+
+
+def test_speech_at_the_minimum_still_calls_the_vendor(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '2')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    stage(store, artifacts, vendor, inspect=lambda *_: (SPEECH[0], 5.0, [{'start': 0.0, 'end': 2.0}])).run('p1')
+    assert vendor.calls == 1
+
+
+def _sample(name, labels):
+    from prometheus_client import REGISTRY
+
+    value = REGISTRY.get_sample_value(name, labels)
+    return value or 0.0
 
 
 def test_a_speech_unit_intent_is_not_marked_vendor_skipped(world, monkeypatch):
@@ -1510,6 +1571,37 @@ def test_an_abandoned_skipped_intent_settles_as_silence_without_billing(world, m
     outcomes = [a.get('outcome') for a in row.get('provider_attempts') or []]
     assert 'abandoned' not in outcomes and outcomes[-1] == 'silence'
     assert all(a.get('audio_seconds', 0) == 0 for a in row['provider_attempts'])
+
+
+def test_an_abandoned_short_speech_intent_counts_the_skipped_audio(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    name = 'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'
+    before = _sample(name, {'provider': 'modulate'})
+    outcome = _silent_abandon(store, artifacts, vendor, _real_health(lambda: 200.0), 'p1', 200.0, SHORT_SPEECH)
+    assert outcome.reason == 'processed' and vendor.calls == 0
+    assert job(store, 'p1')['result']['outcome'] == 'silence'
+    assert _sample(name, {'provider': 'modulate'}) - before == pytest.approx(5.0)
+
+
+def test_a_reconciled_saved_short_speech_skip_counts_the_skipped_audio(world, monkeypatch):
+    # The silence result was saved but its settle never ran, so redelivery reconciles the saved
+    # object: that path must count the unbilled audio too, exactly once.
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    name = 'omi_batch_pipeline_vendor_short_speech_skipped_audio_seconds_total'
+    before = _sample(name, {'provider': 'modulate'})
+    artifacts.fail_persist = True
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH).run('p1').outcome == 'retry'
+    assert vendor.calls == 0 and _sample(name, {'provider': 'modulate'}) == before
+    artifacts.fail_persist = False
+    token = job(store, 'p1')['provider_intent']['token']
+    artifacts.results[f'gs://synthetic/results/p1/{token}.enc'] = provider_stt.silence_payload(5.0)
+    assert stage(store, artifacts, vendor, inspect=lambda *_: SHORT_SPEECH, now=310.0).run('p1').reason == 'processed'
+    assert vendor.calls == 0
+    assert _sample(name, {'provider': 'modulate'}) - before == pytest.approx(5.0)
 
 
 def test_a_burst_of_abandoned_silent_intents_never_opens_a_healthy_vendors_breaker(world, monkeypatch):

@@ -30,7 +30,7 @@ from utils.observability.reasons import VendorAttemptOutcome, VendorHealthReason
 
 OWNER = 'synthetic-owner'
 JA = SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
-SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 1.0}])
+SPEECH = (b'\0\0' * 16000 * 5, 5.0, [{'start': 0.5, 'end': 3.0}])
 SILENCE = (b'\0\0' * 16000 * 5, 5.0, [])
 BOTH = lambda language: ('modulate', 'soniox')  # noqa: E731  # a configured table listing Soniox
 
@@ -244,7 +244,7 @@ def test_terminal_failed_held_carries_its_measured_vad_speech_for_t2(store):
     assert 'measured_held_vad_speech_seconds' not in job(store)  # failed over: not terminal yet
     stage(store, artifacts, vendors, now=201.0).run('p1')
     assert job(store)['recovery_state'] == 'failed_held'
-    assert job(store)['measured_held_vad_speech_seconds'] == 0.5  # SPEECH spans 0.5-1.0 s
+    assert job(store)['measured_held_vad_speech_seconds'] == 2.5  # SPEECH spans 0.5-1.0 s
 
 
 def test_an_unmeasured_failure_never_invents_vad_speech(store):
@@ -277,7 +277,7 @@ def test_guarded_validated_empty_exhaustion_and_kill_switch(store, monkeypatch, 
         stage(store, artifacts, vendors, routes=lambda _: ('modulate',)).run('p1')
     assert job(store)['state'] == 'quarantined'
     assert job(store)['recovery_state'] == ('held' if enabled else 'failed_held')
-    assert job(store)['measured_held_vad_speech_seconds'] == 0.5
+    assert job(store)['measured_held_vad_speech_seconds'] == 2.5
     assert job(store)['attempt'] == 0
     assert vendors.calls == ['modulate']
 
