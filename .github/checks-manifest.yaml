@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: worker-image-only-tests
+    command: ["python3", ".github/scripts/test_worker_image_only.py"]
+    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-2149: image.digest-only Helm overrides would activate 28 levers over the approved live empty map; execute the guarded image-only primitive against private-runtime and drift fixtures"
   - id: batch-pipeline-tuning-disclosure
     command: ["python3", ".github/scripts/check_batch_tuning_disclosure.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}", "--run-tests"]
     triggers: ["backend/config/batch_pipeline.py", "backend/utils/batch_pipeline/**", "backend/charts/batch-pipeline-worker/**", "backend/charts/pusher/**", "backend/utils/pusher_*.py", ".github/scripts/*check_batch_tuning_disclosure.py", ".github/checks-manifest.yaml"]

@@ -1379,7 +1379,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 21,
+      "budget_p50_minutes": 22,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1388,7 +1388,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4892,7 +4892,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4922,6 +4922,12 @@
               "description": "batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree",
               "required": "false"
             },
+            "preserve_live_worker": {
+              "default": "false",
+              "description": "Prod batch-pipeline-worker only: CAS image-only update, preserving the entire live runtime spec; siblings are verified but never rolled",
+              "required": "false",
+              "type": "boolean"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
@@ -4937,6 +4943,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "worker_live_baseline": {
+              "default": "",
+              "description": "Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)",
+              "required": "false"
             }
           }
         }
