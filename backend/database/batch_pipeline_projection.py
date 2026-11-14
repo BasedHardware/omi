@@ -298,7 +298,10 @@ class ProjectionStore:
             raw = (job.get('policy_parts') or {}).get('projection')
             if raw is None or not ProjectionPolicy.from_dict(raw).async_projection:
                 return False
-            if row.get('projection_state') not in PROJECTION_FINISH_STATES:
+            if (
+                row.get('projection_state') not in PROJECTION_FINISH_STATES
+                or row.get(PROJECTION_FINISH_DUE_FIELD) == PROJECTION_FINISH_ASYNC_CLOCK
+            ):
                 return False
             transaction.update(ref, {PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK})
             return True

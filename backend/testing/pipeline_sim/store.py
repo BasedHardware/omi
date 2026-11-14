@@ -468,7 +468,7 @@ class SimStore:
             if table == 'results'
             and row.get('projection_state') in wanted
             and 'committed_at' in row
-            and (not exclude_async or row.get('projection_finish_due_at', -1) >= 0)
+            and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
             and (
                 due_before is None
                 or row.get('projection_finish_due_at') is not None

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 from config.batch_pipeline import (
     owner_drain_enabled,
     projection_index_deferred_enabled,
+    projection_finish_async_skip_enabled,
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
     projection_prefetch_depth,
@@ -29,6 +30,7 @@ from config.batch_pipeline import (
     serving_sweep_page_rows,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK, PROJECTION_FINISH_DUE_FIELD
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
@@ -1719,9 +1721,10 @@ class Projector:
                 if policy.async_projection:
                     self.has_async_followups = True
                     defer = False
-                    from config.batch_pipeline import projection_finish_async_skip_enabled
-
-                    if projection_finish_async_skip_enabled():
+                    if (
+                        projection_finish_async_skip_enabled()
+                        and entry.get(PROJECTION_FINISH_DUE_FIELD) != PROJECTION_FINISH_ASYNC_CLOCK
+                    ):
                         self.store.retire_async_finish(segment_id)
                     continue
                 result = self._project_read(segment_id, job, entry, binding)

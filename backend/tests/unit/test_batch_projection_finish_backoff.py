@@ -533,3 +533,40 @@ def test_new_async_state_writes_exclude_without_backfill_or_policy_reads():
     for state in ('persisted', 'ready'):
         assert projection_finish_state_fields(state, 12.0, async_projection=True)[PROJECTION_FINISH_DUE_FIELD] == -1.0
         assert projection_finish_state_fields(state, 12.0)[PROJECTION_FINISH_DUE_FIELD] == 12.0
+
+
+@pytest.mark.parametrize('stripe', [0, 2048])
+def test_sync_finish_with_backoff_off_seeds_a_finite_cursor(monkeypatch, stripe):
+    import math
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'on')
+    log, ids = finish_log()
+    projector = silent_projector(log)
+    projector.finish_discovery.stripe = stripe
+    original = log.projection_page
+    cursors = []
+
+    def page(*args, **kwargs):
+        after = kwargs.get('after')
+        if after is not None:
+            cursors.append(after)
+        return original(*args, **kwargs)
+
+    log.projection_page = page
+    projector.sweep()
+    assert all(math.isfinite(cursor[0]) for cursor in cursors)
+    assert [call.args[0] for call in projector._finish.call_args_list] == ids
+
+
+def test_missing_marker_does_not_reclassify_an_already_excluded_row(monkeypatch):
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    log = ResultLog()
+    log.commit('owner', 'a', 'row', ['row'], state='persisted')
+    log.results['row'][PROJECTION_FINISH_DUE_FIELD] = -1.0
+    log.retire_async_finish = Mock(side_effect=AssertionError('already classified'))
+    projector = projector_for(log)
+    projector.sweep()
+    projector.sweep()
+    log.retire_async_finish.assert_not_called()
+    assert projector.has_async_followups
