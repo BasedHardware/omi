@@ -193,11 +193,12 @@ def test_new_rules_do_not_change_server_recovery_policy():
 def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeypatch, mode, expected):
     from datetime import datetime, timedelta, timezone
     from unittest.mock import AsyncMock
-    from database import calendar_meetings, users
+    from database import calendar_meetings, google_calendar_preferences, users
     from utils.conversations import calendar_linking
     from utils.conversations.terminal_calendar import calendar_retains
 
     monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
     integration = {'connected': True, 'access_token': 'test-token'}
     if mode == 'missing_token':
         integration.pop('access_token')
@@ -365,3 +366,25 @@ def test_production_terminal_assessment_call_sites_are_pinned():
                         for kw in call.keywords
                     )
     assert observed == expected
+
+
+def test_terminal_calendar_probe_keeps_uncertainty_when_a_calendar_was_skipped(monkeypatch):
+    # A selected calendar that could not be read leaves absence unproven, so the
+    # probe must return uncertainty rather than confirmed no-overlap.
+    from datetime import datetime, timedelta, timezone
+    from database import calendar_meetings, google_calendar_preferences, users
+    from utils.conversations import calendar_linking
+    from utils.conversations.terminal_calendar import calendar_retains
+
+    monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda *_: {})
+    monkeypatch.setattr(users, 'get_integration', lambda *_: {'connected': True, 'access_token': 'test-token'})
+
+    async def fetch(**kwargs):
+        kwargs['on_degraded']()
+        return []
+
+    monkeypatch.setattr(calendar_linking, 'get_google_calendar_events', fetch)
+    now = datetime.now(timezone.utc)
+    row = {'source': 'omi', 'started_at': now, 'finished_at': now + timedelta(minutes=1)}
+    assert calendar_retains('u', row) is None
