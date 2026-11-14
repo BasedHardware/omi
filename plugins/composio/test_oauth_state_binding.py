@@ -66,6 +66,7 @@ def load_app():
     # suite stays hermetic (their sandbox only materializes declared stubs).
     tools_auth_stub = ModuleType("src.tools_auth")
     tools_auth_stub.require_composio_tools_auth = lambda *_args, **_kwargs: None
+    tools_auth_stub.create_composio_session_token = lambda *_args, **_kwargs: "stub-token"
 
     src_pkg = ModuleType("src")
     src_pkg.__path__ = [str(SRC_DIR)]
@@ -153,6 +154,8 @@ class TestCallbackGuardsState(unittest.TestCase):
         self.post_patcher = patch.object(notion.requests, "post")
         self.mock_post = self.post_patcher.start()
         self.addCleanup(self.post_patcher.stop)
+        notion.store_notion_credentials.reset_mock()
+        notion.templates.TemplateResponse.reset_mock()
 
     def test_unsigned_callback_never_reaches_token_exchange(self):
         with self.assertRaises(HTTPException) as caught:
@@ -173,10 +176,34 @@ class TestCallbackGuardsState(unittest.TestCase):
         )
         background_tasks = Mock()
         state = notion._signed_state("uid-abc")
-        asyncio.run(notion.notion_callback(Mock(), background_tasks, code="c", state=state))
+        res = asyncio.run(notion.notion_callback(Mock(), background_tasks, code="c", state=state))
         self.mock_post.assert_called_once()
         notion.store_notion_credentials.assert_called_once_with("uid-abc", "token", "ws-id", "Test Workspace")
         self.assertEqual(background_tasks.add_task.call_args[0][2], "uid-abc")
+        call_context = notion.templates.TemplateResponse.call_args[0][1]
+        self.assertEqual(call_context["uid"], "uid-abc")
+        self.assertEqual(call_context["session_token"], "stub-token")
+
+    def test_callback_propagates_503_when_composio_auth_unconfigured(self):
+        self.mock_post.return_value = Mock(
+            status_code=200,
+            json=Mock(
+                return_value={
+                    "access_token": "token",
+                    "workspace_id": "ws-id",
+                    "workspace_name": "Test Workspace",
+                }
+            ),
+        )
+        state = notion._signed_state("uid-abc")
+        with patch.object(
+            notion,
+            "create_composio_session_token",
+            side_effect=HTTPException(status_code=503, detail="composio tools auth is not configured"),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(notion.notion_callback(Mock(), Mock(), code="c", state=state))
+            self.assertEqual(caught.exception.status_code, 503)
 
 
 if __name__ == "__main__":
