@@ -392,7 +392,6 @@ class FirestoreEnrichmentOutbox:
         the row past the grace polls hourly. The C3 consumer serves prod (ENRICHMENT_ROUTE=
         enrichment_queue), where this claim/defer loop was ~130k writes/h on 2026-11-02.
         """
-        outbox = _outbox()
 
         def rearm(old):
             if not _holds(old, claim):

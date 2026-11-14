@@ -38,13 +38,13 @@ from config.summary_guarantee import (
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
-from config.outbox_custody import (  # noqa: F401 - re-exported for callers of this module
-    LIVE_DEFER_SECONDS,
-    STUCK_DEFER_GRACE_SECONDS,
-    STUCK_DEFER_POLL_SECONDS,
-    STUCK_DEFER_REASONS,
-    custody_defer_until,
-    custody_deferred_since,
+from config.outbox_custody import (
+    LIVE_DEFER_SECONDS as LIVE_DEFER_SECONDS,
+    STUCK_DEFER_GRACE_SECONDS as STUCK_DEFER_GRACE_SECONDS,
+    STUCK_DEFER_POLL_SECONDS as STUCK_DEFER_POLL_SECONDS,
+    STUCK_DEFER_REASONS as STUCK_DEFER_REASONS,
+    custody_defer_until as custody_defer_until,
+    custody_deferred_since as custody_deferred_since,
 )
 from utils.sync import processing_hold
 
