@@ -29,6 +29,27 @@ class MobileBatchBuffer {
   Future<void> _pending = Future.value();
   bool failed = false;
 
+  /// Chunks sealed but not yet registered as files. A chunk whose publish
+  /// failed stays here: its audio is in the journal, not in the file index.
+  final List<Wal> _publishing = [];
+
+  /// Audio of [recordingSessionId] this buffer holds that is not yet a
+  /// registered file: the chunk being written, and sealed chunks still being
+  /// published. Read-only; callers observe it and never seal on its account.
+  /// Returns each chunk's start time in epoch seconds.
+  /// With [through], excludes trusted trailing silence, but a future clock
+  /// cannot prove audio is after the end. Neither view changes the journal.
+  List<int> unregisteredStarts(String recordingSessionId, {DateTime? through, DateTime? now}) => [
+        if (_wal != null && _wal!.recordingSessionId == recordingSessionId) _wal!.timerStart,
+        for (final wal in _publishing)
+          if (wal.recordingSessionId == recordingSessionId) wal.timerStart,
+      ]
+          .where((start) =>
+              through == null ||
+              start <= through.millisecondsSinceEpoch ~/ 1000 ||
+              start > (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000)
+          .toList();
+
   Future<void> initialize() async {
     await directory.create(recursive: true);
     _files = directory.listSync().whereType<File>().where((f) => _isRetainedBatchAudio(f.path)).length;
@@ -133,8 +154,10 @@ class MobileBatchBuffer {
     _writer = null;
     _wal = null;
     _journal = null;
+    _publishing.add(wal);
     _pending = _pending.then((_) async {
       await publish(wal);
+      _publishing.remove(wal);
       // publish persists the shared WAL index before removing the journal.
       if (await journal.exists()) await journal.delete();
     }).catchError((Object _) {

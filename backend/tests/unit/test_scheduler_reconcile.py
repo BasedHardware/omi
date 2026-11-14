@@ -107,6 +107,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "batch-stock-census",
         "cap-hold-durable-redrive",
         "candidate-integration-sweep",
         "dream-agent-canary-half-hourly",

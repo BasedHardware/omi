@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -162,6 +163,72 @@ void main() {
       expect(gate.calls, 1);
     });
   }
+
+  test('end watermark counts unknown clocks and refusals without counting accepted files or valid trailing silence',
+      () {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final end = DateTime.fromMillisecondsSinceEpoch((now - 120) * 1000);
+    Wal row(int start, WalStatus status) => _makeWal(timerStart: start, status: status)..recordingSessionId = 'ended';
+    final refused = row(now - 180, WalStatus.uploadRejected)
+      ..uploadRejectionReason = WalUploadRejection.invalidCaptureTime;
+    sync.testWals = [
+      row(now - 180, WalStatus.miss),
+      row(2145916800, WalStatus.miss),
+      row(0, WalStatus.miss),
+      refused,
+      row(now - 180, WalStatus.inProgress),
+      row(now - 60, WalStatus.miss), // Trusted trailing silence after the end.
+      row(2145916800, WalStatus.uploaded),
+      row(2145916800, WalStatus.synced),
+      row(2145916800, WalStatus.miss)..recordingSessionId = 'other',
+    ];
+    expect(sync.pendingWalsForRecording('ended', through: end), 5);
+    expect(sync.pendingWalsForRecording('ended'), 6);
+  });
+
+  test('end reporter reaches zero only after both clock classes in the same session are accepted', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final valid = _makeWal(timerStart: now - 60, filePath: 'audio_${now - 60}.bin')..recordingSessionId = 'mixed';
+    final future = _makeWal(timerStart: 2145916800, filePath: 'audio_2145916800.bin')
+      ..recordingSessionId = 'mixed'
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400);
+    for (final wal in [valid, future]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    sync.testWals = [future, valid];
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+      disabled: () async => false,
+      post: (signal, {required pendingWals, required sentAt}) async {
+        sent.add(pendingWals);
+        return true;
+      },
+      pendingWals: (signal) => sync.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt),
+    );
+    sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+    uploadResponse = (files) async {
+      if (files.single.uri.pathSegments.last == future.filePath) {
+        expect(valid.status, WalStatus.uploaded, reason: 'valid audio retains the first turn');
+        expect(sync.pendingWalsForRecording('mixed', through: DateTime.now()), 1);
+      }
+      return UploadFilesResult.queued('accepted-${uploadAttempts.length}');
+    };
+    await reporter.report(CaptureEndSignal(
+      recordingSessionId: 'mixed',
+      type: CaptureEndType.userInitiated,
+      lastSpeechAt: DateTime.now(),
+      decidedAt: DateTime.now(),
+    ));
+    await sync.syncAll();
+    await reporter.uploadAccepted('mixed'); // Settle the reporter's serialized observer queue.
+    expect(uploadAttempts, [
+      [valid.filePath],
+      [future.filePath]
+    ]);
+    expect(liveClaims.last, isFalse, reason: 'the unknown clock never claims a live manifest');
+    expect(sent, [2, 0], reason: 'accepting valid work must not hide the retained invalid-date refusal');
+    expect(future.status, WalStatus.uploaded);
+  });
 
   // -------------------------------------------------------------------------
   // getMissingWals — status filter
