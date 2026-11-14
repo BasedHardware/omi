@@ -1,7 +1,10 @@
 """Offline scheduling and authority contracts for the real schema workflow."""
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import unittest
 
 import yaml
@@ -88,6 +91,51 @@ class SchemaQueue(unittest.TestCase):
         self.assertIn('R15 step 0', block)
         self.assertEqual(POLICY.validate_lock('gcp_firestore_indexes.yml', TEXT,
                                              POLICY.LOCK_CONTRACTS['gcp_firestore_indexes.yml']), [])
+
+    def test_pending_source_is_not_claimed_as_a_selectable_historical_dispatch(self):
+        block = '\n'.join(POLICY.job_block(TEXT, 'validate_merged_prod_indexes'))
+        self.assertIn('dispatch main for cumulative reconciliation', block)
+        self.assertIn('not this pending source', block)
+        self.assertIn('existing source-pinned readiness gate', block)
+        self.assertIn('does not close an older pending receipt by itself', block)
+        self.assertNotIn('dispatch this exact main commit', block)
+        self.assertNotIn('source_sha', WORKFLOW['on']['workflow_dispatch']['inputs'])
+
+    def test_real_dispatch_receipt_uses_new_main_and_rejects_a_stale_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            def git(*args):
+                return subprocess.run(['git', *args], cwd=repo, text=True, capture_output=True,
+                                      timeout=15, check=True).stdout.strip()
+            git('init', '-q')
+            def commit(content):
+                (repo / 'manifest-fixture').write_text(content)
+                git('add', 'manifest-fixture')
+                git('-c', 'user.name=Workflow fixture', '-c', 'user.email=fixture@example.com',
+                    'commit', '-qm', content)
+                return git('rev-parse', 'HEAD')
+            pending = commit('pending source')
+            dispatch = commit('main advanced')
+            for name, operation in (('reconcile_composite_indexes', 'composite-indexes'),
+                                    ('apply_field_exemptions', 'field-exemptions')):
+                script = next(s['run'] for s in JOBS[name]['steps']
+                              if s['name'] == 'Verify dispatched Firestore control plane')
+                for expected, allowed in ((dispatch, True), (pending, False)):
+                    with self.subTest(job=name, expected=expected):
+                        summary = repo / 'summary'
+                        summary.write_text('')
+                        result = subprocess.run(['bash', '-c', script], cwd=repo, text=True,
+                                                capture_output=True, timeout=15,
+                                                env={**os.environ, 'GITHUB_SHA': expected,
+                                                     'GITHUB_STEP_SUMMARY': str(summary)})
+                        self.assertEqual(result.returncode == 0, allowed, result.stdout + result.stderr)
+                        if allowed:
+                            self.assertIn(f'SCHEMA_SOURCE source={dispatch} operation={operation} mode=cumulative-dispatch',
+                                          summary.read_text())
+                            self.assertNotIn(pending, summary.read_text())
+                        else:
+                            self.assertEqual(summary.read_text(), '')
+                        self.assertEqual(git('rev-parse', 'HEAD'), dispatch)
 
 
 if __name__ == '__main__':

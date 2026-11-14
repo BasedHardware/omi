@@ -1,8 +1,9 @@
 name: Reconcile Firestore Indexes
 
 on:
-  # Push validates declarations locally. The release owner dispatches the exact
-  # main commit and proves READY before a dependent deploy (R15 step 0).
+  # Push validates declarations locally. The release owner dispatches main;
+  # reconciliation uses that immutable run SHA, possibly newer than this push.
+  # The dependent release still proves its own source READY (R15 step 0).
   push:
     branches: [ "main" ]
     paths:
@@ -120,7 +121,7 @@ jobs:
       - name: Report PR declarations pending production reconciliation
         run: |
           echo 'Declarations validated locally; production readiness is not established.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Owner: release owner for this change. Dispatch the pinned merged main commit and observe named indexes READY before dependent deployment (R15 step 0).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Owner: release owner for this change. Dispatch main for cumulative reconciliation, record its immutable run SHA, and prove named indexes READY for the dependent release source before deployment (R15 step 0).' >> "$GITHUB_STEP_SUMMARY"
 
   validate_merged_prod_indexes:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -143,7 +144,7 @@ jobs:
           receipt="SCHEMA_PENDING source=$GITHUB_SHA owner=release-owner deadline=$deadline"
           echo "$receipt"
           echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
-          echo 'Local validation only; production readiness is not established. Release owner: dispatch this exact main commit, approve the owned run, and observe all named indexes READY before dependent deployment (R15 step 0).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Local validation only; production readiness is not established. Release owner: dispatch main for cumulative reconciliation and approve the owned run. If main advanced, the writer reconciles the newer immutable dispatch SHA, not this pending source. Record SCHEMA_SOURCE, then prove this pending source and the dependent release source READY with the existing source-pinned readiness gate (R15 step 0). A newer writer result does not close an older pending receipt by itself.' >> "$GITHUB_STEP_SUMMARY"
 
   reconcile_composite_indexes:
     # Only a confirmed dispatch may write production schema. The same job also
@@ -192,6 +193,9 @@ jobs:
             exit 1
           fi
           echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
+          receipt="SCHEMA_SOURCE source=$checked_sha operation=composite-indexes mode=cumulative-dispatch"
+          echo "$receipt"
+          echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
 
       # Prod: GitHub WIF as omi-ci-schema-prod@ (index/field config only, no
       # document access; credential-hygiene WS-C). Development keeps JSON.
@@ -351,6 +355,9 @@ jobs:
             exit 1
           fi
           echo "Applying Firestore field exemptions from dispatched commit $checked_sha."
+          receipt="SCHEMA_SOURCE source=$checked_sha operation=field-exemptions mode=cumulative-dispatch"
+          echo "$receipt"
+          echo "$receipt" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Google Auth for Firestore field exemptions
         uses: google-github-actions/auth@v3

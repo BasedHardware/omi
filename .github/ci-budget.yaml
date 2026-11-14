@@ -1483,7 +1483,7 @@
       "matrix_size": 1,
       "needs": "plan_pr_indexes",
       "owner": "CI maintainers",
-      "rationale": "2026-10-29 wifidx: replaces the two PR prebuild jobs (prebuild_pr_prod_indexes + prebuild_pr_development_indexes, 2+2 minutes at the same 2 runs/day class), which have failed at Google Auth on every eligible PR since the 10-22 WIF tightening restricted both deploy pools to refs/heads/main. Read-only dry-run against prod with a dedicated index-reader identity: same trusted-main steps as the writer, one gcloud index list instead of provisioning in two projects. Same frequency and a 2-minute ceiling under the old pair's combined budget.",
+      "rationale": "SCA-2225: credential-free local add-only validation using trusted main controls and candidate declarations as data. contents: read only; no GCP authentication, gcloud calls, production reads or schema writes. The 2/day frequency is a planning sentinel, not observed demand or a schedule; the 2-minute budget covers local validation only. Production readiness remains pending a separately approved dispatch and source-pinned readiness proof.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
