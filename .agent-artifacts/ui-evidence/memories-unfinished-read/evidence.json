@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-memories-unfinished-read.png",
+      "platform": "desktop-macos",
+      "description": "Memories page body for an empty truncated read: Memories Didn't Finish Loading, with Try Again",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-memories-unfinished-footer.png",
+      "platform": "desktop-macos",
+      "description": "Memories list footer for a truncated read that returned rows: Some memories were not loaded, with Try Again",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
