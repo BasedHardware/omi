@@ -13,7 +13,6 @@ from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from google.api_core.exceptions import NotFound
 import threading
 import time
 import math
@@ -45,7 +44,6 @@ from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
-from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS

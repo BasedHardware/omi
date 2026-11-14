@@ -9,7 +9,7 @@ from functools import wraps
 
 from google.api_core.exceptions import NotFound
 
-from database.batch_pipeline_artifact_missing import artifact_missing
+from utils.batch_pipeline import artifact_missing
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.contracts import WorkItem
 
