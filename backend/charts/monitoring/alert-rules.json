@@ -33877,6 +33877,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Batch reads exceed 60,000 per completed audio-hour with at least 50 completed audio-hours in the hour. Budget: 45,000.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "threshold": "Batch reads exceed 60,000 per completed audio-hour with at least 50 completed audio-hours in the hour. Budget: 45,000. Sustained for 2h.",
       "severity": "ticket",
       "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
@@ -34033,6 +34034,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Batch reads exceed 10M/hour with fewer than 50 completed audio-hours.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "threshold": "Batch reads exceed 10M/hour with fewer than 50 completed audio-hours. Sustained for 2h.",
       "severity": "ticket",
       "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
@@ -34189,6 +34191,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Last full UTC hour of billed reads exceeds 1.25x the median of the same hour on the previous seven days. Missing any of the seven baseline hours is an agent-tier telemetry ticket.",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "threshold": "Last full UTC hour of billed reads exceeds 1.25x the median of the same hour on the previous seven days. Sustained for 2h.",
       "severity": "ticket",
       "user_impact": "Cost regression only; no direct user outage. Ticket, not a page.",
