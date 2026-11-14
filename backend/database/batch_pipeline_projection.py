@@ -79,6 +79,10 @@ class ProjectionStore:
 
         return ProviderProjection(handoff, identity)
 
+    def writer_scope(self):
+        """Cover the caller through SDK COMMIT; transition stores keep their scope."""
+        return nullcontext()
+
     @property
     def client(self):
         return self.store.client

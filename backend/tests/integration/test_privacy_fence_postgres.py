@@ -374,3 +374,33 @@ def test_erased_owner_never_reopens(context):
                 'WHERE owner_key=%s',
                 (owner,),
             )
+
+
+@pytest.mark.parametrize(
+    'data,merge,narrows',
+    [
+        ({'deleted': False, 'private_cloud_sync_enabled': False, 'uses_custom_stt': True}, False, False),
+        ({'record_lane_owner': 'batch_sync_v1', 'private_cloud_sync_enabled': False}, False, False),
+        ({'record_lane_owner': 'batch_live_v1', 'private_cloud_sync_enabled': True}, False, True),
+        ({'deleted': True}, False, True),
+        ({'sync_merged_into': 'other'}, False, True),
+        ({'deleted': {'unknown': 'shape'}}, False, True),
+        ({'private_cloud_sync_enabled': False}, True, True),
+        ({'record_lane_owner': 'batch_sync_v1'}, True, True),
+        ({'sync_merged_into': None}, True, True),
+    ],
+)
+def test_replacement_post_image_and_masked_narrowing_rules(context, data, merge, narrows):
+    fence, client, uid, owner = context
+    job = admit(context, keys=[conversation_key(owner, 'c')])
+    token = g2_coordinator.set(Coordinator(client, fence))
+    try:
+        client.collection('users').document(uid).collection('conversations').document('c').set(data, merge=merge)
+    finally:
+        g2_coordinator.reset(token)
+    with fence.pool.connection() as conn, conn.transaction():
+        if narrows:
+            with pytest.raises(FenceRefused):
+                fence.check_work_write(conn, owner, job)
+        else:
+            fence.check_work_write(conn, owner, job)

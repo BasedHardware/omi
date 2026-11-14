@@ -5,6 +5,7 @@ published views refuse rather than reconstruct data after purge. Outstanding
 views have no invented TTL; production retained-copy purge remains a gate.
 """
 
+from contextlib import contextmanager
 from copy import deepcopy
 from typing import cast
 
@@ -93,6 +94,17 @@ class ProviderProjection(ProjectionStore):
             'retained_copy_manifest': self.custody_manifest(),
         }
         super().__init__(_ViewStore(self))
+
+    @contextmanager
+    def writer_scope(self):
+        from database.batch_privacy_write_fence import g2_coordinator
+        from database.privacy_fence.interceptor import Coordinator
+
+        token = g2_coordinator.set(Coordinator(self.client, self.handoff.fence))
+        try:
+            yield
+        finally:
+            g2_coordinator.reset(token)
 
     def custody_manifest(self):
         """Exact new retained-copy census; this is not a purge certificate."""
@@ -228,7 +240,8 @@ class ProviderProjection(ProjectionStore):
             transaction.create(owner_ref, {**self.owner, 'projection_watermark': None})
             return True
 
-        return publish(self.client.transaction())
+        with self.writer_scope():
+            return publish(self.client.transaction())
 
     def _mirror(self, binding, extra=()):
         # Private projection custody is not the legacy runnable queue shadow.
@@ -259,7 +272,8 @@ class ProviderProjection(ProjectionStore):
             self.guard(transaction)
             return body(transaction)
 
-        return super().run(guarded, policy=policy)
+        with self.writer_scope():
+            return super().run(guarded, policy=policy)
 
     def _prepare_completion_receipt(self, transaction, binding):
         if binding != self.binding:
@@ -413,4 +427,5 @@ class _ViewStore(FirestoreStore):
             view.flush()
             return result
 
-        return commit(self.client.transaction())
+        with self.projection.writer_scope():
+            return commit(self.client.transaction())

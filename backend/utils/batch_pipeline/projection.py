@@ -8,6 +8,7 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_
 from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
+from functools import wraps
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -407,6 +408,16 @@ def record_speech(binding, accounting: dict, now: float) -> None:
         record_speech_steps(binding, accounting['source'], steps, times, now)
 
 
+def customer_writer(method):
+    @wraps(method)
+    def scoped(self, *args, **kwargs):
+        # Context only: no SQL pool slot or owner lock spans follow-up I/O.
+        with self.store.writer_scope():
+            return method(self, *args, **kwargs)
+
+    return scoped
+
+
 class Projector:
     def __init__(
         self,
@@ -679,6 +690,7 @@ class Projector:
             self.finish_part(item, binding, receipt, int(index) if index is not None else None, policy=policy)
         return self.complete_content(item.segment_id, binding, policy=policy)
 
+    @customer_writer
     def complete_content(self, segment_id, binding, *, policy=None):
         policy = policy or self.store.policy(segment_id)
         with projection_phase('accounting', policy):
@@ -840,18 +852,19 @@ class Projector:
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
         try:
-            conversations_db.assign_sync_conversation(
-                binding.owner_id,
-                incoming,
-                target_id=binding.target_conversation_id,
-                firestore_client=self.store.client,
-                before_assign=session.prepare,
-                validate_plan=session.validate_plan,
-                after_assign=lambda transaction, planned: session.persist(transaction, planned),
-                retry_contention=session.policy.projection_contention,
-                timing=session.policy.projection_timing,
-                **self._index_options(hint),
-            )
+            with self.store.writer_scope():
+                conversations_db.assign_sync_conversation(
+                    binding.owner_id,
+                    incoming,
+                    target_id=binding.target_conversation_id,
+                    firestore_client=self.store.client,
+                    before_assign=session.prepare,
+                    validate_plan=session.validate_plan,
+                    after_assign=lambda transaction, planned: session.persist(transaction, planned),
+                    retry_contention=session.policy.projection_contention,
+                    timing=session.policy.projection_timing,
+                    **self._index_options(hint),
+                )
         finally:
             self._mirror_assignment(session)
 
@@ -1045,19 +1058,20 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
-                                binding.owner_id,
-                                incoming,
-                                target_id=context.target_id,
-                                candidate_id=candidate['id'] if candidate else None,
-                                firestore_client=self.store.client,
-                                before_assign=session.prepare,
-                                validate_plan=session.validate_plan,
-                                after_assign=persisted,
-                                retry_contention=policy.projection_contention,
-                                timing=policy.projection_timing,
-                                **self._index_options(hint),
-                            )
+                            with self.store.writer_scope():
+                                assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
+                                    binding.owner_id,
+                                    incoming,
+                                    target_id=context.target_id,
+                                    candidate_id=candidate['id'] if candidate else None,
+                                    firestore_client=self.store.client,
+                                    before_assign=session.prepare,
+                                    validate_plan=session.validate_plan,
+                                    after_assign=persisted,
+                                    retry_contention=policy.projection_contention,
+                                    timing=policy.projection_timing,
+                                    **self._index_options(hint),
+                                )
                         finally:
                             self._mirror_assignment(session)
                         incoming.pop('_sync_lineage_eligible', None)
@@ -1126,6 +1140,7 @@ class Projector:
     def supersede(self, session):
         return persist_disposition(session)
 
+    @customer_writer
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
         if receipt.get('conversation_id'):
@@ -1173,6 +1188,7 @@ class Projector:
                 return
         self.store.ready(item.segment_id, binding, self.clock(), part_index=index, policy=policy)
 
+    @customer_writer
     def persist_playback(self, item: WorkItem, binding, canonical: str, receipt: dict):
         if self.fetch_audio is None:
             raise ProjectionBlocked('private playback requires ArtifactStore.fetch_audio')

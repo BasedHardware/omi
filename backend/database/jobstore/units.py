@@ -292,68 +292,83 @@ class Units:
             if not isinstance(result, dict) or WorkResult(**result).segment_id != identity:
                 raise ValueError('typed provider completion requires its bound durable WorkResult')
         with self.pool.connection() as conn, conn.transaction():
-            job = self._guarded_unit(conn, identity)
-            if (
-                not job
-                or job['state'] != 'pending'
-                or job['attempt_token'] != attempt
-                or str(job['attempt_admission_id']) != job['admission']['admission_id']
-            ):
-                return False
-            if job['source'] and self.handoff is None:
-                raise AuthorityRefused('source-bound provider settlement requires its handoff')
-            # Status-only refusal is a separate API/integration gate. Do not let
-            # a caller smuggle a result through a privacy_blocked status write.
-            if state != 'result_ready' and result is not None:
-                raise ValueError('refused units cannot carry a result')
-            conn.execute("SELECT set_config('omi.queue_owner_key',%s,true)", (job['owner_key'],))
-            conn.execute(
-                'UPDATE units SET state=%s,result=%s,attempt_token=NULL,lease_token=NULL,lease_until=0,settled_at=%s '
-                'WHERE namespace=%s AND unit_id=%s',
-                (state, jsonb(result) if result is not None else None, now, self.namespace, identity),
+            return self.settle_in_transaction(
+                conn, identity, attempt, state, result, now=now, partial_wait=partial_wait
             )
-            recording = row_dict(
-                conn,
-                'UPDATE recordings SET units_final=units_final+1,projection_state=CASE '
-                "WHEN %s='privacy_blocked' THEN 'revoked' ELSE projection_state END "
-                'WHERE namespace=%s AND recording_id=%s RETURNING *',
-                (state, self.namespace, job['recording_id']),
-            )
-            if recording is None:
-                raise AuthorityRefused('missing recording; terminal CAS rolled back')
-            due = (
-                now
-                if recording['units_final'] == recording['units_total'] or recording['projection_state'] == 'revoked'
-                else now + partial_wait
-            )
-            if recording['projection_task_id'] is None:
-                task = conn.execute(
-                    'INSERT INTO outbox(namespace,kind,dedupe_key,owner_id,payload,available_at,created_at) '
-                    "VALUES (%s,'project_conversation',%s,%s,%s,%s,%s) RETURNING id",
-                    (
-                        self.namespace,
-                        job['recording_id'],
-                        job['owner_key'],
-                        jsonb({'recording_id': job['recording_id']}),
-                        due,
-                        now,
-                    ),
-                ).fetchone()[0]
-                conn.execute(
-                    'UPDATE recordings SET projection_task_id=%s,partial_deadline=%s WHERE namespace=%s AND recording_id=%s',
-                    (task, due, self.namespace, job['recording_id']),
-                )
-            elif due == now:
-                conn.execute(
-                    'UPDATE outbox SET available_at=%s,wake_pending=true WHERE id=%s',
-                    (now, recording['projection_task_id']),
-                )
-            conn.execute(
-                "UPDATE queue_custody SET phase='completed',completion=%s WHERE namespace=%s AND identity=%s",
-                (jsonb({'state': state, 'attempt': attempt, 'result': result}), self.namespace, identity),
-            )
-            if self.handoff is not None and recording['units_final'] == recording['units_total']:
-                from database.jobstore.provider_handoff import seal_recording
 
-                seal_recording(conn, self.handoff, recording)
-            return True
+    def settle_in_transaction(self, conn, identity, attempt, state, result, *, now, partial_wait, effect=None):
+        """Join terminal custody to the caller's effect COMPLETE transaction."""
+        if state not in {'result_ready', 'quarantined', 'privacy_blocked'} or partial_wait <= 0:
+            raise ValueError('terminal state and explicit positive partial wait required')
+        if self.handoff is not None and state == 'result_ready':
+            from utils.batch_pipeline.contracts import WorkResult
+
+            if not isinstance(result, dict) or WorkResult(**result).segment_id != identity:
+                raise ValueError('typed provider completion requires its bound durable WorkResult')
+        job = self._guarded_unit(conn, identity)
+        if (
+            not job
+            or job['state'] != 'pending'
+            or job['attempt_token'] != attempt
+            or str(job['attempt_admission_id']) != job['admission']['admission_id']
+        ):
+            return False
+        if job['provider_effect_id'] is not None and str(job['provider_effect_id']) != effect:
+            raise AuthorityRefused('provider effect COMPLETE transaction required')
+        if job['source'] and self.handoff is None:
+            raise AuthorityRefused('source-bound provider settlement requires its handoff')
+        # Status-only refusal is a separate API/integration gate. Do not let
+        # a caller smuggle a result through a privacy_blocked status write.
+        if state != 'result_ready' and result is not None:
+            raise ValueError('refused units cannot carry a result')
+        conn.execute("SELECT set_config('omi.queue_owner_key',%s,true)", (job['owner_key'],))
+        conn.execute(
+            'UPDATE units SET state=%s,result=%s,attempt_token=NULL,lease_token=NULL,lease_until=0,settled_at=%s '
+            'WHERE namespace=%s AND unit_id=%s',
+            (state, jsonb(result) if result is not None else None, now, self.namespace, identity),
+        )
+        recording = row_dict(
+            conn,
+            'UPDATE recordings SET units_final=units_final+1,projection_state=CASE '
+            "WHEN %s='privacy_blocked' THEN 'revoked' ELSE projection_state END "
+            'WHERE namespace=%s AND recording_id=%s RETURNING *',
+            (state, self.namespace, job['recording_id']),
+        )
+        if recording is None:
+            raise AuthorityRefused('missing recording; terminal CAS rolled back')
+        due = (
+            now
+            if recording['units_final'] == recording['units_total'] or recording['projection_state'] == 'revoked'
+            else now + partial_wait
+        )
+        if recording['projection_task_id'] is None:
+            task = conn.execute(
+                'INSERT INTO outbox(namespace,kind,dedupe_key,owner_id,payload,available_at,created_at) '
+                "VALUES (%s,'project_conversation',%s,%s,%s,%s,%s) RETURNING id",
+                (
+                    self.namespace,
+                    job['recording_id'],
+                    job['owner_key'],
+                    jsonb({'recording_id': job['recording_id']}),
+                    due,
+                    now,
+                ),
+            ).fetchone()[0]
+            conn.execute(
+                'UPDATE recordings SET projection_task_id=%s,partial_deadline=%s WHERE namespace=%s AND recording_id=%s',
+                (task, due, self.namespace, job['recording_id']),
+            )
+        elif due == now:
+            conn.execute(
+                'UPDATE outbox SET available_at=%s,wake_pending=true WHERE id=%s',
+                (now, recording['projection_task_id']),
+            )
+        conn.execute(
+            "UPDATE queue_custody SET phase='completed',completion=%s WHERE namespace=%s AND identity=%s",
+            (jsonb({'state': state, 'attempt': attempt, 'result': result}), self.namespace, identity),
+        )
+        if self.handoff is not None and recording['units_final'] == recording['units_total']:
+            from database.jobstore.provider_handoff import seal_recording
+
+            seal_recording(conn, self.handoff, recording)
+        return True

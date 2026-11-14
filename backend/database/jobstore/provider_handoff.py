@@ -144,6 +144,12 @@ class ProviderHandoff:
         self.handoff = handoff
         self.units = Units(handoff.pool, handoff.fence, handoff.ticket, handoff=handoff)
 
+    def fence_ticket(self, identity, attempt, *, lease_seconds):
+        """Explicit paid boundary binding; no runtime provider is selected."""
+        from database.jobstore.provider_effect import FenceTicket
+
+        return FenceTicket(self.units, identity, attempt, lease_seconds=lease_seconds)
+
     def deliver(self, identity):
         def persist(conn, payload, admission):
             binding = validate_provider_payload(payload)

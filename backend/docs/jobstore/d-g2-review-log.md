@@ -79,3 +79,25 @@ server read leases. Existing deadline/retry policies remain unchanged.
 This reduces the first P1; it does not close production dispatch/cohort, purge,
 reverse certificate, runtime scheduling, fleet/budget or full matrix gaps. No
 new review round, merge, activation or savings claim is requested.
+
+## Ordinary paid effect and customer writer scope
+
+Migration 0013 preserves the original provider effect identity through registry
+retirement and rejects isolated terminal result settlement at SQL COMMIT.
+`ProviderHandoff.fence_ticket` binds REGISTER/START/COMPLETE to the original
+paid admission and immutable typed source. The actual provider STT seam invokes
+START after the existing allowance observation and before its single POST.
+COMPLETE joins Units terminal custody/counter/outbox/full seal; missing replies
+never authorize a second send. Synthetic tests replace only the paid network
+and exercise the real FS/SQL boundaries, including abrupt process exits before
+and after START and terminal COMMIT. The A3 late-transmission residual remains.
+
+Customer publication, private mutations and actual production assignment calls
+now scope CommitCoordinator through SDK COMMIT. Full conversation replacements
+use Rev3's post-image predicate; masked authority writes retain conservative
+ownership/redirect/consent treatment. Ordinary successful projection and real
+narrowing classifier/commit tests cover this source change. Other production
+writer/runner/cohort bindings remain uninstalled. Original result publication,
+per-record retained-copy cleanup/purge, GCS/reverse certificates, scheduling and
+the complete matrix/fleet/budget qualification still block the first P1.
+No new review round, merge, activation or savings claim is requested.

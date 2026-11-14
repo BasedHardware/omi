@@ -500,3 +500,33 @@ def test_private_view_reads_stay_within_declared_per_attempt_budget(lane, monkey
         <= 7 * len(lane.binding.segment_ids) + 20
     )
     assert max(count for (family, _), count in counts.items() if family.endswith('_intakes')) <= 3
+
+
+def test_customer_writer_scope_reaches_actual_sdk_commit_and_resets(lane, monkeypatch):
+    from database.batch_privacy_write_fence import g2_coordinator
+    from database.privacy_fence.interceptor import Coordinator
+    from database.privacy_fence.protocol import lock
+
+    requests = []
+    original = Coordinator.prepare
+
+    def inspect(coordinator, request):
+        # Neither a pool slot nor an owner guard spans the original FS RPC.
+        with lane.handoff.pool.connection(timeout=2) as one, lane.handoff.pool.connection(timeout=2) as two:
+            with one.transaction():
+                lock(one, lane.view.packet['owner_key'], exclusive=True)
+                assert two.execute('SELECT 1').fetchone() == (1,)
+        requests.append([w.update.name or w.delete or w.transform.document for w in request.writes])
+        return original(coordinator, request)
+
+    monkeypatch.setattr(Coordinator, 'prepare', inspect)
+    previous = g2_coordinator.get()
+    assert finish(lane)
+    assert g2_coordinator.get() is previous
+    assert any(any('/conversations/' in path for path in paths) for paths in requests)
+    assert any(lane.handoff.ref('receipt', 'recording')._document_path in paths for paths in requests)
+    with pytest.raises(RuntimeError):
+        with lane.view.writer_scope():
+            assert isinstance(g2_coordinator.get(), Coordinator)
+            raise RuntimeError('scope failure')
+    assert g2_coordinator.get() is previous

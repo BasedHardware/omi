@@ -100,6 +100,28 @@ def classify(write):
     if write.delete:
         return Narrowing(uid, cid, 'deleted', 'deleted')
     authorities = set(CONVERSATION_AUTHORITY_FIELDS)
+    if not masked:
+        # Rev3: replacements use the complete post-image walk predicate, not
+        # the masked-field rule. Ordinary sync rows can contain false cloud
+        # consent: that field only denies the walk on batch_live_v1 rows.
+        # Live rows also depend on user consent, which this write cannot prove.
+        if transform_fields & authorities:
+            return Narrowing(uid, cid)
+        for field in authorities:
+            if field in fields and Value.pb(fields[field]).WhichOneof('value_type') not in {
+                'null_value',
+                'boolean_value',
+                'string_value',
+            }:
+                return Narrowing(uid, cid)
+        if _value(fields.get('sync_merged_into', Value())):
+            return Narrowing(uid, cid, 'redirected', 'recording_privacy')
+        if (
+            _value(fields.get('deleted', Value()))
+            or _value(fields.get('record_lane_owner', Value())) == 'batch_live_v1'
+        ):
+            return Narrowing(uid, cid, reason='recording_privacy')
+        return None
     checks = touched & authorities if masked else authorities
     if transform_fields & authorities:
         return Narrowing(uid, cid)
