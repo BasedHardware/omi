@@ -2,8 +2,8 @@
 
 Episode composition now uses the same hydrated `MemoryService.search` facade as
 chat search, including its canonical/legacy visibility and lifecycle fences and
-underlying `query_memory_vector_candidates`. One search accepts at most 60
-candidates and returns at most 20; the shared chat profile eligibility predicate
+underlying `query_memory_vector_candidates`. One facade search requests a
+candidate limit of 60 and result limit of 20; the shared chat profile eligibility predicate
 is applied by search and again before rendering. Raw vector metadata is never
 used as prompt content. No new model route or credential path is introduced.
 

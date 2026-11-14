@@ -1134,22 +1134,26 @@ def _compose(
         return 'live'
     member_revisions: dict[str, Optional[datetime]] = {}
     waiting_until: list[datetime] = []
+    wait_observed_at = datetime.now(timezone.utc)
     state, members = _members(uid, episode, c, revisions=member_revisions, waiting_until=waiting_until)
     if state == 'waiting':
         if waiting_until:
             now = datetime.now(timezone.utc)
             due = min(waiting_until)
             if _utc(episode.get('compose_transcript_wait_until')) != due:
-                _write(
+                written = _write(
                     uid,
                     episode_id,
                     c,
                     {
                         'compose_pending_since': episode.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
-                        'compose_transcript_wait_started_at': now,
+                        'compose_transcript_wait_started_at': wait_observed_at,
                     },
+                    expected_member_revisions=member_revisions,
                 )
+                if written != 'written':
+                    return written  # A concurrent transcript cannot acquire a stale six-hour wait.
             _defer(uid, episode_id, c, max(0.0, (due - now).total_seconds()))
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
@@ -1740,6 +1744,9 @@ def schedule_for_conversation(
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
+            if transcript_updated:
+                with _inflight_lock:
+                    _deferred.pop((uid, str(episode['id'])), None)
             if transcript_updated and episode.get('compose_transcript_wait_until'):
                 # Receipt is authoritative even if the worker that deferred the wait died.
                 _write(

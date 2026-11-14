@@ -139,6 +139,34 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
     assert 'rain sensor' in block and 'locked' not in block
 
 
+def test_search_outage_uses_cached_eligible_facts_and_emits_degradation(monkeypatch):
+    from database import goals, users
+    from utils.llms import memory as chat_memory
+    from utils.observability import fallback
+
+    events = []
+    monkeypatch.setattr(context, '_search_memories', lambda *_a: (_ for _ in ()).throw(RuntimeError('synthetic')))
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: events.append(kwargs))
+    monkeypatch.setattr(
+        chat_memory,
+        'get_prompt_data',
+        lambda _uid: (
+            'Synthetic',
+            [],
+            [],
+            [
+                {'content': 'Irrigation uses a rain sensor.'},
+                {'content': 'Irrigation rejected.', 'user_review': False},
+            ],
+        ),
+    )
+    monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
+    monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
+    _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
+    assert 'rain sensor' in block and 'rejected' not in block
+    assert len(events) == 1 and events[0]['outcome'] == 'degraded'
+
+
 def test_background_is_token_bounded_for_multilingual_long_facts():
     memories = [{'content': 'irrigation ' + '园艺浇水计划。' * 2000} for _ in range(50)]
     assert 0 < tokens(context.relevant_memories([member()], memories)) <= config.COMPOSER_MEMORY_TOKENS

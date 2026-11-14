@@ -1758,6 +1758,38 @@ def test_transcript_receipt_rearms_active_wait(store, monkeypatch):
     composer.transcript_projected(UID, store.rows['c2'])
     assert queued and store.episode['compose_transcript_wait_until'] is None
     assert composer.needs_compose(store.episode)
+    assert (UID, 'ep1') not in composer._deferred
+
+
+def test_wait_write_is_fenced_against_a_concurrent_transcript(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+
+    def concurrent(*_args, updates, expected_member_revisions, **_kwargs):
+        assert set(expected_member_revisions) == {'c1', 'c2'}
+        store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+        raise composer.episodes_db.EpisodeConflict('member_revision_changed')
+
+    monkeypatch.setattr(composer.episodes_db, 'update_episode', concurrent)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'superseded'
+    assert not store.episode.get('compose_transcript_wait_until') and not composer._deferred
+
+
+def test_receipt_promotes_real_deferred_wait_without_a_home_request(store, monkeypatch):
+    _schedule_seam(store, monkeypatch)
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() > 21000
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert store.episode['compose_transcript_wait_until'] is None
+    assert 0 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= config.COMPOSER_SETTLE_SECONDS
+    store.episode['compose_pending_since'] -= timedelta(minutes=26)
+    store.episode['compose_activity_at'] -= timedelta(minutes=26)
+    composer._deferred[UID, 'ep1'] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1', 'c2']
 
 
 def test_home_active_wait_eliminates_redundant_composer_reads(store, monkeypatch):

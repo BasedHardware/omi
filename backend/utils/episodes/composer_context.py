@@ -208,6 +208,16 @@ def gather(
                     memories = _search_memories(uid, members)
                 except Exception as error:
                     logger.warning('event=episode_context source=memory_search exception_type=%s', type(error).__name__)
+                    from utils.observability.fallback import record_fallback
+
+                    record_fallback(
+                        component='conversation_notes',
+                        from_mode='episode_memory_search',
+                        to_mode='cached_prompt_memories',
+                        reason='other',
+                        outcome='degraded',
+                        log=logger,
+                    )
                 if not relevant_memories(members, memories):
                     _, baseline, manual, generated = get_prompt_data(uid)
                     memories = [*baseline, *manual, *generated]

@@ -29,3 +29,12 @@ Length/density fields are added only in the scaled range, after cached instructi
 No composer version or fingerprint changes, migration, or fleet recompose.
 Existing episodes recompose only for the already supported evidence, membership,
 regeneration or late-transcript triggers. Deployment alone triggers nothing.
+
+Integration verification retains the lead's 24-hour Home label and production
+Firestore settings. Transcript receipts remove the process-local wait timer as
+well as the persisted deadline, then use the existing quiet-window policy. A
+member-revision CAS fences the first wait write: a transcript arriving between
+the member read and that write supersedes the wait instead of suppressing it.
+The real scheduler regression reaches a composed summary after the quiet window
+without a Home request. Memory-search exceptions emit shared degraded-fallback
+telemetry before using the cached eligible-fact intake.
