@@ -5,7 +5,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db, get_firestore_client, run_transactional
+from ._client import db, run_transactional
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def _get_client(client: Optional[Any] = None) -> Any:
 
 def create_import_job(job_data: Dict[str, Any], *, firestore_client: Optional[Any] = None) -> str:
     """Create a new import job in Firestore."""
-    if not isinstance(job_data, dict):
+    if not job_data:
         raise ValueError("job_data must be a dictionary")
     raw_id = job_data.get('id')
     job_id = _sanitize_id(raw_id, 'job_id')
@@ -64,7 +64,7 @@ def create_import_job(job_data: Dict[str, Any], *, firestore_client: Optional[An
 def update_import_job(job_id: str, updates: Dict[str, Any], *, firestore_client: Optional[Any] = None) -> bool:
     """Update an existing import job. Returns True if updated, False if empty or not found."""
     cleaned_id = _sanitize_id(job_id, 'job_id')
-    if not updates or not isinstance(updates, dict):
+    if not updates:
         return False
     client = _get_client(firestore_client)
     job_ref = client.collection('import_jobs').document(cleaned_id)
@@ -88,7 +88,7 @@ def update_import_job_unless_cancelled(
     user makes while a worker writes cannot be overwritten by it.
     """
     cleaned_id = _sanitize_id(job_id, 'job_id')
-    if not updates or not isinstance(updates, dict):
+    if not updates:
         return False
     client = _get_client(firestore_client)
     job_ref = client.collection('import_jobs').document(cleaned_id)
@@ -135,7 +135,7 @@ def update_import_job_progress(
     ``IMPORT_JOB_PROGRESS_FIELDS`` may be written, and a deleted job is not recreated.
     """
     cleaned_id = _sanitize_id(job_id, 'job_id')
-    if not isinstance(progress, dict):
+    if not progress:
         raise ValueError("progress must be a dictionary")
     unexpected = set(progress) - IMPORT_JOB_PROGRESS_FIELDS
     if unexpected:
