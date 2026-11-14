@@ -123,7 +123,14 @@ def verified_transcription_seconds(data: Any, now: datetime) -> float:
     if data is None or isinstance(data, dict) and data.get('ready') is not True:
         raise UsageBaselineNotReady('unverified monthly usage')
     epoch = _epoch()
-    if not epoch or not isinstance(data, dict) or not _ready(data, epoch, now):
+    if not epoch or not isinstance(data, dict):
+        raise ValueError('unverified monthly usage')
+    if not _ready(data, epoch, now):
+        other = data.get('epoch')
+        if isinstance(other, str) and other != epoch and _ready(data, other, now):
+            # Ready under another service's epoch: the fenced source scan can
+            # re-prove it under ours, so this is a missing baseline, not corruption.
+            raise UsageBaselineNotReady('monthly usage ready under another epoch')
         raise ValueError('unverified monthly usage')
     value = data['totals'].get('transcription_seconds')
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:

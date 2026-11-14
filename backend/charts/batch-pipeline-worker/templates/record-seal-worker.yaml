@@ -49,6 +49,7 @@ spec:
           readinessProbe:
             httpGet: {path: /metrics, port: metrics}
           env:
+            - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
             - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealWorker.runtimeEnabled | quote }}}
             - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
             - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}

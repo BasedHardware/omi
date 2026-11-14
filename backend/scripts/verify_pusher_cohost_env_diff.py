@@ -139,6 +139,7 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # Listen mounts sync upload admission; pusher never accepts sync filenames.
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription
@@ -243,6 +244,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Listen mounts sync upload admission; pusher never accepts sync filenames.
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription
@@ -389,10 +391,21 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST", "PUSHER_STORAGE_PCM_BUDGET_MB"}),
+    "dev": frozenset(
+        {
+            "GOOGLE_CLIENT_ID",
+            "REDIS_DB_HOST",
+            "TYPESENSE_HOST",
+            "PUSHER_STORAGE_PCM_BUDGET_MB",
+            # Only pusher owns the drained recording worker's producer-pending retry bound.
+            "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+        }
+    ),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
+            # Only pusher owns the drained recording worker's producer-pending retry bound.
+            "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
             # Only pusher owns closed recording workers and their eviction proof.
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",
             "PUSHER_ABANDON_EVICTED_TOKENS",

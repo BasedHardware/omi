@@ -82,6 +82,15 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   fallback labelled "SaaS est.". Measured SaaS is labelled "SaaS measured
   (Mercury)" and drawn as a solid blue-grey segment. Unsourced lines are named
   in the reason, never dropped.
+  The cost chart groups its legend into GCP, LLM, STT actual, STT est/model,
+  measured SaaS, estimated SaaS and Revenue; provider amounts remain in the
+  tooltip and the API. These presentation groups preserve the existing dollars
+  and keep estimates/models distinct from actual spend.
+  Variable margin uses the fresh hourly meter first, then a metered live day,
+  then the latest settled day's existing calculation. Its visible source line
+  names the mode and date. A missing latest-day revenue book stays unavailable;
+  the reducer never borrows an older non-null margin. Missing prior MRR/ARPMAU
+  comparisons read `history gap`; a zero prior still has no percentage delta.
 - Cold-load rules match the wall and converge across Cloud Run instances
   (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
   the day's successful reads live in one doc in the admin Firestore payload cache

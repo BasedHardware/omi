@@ -154,7 +154,7 @@ def test_retrieve_file_paths_v2_write_failure_keeps_private_filename_out_of_resp
 
     # The staging-error contract is independent of filename timestamp parsing;
     # force a valid in-range timestamp so the test reaches the write seam.
-    monkeypatch.setattr(mod, 'parse_sync_filename_timestamp', lambda _filename: 1_720_000_000)
+    monkeypatch.setattr(mod, 'get_timestamp_from_path', lambda _filename: 1_720_000_000)
 
     def raise_write_error(*_args, **_kwargs):
         raise OSError('private storage detail')

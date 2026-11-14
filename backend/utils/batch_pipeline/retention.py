@@ -465,14 +465,24 @@ def cleanup_completed_artifacts(
 
 
 def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
-    """Authorize artifact IO; full-row exports always use live transactional reads."""
+    """Authorize artifact IO with partial exports on owner-memo hits.
+
+    The walk fills ``loaded`` whenever it walks live (identical reads and order
+    to the lever-off path). When the owner memo (bpp_owner_memo) serves the
+    check, already-certified IDs are not exported; unseen IDs are still checked
+    live and their conversation rows may be exported. The protection rows this
+    callback needs — the user row and, for ``snapshots`` callers, the target
+    conversation row — are read explicitly below when the decision did not
+    export them.
+    """
     from utils.batch_pipeline.artifacts import ProtectionContext
 
     def authorize(transaction):
-        loaded = {}
+        loaded: dict[str, Any] = {}
         # The ordinary artifact callback returns only ProtectionContext, whose
-        # protection level is read live below. It does not export full rows.
-        # Staging/enrichment callers requesting snapshots retain the exact walk.
+        # protection level is read live below. Every other caller passes
+        # ``loaded``: a live walk fills it, and an owner hit may leave it empty
+        # for certified IDs or partially fill it for unseen IDs.
         decision_only = (
             snapshots is None
             and current_attempt() is not None
@@ -490,22 +500,38 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             snapshots=None if decision_only else loaded,
             read_budget=read_budget,
         )
+        if 'user' not in loaded:
+            # A certified memo decision served the walk: read the protection
+            # rows this callback needs. A live walk already loaded them.
+            loaded['user'] = (
+                privacy_check_metrics.read_snapshot(
+                    'batch',
+                    store.client.collection('users').document(item.owner_id),
+                    uid=item.owner_id,
+                    transaction=transaction,
+                    read_budget=read_budget,
+                ).to_dict()
+                or {}
+            )
+            target = item.conversation_id
+            if snapshots is not None and target and target not in loaded.get('conversations', {}):
+                loaded.setdefault('conversations', {})[target] = (
+                    privacy_check_metrics.read_snapshot(
+                        'batch',
+                        store.client.collection('users')
+                        .document(item.owner_id)
+                        .collection('conversations')
+                        .document(target),
+                        uid=item.owner_id,
+                        transaction=transaction,
+                        read_budget=read_budget,
+                    ).to_dict()
+                    or {}
+                )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
-        user = (
-            privacy_check_metrics.read_snapshot(
-                'batch',
-                store.client.collection('users').document(item.owner_id),
-                uid=item.owner_id,
-                transaction=transaction,
-                read_budget=read_budget,
-            ).to_dict()
-            or {}
-            if decision_only
-            else loaded['user']
-        )
-        return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
+        return ProtectionContext(loaded['user'].get('data_protection_level', 'enhanced'), generation)
 
     if read_budget is not None:
         from database.batch_pipeline_reads import read_snapshot
