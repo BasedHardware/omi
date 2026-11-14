@@ -8,6 +8,7 @@ import pytest
 
 from utils import backfill_hours_cap as day_cap
 from utils import stt_cap_dispatch as cap
+from utils.batch_pipeline import admission
 from utils.transcription_allowance import TranscriptionAllowance
 
 
@@ -306,8 +307,6 @@ def test_sync_admission_caps_backfill_even_when_scope_is_off(monkeypatch, plan, 
 
 
 def test_batch_admission_forwards_backfill(monkeypatch):
-    from utils.batch_pipeline import admission
-
     seen = {}
 
     def fake_sync_admission(uid, seconds, provider, *, lane, path, backfill=False):
