@@ -1849,31 +1849,186 @@ class AnalyticsManager {
         ),
       );
 
-  /// [plan] is the tier id. [billingInterval] is `month` or `year`, not the
-  /// sheet's yearly/monthly toggle. [source] is the surface that opened the sheet.
-  void upgradePlanSelected({required String plan, required String billingInterval, required String source}) =>
+  /// One actual purchase-surface mount, not an opener intent or a widget rebuild.
+  void paywallViewed(
+    String source, {
+    required PaywallViewedSurface surface,
+    String currentPlan = 'unknown',
+    String catalogTier = 'not_applicable',
+  }) =>
       const TypedEvents().emit(
-        UpgradePlanSelected(
-          plan: _closedEnum(
-            UpgradePlanSelectedPlan.values,
-            _planWire(plan),
-            UpgradePlanSelectedPlan.unknown,
+        PaywallViewed(
+          source:
+              _closedEnum(PaywallViewedSource.values, source, PaywallViewedSource.unknown, (value) => value.wireName),
+          currentPlan: _closedEnum(
+            PaywallViewedCurrentPlan.values,
+            _planWire(currentPlan),
+            PaywallViewedCurrentPlan.unknown,
             (value) => value.wireName,
           ),
-          billingInterval: _closedEnum(
-            UpgradePlanSelectedBillingInterval.values,
-            _intervalWire(billingInterval),
-            UpgradePlanSelectedBillingInterval.unknown,
+          catalogTier: _closedEnum(
+            PaywallViewedCatalogTier.values,
+            catalogTier,
+            PaywallViewedCatalogTier.unknown,
             (value) => value.wireName,
           ),
-          source: _closedEnum(
-            UpgradePlanSelectedSource.values,
-            source,
-            UpgradePlanSelectedSource.unknown,
+          surface: surface,
+        ),
+      );
+
+  void allowanceReached({required String kind, required String surface, required String reason}) =>
+      const TypedEvents().emit(
+        AllowanceReached(
+          allowanceKind: _closedEnum(
+            AllowanceReachedAllowanceKind.values,
+            kind,
+            AllowanceReachedAllowanceKind.unknown,
+            (value) => value.wireName,
+          ),
+          surface: _closedEnum(
+            AllowanceReachedSurface.values,
+            surface,
+            AllowanceReachedSurface.unknown,
+            (value) => value.wireName,
+          ),
+          reason: _closedEnum(
+            AllowanceReachedReason.values,
+            reason,
+            AllowanceReachedReason.unknown,
             (value) => value.wireName,
           ),
         ),
       );
+
+  void allowanceBlockShown({required String kind, required String surface, required String reason}) =>
+      const TypedEvents().emit(
+        AllowanceBlockShown(
+          allowanceKind: _closedEnum(
+            AllowanceBlockShownAllowanceKind.values,
+            kind,
+            AllowanceBlockShownAllowanceKind.unknown,
+            (value) => value.wireName,
+          ),
+          surface: _closedEnum(
+            AllowanceBlockShownSurface.values,
+            surface,
+            AllowanceBlockShownSurface.unknown,
+            (value) => value.wireName,
+          ),
+          reason: _closedEnum(
+            AllowanceBlockShownReason.values,
+            reason,
+            AllowanceBlockShownReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
+
+  void upgradeTapped({required String plan, required String billingInterval, required String source}) =>
+      const TypedEvents().emit(
+        UpgradeTapped(
+          plan: _closedEnum(
+              UpgradeTappedPlan.values, _planWire(plan), UpgradeTappedPlan.unknown, (value) => value.wireName),
+          billingInterval: _closedEnum(
+            UpgradeTappedBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradeTappedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source:
+              _closedEnum(UpgradeTappedSource.values, source, UpgradeTappedSource.unknown, (value) => value.wireName),
+        ),
+      );
+
+  void checkoutOpened({
+    required String plan,
+    required String billingInterval,
+    required String source,
+    required bool inApp,
+  }) =>
+      const TypedEvents().emit(
+        CheckoutOpened(
+          plan: _closedEnum(
+              CheckoutOpenedPlan.values, _planWire(plan), CheckoutOpenedPlan.unknown, (value) => value.wireName),
+          billingInterval: _closedEnum(
+            CheckoutOpenedBillingInterval.values,
+            _intervalWire(billingInterval),
+            CheckoutOpenedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source:
+              _closedEnum(CheckoutOpenedSource.values, source, CheckoutOpenedSource.unknown, (value) => value.wireName),
+          stage: inApp ? CheckoutOpenedStage.inAppCheckout : CheckoutOpenedStage.hostedCheckout,
+          result: CheckoutOpenedResult.opened,
+        ),
+      );
+
+  /// Client success navigation only: this is not accepted payment or entitlement.
+  void checkoutCompleted({
+    required String plan,
+    required String billingInterval,
+    required String source,
+    required bool inApp,
+  }) =>
+      const TypedEvents().emit(
+        CheckoutCompleted(
+          plan: _closedEnum(
+              CheckoutCompletedPlan.values, _planWire(plan), CheckoutCompletedPlan.unknown, (value) => value.wireName),
+          billingInterval: _closedEnum(
+            CheckoutCompletedBillingInterval.values,
+            _intervalWire(billingInterval),
+            CheckoutCompletedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source: _closedEnum(
+              CheckoutCompletedSource.values, source, CheckoutCompletedSource.unknown, (value) => value.wireName),
+          stage: inApp ? CheckoutCompletedStage.inAppCheckout : CheckoutCompletedStage.hostedCheckout,
+          result: CheckoutCompletedResult.clientNavigationCompleted,
+        ),
+      );
+
+  void restoreAttempted({required String source}) => const TypedEvents().emit(
+        RestoreAttempted(
+          source: _closedEnum(
+              RestoreAttemptedSource.values, source, RestoreAttemptedSource.unknown, (value) => value.wireName),
+        ),
+      );
+
+  void restoreResult({required String source, required RestoreResultResult result}) => const TypedEvents().emit(
+        RestoreResult(
+          source:
+              _closedEnum(RestoreResultSource.values, source, RestoreResultSource.unknown, (value) => value.wireName),
+          result: result,
+        ),
+      );
+
+  /// [plan] is the tier id. [billingInterval] is `month` or `year`, not the
+  /// sheet's yearly/monthly toggle. [source] is the surface that opened the sheet.
+  void upgradePlanSelected({required String plan, required String billingInterval, required String source}) {
+    upgradeTapped(plan: plan, billingInterval: billingInterval, source: source);
+    const TypedEvents().emit(
+      UpgradePlanSelected(
+        plan: _closedEnum(
+          UpgradePlanSelectedPlan.values,
+          _planWire(plan),
+          UpgradePlanSelectedPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          UpgradePlanSelectedBillingInterval.values,
+          _intervalWire(billingInterval),
+          UpgradePlanSelectedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+        source: _closedEnum(
+          UpgradePlanSelectedSource.values,
+          source,
+          UpgradePlanSelectedSource.unknown,
+          (value) => value.wireName,
+        ),
+      ),
+    );
+  }
 
   void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
     const TypedEvents().emit(

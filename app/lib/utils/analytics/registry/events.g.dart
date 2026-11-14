@@ -2967,6 +2967,568 @@ final class OnboardingStepCompleted extends RegisteredEvent {
   Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName, "exit_reason": exitReason.wireName};
 }
 
+enum PaywallViewedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const PaywallViewedSource(this.wireName);
+  final String wireName;
+}
+
+enum PaywallViewedCurrentPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const PaywallViewedCurrentPlan(this.wireName);
+  final String wireName;
+}
+
+enum PaywallViewedCatalogTier {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown"),
+  notApplicable("not_applicable");
+  const PaywallViewedCatalogTier(this.wireName);
+  final String wireName;
+}
+
+enum PaywallViewedSurface {
+  plansSheet("plans_sheet"),
+  trialPaywall("trial_paywall"),
+  outlinePaywall("outline_paywall"),
+  webPaywall("web_paywall"),
+  storefront("storefront"),
+  settingsPlans("settings_plans"),
+  usageLimitPopup("usage_limit_popup"),
+  chatQuotaBanner("chat_quota_banner"),
+  trialUpsell("trial_upsell"),
+  monthlyFallback("monthly_fallback"),
+  yearlySwitch("yearly_switch");
+  const PaywallViewedSurface(this.wireName);
+  final String wireName;
+}
+
+final class PaywallViewed extends RegisteredEvent {
+  const PaywallViewed({required this.source, required this.currentPlan, required this.catalogTier, required this.surface});
+  final PaywallViewedSource source;
+  final PaywallViewedCurrentPlan currentPlan;
+  final PaywallViewedCatalogTier catalogTier;
+  final PaywallViewedSurface surface;
+  @override
+  String get wireName => "Subscription Paywall Viewed";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName, "catalog_tier": catalogTier.wireName, "surface": surface.wireName};
+}
+
+enum AllowanceReachedAllowanceKind {
+  transcription("transcription"),
+  chat("chat"),
+  usageBudget("usage_budget"),
+  mcpDailyCap("mcp_daily_cap"),
+  trial("trial"),
+  unknown("unknown");
+  const AllowanceReachedAllowanceKind(this.wireName);
+  final String wireName;
+}
+
+enum AllowanceReachedSurface {
+  capture("capture"),
+  conversations("conversations"),
+  chat("chat"),
+  settings("settings"),
+  storefront("storefront"),
+  onDevice("on_device"),
+  unknown("unknown");
+  const AllowanceReachedSurface(this.wireName);
+  final String wireName;
+}
+
+enum AllowanceReachedReason {
+  planAllowanceExhausted("plan_allowance_exhausted"),
+  chatQuotaExhausted("chat_quota_exhausted"),
+  budgetExhausted("budget_exhausted"),
+  mcpCapReached("mcp_cap_reached"),
+  trialExpired("trial_expired"),
+  subscriptionInactive("subscription_inactive"),
+  unknown("unknown");
+  const AllowanceReachedReason(this.wireName);
+  final String wireName;
+}
+
+final class AllowanceReached extends RegisteredEvent {
+  const AllowanceReached({required this.allowanceKind, required this.surface, required this.reason});
+  final AllowanceReachedAllowanceKind allowanceKind;
+  final AllowanceReachedSurface surface;
+  final AllowanceReachedReason reason;
+  @override
+  String get wireName => "Subscription Allowance Reached";
+  @override
+  Map<String, Object> get properties => {"allowance_kind": allowanceKind.wireName, "surface": surface.wireName, "reason": reason.wireName};
+}
+
+enum AllowanceBlockShownAllowanceKind {
+  transcription("transcription"),
+  chat("chat"),
+  usageBudget("usage_budget"),
+  mcpDailyCap("mcp_daily_cap"),
+  trial("trial"),
+  unknown("unknown");
+  const AllowanceBlockShownAllowanceKind(this.wireName);
+  final String wireName;
+}
+
+enum AllowanceBlockShownSurface {
+  capture("capture"),
+  conversations("conversations"),
+  chat("chat"),
+  settings("settings"),
+  storefront("storefront"),
+  onDevice("on_device"),
+  unknown("unknown");
+  const AllowanceBlockShownSurface(this.wireName);
+  final String wireName;
+}
+
+enum AllowanceBlockShownReason {
+  planAllowanceExhausted("plan_allowance_exhausted"),
+  chatQuotaExhausted("chat_quota_exhausted"),
+  budgetExhausted("budget_exhausted"),
+  mcpCapReached("mcp_cap_reached"),
+  trialExpired("trial_expired"),
+  subscriptionInactive("subscription_inactive"),
+  unknown("unknown");
+  const AllowanceBlockShownReason(this.wireName);
+  final String wireName;
+}
+
+final class AllowanceBlockShown extends RegisteredEvent {
+  const AllowanceBlockShown({required this.allowanceKind, required this.surface, required this.reason});
+  final AllowanceBlockShownAllowanceKind allowanceKind;
+  final AllowanceBlockShownSurface surface;
+  final AllowanceBlockShownReason reason;
+  @override
+  String get wireName => "Subscription Allowance Block Shown";
+  @override
+  Map<String, Object> get properties => {"allowance_kind": allowanceKind.wireName, "surface": surface.wireName, "reason": reason.wireName};
+}
+
+enum UpgradeTappedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const UpgradeTappedPlan(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeTappedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeTappedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeTappedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const UpgradeTappedSource(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeTapped extends RegisteredEvent {
+  const UpgradeTapped({required this.plan, required this.billingInterval, required this.source});
+  final UpgradeTappedPlan plan;
+  final UpgradeTappedBillingInterval billingInterval;
+  final UpgradeTappedSource source;
+  @override
+  String get wireName => "Subscription Upgrade Tapped";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName, "source": source.wireName};
+}
+
+enum CheckoutOpenedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const CheckoutOpenedPlan(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutOpenedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const CheckoutOpenedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutOpenedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const CheckoutOpenedSource(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutOpenedStage {
+  hostedCheckout("hosted_checkout"),
+  inAppCheckout("in_app_checkout");
+  const CheckoutOpenedStage(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutOpenedResult {
+  opened("opened"),
+  clientNavigationCompleted("client_navigation_completed");
+  const CheckoutOpenedResult(this.wireName);
+  final String wireName;
+}
+
+final class CheckoutOpened extends RegisteredEvent {
+  const CheckoutOpened({required this.plan, required this.billingInterval, required this.source, required this.stage, required this.result});
+  final CheckoutOpenedPlan plan;
+  final CheckoutOpenedBillingInterval billingInterval;
+  final CheckoutOpenedSource source;
+  final CheckoutOpenedStage stage;
+  final CheckoutOpenedResult result;
+  @override
+  String get wireName => "Subscription Checkout Opened";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName, "source": source.wireName, "stage": stage.wireName, "result": result.wireName};
+}
+
+enum CheckoutCompletedPlan {
+  basic("basic"),
+  plus("plus"),
+  unlimited("unlimited"),
+  unlimitedV2("unlimited_v2"),
+  operator("operator"),
+  architect("architect"),
+  unknown("unknown");
+  const CheckoutCompletedPlan(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutCompletedBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const CheckoutCompletedBillingInterval(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutCompletedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const CheckoutCompletedSource(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutCompletedStage {
+  hostedCheckout("hosted_checkout"),
+  inAppCheckout("in_app_checkout");
+  const CheckoutCompletedStage(this.wireName);
+  final String wireName;
+}
+
+enum CheckoutCompletedResult {
+  opened("opened"),
+  clientNavigationCompleted("client_navigation_completed");
+  const CheckoutCompletedResult(this.wireName);
+  final String wireName;
+}
+
+final class CheckoutCompleted extends RegisteredEvent {
+  const CheckoutCompleted({required this.plan, required this.billingInterval, required this.source, required this.stage, required this.result});
+  final CheckoutCompletedPlan plan;
+  final CheckoutCompletedBillingInterval billingInterval;
+  final CheckoutCompletedSource source;
+  final CheckoutCompletedStage stage;
+  final CheckoutCompletedResult result;
+  @override
+  String get wireName => "Subscription Checkout Completed";
+  @override
+  Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName, "source": source.wireName, "stage": stage.wireName, "result": result.wireName};
+}
+
+enum RestoreAttemptedSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const RestoreAttemptedSource(this.wireName);
+  final String wireName;
+}
+
+final class RestoreAttempted extends RegisteredEvent {
+  const RestoreAttempted({required this.source});
+  final RestoreAttemptedSource source;
+  @override
+  String get wireName => "Subscription Restore Attempted";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName};
+}
+
+enum RestoreResultSource {
+  chatQuotaExceeded("chat_quota_exceeded"),
+  freemiumSwitch("freemium_switch"),
+  lockedConversation("locked_conversation"),
+  lockedMemory("locked_memory"),
+  chatApps("chat_apps"),
+  usagePage("usage_page"),
+  transcriptionSettings("transcription_settings"),
+  unlimitedDeeplink("unlimited_deeplink"),
+  macosBilling("macos_billing"),
+  macosUsageLimit("macos_usage_limit"),
+  macosChatQuotaBanner("macos_chat_quota_banner"),
+  windowsBilling("windows_billing"),
+  windowsUsageLimit("windows_usage_limit"),
+  webPlans("web_plans"),
+  macosSettingsView("macos_settings_view"),
+  windowsSettingsView("windows_settings_view"),
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80"),
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap"),
+  mobileChat("mobile_chat"),
+  mobileMcpCap("mobile_mcp_cap"),
+  onDeviceAtCap("on_device_at_cap"),
+  onDeviceOverflow("on_device_overflow"),
+  heldAudio("held_audio"),
+  macosProactiveAgent("macos_proactive_agent"),
+  macosScreenContext("macos_screen_context"),
+  macosMcpDailyCap("macos_mcp_daily_cap"),
+  webChat("web_chat"),
+  webUsageLimit("web_usage_limit"),
+  webSettingsView("web_settings_view"),
+  macosChat("macos_chat"),
+  windowsChat("windows_chat"),
+  plansYearlySwitch("plans_yearly_switch");
+  const RestoreResultSource(this.wireName);
+  final String wireName;
+}
+
+enum RestoreResultResult {
+  succeeded("succeeded"),
+  failed("failed"),
+  noEntitlement("no_entitlement"),
+  cancelled("cancelled");
+  const RestoreResultResult(this.wireName);
+  final String wireName;
+}
+
+final class RestoreResult extends RegisteredEvent {
+  const RestoreResult({required this.source, required this.result});
+  final RestoreResultSource source;
+  final RestoreResultResult result;
+  @override
+  String get wireName => "Subscription Restore Result";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "result": result.wireName};
+}
+
 enum PaywallVariantShownVariant {
   control("control"),
   outline("outline"),

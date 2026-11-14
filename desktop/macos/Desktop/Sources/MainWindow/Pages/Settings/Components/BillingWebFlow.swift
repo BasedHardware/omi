@@ -7,6 +7,7 @@ struct BillingWebFlow: Identifiable {
   let title: String
   let url: URL
   let completionURLs: [String]
+  var purchase: PurchaseCheckoutObservation? = nil
 }
 
 enum BillingWebFlowOutcome {
@@ -29,6 +30,7 @@ struct BillingWebFlowSheet: View {
         Spacer()
 
         Button("Close") {
+          flow.purchase?.finish(success: false)
           onComplete(.dismissed)
         }
         .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -41,8 +43,10 @@ struct BillingWebFlowSheet: View {
 
       BillingWebView(flow: flow, onComplete: onComplete)
         .frame(minWidth: 860, minHeight: 680)
+        .onAppear { flow.purchase?.opened() }
     }
     .background(Ink.surface)
+    .onDisappear { flow.purchase?.finish(success: false) }
   }
 }
 
@@ -72,8 +76,10 @@ struct BillingWebView: NSViewRepresentable {
     let flow: BillingWebFlow
     let onComplete: (BillingWebFlowOutcome) -> Void
     var completionHandled = false
+    let purchase: PurchaseCheckoutObservation?
 
     init(flow: BillingWebFlow, onComplete: @escaping (BillingWebFlowOutcome) -> Void) {
+      self.purchase = flow.purchase
       self.flow = flow
       self.onComplete = onComplete
     }
@@ -89,14 +95,7 @@ struct BillingWebView: NSViewRepresentable {
         return
       }
 
-      if let matchedCompletionURL = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
-        Self.urlsMatchCompletion(url, completionURL: $0)
-      }) {
-        if matchedCompletionURL.pathComponents.last == "cancel" {
-          finish(.cancelled)
-        } else {
-          finish(.completed)
-        }
+      if handleNavigation(url, isMainFrame: navigationAction.targetFrame?.isMainFrame) {
         decisionHandler(.cancel)
         return
       }
@@ -104,14 +103,23 @@ struct BillingWebView: NSViewRepresentable {
       decisionHandler(.allow)
     }
 
-    private static func urlsMatchCompletion(_ url: URL, completionURL: URL) -> Bool {
-      guard url.scheme == completionURL.scheme,
-        url.host == completionURL.host,
-        url.path == completionURL.path
-      else {
-        return false
+    /// Preserve legacy flow resolution; only verified navigation reaches the new observation.
+    @discardableResult
+    func handleNavigation(_ url: URL, isMainFrame: Bool?) -> Bool {
+      guard
+        let matched = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
+          PurchaseCheckoutObservation.matches(url, completionURL: $0)
+        })
+      else { return false }
+      if matched.pathComponents.last == "cancel" {
+        finish(.cancelled)
+      } else {
+        finish(
+          .completed,
+          verifiedNavigation: isMainFrame == true
+            && PurchaseCheckoutObservation.verifiedMatches(url, completionURL: matched))
       }
-      return url.query == completionURL.query || completionURL.query == nil
+      return true
     }
 
     func webView(
@@ -126,9 +134,24 @@ struct BillingWebView: NSViewRepresentable {
       return nil
     }
 
-    func finish(_ outcome: BillingWebFlowOutcome) {
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
+      // A provisional failure is usually a redirect or network blip, not a terminal
+      // outcome: latching here would suppress checkout_completed for a retry that
+      // succeeds in the same sheet. Only .completed/.cancelled/.dismissed latch.
+      purchase?.navigationFailed()
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
+      purchase?.navigationFailed()
+    }
+
+    func finish(_ outcome: BillingWebFlowOutcome, verifiedNavigation: Bool = false) {
       guard !completionHandled else { return }
       completionHandled = true
+      if case .completed = outcome {
+        purchase?.finish(success: verifiedNavigation)
+      } else {
+        purchase?.finish(success: false)
+      }
       DispatchQueue.main.async {
         self.onComplete(outcome)
       }

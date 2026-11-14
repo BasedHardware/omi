@@ -1,3 +1,5 @@
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -15,6 +17,7 @@ class OmiLockedPreview extends StatelessWidget {
     required this.onPressed,
     this.status,
     this.interactive = false,
+    this.purchaseSource = 'locked_conversation',
   });
 
   final Widget child;
@@ -25,13 +28,19 @@ class OmiLockedPreview extends StatelessWidget {
   /// Lets gestures reach the obscured [child] (for example a row's long-press menu or swipe). The
   /// content stays blurred and hidden from semantics; only the tint stops absorbing touches.
   final bool interactive;
+  final String purchaseSource;
+  FutureOr<void> _upgradeIntent() {
+    PlatformManager.instance.analytics
+        .upgradeTapped(plan: 'unknown', billingInterval: 'unknown', source: purchaseSource);
+    return onPressed();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       // Child recognizers retain row long-press/swipe; gaps use the guarded action.
-      onTap: () => onPressed(),
+      onTap: () => _upgradeIntent(),
       child: ClipRRect(
         borderRadius: OmiRadius.xlAll,
         child: Stack(
@@ -70,7 +79,7 @@ class OmiLockedPreview extends StatelessWidget {
                     label: label,
                     icon: Icons.hourglass_empty,
                     size: OmiButtonSize.compact,
-                    onPressed: onPressed,
+                    onPressed: _upgradeIntent,
                   ),
                 ],
               ),
@@ -78,6 +87,10 @@ class OmiLockedPreview extends StatelessWidget {
           ],
         ),
       ),
+    ).withAllowanceBlock(
+      kind: 'unknown',
+      surface: 'conversations',
+      reason: 'unknown',
     );
   }
 }

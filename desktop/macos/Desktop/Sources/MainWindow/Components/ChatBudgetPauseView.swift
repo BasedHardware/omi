@@ -18,6 +18,10 @@ struct ChatBudgetPauseView: View {
     .background(Ink.rowFill)
     .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius))
     .accessibilityIdentifier("chat-budget-pause")
+    .onAppear {
+      AnalyticsManager.shared.purchaseEvent(
+        .allowanceBlockShown, ["allowance_kind": "usage_budget", "surface": "chat", "reason": "budget_exhausted"])
+    }
   }
 
   struct Slot: View {
@@ -50,6 +54,10 @@ struct ChatBudgetPauseView: View {
                 guard let id = price.id, busy == nil else { return }
                 busy = id
                 error = nil
+                PurchaseCheckoutObservation.tapped(
+                  context: PurchaseCheckoutContext(
+                    plan: tier.planId, interval: price.interval.rawValue, source: "macos_chat"),
+                  sink: { event, properties in AnalyticsManager.shared.purchaseEvent(event, properties) })
                 AnalyticsManager.shared.upgradePlanSelected(
                   plan: tier.planId, billingInterval: price.interval.rawValue, source: "macos_chat")
                 Task { @MainActor in
@@ -62,7 +70,14 @@ struct ChatBudgetPauseView: View {
                       _ = try await APIClient.shared.upgradeSubscription(priceId: id)
                     } else {
                       let result = try await APIClient.shared.createCheckoutSession(priceId: id)
-                      if let address = result.url, let url = URL(string: address) { NSWorkspace.shared.open(url) }
+                      if let address = result.url, let url = URL(string: address), NSWorkspace.shared.open(url) {
+                        AnalyticsManager.shared.purchaseEvent(
+                          .checkoutOpened,
+                          [
+                            "source": "macos_chat", "plan": tier.planId,
+                            "billing_interval": price.interval.rawValue, "stage": "hosted_checkout", "result": "opened",
+                          ])
+                      }
                     }
                     await limiter.fetchPlan()
                     showingSheet = false

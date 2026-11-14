@@ -1,3 +1,5 @@
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -150,6 +152,10 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
   Future<void> _switch() async {
     var offer = _offer;
     if (offer == null || _switching) return;
+    PlatformManager.instance.analytics.upgradeTapped(
+        plan: context.read<UsageProvider?>()?.subscription?.subscription.plan.wireName ?? 'unknown',
+        billingInterval: 'year',
+        source: 'plans_yearly_switch');
     HapticFeedback.mediumImpact();
     const TypedEvents().emit(SubscriptionYearlySwitchConfirmed(
         surface: SubscriptionYearlySwitchConfirmedSurface.values.byName(widget.surface.name)));
@@ -256,6 +262,10 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
           child: _content(context),
         ),
       ),
+    ).withPurchaseExposure(
+      enabled: !_loading && !_done && _usablePreview(_offer) && (_offer?.priceId?.trim().isNotEmpty ?? false),
+      source: 'plans_yearly_switch',
+      surface: PaywallViewedSurface.yearlySwitch,
     );
   }
 

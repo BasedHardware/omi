@@ -29,6 +29,8 @@ vi.mock('@/components/auth/AuthProvider', () => ({
   }),
 }));
 vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
+  trackPurchaseEvent: vi.fn(),
+  openPurchaseCheckout: vi.fn((url) => window.open(url, '_blank')),
   trackPaywallOpened: mocks.opened,
   trackUpgradePlanSelected: mocks.selected,
   trackUpgradeSucceeded: mocks.succeeded,

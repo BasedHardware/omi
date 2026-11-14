@@ -69,6 +69,8 @@ struct ClaudeAuthSheet: View {
       // Actions
       VStack(spacing: OmiSpacing.md) {
         Button(action: {
+          AnalyticsManager.shared.purchaseEvent(
+            .upgradeTapped, ["source": "macos_chat", "plan": "unlimited_v2", "billing_interval": "unknown"])
           isConnecting = true
           onConnect()
         }) {
@@ -102,6 +104,7 @@ struct ClaudeAuthSheet: View {
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.xl)
     }
+    .purchaseExposure(source: "macos_chat", surface: "plans_sheet")
     .frame(width: 400, height: 380)
     // A sheet is its own window, not content hosted on the panel, so this is one of the few places
     // that *should* paint a ground — and `glassContent()` pins the light appearance it resolves in,

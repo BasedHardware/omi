@@ -14,6 +14,8 @@ import { createChatQuotaGate, type ChatQuotaGate, type QuotaVerdict } from '../.
 import { auth } from '../../lib/firebase'
 
 export type BarSender = {
+  /** Telemetry authority only; never changes the existing quota verdict. */
+  authoritativeLimitReached: () => boolean
   /** Send through the quota gate. Resolves to the blocked-notice text when the
    *  send was REFUSED (the bar renders it inline), or null when it went out. */
   send: (text: string, fromVoice: boolean) => Promise<string | null>
@@ -37,6 +39,7 @@ export function createBarSender(
   isSignedIn: () => boolean = () => auth.currentUser != null
 ): BarSender {
   return {
+    authoritativeLimitReached: () => gate.authoritativeLimitReached(),
     sync: async (): Promise<void> => {
       if (!isSignedIn()) return
       await gate.sync()
@@ -57,7 +60,8 @@ export function createBarSender(
         window.omiBar.notifyUsageLimit({
           message: verdict.message,
           spoken: fromVoice,
-          popup: !fromVoice
+          popup: !fromVoice,
+          authoritative: gate.authoritativeLimitReached()
         })
         return verdict.message
       }

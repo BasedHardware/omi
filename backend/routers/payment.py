@@ -1942,6 +1942,12 @@ def stripe_success(session_id: str = Query(...)):
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
                 <h1>Payment Successful!</h1>
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
+                <script>
+                    // Static navigation observation only; webhook payment truth is unchanged.
+                    try {
+                        if (window.opener) window.opener.postMessage('omi:checkout:client_navigation_completed', '*');
+                    } catch (_) { /* Optional observer; the return page remains usable. */ }
+                </script>
             </body>
         </html>
     """)
@@ -1955,6 +1961,12 @@ def stripe_cancel():
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
                 <h1>Payment Cancelled</h1>
                 <p>Your payment process was cancelled. You can return to the app.</p>
+                <script>
+                    // Static navigation observation only; webhook payment truth is unchanged.
+                    try {
+                        if (window.opener) window.opener.postMessage('omi:checkout:cancelled', '*');
+                    } catch (_) { /* Optional observer; the return page remains usable. */ }
+                </script>
             </body>
         </html>
     """)

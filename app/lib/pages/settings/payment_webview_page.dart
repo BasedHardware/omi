@@ -13,8 +13,17 @@ class PaymentWebViewPage extends StatefulWidget {
   final String checkoutUrl;
   final String? title;
   final VoidCallback? onLoaded;
+  final VoidCallback? onCheckoutOpened;
+  final VoidCallback? onCheckoutCompleted;
 
-  const PaymentWebViewPage({super.key, required this.checkoutUrl, this.title, this.onLoaded});
+  const PaymentWebViewPage({
+    super.key,
+    required this.checkoutUrl,
+    this.title,
+    this.onLoaded,
+    this.onCheckoutOpened,
+    this.onCheckoutCompleted,
+  });
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPageState();
@@ -25,6 +34,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   bool _isLoading = true;
   bool _hasError = false;
   bool _reportedLoaded = false;
+  bool _checkoutFinished = false;
   final _failedHttpUrls = <String>{};
 
   @override
@@ -76,11 +86,23 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
           },
           onNavigationRequest: (NavigationRequest request) {
             if (request.url.startsWith(successUrl)) {
+              if (_checkoutFinished) return NavigationDecision.prevent;
+              _checkoutFinished = true;
               Logger.debug('Payment successful, closing webview');
+              // Success navigation is a client observation, not accepted payment.
+              if (mounted &&
+                  request.isMainFrame &&
+                  !_hasError &&
+                  context.read<UsageProvider>().showSubscriptionUI &&
+                  _verifiedSuccess(request.url, successUrl)) {
+                widget.onCheckoutCompleted?.call();
+              }
               Navigator.of(context).pop(true); // Pop with success result
               return NavigationDecision.prevent;
             }
             if (request.url.startsWith(cancelUrl)) {
+              if (_checkoutFinished) return NavigationDecision.prevent;
+              _checkoutFinished = true;
               Logger.debug('Payment cancelled, closing webview');
               Navigator.of(context).pop(false); // Pop with cancel result
               return NavigationDecision.prevent;
@@ -90,6 +112,22 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
         ),
       )
       ..loadRequest(Uri.parse(widget.checkoutUrl));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && context.read<UsageProvider>().showSubscriptionUI) widget.onCheckoutOpened?.call();
+    });
+  }
+
+  // Observation-only: legacy route resolution above remains unchanged.
+  bool _verifiedSuccess(String raw, String configuredSuccess) {
+    final actual = Uri.tryParse(raw);
+    final expected = Uri.tryParse(configuredSuccess);
+    if (actual == null || expected == null || !actual.hasAuthority || !expected.hasAuthority) return false;
+    if (actual.authority.contains('@') || expected.authority.contains('@')) return false;
+    return (expected.scheme == 'https' || expected.scheme == 'http') &&
+        actual.scheme == expected.scheme &&
+        actual.host == expected.host &&
+        actual.port == expected.port &&
+        actual.path == expected.path;
   }
 
   Future<void> _retry() async {
@@ -116,26 +154,33 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
       return const SizedBox.shrink();
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        // A pushed page: back, not close. It reports "not completed" like the cancel URL does.
-        leading: OmiBackButton(onPressed: () => Navigator.of(context).pop(false)),
-        title: Text(widget.title ?? context.l10n.completeYourUpgrade),
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_hasError)
-            Positioned.fill(
-              child: ColoredBox(
-                color: OmiColors.surface0,
-                child: OmiErrorState(message: context.l10n.couldNotLoadCheckout, onRetry: _retry),
-              ),
-            )
-          else if (_isLoading)
-            const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
-        ],
-      ),
-    );
+    return PopScope(
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) _checkoutFinished = true;
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            // A pushed page: back, not close. It reports "not completed" like the cancel URL does.
+            leading: OmiBackButton(onPressed: () {
+              _checkoutFinished = true;
+              Navigator.of(context).pop(false);
+            }),
+            title: Text(widget.title ?? context.l10n.completeYourUpgrade),
+          ),
+          body: Stack(
+            children: [
+              WebViewWidget(controller: _controller),
+              if (_hasError)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: OmiColors.surface0,
+                    child: OmiErrorState(message: context.l10n.couldNotLoadCheckout, onRetry: _retry),
+                  ),
+                )
+              else if (_isLoading)
+                const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
+            ],
+          ),
+        ));
   }
 }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { trackPurchaseEvent } from '@/lib/analytics/subscriptionFunnel';
 import { parseStorefront, type PlanStorefront } from '@/lib/planStorefront';
 
 const api = vi.hoisted(() => ({
@@ -13,6 +14,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock('@/lib/api', () => api);
 vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
+  trackPurchaseEvent: vi.fn(),
+  openPurchaseCheckout: vi.fn((url) => window.open(url, '_blank')),
   trackPaywallOpened: vi.fn(),
   trackUpgradePlanSelected: vi.fn(),
   trackUpgradeSucceeded: vi.fn(),
@@ -26,6 +29,7 @@ import {
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
+  vi.mocked(trackPurchaseEvent).mockClear();
   vi.stubGlobal('open', vi.fn());
   window.localStorage.clear();
 });
@@ -256,5 +260,110 @@ describe('BudgetUpsellBanner', () => {
     await waitFor(() =>
       expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_year'),
     );
+  });
+});
+
+const views = () =>
+  vi.mocked(trackPurchaseEvent).mock.calls.filter(([id]) => id === 'paywallViewed');
+describe('StorefrontPanel rendered purchase exposure', () => {
+  it('waits through loading then counts once when selectable offers commit', async () => {
+    let release!: (data: PlanStorefront) => void;
+    api.getStorefront.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const tree = render(
+      <StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />,
+    );
+    expect(views()).toHaveLength(0);
+    release(golden('single_plan_omi_pro'));
+    await screen.findByRole('button', { name: 'Get Unlimited' });
+    await waitFor(() => expect(views()).toHaveLength(1));
+    tree.rerender(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    expect(views()).toHaveLength(1);
+  });
+  it.each(['empty', 'hidden', 'legacy', 'blocked', 'invalid-price', 'unknown-live-plan'])(
+    'no exposure for %s catalogs',
+    (kind) => {
+      let data = golden(kind === 'legacy' ? 'legacy_neo' : 'single_plan_omi_pro');
+      if (kind === 'empty') data = { ...data, tiers: [] };
+      if (kind === 'hidden') data = { ...data, showSubscriptionUi: false };
+      if (kind === 'blocked')
+        data = {
+          ...data,
+          tiers: data.tiers.map((tier) => ({ ...tier, blockedLine: 'Unavailable' })),
+        };
+      if (kind === 'invalid-price')
+        data = {
+          ...data,
+          tiers: data.tiers.map((tier) => ({
+            ...tier,
+            prices: tier.prices.map((price) => ({ ...price, id: null })),
+          })),
+        };
+      render(
+        <StorefrontPanel
+          source="web_plans"
+          initial={data}
+          livePlanId={kind === 'unknown-live-plan' ? 'future_plan' : undefined}
+          onSubscriptionUpdate={vi.fn()}
+        />,
+      );
+      expect(views()).toHaveLength(0);
+    },
+  );
+  it('failed load does not consume exposure before retry returns offers', async () => {
+    api.getStorefront
+      .mockRejectedValueOnce(new Error('private'))
+      .mockResolvedValue(golden('single_plan_omi_pro'));
+    render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(views()).toHaveLength(0);
+    fireEvent.click(retry);
+    await screen.findByRole('button', { name: 'Get Unlimited' });
+    await waitFor(() => expect(views()).toHaveLength(1));
+  });
+  it('collapsed purchasable tiers do not count until expanded; chip changes do not duplicate', async () => {
+    const data = golden('single_plan_omi_pro');
+    data.tiers = data.tiers.map((tier) => ({ ...tier, recommended: false }));
+    render(
+      <StorefrontPanel
+        source="web_plans"
+        initial={data}
+        onSubscriptionUpdate={vi.fn()}
+      />,
+    );
+    expect(views()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'See all plans' }));
+    await waitFor(() => expect(views()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 3 months free' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See all plans' }));
+    fireEvent.click(screen.getByRole('button', { name: 'See all plans' }));
+    expect(views()).toHaveLength(1);
+  });
+  it('only a price for the selected interval counts, then latches through interval changes', async () => {
+    const data = golden('single_plan_omi_pro');
+    data.tiers = data.tiers.map((tier) => ({
+      ...tier,
+      prices: tier.prices.map((price) => ({
+        ...price,
+        id: price.interval === 'month' ? null : price.id,
+      })),
+    }));
+    render(
+      <StorefrontPanel
+        source="web_plans"
+        initial={data}
+        onSubscriptionUpdate={vi.fn()}
+      />,
+    );
+    expect(views()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 3 months free' }));
+    await waitFor(() => expect(views()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 3 months free' }));
+    expect(views()).toHaveLength(1);
   });
 });

@@ -511,6 +511,7 @@ void main() {
       'Upgrade Succeeded Attributed',
       'Upgrade Succeeded',
       'Paywall Opened',
+      'Subscription Upgrade Tapped',
       'Upgrade Plan Selected',
     ]);
     expect(adapter.events.first.properties, {
@@ -539,6 +540,9 @@ void main() {
       'app_version': '2.3.4',
       'app_build': '567',
     });
+    // The new observation and retained legacy event share the same closed,
+    // content-free dimensions at the analytics delivery boundary.
+    expect(adapter.events[5].properties, adapter.events[4].properties);
   });
 }
 

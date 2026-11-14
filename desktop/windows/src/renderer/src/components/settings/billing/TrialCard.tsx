@@ -1,3 +1,6 @@
+import { useEffect, useRef } from 'react'
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
+import { trackPurchaseEvent } from '../../../lib/analytics'
 import { Clock, AlertCircle, Check } from 'lucide-react'
 import { BillingCard } from './BillingCard'
 import { cn } from '../../../lib/utils'
@@ -51,6 +54,11 @@ export function TrialCard(props: {
   onViewPlans: () => void
 }): React.JSX.Element {
   const { trial, onViewPlans } = props
+  const observation = useRef(new PurchaseObservation(trackPurchaseEvent))
+  useEffect(() => {
+    const raw = { allowance_kind: 'trial', surface: 'settings', reason: 'trial_expired' }
+    observation.current.allowance(trial.trial_expired === true, raw)
+  }, [trial.trial_expired])
 
   if (trial.trial_expired) {
     return (
@@ -60,7 +68,17 @@ export function TrialCard(props: {
         title="Trial Ended"
         subtitle="Upgrade to keep unlimited access"
         trailing={
-          <button onClick={onViewPlans} className="btn-primary">
+          <button
+            onClick={() => {
+              trackPurchaseEvent('upgradeTapped', {
+                plan: 'unknown',
+                billing_interval: 'unknown',
+                source: 'windows_billing'
+              })
+              onViewPlans()
+            }}
+            className="btn-primary"
+          >
             View Plans
           </button>
         }

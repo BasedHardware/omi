@@ -564,6 +564,7 @@ extension AppState {
         if isPaywalled { isPaywalled = false }
         break
       }
+      FloatingBarUsageLimiter.shared.observeTranscriptionAllowanceReached(true)
       triggerUsageLimitPopup(reason: "transcription")
       // Hard-stop client-side capture so the mic LED and screen-recording
       // indicator actually turn off. Without this, popup shows but the user

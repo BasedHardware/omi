@@ -1,3 +1,4 @@
+import { trackPurchaseEvent } from './analytics'
 import type { LiveStatus } from './liveConversation'
 import { isQuotaExhaustedMessage } from './transcriptionClient'
 import { hasTranscriptionByokCached } from './byokKeys'
@@ -14,7 +15,26 @@ export function onUsageLimit(cb: (reason: UsageLimitReason | null) => void): () 
   return signal.subscribe(cb)
 }
 
-export function showUsageLimit(reason: UsageLimitReason): void {
+const reached = new Set<UsageLimitReason>()
+let authoritativePresentation = false
+export function usageLimitIsAuthoritative(): boolean {
+  return authoritativePresentation
+}
+export function showUsageLimit(reason: UsageLimitReason, authoritative = reason !== 'chat'): void {
+  authoritativePresentation = authoritative
+  if (authoritative && reason !== 'chat' && !reached.has(reason)) {
+    reached.add(reason)
+    trackPurchaseEvent('allowanceReached', {
+      allowance_kind: reason === 'trial_expired' ? 'trial' : reason,
+      surface: reason === 'transcription' ? 'capture' : 'chat',
+      reason:
+        reason === 'trial_expired'
+          ? 'trial_expired'
+          : reason === 'transcription'
+            ? 'plan_allowance_exhausted'
+            : 'chat_quota_exhausted'
+    })
+  }
   signal.set(reason)
 }
 
@@ -25,6 +45,7 @@ export function dismissUsageLimit(): void {
 /** Test-only: reset the once-per-session guards. */
 export function __resetUsageLimitSession(): void {
   transcriptionQuotaPopupShown = false
+  reached.clear()
   signal.set(null)
 }
 
@@ -51,6 +72,7 @@ let transcriptionQuotaPopupShown = false
  */
 export function maybeTriggerTranscriptionQuotaPopup(status: LiveStatus, error?: string): boolean {
   if (status !== 'error') {
+    reached.delete('transcription')
     // Recovery (connecting/live/idle) re-arms the latch for the next exhaustion.
     transcriptionQuotaPopupShown = false
     return false
