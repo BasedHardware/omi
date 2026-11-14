@@ -68,7 +68,12 @@ def test_batch_query_selects_both_caller_prefixes_and_uses_real_counters():
 
 def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment():
     nodes = RULES[STEP]["data"]
-    hourly = "last_over_time((avg_over_time(sum(firestore_googleapis_com:document_read_count)[1h:1m]) * 60)[1h:1h])"
+    metric = "firestore_googleapis_com:document_read_count"
+    coverage = (
+        "(min(count_over_time(" + metric + "[1h])) >= 58) and "
+        "(count(count by (type) (count_over_time(" + metric + "[1h]))) == 3)"
+    )
+    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h])) and " + coverage + ")[1h:1h])"
     assert nodes[0]["model"]["expr"] == hourly
     historical = nodes[1]["model"]["expr"]
     expected = (
@@ -79,7 +84,7 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
         + ")"
     )
     union = expected[len("quantile(0.5, ") : -1]
-    assert historical == "(" + expected + ") and (count(" + union + ") == 7)"
+    assert historical == "(" + expected + ") and (count(" + union + ") == 7) and (" + expected + " > 0)"
     assert RULES[STEP]["noDataState"] == "Alerting"
     assert "[7d:1d]" not in historical
     assert "increase(" not in hourly

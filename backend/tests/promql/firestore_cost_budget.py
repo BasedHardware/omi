@@ -58,10 +58,12 @@ def step_case(name, elevated, expected):
         "name": name,
         "interval": "1m",
         "input_series": [
+            {"series": 'firestore_googleapis_com:document_read_count{type="LOOKUP"}', "values": "0x11519"},
+            {"series": 'firestore_googleapis_com:document_read_count{type="NOT_FOUND"}', "values": "0x11519"},
             {
                 "series": 'firestore_googleapis_com:document_read_count{type="QUERY"}',
                 "values": " ".join([daily] * 7 + [final]),
-            }
+            },
         ],
         "alert_rule_test": [
             {"eval_time": "7d16h30m", "alertname": "FirestoreBilledReadsStep", "exp_alerts": [{}] if expected else []}
@@ -86,6 +88,34 @@ def main():
         step_case("full hour step sustained", True, True),
     ]
     median = rules[-1]["data"][1]["model"]["expr"]
+    hourly = rules[-1]["data"][0]["model"]["expr"]
+    for name, values, query, expected in (
+        ("one missing minute is not extrapolated", "100x29 _ 100x29", hourly, [{"labels": "{}", "value": 5900}]),
+        (
+            "58 raw minutes accepted without extrapolation",
+            "100x28 _x1 100x29",
+            hourly,
+            [{"labels": "{}", "value": 5800}],
+        ),
+        ("57 raw minutes reject current hour", "100x27 _x2 100x29", hourly, []),
+        ("missing baseline minutes reject median", "100x27 _x2 100x29", median, []),
+        ("zero baseline rejects division", "0x59", median, []),
+    ):
+        tests.append(
+            {
+                "name": name,
+                "interval": "1m",
+                "input_series": [
+                    {
+                        "series": 'firestore_googleapis_com:document_read_count{type="QUERY"}',
+                        "values": " ".join([values] * 192),
+                    },
+                    {"series": 'firestore_googleapis_com:document_read_count{type="LOOKUP"}', "values": "0x11519"},
+                    {"series": 'firestore_googleapis_com:document_read_count{type="NOT_FOUND"}', "values": "0x11519"},
+                ],
+                "promql_expr_test": [{"expr": query, "eval_time": "7d16h30m", "exp_samples": expected}],
+            }
+        )
     for name, values in (
         ("one missing baseline day", " ".join(["100x1439"] * 3 + ["_x1439"] + ["100x1439"] * 4)),
         ("all baseline days missing", "_x10079 100x1439"),
@@ -95,7 +125,9 @@ def main():
                 "name": name,
                 "interval": "1m",
                 "input_series": [
-                    {"series": 'firestore_googleapis_com:document_read_count{type="QUERY"}', "values": values}
+                    {"series": 'firestore_googleapis_com:document_read_count{type="LOOKUP"}', "values": "0x11519"},
+                    {"series": 'firestore_googleapis_com:document_read_count{type="NOT_FOUND"}', "values": "0x11519"},
+                    {"series": 'firestore_googleapis_com:document_read_count{type="QUERY"}', "values": values},
                 ],
                 "promql_expr_test": [{"expr": median, "eval_time": "7d16h30m", "exp_samples": []}],
             }
@@ -108,7 +140,7 @@ def main():
                     "groups": [
                         {
                             "name": "firestore-cost",
-                            "interval": "1m",
+                            "interval": "5m",
                             "rules": [
                                 {"alert": rule["title"], "expr": expression(rule), "for": rule["for"]} for rule in rules
                             ],
@@ -121,7 +153,7 @@ def main():
             yaml.safe_dump(
                 {
                     "rule_files": ["rules.yml"],
-                    "evaluation_interval": "1m",
+                    "evaluation_interval": "5m",
                     "tests": tests,
                 }
             )

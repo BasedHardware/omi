@@ -197,13 +197,19 @@ on the previous seven days for 2h. First query: compare the caller query above
 against `[1h] offset 1d`, then break native reads down by `type`. Owner: Firestore
 cost owner, SCA-2173. Remove the batch caller filter for this fleet-wide step.
 The native metric is a per-minute DELTA exposed as a gauge,
-not a counter: the rule uses an hourly mean times 60, never `increase()` on it.
+not a counter: the rule sums raw per-60s samples with `sum(sum_over_time(...[1h]))`,
+never `increase()` or an extrapolated mean times 60. Each selected hour requires
+all three read types and at least 58 raw samples for every series. Up to two
+missing minutes are tolerated without inventing reads; 57 or fewer samples
+make that hour unavailable. Coverage is checked before hourly alignment, on
+the raw series rather than a resampled subquery that could conceal a gap.
 An hourly-aligned subquery and `last_over_time` select the last full hour; seven
 explicit daily offsets with distinct `day` labels feed `quantile(0.5, ...)`.
 This avoids a `[7d:1d]` subquery, whose daily alignment samples UTC midnight rather
 than the current hour. Only the two-hour pending duration is continuous; the
 step input changes on UTC hour boundaries. The median requires all seven daily
-samples (`count(...) == 7`); partial history is never accepted as a baseline.
+samples (`count(...) == 7`) and a strictly positive median; partial history or
+a zero median is never used as a divisor.
 Missing history makes the median NoData, which this rule maps to Alerting after
 its pending duration, routed as the same agent-tier ticket. The existing
 unattributed-reads blind rule additionally covers missing/stale native data.
