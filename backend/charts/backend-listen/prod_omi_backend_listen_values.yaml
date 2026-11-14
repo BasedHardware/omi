@@ -136,6 +136,10 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
+  - name: UNLIMITED_V2_TX_HOURS_CAP_ENABLED
+    value: "false"
+  - name: UNLIMITED_V2_TX_HOURS_CAP_HOURS
+    value: "8"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED

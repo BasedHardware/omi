@@ -877,7 +877,7 @@ class ListenSessionRuntime:
         credit_admission = (
             admission
             if admission is not None
-            and getattr(admission, 'reason', None) != 'legacy_dispatch_disabled'
+            and getattr(admission, 'reason', None) not in {'legacy_dispatch_disabled', 'dispatch_scope_disabled'}
             and (admission.omi_selected or not customer_funded(self.stt_service))
             else None
         )

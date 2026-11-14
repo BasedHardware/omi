@@ -32,6 +32,8 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -881,6 +883,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -1220,6 +1224,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -1549,6 +1555,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -1868,6 +1876,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -2422,6 +2432,8 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -3397,6 +3409,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -3866,6 +3880,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -4332,6 +4348,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -4770,6 +4788,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_TX_HOURS_CAP_HOURS: {value: '8', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:

@@ -31,6 +31,7 @@ from utils.other import endpoints as auth
 from utils.analytics import record_usage
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.subscription import resolve_transcription_allowance, TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+from utils import unlimited_v2_day_cap
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import create_named_task
 from utils.stt import duration_probe
@@ -113,6 +114,10 @@ async def _admit(uid: str, source: str | None, seconds: int) -> None:
     allowance = await run_blocking(db_executor, resolve_transcription_allowance, uid, source=source, byok_active=False)
     if allowance.reason in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS:
         raise HTTPException(status_code=503, detail='Transcription allowance temporarily unavailable')
+    # The default-off unlimited_v2 user-day cap answers exactly like an
+    # exhausted allowance, so clients keep the existing 402 contract.
+    if await run_blocking(db_executor, unlimited_v2_day_cap.refuses, uid, plane='http'):
+        raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
     if not allowance.managed or (allowance.remaining_seconds is not None and seconds > allowance.remaining_seconds):
         raise HTTPException(status_code=402, detail='Transcription allowance exhausted')
 

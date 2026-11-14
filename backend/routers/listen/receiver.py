@@ -12,6 +12,7 @@ import uuid
 from config.stt_cap_dispatch import execution_admission_enabled as stt_cap_dispatch_enabled
 from config.stt_cap_dispatch import execution_admission_configured as stt_cap_dispatch_configured
 from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppress_socket_audio
+from utils import unlimited_v2_day_cap
 from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
@@ -290,9 +291,15 @@ class ListenReceiver(ReplayFilterMixin):
         self.soniox_idle_budget = SonioxIdleBudget(uid_provider=lambda: host.request.uid)
         self.host = host
         self.cap_admission: LiveAdmission | None = None
-        if stt_cap_dispatch_configured() and not host.use_custom_stt:
-            if stt_cap_dispatch_enabled(host.request.uid, 'live'):
-                self.cap_admission = LiveAdmission(host.request.uid, host.request.source)
+        # The default-off unlimited_v2 user-day cap needs the same live
+        # admission object so a capped session pauses at the provider instead
+        # of being terminated. Non-cap plans keep their existing path:
+        # funded_allowance answers dispatch_scope_disabled for them.
+        if not host.use_custom_stt and (
+            (stt_cap_dispatch_configured() and stt_cap_dispatch_enabled(host.request.uid, 'live'))
+            or unlimited_v2_day_cap.cap_enabled()
+        ):
+            self.cap_admission = LiveAdmission(host.request.uid, host.request.source)
         self.live_hold = LiveHeldAudio(host) if self.cap_admission is not None else None
         self._cap_init_lock = asyncio.Lock()
         self._cap_hold_stop = asyncio.Event()

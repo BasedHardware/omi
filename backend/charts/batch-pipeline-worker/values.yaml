@@ -85,6 +85,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
+  # Default-off unlimited_v2 daily transcribed-hours cap (see
+  # utils/unlimited_v2_day_cap.py). false restores current behavior exactly.
+  unlimitedV2TxHoursCapEnabled: false
+  unlimitedV2TxHoursCapHours: "8"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""

@@ -28,6 +28,7 @@ from utils.observability.stt_cap_dispatch import (
 )
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
+from utils import unlimited_v2_day_cap
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def customer_funded(provider):
 _UNRESOLVED = object()
 
 
-def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
+def _funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
     from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
@@ -82,6 +83,16 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
     if subscription is not _UNRESOLVED:
         kwargs['subscription'] = subscription
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
+
+
+def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
+    """The funded-STT allowance, then the default-off unlimited_v2 user-day cap.
+
+    The day cap is evaluated on every managed answer, independent of the legacy
+    dispatch scope, so the same refusal reaches live, sync and batch admission.
+    """
+    allowance = _funded_allowance(uid, source=source, usage_cache=usage_cache, subscription=subscription, lane=lane)
+    return unlimited_v2_day_cap.refuse(uid, allowance, plane=lane or 'live')
 
 
 class CapAllowanceDenied(Exception):
@@ -171,9 +182,13 @@ class LiveAdmission:
             return True
         if self.remaining_units is None:
             # A known non-ladder account needs only a long membership refresh
-            # when legacy dispatch is off. Invalidation still forces a read.
-            # Enabled legacy dispatch retains main's per-flush refresh.
-            return self.reason != 'legacy_dispatch_disabled' or time.monotonic() - self.refreshed_at >= 900
+            # when legacy dispatch is off (or this host is outside the funded
+            # dispatch scope, e.g. the unlimited_v2 day cap alone). Invalidation
+            # still forces a read. Enabled legacy dispatch retains main's
+            # per-flush refresh.
+            if self.reason in {'legacy_dispatch_disabled', 'dispatch_scope_disabled'}:
+                return time.monotonic() - self.refreshed_at >= 900
+            return True
         near = self.remaining_units <= 120 * _units_per_second() or (
             self.budget_units is not None and self.remaining_units <= self.budget_units * 0.1
         )

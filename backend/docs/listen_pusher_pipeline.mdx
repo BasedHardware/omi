@@ -748,6 +748,23 @@ false/0/off uses generic finalize without reopening held providers. That emergen
 mode can flush sub-second speech fragments earlier because it omits the ordinary
 speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
 local-send phase/exception attribution and the listen-train acceptance checks.
+
+### unlimited_v2 daily transcribed-hours cap
+
+`UNLIMITED_V2_TX_HOURS_CAP_ENABLED` (default `false`) and
+`UNLIMITED_V2_TX_HOURS_CAP_HOURS` (default `8`) are a separate, default-off
+admission cap for the `unlimited_v2` plan only. It counts the
+`transcription_seconds` already recorded on `users/{uid}/hourly_usage` for the
+current UTC user-day — the same basis `unit_cost_user_day.tx_sec` uses — and
+refuses managed transcription once that day reached the cap level. The kill
+switch is the boolean; an unparseable or non-positive hours value keeps the
+default level. Above the cap the answer is identical to an exhausted allowance:
+live admission pauses and holds audio, offline segments are durably held, and
+`POST /v1/stt/transcribe` keeps its existing 402. Free, Plus and the deprecated
+paid tiers are unchanged in both modes, and an unreadable plan or meter read
+admits transcription. Deployment, readback and activation:
+[runbook](runbooks/unlimited-v2-day-cap.md); rollout note:
+[change note](listen_pusher_pipeline/changes/2026-11-14-unlimited-v2-day-cap.md).
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
