@@ -4,11 +4,12 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
+from utils.batch_pipeline.projection_writers import customer_writer, persist_playback
+
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from functools import wraps
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -406,16 +407,6 @@ def record_speech(binding, accounting: dict, now: float) -> None:
             steps.append(accounting['seconds'])
             times.append(now)
         record_speech_steps(binding, accounting['source'], steps, times, now)
-
-
-def customer_writer(method):
-    @wraps(method)
-    def scoped(self, *args, **kwargs):
-        # Context only: no SQL pool slot or owner lock spans follow-up I/O.
-        with self.store.writer_scope():
-            return method(self, *args, **kwargs)
-
-    return scoped
 
 
 class Projector:
@@ -1190,79 +1181,7 @@ class Projector:
 
     @customer_writer
     def persist_playback(self, item: WorkItem, binding, canonical: str, receipt: dict):
-        if self.fetch_audio is None:
-            raise ProjectionBlocked('private playback requires ArtifactStore.fetch_audio')
-        from database.conversations import decode_transcript_segments_verified
-
-        # Reconstruct only this input's retained ranges from the stored legacy
-        # transcript. Never put transcripts or unbounded survivor IDs in receipts.
-        row = (
-            self.store.client.collection('users')
-            .document(binding.owner_id)
-            .collection('conversations')
-            .document(canonical)
-            .get()
-            .to_dict()
-            or {}
-        )
-        if not row or row.get('deleted'):
-            raise ProjectionBlocked('playback target deleted')
-        segments = decode_transcript_segments_verified(
-            binding.owner_id,
-            row.get('transcript_segments'),
-            bool(row.get('transcript_segments_compressed')),
-        )
-        origin = row['started_at'].timestamp()
-        capture_at = receipt.get('capture_at') or item.capture_at
-        scope = receipt.get('speaker_scope') or f'sync:{item.segment_id}'
-        survivors = []
-        for segment in segments:
-            if segment.get('speaker_id_scope') == scope:
-                stamp = origin + segment['start']
-                if scope.startswith('final:batch:') and not (
-                    capture_at <= stamp < (receipt.get('audio_end') or item.capture_at + item.duration_seconds)
-                ):
-                    continue
-                survivors.append(
-                    {
-                        **segment,
-                        'timestamp': stamp,
-                        'start': stamp - capture_at,
-                        'end': origin + segment['end'] - capture_at,
-                    }
-                )
-        if not survivors:
-            return
-        try:
-            audio = self.fetch_audio(item)
-        except NotFound:  # Transcript is projected; close like a no-survivor input.
-            return artifact_missing.record('playback')
-        audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
-        if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
-            import io
-            from pydub import AudioSegment
-
-            # Match legacy retrieve_vad_segments slicing before full/partial
-            # audio policy. Never copy a whole multipart capture to each row.
-            decoded = AudioSegment.from_wav(io.BytesIO(audio))
-            sliced = decoded[(capture_at - item.capture_at) * 1000 : (audio_end - item.capture_at) * 1000]
-            output = io.BytesIO()
-            sliced.export(output, format='wav')
-            audio = output.getvalue()
-        # Deliberately share the legacy audio persistence and partial-overlap
-        # policy; its stable chunk timestamps make replay an overwrite.
-        from utils.sync.merge_audio import store_intake_audio
-
-        store_intake_audio(
-            binding.owner_id,
-            capture_at,
-            audio,
-            binding.data_protection_level,
-            survivors,
-            receipt['incoming_segment_count'],
-            True,
-            canonical,
-        )
+        return persist_playback(self, item, binding, canonical, receipt)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         return self.store.status(uid, content_id)
