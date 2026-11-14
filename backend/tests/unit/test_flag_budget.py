@@ -49,6 +49,10 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'RECORD_FRESH_MERGE_ENABLED',
+    'RECORD_NOTES_EAGER_ENABLED',
+    'RECORD_FOLLOWUP_WAKE_ENABLED',
+    'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
@@ -298,6 +302,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
+        elif name.startswith('RECORD_'):
+            assert entry['owner'] == 'q12-post-seal'
+            assert entry['review_by'] == '2026-12-14'
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')

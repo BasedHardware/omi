@@ -1446,3 +1446,61 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
         assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['backend-listen', 'batch-pipeline-worker'])
+@pytest.mark.parametrize('disabled', [False, True])
+def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, disabled, tmp_path):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    stem = 'batch-pipeline-worker' if chart == 'batch-pipeline-worker' else 'backend_listen'
+    values = chart_dir / f'{environment}_omi_{stem}_values.yaml'
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    command = [
+        'helm',
+        'template',
+        f'{environment}-{chart}',
+        str(chart_dir),
+        '-f',
+        str(values),
+        '--set-string',
+        'image.digest=sha256:' + 'a' * 64,
+        '--set',
+        'image.tag=',
+        '--set',
+        'image.pullPolicy=IfNotPresent',
+    ]
+    if chart == 'batch-pipeline-worker':
+        command += ['--set', 'enabled=true']
+        command += ['--namespace', f'{environment}-omi-backend']
+        if disabled:
+            for key in flags:
+                command += ['--set', f'worker.{key}=false']
+    elif disabled:
+        source = yaml.safe_load(values.read_text())
+        for entry in source['env']:
+            if entry['name'] in flags:
+                entry['value'] = 'false'
+        override = tmp_path / 'disabled.yaml'
+        override.write_text(yaml.safe_dump({'env': source['env']}))
+        command += ['-f', str(override)]
+    result = subprocess.run(command, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert deployments
+    for deployment in deployments:
+        if (
+            chart == 'batch-pipeline-worker'
+            and deployment['spec']['template']['metadata']['labels'].get('app.kubernetes.io/name')
+            != 'batch-pipeline-worker'
+        ):
+            continue  # Repair/sweeper children do not execute these paths.
+        containers = deployment['spec']['template']['spec']['containers']
+        env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
+        for key in flags:
+            assert env[key] == ('false' if disabled else 'true')

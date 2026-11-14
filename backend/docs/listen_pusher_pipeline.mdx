@@ -9790,13 +9790,42 @@ Native record admission persists `record_finished_at` from the already-read
 conversation when its end is no more than 1,800 seconds old and is not in the
 future. The fresh-merge switch uses that recording end for every sibling's
 `fresh_capture` class, retaining the existing fresh-first ordering protocol.
-Recent, fresh, non-partial native records enqueue enrichment at projection's
-current time with `min` coalescing; older, unstamped, partial and upload work
-retain the settle window. Consumer processing holds and all privacy, custody,
-revision, lease and sibling fences still apply. Successfully projected recent
+The fresh-first merge path never skips an uncommitted earlier sibling in the
+same immutable native-record binding, including after the head wait expires.
+Recent, fresh, non-partial native records mark per-unit notes receipts without
+creating per-unit outbox revisions. The content-completion transaction checks
+all sibling receipts, then creates one durable notes refresh for the complete
+recording. It uses current time with `min` coalescing only when the recording's
+producer barrier and processing holds are clear; otherwise it retains the
+settle/coalescing policy. Existing outbox sync/merge holds cannot be shortened.
+An in-flight flag change or a recording aging out still delivers the durable
+notes obligation through normal settle. Completion replay creates no new
+refresh. Older, unstamped, partial and upload work retain their existing policy.
+All privacy, custody, revision and lease fences still apply. Successfully projected recent
 single-unit records wake the existing follow-up slots immediately. A concurrent
 seal due-now wake survives an earlier intake attempt's stale barrier refusal.
 No polling cadence or queue capacity changes. Disabling a switch restores its
 previous scheduling behavior; already-stamped admission metadata is retained.
 
 [Measurement, costs and verification](listen_pusher_pipeline/changes/2026-11-14-record-post-seal-latency.md).
+
+All four controls have literal default-on bindings on the dev/prod Cloud Run
+`backend`, `backend-integration`, `backend-sync`, and `backend-sync-backfill`
+services and GKE `backend-listen`, plus overridable worker-chart values on the
+batch worker. They are listen-only in the pusher cohost contract: pusher retains
+and seals audio, and does not execute these batch scheduling paths. A worker
+running the sibling guard is required before activating fresh stamping on CPU
+hosts. This source change does not change or deploy a GPU worker image.
+
+Stage timestamps reuse existing writes: `record_sealed_at` on the conversation
+at actual barrier closure (pusher/repair/orphan); `record_intake_claimed_at` on
+the pending claim and every admitted sibling; `record_ready_at` at admission
+after staging; `record_first_leased_at` at the first GPU lease. No historical
+seal times are inferred. Retry leases preserve the first lease timestamp.
+Instrumentation adds zero Firestore reads and zero document writes. The Home
+list field projection includes the existing `notes_written_at` timestamp.
+`omi_record_notes_to_home_read_seconds` records a Home-ready row's first
+observation per process/notes revision (bounded local dedupe, 8,192 entries).
+It measures backend row observation, including time until a Home list request;
+it cannot establish phone rendering or a globally unique first observation.
+The metric has no account or conversation labels and performs no database IO.

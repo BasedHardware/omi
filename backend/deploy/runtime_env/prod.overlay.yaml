@@ -48,6 +48,10 @@ overlay:
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
+        RECORD_FRESH_MERGE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -551,6 +555,10 @@ overlay:
             version: latest
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          RECORD_FRESH_MERGE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -917,6 +925,10 @@ overlay:
             version: latest
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          RECORD_FRESH_MERGE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
@@ -1320,6 +1332,10 @@ overlay:
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          RECORD_FRESH_MERGE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -1672,6 +1688,10 @@ overlay:
         - HOSTED_DIARIZATION_API_URL
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          RECORD_FRESH_MERGE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}

@@ -101,6 +101,14 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: RECORD_FRESH_MERGE_ENABLED
+    value: 'true'
+  - name: RECORD_NOTES_EAGER_ENABLED
+    value: 'true'
+  - name: RECORD_FOLLOWUP_WAKE_ENABLED
+    value: 'true'
+  - name: RECORD_SEAL_WAKE_PRESERVED_ENABLED
+    value: 'true'
   - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
     value: "true"
   - name: SYNC_RECORD_COVERAGE_WAIT_MEMO

@@ -24,8 +24,12 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 285,
+  "count": 289,
   "names": {
+    "RECORD_FRESH_MERGE_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
+    "RECORD_NOTES_EAGER_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
+    "RECORD_FOLLOWUP_WAKE_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
+    "RECORD_SEAL_WAKE_PRESERVED_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_DELIVERED_SHARE_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-13", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},

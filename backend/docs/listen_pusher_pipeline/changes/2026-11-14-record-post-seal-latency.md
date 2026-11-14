@@ -11,7 +11,7 @@ Completed units took p50/p90 12.51/22.42 seconds from intake's start timestamp
 to GPU completion (192 units), 59.93/171.00 seconds from completion to ordered
 merge (166), and 24.37/43.27 seconds from merge to projection (165). These are
 unit-weighted completed-stage distributions, not an uncensored end-to-end SLO.
-Seal, intake-claim, actual-ready and first-lease timestamps are not persisted;
+At measurement time seal, intake-claim, actual-ready and first-lease timestamps were not persisted;
 those intervals cannot be separated honestly. `timing_store` identifies the
 audio clock domain, not a timing trace. The consenting owner had no recordings
 ending after the cutoff and no ledger transitions in that window.
@@ -73,3 +73,58 @@ Evidence and reproducible queries live in the owning workspace run
 `data/run-2026-11-15-quality-12h/q12j-evidence/`. Regression tests use synthetic
 accounts and strict transaction ordering; the owner-drain suite exercises the
 actual projection walk, bounded scheduler and follow-up handoff.
+
+
+## FIX-FIRST corrections (2026-11-14)
+
+The fresh head-wait bypass now checks all earlier siblings in the same immutable
+native-record binding inside the committing transaction. A later ready sibling
+cannot commit until each predecessor is committed; unrelated older stock can
+still be passed through the existing fresh-first machinery. The check covers
+both transactional and fallback fresh selection and recovery release.
+
+Notes dispatch is owned by recording completion, after every sibling projection
+receipt is ready. Admission stamps that durable owner on every recent full-record
+sibling; an unstamped in-flight binding gets a one-time ledger upgrade on its
+first eligible receipt. Aging out or changing the urgency switch cannot return
+later siblings to per-unit dispatch. Completion replay creates no new outbox
+revision. Applicable producer, processing, sync and merge holds retain settle.
+The normal one-conversation recording creates one automatic notes obligation,
+even with 128 units: zero extra notes runs from sibling count. A true size
+rollover into K distinct conversations requires K obligations, one per output,
+prepared before any outbox writes. Model/tool turns and provider/empty-output
+retries within those runs retain existing budgets; this change does not claim
+an absolute cap on all paid model calls for a recording.
+
+All four independent controls have rendered true/false bindings on both dev
+and prod CPU serving hosts and the dedicated worker chart. The helper flag
+budget adds four owned registry exceptions reviewed by 2026-12-14, leaving the
+seeded budget at 161. The worker must include the unconditional sibling guard
+before the fresh-classification change activates on CPU hosts; no GPU image
+change or deployment is authorized in this lane.
+
+New measurement fields and their write costs:
+
+| Field/metric | Existing operation | Additional reads | Additional document writes |
+| --- | --- | ---: | ---: |
+| `record_sealed_at` | Conversation closure patch on pusher, repair, orphan registration | 0 | 0 |
+| `record_intake_claimed_at` | Existing pending-job claim; copied to admitted siblings | 0 | 0 |
+| `record_ready_at` | Existing staged-unit admission write | 0 | 0 |
+| `record_first_leased_at` | Existing first GPU lease write | 0 | 0 |
+| `omi_record_notes_to_home_read_seconds` | Existing Home list row projection | 0 | 0 |
+
+Home uses the existing `notes_written_at` field in the same list projection.
+The histogram is first observation per process/revision with bounded local
+cache, not unique globally and not client screen paint. No synthetic historic
+seal timestamps are backfilled. Seal and claim may overlap if a seal lands
+while a claim is in flight; such samples are overlapping intervals.
+
+The sibling correctness guard adds at most i predecessor-job reads for unit i
+(zero for a single-unit capture); a full N-unit commit sequence has at most
+N(N-1)/2 such reads, excluding retries/refused probes. At N=128 this is 8,128
+reads, $0.00414528 at $0.51/million. Per-hour cost is $0.00000051 times the
+actual extra reads/hour, not a newly recurring poll. Refused later-unit probes
+stop at the first uncommitted predecessor. Notes completion replaces per-unit
+outbox mutations with one per canonical output. A legacy unstamped binding's
+one-time owner upgrade adds one ledger write, no read; new admissions add none.
+Instrumentation itself adds zero periodic reads/hour and zero document writes.

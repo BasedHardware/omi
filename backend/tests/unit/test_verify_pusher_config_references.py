@@ -505,3 +505,25 @@ def test_accepts_referenced_secret_key_from_key_only_output(monkeypatch, preflig
 
     monkeypatch.setattr(preflight.subprocess, "run", fake_run)
     assert preflight.verify("safe-ns", {("secret", "safe-name", "REQUIRED_KEY")}) == []
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_post_seal_controls_are_listen_only_rendered_bindings(environment, preflight):
+    root = SCRIPT.parents[2]
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    module = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    for key in flags:
+        assert key in module['LISTEN_ONLY_ALLOWED'][environment]
+    values = yaml.safe_load(
+        (root / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text()
+    )
+    listen = {entry['name']: entry.get('value') for entry in values['env']}
+    pusher = yaml.safe_load((root / f'backend/charts/pusher/{environment}_omi_pusher_values.yaml').read_text())
+    assert set(flags).isdisjoint(entry['name'] for entry in pusher['env'])
+    assert set(flags).isdisjoint(preflight.literal_pusher_values(preflight.rendered_pusher_deployment(environment)))
+    assert {key: listen[key] for key in flags} == dict.fromkeys(flags, 'true')
