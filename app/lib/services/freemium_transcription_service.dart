@@ -111,8 +111,45 @@ class FreemiumTranscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Find any downloaded Whisper model in the models directory
-  /// Returns the path to the first found model, preferring smaller models
+  /// Smaller models are faster and need less memory, so they win when nothing was chosen.
+  static const modelPriority = ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2'];
+
+  /// Picks the model to run out of the ones actually on disk.
+  ///
+  /// The model selected in settings wins; [modelPriority] is only the fallback. Without this, a
+  /// user who downloads `base` while an older `tiny` is still present silently runs `tiny`, so the
+  /// model picker on the transcription settings page appears to do nothing.
+  static String? chooseModelPath(
+    List<String> binPaths, {
+    String? preferredModel,
+    String? preferredPath,
+  }) {
+    if (binPaths.isEmpty) return null;
+
+    String basename(String path) => path.replaceAll('\\', '/').split('/').last.toLowerCase();
+
+    if (preferredPath != null && preferredPath.isNotEmpty) {
+      final wanted = basename(preferredPath);
+      for (final path in binPaths) {
+        if (basename(path) == wanted) return path;
+      }
+    }
+
+    final order = <String>[
+      if (preferredModel != null && preferredModel.isNotEmpty) preferredModel,
+      ...modelPriority,
+    ];
+    for (final name in order) {
+      final wanted = 'ggml-${name.toLowerCase()}.bin';
+      for (final path in binPaths) {
+        if (basename(path) == wanted) return path;
+      }
+    }
+
+    return binPaths.first;
+  }
+
+  /// Find the Whisper model to run in the models directory.
   Future<String?> _findDownloadedModelPath() async {
     try {
       final appDir = await getApplicationSupportDirectory();
@@ -122,29 +159,20 @@ class FreemiumTranscriptionService extends ChangeNotifier {
         return null;
       }
 
-      // Prefer smaller models (faster, less resource usage)
-      const modelPriority = ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2'];
-
       final files = await modelDir.list().toList();
       final binFiles = files.whereType<File>().where((f) => f.path.endsWith('.bin')).toList();
 
-      if (binFiles.isEmpty) {
-        return null;
-      }
+      // Only this provider's own saved config is a deliberate choice of whisper model.
+      final config = SharedPreferencesUtil().customSttConfig;
+      final chose = config.isEnabled && config.provider == SttProvider.onDeviceWhisper;
 
-      // Try to find by priority
-      for (final modelName in modelPriority) {
-        for (final file in binFiles) {
-          if (file.path.contains('ggml-$modelName.bin') && await file.exists()) {
-            Logger.debug('[Freemium] Found model: ${file.path}');
-            return file.path;
-          }
-        }
-      }
-
-      // Fallback to any .bin file
-      Logger.debug('[Freemium] Using fallback model: ${binFiles.first.path}');
-      return binFiles.first.path;
+      final path = chooseModelPath(
+        binFiles.map((file) => file.path).toList(),
+        preferredModel: chose ? config.model : null,
+        preferredPath: chose ? config.url : null,
+      );
+      if (path != null) Logger.debug('[Freemium] Using model: $path');
+      return path;
     } catch (e) {
       Logger.debug('[Freemium] Error finding model: $e');
     }

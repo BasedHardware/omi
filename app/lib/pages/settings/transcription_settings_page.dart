@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_request_credentials.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
@@ -274,13 +275,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _checkLocalModel() async {
     try {
       final appDir = await getApplicationSupportDirectory();
-      final modelName = _currentModel.isEmpty ? 'tiny' : _currentModel;
-      final filePath = '${appDir.path}/models/ggml-$modelName.bin';
-      if (await File(filePath).exists()) {
+      final modelDir = Directory('${appDir.path}/models');
+      final binFiles = await modelDir.exists()
+          ? (await modelDir.list().toList()).whereType<File>().where((f) => f.path.endsWith('.bin')).toList()
+          : <File>[];
+
+      // Detect whatever is installed rather than only the model this provider names. A model that
+      // arrived another way still has to show up here, otherwise this row claims nothing is
+      // installed while on-device transcription is using that very file.
+      final filePath = FreemiumTranscriptionService.chooseModelPath(
+        binFiles.map((file) => file.path).toList(),
+        preferredModel: _currentModel.isEmpty ? null : _currentModel,
+        preferredPath: _urlController.text.isEmpty ? null : _urlController.text,
+      );
+
+      if (filePath != null) {
+        final installed = RegExp(r'ggml-(.+)\.bin$').firstMatch(filePath.replaceAll('\\', '/'))?.group(1);
         if (mounted) {
           setState(() {
             _urlController.text = filePath;
-            _updateCurrentProviderConfig(url: filePath);
+            _updateCurrentProviderConfig(url: filePath, model: installed);
           });
 
           await _saveCurrentProviderConfig();
