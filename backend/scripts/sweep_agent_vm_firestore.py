@@ -2,9 +2,10 @@
 """One-time sweep of the retired Agent VM Firestore state.
 
 PR #11795 removed the Cloud Agent VM control plane. The Firestore records it
-wrote are now inert: nothing in `main` reads them, and the fleet is empty. This
-script removes the leftovers so the account-deletion cleanup path that still
-references them can be retired in turn.
+wrote are retired in source. Before using this script, the operator must
+independently verify deployed writers and fleet retirement; source removal is
+not evidence that the deployed fleet is empty. This script removes leftovers
+so the account-deletion cleanup path can be retired in turn.
 
 Targets, in the order the runbook runs them:
 
@@ -19,8 +20,9 @@ Safety properties:
 
   * `--project` is required. There is no ambient default: the operator names the
     Firestore project on the command line, the client is built for exactly that
-    project, and the run aborts before any read or write when the live client
-    resolves to a different project.
+    project through the Firebase app's projectId option. The printed client
+    project confirms that binding, not that the operator chose the right project
+    or that ambient credentials belong to it. The operator verifies those facts.
   * Dry run is the default. Nothing is written without `--apply`.
   * Every receipt line carries the selected project, and separately reports the
     operations `queued` into batches versus the operations `committed` by a

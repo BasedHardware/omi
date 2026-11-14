@@ -163,7 +163,9 @@ def test_project_selection_is_required(monkeypatch):
     assert fake_fs.requested_projects == []
 
 
-def test_client_on_another_project_is_refused_before_any_read_or_write(monkeypatch, capsys):
+def test_unexpected_client_binding_is_defensively_refused_before_data_io(monkeypatch, capsys):
+    # Fault-injected SDK boundary: the real pinned SDK derives db.project from
+    # app.options.projectId. This does not simulate credential-project discovery.
     db = _Db('some-compute-project', _users(('u1', {'agentVm': {'state': 'running'}})))
     fake_fs = _FakeFs(db)
     code = _run_main(monkeypatch, fake_fs, ['--apply'])

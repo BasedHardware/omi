@@ -624,8 +624,12 @@ account-deletion cleanup path alive, so they go before that path is retired.
 | `leases` | the standalone `agent_vm_reconciler_leases` collection |
 
 `--project` is required: the run never inherits an ambient project. The client
-is built for exactly that project and the run refuses, before any read or
-write, when the live client resolves elsewhere. Every receipt line names the
+is bound to that project through the Firebase app's `projectId` option. The
+printed client project confirms that binding; it does not independently prove
+the operator selected the right project, the credentials' home project, or that
+deployed writers are gone. Verify the intended target and retirement evidence
+separately. A defensive check refuses an unexpected SDK client binding before
+any read or write. Every receipt line names the
 project and separates `queued` batch operations from `committed` ones, so a
 failed batch shows up as `failed_ops`/`failed_batches` and the run exits
 non-zero with `INCOMPLETE` instead of looking successful.
