@@ -209,7 +209,7 @@ class CapturePack:
     def encoded(self, *, preserve_pcm: bool = False, compact_custody_pcm: bool = False) -> tuple[bytes, dict[str, Any]]:
         raw = bytes(self.data)
         codec = self.codec
-        if preserve_pcm and compact_custody_pcm and codec == 'pcm16':
+        if preserve_pcm and compact_custody_pcm and codec == 'pcm16' and self.pcm_proven:
             raw, codec = compact_pcm(raw, self.sample_rate, self.channels)
         if codec in {'pcm16', 'pcm8'} and not preserve_pcm:
             if codec == 'pcm8':

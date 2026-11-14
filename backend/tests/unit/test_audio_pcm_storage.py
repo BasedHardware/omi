@@ -49,6 +49,19 @@ def test_incompressible_pcm_does_not_grow():
     assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
 
 
+def test_unproven_zero_sample_payload_keeps_original_container(monkeypatch):
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('unproven PCM must not invoke encoder'))
+    pack = CapturePack('pcm16', 16000)
+    pcm = bytes(64000)
+    pack.append(pcm, 'conversation', 1000, len(pcm) // 2)
+    # Even alignment alone cannot make an undecodable retained frame PCM.
+    pack.append(b'\xff\xff', 'conversation', 1002, 0)
+    assert not pack.pcm_proven
+    encoded, metadata = pack.encoded(preserve_pcm=True, compact_custody_pcm=True)
+    assert encoded == pcm + b'\xff\xff'
+    assert metadata['codec'] == 'pcm16' and metadata['pcm_sha256'] is None
+
+
 @pytest.mark.parametrize('value', ['false', '', 'bad'])
 def test_kill_switch_preserves_pcm_without_launching_encoder(monkeypatch, value):
     monkeypatch.setenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', value)

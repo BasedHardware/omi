@@ -13,7 +13,8 @@ It tries mono PCM windows from 32,000 bytes through 16 MiB, with two encoder
 slots per process, one FFmpeg codec thread, and a two-second deadline for each
 encode/decode subprocess. Busy capacity, missing FFmpeg, timeouts, invalid
 output or any sample mismatch retain original PCM. Windows below the minimum,
-PCM8, native Opus and multichannel originals keep their current representation.
+PCM8, native Opus, multichannel originals and packs without a complete PCM
+identity proof keep their current representation.
 Only an independently decoded, byte-identical FLAC saving at least 5% is used.
 Compression applies regardless of speech classification: quiet speech is safe.
 
