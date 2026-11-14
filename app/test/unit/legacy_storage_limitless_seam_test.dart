@@ -63,6 +63,7 @@ class _FakeStorageDevice implements DeviceConnection {
   _FakeStorageDevice({required this.script});
 
   final List<List<int>> script;
+  bool deleteConfirmed = true;
   final writes = <List<int>>[];
   final deletes = <int>[];
   void Function(List<int>)? onBytes;
@@ -92,7 +93,7 @@ class _FakeStorageDevice implements DeviceConnection {
   @override
   Future<bool> deleteStorageFile(int fileIndex) async {
     deletes.add(fileIndex);
-    return true;
+    return deleteConfirmed;
   }
 
   @override
@@ -279,6 +280,32 @@ void main() {
     await sync.stop();
   });
 
+  test('FlashPage: pending cleanup retains the recording and reports unsupported deletion', () async {
+    final pending = Wal(
+        timerStart: 123,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        status: WalStatus.miss,
+        storage: WalStorage.flashPage,
+        device: 'limitless-1');
+    final sync = FlashPageWalSyncImpl(_Listener())..testWals = [pending];
+    await expectLater(sync.deleteWal(pending), throwsStateError);
+    expect(await sync.getMissingWals(), contains(pending));
+    await expectLater(sync.deleteAllPendingWals(), throwsStateError);
+    expect(await sync.getMissingWals(), contains(pending));
+  });
+
+  test('StorageSync: rejected delete reports failure while invalidating unsafe positional indexes', () async {
+    final card = _FakeStorageDevice(script: [])..deleteConfirmed = false;
+    final target = storageWal();
+    final sync = storageSyncWith(_FakeLocalSync(), card, target);
+    await expectLater(sync.deleteWal(target), throwsStateError);
+    expect(card.deletes, [target.fileNum]);
+    expect(await sync.getMissingWals(), isEmpty);
+    await card.controller.close();
+    await sync.stop();
+  });
+
   test('StorageSync: clearing synced recordings never deletes by the index of a file the sync deleted', () async {
     // Every read gets the same packets: device file 0 arrives whole, while file 1
     // is twice as large, so its transfer is cut short and it stays pending.
@@ -314,8 +341,9 @@ void main() {
     expect(await sync.getMissingWals(), [pending]);
 
     // Control: deleting the pending recording itself still reaches the device.
-    final reachedDevice = throwsA(predicate((e) => '$e'.contains('Service manager is not initiated')));
-    await expectLater(sync.deleteWal(pending), reachedDevice);
+    await sync.deleteWal(pending);
+    expect(card.deletes, hasLength(2));
+    expect(await sync.getMissingWals(), isEmpty);
     await card.controller.close();
     await sync.stop();
   });

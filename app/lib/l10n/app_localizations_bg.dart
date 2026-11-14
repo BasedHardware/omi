@@ -9208,6 +9208,24 @@ class AppLocalizationsBg extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Не може да се определи текущата версия на фърмуера';
 
   @override
+  String get applyCodeToCurrentPlan => 'Приложи към текущия план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Кодът е приложен към текущия ви план.',
+        'refused': 'Кодът не може да бъде приложен. Проверете кода и необходимия план.',
+        'conflict': 'Кодът вече е използван или планът вече има отстъпка.',
+        'rateLimited': 'Твърде много опити. Изчакайте и опитайте по-късно.',
+        'other': 'Кодът не беше приложен. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Промо код';
 
   @override
@@ -13699,6 +13717,9 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Повторно генериране на бележки';
 
   @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';

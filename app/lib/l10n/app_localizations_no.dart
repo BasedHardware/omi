@@ -9172,6 +9172,24 @@ class AppLocalizationsNo extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Kan ikke bestemme gjeldende fastvareversjon';
 
   @override
+  String get applyCodeToCurrentPlan => 'Bruk på nåværende abonnement';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koden er brukt på ditt nåværende abonnement.',
+        'refused': 'Koden kan ikke brukes. Sjekk koden og abonnementet som kreves.',
+        'conflict': 'Koden er allerede brukt, eller abonnementet ditt har allerede rabatt.',
+        'rateLimited': 'For mange forsøk. Vent og prøv igjen senere.',
+        'other': 'Koden kunne ikke brukes. Prøv igjen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kampanjekode';
 
   @override
@@ -13653,6 +13671,9 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Generer notater på nytt';
 
   @override
   String get attentionSummaryFailed => 'Kunne ikke oppsummere denne samtalen';

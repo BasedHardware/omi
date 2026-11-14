@@ -20,7 +20,9 @@ from database.fsr_read_cache import cached_read, plane_id
 
 
 def _certificate(family, uid, client):
-    snapshot = metrics.read_snapshot(family, client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid)))
+    snapshot = metrics.read_snapshot(
+        family, client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(uid)), uid=uid
+    )
     version = token_version(snapshot)
     generation = (snapshot.to_dict() or {}).get('generation', 0)
     if version is None or type(generation) is not int:
@@ -175,7 +177,7 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=(), reus
     )
     if not (shadow or ttl_on or enforce):
         # Preserve the default path, including its read sequence.
-        return _run(family, live, blocked)
+        return _run(family, uid, live, blocked)
     live_evidence = metrics.DecisionEvidence()
     with metrics.evidence_scope(live_evidence):
         if shadow:
@@ -205,7 +207,7 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=(), reus
             reason = 'allow' if result else 'conversation_deleted'
         except blocked:
             reason = 'destructive_operation'
-            metrics.decision(family, reason)
+            metrics.decision(family, reason, uid=uid)
             if shadow:
                 _shadow(
                     family,
@@ -222,9 +224,9 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=(), reus
                 )
             raise
         except Exception:
-            metrics.decision(family, 'authority_unavailable')
+            metrics.decision(family, 'authority_unavailable', uid=uid)
             raise
-        metrics.decision(family, reason)
+        metrics.decision(family, reason, uid=uid)
         if shadow:
             _shadow(
                 family, uid, client, variant, live, cache_family, reason, blocked, reuse_allowed, ttl_on, live_evidence
@@ -232,16 +234,16 @@ def decide(family, uid, client, variant, live, cache_family, *, blocked=(), reus
         return result
 
 
-def _run(family, live, blocked):
+def _run(family, uid, live, blocked):
     try:
         result = live()
     except blocked:
-        metrics.decision(family, 'destructive_operation')
+        metrics.decision(family, 'destructive_operation', uid=uid)
         raise
     except Exception:
-        metrics.decision(family, 'authority_unavailable')
+        metrics.decision(family, 'authority_unavailable', uid=uid)
         raise
-    metrics.decision(family, 'allow' if result else 'conversation_deleted')
+    metrics.decision(family, 'allow' if result else 'conversation_deleted', uid=uid)
     return result
 
 
@@ -270,7 +272,7 @@ def _shadow(
                 candidate = 'allow' if clear else 'conversation_deleted'
             except blocked:
                 candidate = 'destructive_operation'
-            metrics.decision(family, candidate)
+            metrics.decision(family, candidate, uid=uid)
         metrics.compare(family, reason, candidate, live_evidence=live_evidence, candidate_evidence=evidence)
     except Exception:
         metrics.shadow_error(family)

@@ -27,6 +27,9 @@ RAW_STORAGE_ALLOWLIST = {
     # Snapshot-fenced close/restore storage; callable only via the lifecycle
     # methods guarded below, like the oversized terminal primitive above.
     'backend/database/stuck_backfill.py',
+    # Reversible no-speech terminal: hidden completed shape with a prior-value
+    # marker and an operator undo. No deletion, no content rewrite.
+    'backend/database/no_speech_terminal.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -38,6 +41,8 @@ LIFECYCLE_METHODS = {
     'restore_conversation_from_discarded',
     'close_noise',
     'restore_noise',
+    'close_no_speech',
+    'restore_no_speech',
 }
 GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {
@@ -70,7 +75,10 @@ def _is_hidden_noise_close(relative_path: str, payload: ast.Dict) -> bool:
     Its restore is revision-fenced and returns the saved in-progress state.
     Require all atomic hide markers; a bare completed write still fails.
     """
-    if relative_path != 'backend/database/stuck_backfill.py':
+    if relative_path not in {
+        'backend/database/stuck_backfill.py',
+        'backend/database/no_speech_terminal.py',
+    }:
         return False
     fields = {
         key.value if isinstance(key, ast.Constant) else key.id if isinstance(key, ast.Name) else None: value
@@ -132,7 +140,11 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         function = node.func
         if isinstance(function, ast.Attribute) and function.attr in LIFECYCLE_METHODS:
-            if self.relative_path != LIFECYCLE_SERVICE:
+            restore_owner = (
+                self.relative_path == 'backend/utils/conversations/no_speech_restore.py'
+                and function.attr == 'restore_no_speech'
+            )
+            if self.relative_path != LIFECYCLE_SERVICE and not restore_owner:
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: direct lifecycle database call {function.attr}; '
                     f'use utils.conversations.lifecycle instead'

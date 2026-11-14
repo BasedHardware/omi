@@ -19,6 +19,27 @@ provider/endpoint labels. Retries count each attempt; breaker refusals count non
 No audio, URL, user or job identity enters the metric. The two routine STT
 `*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
 outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
+
+## Pre-recorded Modulate credit-refusal failover
+
+`PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared
+on every pre-recorded runtime co-host. Only a typed Modulate credit/quota refusal
+or an open Modulate breaker retries the same WAV once through the existing Soniox
+batch client. Soniox must accept the resolved language hint (or `multi` auto-detection)
+and its positive duration must not exceed two hours. Empty transcripts, client or
+validation errors, plain rate limits, other transient errors, and timeouts of a
+posted request whose billing state is unknown keep the original Modulate behavior.
+A Soniox 429 returns the original Modulate failure class without another provider
+loop. Successful fallback reports `provider=modulate,to=soniox,outcome=recovered`;
+failure reports `exhausted`; both use `component=stt_prerecorded` with the bounded
+`provider_budget_exhausted` or `circuit_open` reason. Soniox audio seconds
+use `omi_prerecorded_vendor_audio_seconds_total{provider=soniox}`.
+
+Held-piece recovery and prompt-verification coordinators retain their existing single-provider attempt budgets. A prior failed Modulate POST suppresses cross-vendor failover even if a later retry receives a credit refusal. Direct authentication/client refusals do not fail over; a request refused locally by an open breaker can fail over as specified.
+
+Rollback sets `PRERECORDED_SONIOX_FAILOVER_ENABLED=false` everywhere it is declared.
+No Deepgram route or ordinary `soniox` pre-recorded model token is added.
+
 ## Fair-use decay switch
 
 `FAIR_USE_THROTTLE_DECAY_ENABLED` defaults on. `false`, `off`, or `0` restores
@@ -187,6 +208,77 @@ After a partial trim, the next overlap is checked against the full previous
 object span, retaining the earlier accepted bytes within that span. A wholly
 covered object does not replace this comparison history.
 
+`RECORD_TOKEN_LEASE_MODE=off|shadow|serve` defaults off; shadow records leases
+without changing seal decisions. Serve honors `RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT`
+(default 0) with salt `record-token-lease`. Only observed custody appends and
+frame batches renew `last_signal_at` / `lease_expires_at` / `signal_source` inside
+the existing token map. `RECORD_TOKEN_LEASE_SECONDS` defaults 3600 (1800–7200).
+Registration also persists `append_late`, so a committed registration whose reply
+is lost returns the same late observation. Manifest admission renews custody-source
+tokens only in the serve cohort; it cannot extend frame-producer leases or fail
+shadow requests. A failed pusher registration remains an abandonment candidate,
+not a committed registration eligible for renewal. Metadata renewal failures do
+not interrupt frame storage or close the live socket.
+Exact custody tokens additionally cover the backend-sync request timeout from
+`config/cloud_run_request_timeouts.json` plus `CUSTODY_REQUEST_MARGIN_SECONDS`
+(300s), giving a 3900s minimum; frame leases keep the configured duration. The
+production sync overlay explicitly pins `--timeout=3600s`, passed through the
+production deploy action; its rendered flags must match the lease timeout config.
+Stock tokens use a fixed `RECORD_TOKEN_LEASE_DEPLOYED_AT` serve-enable epoch. Stock lapses by enable + lease; retry wakes and refusal
+stamps cannot extend it. Only explicit server-observed activity renews it. Lease lapse never substitutes for retained-tail
+proof. Custody uploads first acquire an exact fence and bump revision only after
+durable acceptance; failed/refused uploads clear only that fence. Intentionally
+disabled archives do not advance the revision or schedule recovery; any already
+acquired fence is cleared. A serve-created
+podless custody fence retains its own lease exit in off/shadow; accepted bytes
+still schedule recovery after a mode rollback.
+An accepted durable append whose exact fence was lost records a revision bump
+and partial continuation transactionally, with an idempotent per-request receipt
+under the conversation's `record_custody_recoveries` subcollection. Privacy gates
+remain authoritative. Normal finish writes the same terminal per-upload receipt
+inside the revision transaction, so an ambiguous committed finish retries without
+a second bump or continuation. The receipt retains the late decision and winning
+completion attempt: a lost commit reply still counts once, while a separate finish
+replay stays read-only and adds no late-append count. Before creating any new receipt,
+finish and committed-fence recovery enroll the account/privacy authority in the
+same transaction, including refused uploads and paths that need no continuation.
+Receipts expire after 24h through the active repair CronJob, using their existing
+server `recorded_at`; only receipt metadata is deleted. A nonempty deliberately
+selected archive subset is durable acceptance, while an archive exception is a
+refusal. Closed/partial WAL retention validates both datetime bounds before IO;
+an unfinished row preserves the upload route's ordinary response. Before staging, an upload with
+only `recording_session_id` resolves its user-scoped conversation through the same
+resolver as record admission and fences that target. If the session does not
+resolve, the original archive/admission response remains unchanged and there is
+no custody append for an unknown target. Captured native input pins
+`record_input_upload_revision` on its jobs while lease observation is enabled.
+A newer append schedules partial continuation regardless of conversation status;
+uncaptured admission reads the current revision and CAS-validates it after staging.
+Separate continuation jobs enter `record_recovery_waiting` until the original
+ledger/publication is complete. Old worker images cannot schedule that state.
+The active repair CronJob and current workers CAS-promote it to `record_pending`
+independent of lease mode, checking privacy again; old-image rollback retains the obligation until a current
+worker returns. Original work and projection bindings are not rewritten.
+Frame late-append counting follows successful durable window/object commit.
+Producer Helm env bindings use the shared runtime ConfigMap; Cloud Run and that
+ConfigMap render the same protected-environment `RECORD_TOKEN_LEASE_*` input
+vector with off defaults. Roll every producer before setting the separately typed
+repair vector to serve; the first serve-enable epoch stays pinned.
+Custody late-append accounting observes the post-storage renewal/finish transaction
+in shadow, non-cohort and serve requests, including throttled renewals. Each
+request retains every durable-file observation through transaction retries and
+counts once only after accepted storage; serve receipts preserve that decision
+without another count on finish replay. No pre-storage row snapshot controls the counter.
+This includes a new pusher session's first durable frame when an older token on
+the still-open row has lapsed; registration alone never increments the counter.
+The active repair CronJob exports the sampled oldest-unsealed age and child
+probe counters on `/metrics`, scraped every 15s, without enabling the idle worker.
+Memoized waits do no token IO; observed append heartbeats coalesce to lease/2. Serve-only frames
+after complete seal re-open the row and use the existing partial continuation
+for interior gaps. Late WAL holes are retained create-only for that same worker;
+raw audio stays retained. See the [review fixes](listen_pusher_pipeline/changes/2026-11-09-token-lease-review-fixes.md).
+See [rollout and rollback](listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md).
+
 Only the independent repair job opts into retrying `record_upload_failed` rows.
 `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED=false` disables that rule. After full
 proof of retained audio and dead producers, repair clears the failure flag and
@@ -263,6 +355,9 @@ also name `linux`. An empty list disables desktop admission. Mobile uses
 nested in the existing batch cohort, so selecting 50% while batch admits 25%
 can suppress at most the batch-admitted 25%. This knob does not expand batch
 admission itself. The rollout lead owns mobile cohort expansion and deployment.
+
+`SYNC_RECORD_COVERAGE_WAIT_MEMO` defaults `true`; set `false` to bypass memo reads
+and writes and restore full WAL coverage checks on each admission.
 
 Web uses `SERVER_BATCH_ONLY_WEB_PERCENT` (default 0), a separate salted owner
 cohort keyed on authenticated `client_platform=web`; persisted source may be
@@ -620,6 +715,17 @@ recovery behavior.
 
 ## Funded transcription cap
 
+The SCA-1750 watch-only phase uses a shared transactional shadow ledger for
+verified monthly billing, operation reservations, and daily-budget PTT settlement.
+`STT_FREE_ALLOWANCE_WATCH_ENABLED` defaults to `true`; `false`, `0`, `off`, or `no`
+stops new observations/reservations. Existing confirmed operations may still settle.
+The core ledger has no cohort or rollout gate. Serving admission results and wire
+payloads remain unchanged. Async observations wait at most 2.5 seconds; sealed GPU
+authorization uses at most 100 ms of remaining authorization budget. The
+[change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md)
+documents billing-unit settlement, conservative expired holds, baseline proof,
+metrics, emulator coverage, and the full-day reconciliation gate before enforcement.
+
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
 Denial preserves receiving and existing audio storage paths; accepted provider
@@ -642,6 +748,25 @@ false/0/off uses generic finalize without reopening held providers. That emergen
 mode can flush sub-second speech fragments earlier because it omits the ordinary
 speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
 local-send phase/exception attribution and the listen-train acceptance checks.
+
+### unlimited_v2 backfill/import daily transcribed-hours cap
+
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) are a separate, default-off
+admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
+already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
+same basis `unit_cost_user_day.tx_sec` uses — and refuses managed **backfill/import**
+transcription once that day reached the cap level. Only the sync `backfill` lane
+and the batch `backfill` lane pass the backfill marker; live listen and fresh
+sync/batch capture never do, so live capture is untouched even on a user-day above
+the cap. The meter is the total day seconds (it cannot separate backfill from live
+seconds); the admission lane is the exact separation for the work being admitted.
+Above the cap the answer is identical to an exhausted allowance: offline segments
+are durably held. Free, Plus and the deprecated paid tiers are unchanged in both
+modes, and an unreadable plan or meter read admits transcription. Deployment,
+readback and activation: [runbook](runbooks/unlimited-v2-backfill-hours-cap.md);
+rollout note:
+[change note](listen_pusher_pipeline/changes/2026-11-14-unlimited-v2-backfill-hours-cap.md).
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
@@ -3025,7 +3150,10 @@ backend reconciliation sweep (or the opt-in self-heal sweep) as a
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
 kept output carrying only the deterministic minimum raises before the
-completed-status transaction. An explicit relevance discard is a valid
+completed-status transaction. The one exception is a kept, plain, decoded
+conversation whose enrichment returned no structure at all: it completes on the
+deterministic minimum unless `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED`
+is set off (default on; see `changes/2026-11-12-capfix-finalization.md`). An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
@@ -3174,6 +3302,14 @@ The [change note](listen_pusher_pipeline/changes/2026-11-07-home-processing-age.
 records the reader audit and unmeasured acceptance.
 
 ### Failure terminal summary recovery
+
+Processing-attention class 11 `recovery_structure_unavailable` items expire on
+read after seven days only while permanently non-retryable. The default-on
+`PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED` runtime/chart switch disables
+new expiry writes when `false`; retained inactive records never reactivate.
+Expiry transactionally checks the observed item version and retry claim before
+setting `expired_at` and `expiry_reason=non_retryable_ttl`. Timestamp handling,
+post-filter limits and endpoint contracts live in [pending work](pending-work.md).
 
 Only transient dead-letter failures with usable input and no prior
 summary get `summary_retryable=true`; enrichment and free-tier persistence clear
@@ -4972,10 +5108,23 @@ committed speech into a fresh conversation.
 | Speaker verification policy | 0.65 / 0.10 | `utils/stt/speaker_match.py` | Maximum cosine distance / minimum runner-up margin; live uses >=5s, <=3 clips |
 | Speaker clustering threshold | 0.60 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Short-clip in-session centroid cutoff |
 | Speaker clustering cap | 8 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Merge misses to nearest centroid after capacity |
-| `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
-| `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
+| `PENDING_REQUEST_TIMEOUT` | 120s | `utils/listen_pusher_session.py` | Timeout before retrying a pending request |
+| `MAX_RETRIES_PER_REQUEST` | 3 | `utils/listen_pusher_session.py` | Retries per burst; deterministic processing faults dead-letter after the initial dispatch plus three failures |
+| `PENDING_REQUEST_RECOVERY_COOLDOWN` | 300s | `utils/listen_pusher_session.py` | Recovery cooldown for transport/provider faults and `job_queued`; shared fallback telemetry records recovery bursts |
+| `MAX_PROCESSING_REQUEST_ATTEMPTS` | 7 | `utils/listen_pusher_session.py` | Total sends per conversation generation, including reconnect replay; exhaustion stops live retries and leaves durable custody with the job owner |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |
 | `MAX_PENDING_REQUESTS` | 100 | `routers/listen/contracts.py` | Max buffered conversations per session |
+
+Opcode-201 processing errors distinguish `deterministic_processing_failed` from
+`transient_processing_failed`. Composition wrappers retain their provider cause;
+SDK timeout/connection errors and provider 429/5xx can use recovery, while a processing
+500 without a transient provider cause is deterministic. Deterministic failures do
+not receive a delayed second durable budget. The terminal conversation retains the
+existing `processing_failed` retry vocabulary and dead-letter/fault signals. A terminal
+live generation cannot be buffered again by reconnect; an explicit newer durable
+generation has a fresh budget. A committed job's optional result send or journey
+publication cannot release its lease or re-enter processing; these fail-open paths
+use shared `record_fallback` telemetry.
 
 ## 8. WebSocket Task Supervision
 
@@ -6650,18 +6799,23 @@ instead of emitting a per-row repair error.
 
 ### Fresh enrichment queue capacity
 
-When `ENRICHMENT_FRESH_TASKS_QUEUE` is configured, new/reopened user-facing
-bindings and idle-row promotion qualify by conversation `finished_at`, falling
+When `ENRICHMENT_FRESH_TASKS_QUEUE` is configured, new/reopened bindings,
+unbound-row repair and idle-row promotion require `first_summary_pending(row)`
+and qualify by conversation `finished_at`, falling
 back to `created_at` only when absent. `ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN`
 defaults to30 minutes;0 disables new priority admission. Unknown/future clocks
 or a failed two-second metadata lookup keep work on the established queue.
 Older backlog retains its drain capacity. Active leases, custom identities,
 background backfill and lazy effects are preserved. Queue/token changes share
-the existing CAS fence. Production ops reconciles fresh capacity at5 concurrent
-deliveries/2 per second; staging mirrors this as `staging-enrichment-fresh`,
+the existing CAS fence. Production ops reconciles fresh capacity at30 concurrent
+deliveries/10 per second; staging intentionally stays at5/2 as `staging-enrichment-fresh`,
 provisioned by its queue bootstrap helper before deployment.
 Existing valid bindings survive rollback; leave both queues running to drain.
 See [the rollout note](listen_pusher_pipeline/changes/2026-11-04-fresh-title-priority.md).
+Recent refreshes with an already seen summary or a disabled first-summary policy
+use the primary enrichment queue; background backfill and effects retain their
+existing routing. In-flight rows keep their current binding until their next
+re-bind. See [first-summary-only admission](listen_pusher_pipeline/changes/2026-11-10-first-summary-fresh-admission.md).
 
 ### First-summary deadline and independent repair
 
@@ -7829,12 +7983,11 @@ preserve explicit policy delays and provider attempts, and allow same-owner
 siblings to progress. Deletion must cancel before paid work or result upload.
 
 The existing emulator-proof runner includes this suite. Local qualification
-requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
-simulator/Postgres deletion-cancellation cases are strict expected failures
-linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
-cancellation writer directly uses a Firestore client instead of the Store
-surface. They assert no provider/result-upload calls even on that failure and
-do not satisfy migration acceptance. Physical erasure and the serving privacy
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. Deletion
+cancellation operates through the bounded revocation `cancel_fenced_recovery`
+on the shared Store surface, ensuring parity across Firestore, Postgres, and the simulator
+(resolving [#23761](https://github.com/BasedHardware/omi/issues/23761)). No provider or
+result-upload calls are permitted on cancellation. Physical erasure and the serving privacy
 bridge remain separate gates. All content and external IO in this suite are
 synthetic; it does not qualify real ASR accuracy or vendor transport retries.
 
@@ -9238,6 +9391,42 @@ to be retried after visibility expiry, so a longer capture still converges after
 it ends. A deleted/incompatible target or size refusal never authorizes a forced
 merge; the standalone recording remains recoverable.
 
+A donor summarized before its live target closed is otherwise refused forever by
+the `already_processed` fence. `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED` is a
+three-value mode, **default `off`**:
+
+- `off` is the pre-change refusal, byte for byte: the processed donor is refused
+  by the blanket `already_processed` fence, no span is compared, and no
+  assignment is attempted.
+- `shadow` runs the containment predicate and the span comparison, emits a
+  bounded counter and one log line, and returns the same refusal. It never
+  assigns, tombstones, retracts notes or memories, and never emits an identifier
+  or content. A donor the transaction would refuse before planning (a
+  user-managed anchor or a manual speaker receipt) counts
+  `outcome=donor_ineligible`, and a donor carrying unplaced speech counts
+  `outcome=unplaced_donor`, so the dry-run count does not overstate eligible
+  merges.
+- `on` lets the bridge absorb the donor only when both the donor's and the
+  target's placed transcript-segment spans exist and the donor's is fully inside
+  the target's. The merged predicate applies tolerance inward, so the configured
+  tolerance is `0.0`: exact containment (the identical re-upload shape) passes,
+  and a donor that extends even slightly past the target is refused. A stricter
+  value can only refuse more.
+
+A row whose only span is the `finished_at` wall-clock envelope never authorizes
+the merge; that donor stays standalone. User curation, an open target,
+`choose_live_overlap`, privacy and size fences are unchanged, and partial overlap
+keeps the standalone row. The assignment transaction re-proves containment on the
+rows it merges and refuses the whole assignment with
+`contained_donor_not_contained` when the donor grew past the target. A contained
+donor whose speech is an exact repeat of the live target is still absorbed: the
+repeat-only fast path is skipped when this call requested donor absorption, so
+the donor redirect is committed instead of being acknowledged as a no-op. Only
+the documented lowercase words select a mode (`on`, `true`, `yes`, `enabled`,
+`shadow`); an absent, blank, unknown, misspelled or numeric value resolves `off`
+in every capture-coverage mode, so a typo disables the merge and never enables
+it.
+
 Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
 A finalizer losing its processing-result CAS checks the current job lease and
@@ -9380,6 +9569,17 @@ repair triggers. Summaries and speaker labels remain prompt inputs, and the full
 fingerprint still owns leases and composed-state validation. See the
 [change note](listen_pusher_pipeline/changes/2026-11-04-episode-compose-settle.md).
 
+`EPISODE_COMPOSER_THRIFT` also defaults on. A parse failure gets one repair
+retry over the bad output alone; a short episode (at most 15 minutes of recorded
+member time) may ship a title and lede with no chapters; a superseded result is
+stored and the episode marked pending instead of discarded; and paid failures
+stop at two per evidence. `off` restores the previous discard-and-retry behavior
+and the four-failure cap. `omi_episode_compose_total` and
+`omi_episode_compose_seconds` carry a bounded `trigger` label
+(`close|read|member_final|settle`), and `omi_episode_compose_calls_total` counts
+each paid call including `repair`. See the
+[change note](listen_pusher_pipeline/changes/2026-11-10-episode-compose-keep-paid.md).
+
 ### Provisional identities from meeting notes
 
 The rich notes call receives approved screenshots (at most four), screen moments,
@@ -9513,3 +9713,48 @@ Successful final rebuild or permanent owner revocation clears only the observed
 marker version; a replacement marker always wins. No PCM or audio-object
 mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
 records scope and verification limits.
+
+### Held staging input expiry
+
+`BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
+`false` is the kill for new day-29 transitions in the existing held sweep.
+Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
+for replacement objects with a finite positive numeric clock, else `enqueued_at`
+as the earlier admission/staging proxy, including when the replacement clock is
+present but malformed. Two unusable clocks never authorize `input_expiring`.
+Exact-bundle repair stamps the new object time without changing original enqueue.
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
+results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
+with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
+Before the ordinary held name page, two indexed urgency streams (legacy enqueue
+and current restage clocks, limit 128 each) use independent age cursors. The
+restage-clock composites are declared in the index registry and generated
+manifest; index readiness precedes rollout. No legacy backfill, record-pending
+or sweep cadence change is involved. The existing
+`BATCH_HELD_DEAD_LETTER_ENABLED` sweep kill also remains effective.
+
+The existing `failed/batch_artifact_missing` upload wire shape and exact-bundle
+custody-repair protocol carry needs-attention and GPU re-upload; legacy readers
+retain their existing custody-safe response. Checked operator GPU requeue or
+target-restorable assignment release is the manual exit, even with the new kill
+off. Status polling and nightly held-expired redrive never reopen this reason.
+`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 21 days with
+fresh sample evidence. The 30-day privacy ceiling is unchanged. See the
+[operator runbook](runbooks/held-staging-inputs.md) for approved manual execution.
+`omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
+in completed bounded age samples and existing held sweep pages, including
+missing clocks excluded by age ordering. Neither clock usable in an age sample also sets
+`omi_batch_timeliness_scan_truncated{leg="staged_input"}` to 1 for the existing
+scan-blind warning. These observations are not a distinct-row fleet census.
+
+### Explicit calendar request preservation
+
+`EXPLICIT_CALENDAR_REQUEST_KEEP` defaults on. A bounded, complete segment-level
+`put … on my/the calendar` or `add … to my/the calendar` instruction bypasses
+the short-clip compute minimum and shares the explicit-instruction keep contract
+with deterministic relevance, content classification and minimum salience.
+This only preserves input for normal adjudication; it does not create an event
+or action, join speakers, or override privacy/manual-selection contracts.
+Explicit `false` (also off/0/no) restores the previous reminder-only exemption.
+Affected fleet users and extra model dollars/day are unknown; this reverses
+compute savings for protected cases. Existing general floor behavior remains.

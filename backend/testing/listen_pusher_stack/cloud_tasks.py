@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+from contextvars import ContextVar
 import os
 from contextlib import contextmanager
 from datetime import timedelta
@@ -26,6 +27,7 @@ from utils.cloud_tasks import DISPATCH_DEADLINE_SECONDS
 FINALIZATION_HANDLER_PATH = '/v1/conversation-finalization-jobs/run'
 TASK_EVENTS_FILE = 'cloud_tasks.jsonl'
 LOCAL_TASK_TOKEN_ENV = 'OMI_STACK_LOCAL_TASK_TOKEN'
+rest_finalization_admission: ContextVar[bool] = ContextVar('stack_rest_finalization_admission', default=False)
 
 
 def _state_dir() -> Path:
@@ -36,6 +38,7 @@ def _state_dir() -> Path:
 
 
 def _append_event(event: dict[str, Any]) -> None:
+    event = {**event, 'admission_origin': 'rest' if rest_finalization_admission.get() else 'background'}
     path = _state_dir() / TASK_EVENTS_FILE
     with path.open('a', encoding='utf-8') as output:
         output.write(json.dumps(event, sort_keys=True) + '\n')

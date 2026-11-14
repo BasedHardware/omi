@@ -107,6 +107,8 @@ enum DefaultsKey: String {
   /// skip separately so later microphone sessions do not test the tap anyway.
   case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
+  /// This Mac's user turned screen capture off. Account sync must not turn it back on.
+  case screenAnalysisHeldOffByUser = "screenAnalysisHeldOffByUser"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
   case ratingPromptDismissed = "ratingPromptDismissed"

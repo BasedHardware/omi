@@ -6,6 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
+
 from prometheus_client import CollectorRegistry
 
 from config.batch_timeliness import TERMINAL_EMPTY_IS_PROCESSED, timeliness_interval_seconds
@@ -366,7 +368,7 @@ def test_rules_page_on_new_delivery_breach_and_keep_diagnostics_agent_tier():
     exprs = [q['model'].get('expr') or q['model'].get('expression') for q in alarm['data']]
     assert 'leg=~"uncommitted|quarantined|assignment_held|projection"' in exprs[0]
     assert 'quarantine_held_rows' not in exprs[0] and 'backlog' not in ' '.join(exprs)
-    assert '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)' in exprs
+    assert '($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)' in exprs
     assert rules['omi-batch-timeliness-sample-stale']['noDataState'] == 'Alerting'
     blind = rules['omi-batch-timeliness-scan-blind']
     assert 'omi_batch_timeliness_scan_truncated' in blind['data'][0]['model']['expr']
@@ -403,6 +405,7 @@ def test_held_stock_age_has_no_epoch_or_24h_cohort_cutoff(monkeypatch):
         'assignment_held': old + 10,
         'quarantine_held': old + 20,
         'held_expired': None,
+        'staged_input': None,
     }
     registry = CollectorRegistry()
     metrics = QueueMetrics(registry)
@@ -465,7 +468,14 @@ def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, 
 
     monkeypatch.setattr(_Query, 'count', counted)
     stock = TIMELINESS_BACKLOG_COUNT_LIMIT + 123
-    sample = _sample(jobs=[{**row, 'enqueued_at': EPOCH - 1}] * stock)
+    # Real held stock has a staged input; keep this count-budget fixture out of
+    # the separate incomplete/malformed staged-input age scan guard.
+    sample = _sample(
+        jobs=[
+            {**row, 'enqueued_at': EPOCH - 1, 'audio_uri': 'gs://based-hardware-batch-pipeline-staging/synthetic/audio'}
+        ]
+        * stock
+    )
     historical = [q for q in queries if any(op == '<' and value == EPOCH for _, op, value in q.filters)]
     assert len(historical) == 7
     assert all(q._limit == (TIMELINESS_BACKLOG_COUNT_LIMIT if enabled else None) for q in historical)
@@ -474,8 +484,7 @@ def test_historical_counts_apply_limit_before_aggregation(monkeypatch, enabled, 
         rules = json.loads((BACKEND / 'charts/monitoring/alerts/critical-failures.json').read_text())
         alarm = next(rule for rule in rules if rule['uid'] == 'omi-batch-held-backlog-growing')
         stock_metric = (
-            'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} '
-            'and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900))'
+            'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} ' f'and ignoring(leg) {FRESH_NEWEST})'
         )
         assert f'({stock_metric} >= {TIMELINESS_BACKLOG_COUNT_LIMIT})' in alarm['data'][0]['model']['expr']
     # Post-epoch counts remain exact and unbounded.
@@ -639,9 +648,9 @@ def test_alerts_aggregate_available_leader_and_keep_missing_sample_freshness():
     stale = rules['omi-batch-timeliness-sample-stale']
     assert stale['noDataState'] == 'Alerting'
     expression = stale['data'][0]['model']['expr']
-    assert 'max(omi_batch_timeliness_observed_at_seconds)' in expression
+    assert f'max({NEWEST})' in expression
     assert 'or vector(1e9)' in expression
-    assert any(q['model'].get('expression') == '$A >= 900' for q in stale['data'])
+    assert any(q['model'].get('expression') == '$A >= 1200' for q in stale['data'])
     assert rules['omi-batch-timeliness-scan-blind']['noDataState'] == 'OK'
 
 
