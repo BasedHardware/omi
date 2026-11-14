@@ -53,6 +53,20 @@ const REASON_ICONS: Record<CancelReason, typeof Wallet> = {
   other: MoreHorizontal,
 };
 
+// The cancellation endpoint answers `{"status": "ok", "message": ...}` on both
+// of its success branches (with or without a subscription schedule), and the
+// mobile client treats `ok` as success. `success` and `cancel_at_period_end`
+// are kept for older/alternate responses.
+function isCancelSuccess(
+  result: { status?: string; cancel_at_period_end?: boolean } | null,
+) {
+  return (
+    result?.status === 'ok' ||
+    result?.status === 'success' ||
+    result?.cancel_at_period_end === true
+  );
+}
+
 const FEEDBACK_TITLE: Record<CancelReason, string> = {
   too_expensive: 'What price would work for you?',
   not_using_enough: 'What would make you use Omi more?',
@@ -214,7 +228,7 @@ export function CancelSubscriptionFlow({
     trackCancelConfirmed(reason, Boolean(trimmed));
     try {
       const result = await cancelSubscription({ reason, reasonDetails: trimmed });
-      if (result?.status === 'success' || result?.cancel_at_period_end) {
+      if (isCancelSuccess(result)) {
         finished.current = true;
         onSubscriptionUpdate();
         setStep('done');

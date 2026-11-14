@@ -71,7 +71,10 @@ describe('CancelSubscriptionFlow', () => {
     acceptRetentionOffer.mockReset();
     (posthog.capture as ReturnType<typeof vi.fn>).mockClear();
     getRetentionOffer.mockResolvedValue(offer);
-    cancelSubscription.mockResolvedValue({ status: 'success', message: 'ok' });
+    cancelSubscription.mockResolvedValue({
+      status: 'ok',
+      message: 'Subscription scheduled for cancellation.',
+    });
   });
 
   it('asks a reason, then feedback, then shows the offer and confirms', async () => {
@@ -123,6 +126,43 @@ describe('CancelSubscriptionFlow', () => {
       has_details: true,
       platform: 'web',
     });
+  });
+
+  it("treats the endpoint's ok response as a successful cancellation", async () => {
+    // The real endpoint answers `{"status": "ok", "message": ...}` on both of
+    // its success branches; a regression here renders a real cancellation as
+    // a failure and never reaches the done screen.
+    cancelSubscription.mockResolvedValueOnce({
+      status: 'ok',
+      message: 'Subscription scheduled for cancellation.',
+    });
+    const { onSubscriptionUpdate } = renderFlow();
+    await reachConfirmStep();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Subscription' }));
+
+    expect(await screen.findByText('Subscription cancelled')).toBeTruthy();
+    expect(
+      screen.getByText('Your subscription is set to cancel at the end of the period.'),
+    ).toBeTruthy();
+    expect(onSubscriptionUpdate).toHaveBeenCalled();
+    expect(screen.queryByText('Failed to cancel subscription')).toBeNull();
+  });
+
+  it('shows the endpoint message when the response is not a success', async () => {
+    cancelSubscription.mockResolvedValueOnce({
+      status: 'error',
+      message: 'No active subscription found.',
+    });
+    const { onSubscriptionUpdate } = renderFlow();
+    await reachConfirmStep();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel Subscription' }));
+
+    expect(await screen.findByText('No active subscription found.')).toBeTruthy();
+    expect(screen.queryByText('Subscription cancelled')).toBeNull();
+    expect(onSubscriptionUpdate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel Subscription' })).toBeEnabled();
   });
 
   it('keeps cancellation reachable after a failed cancel request', async () => {
