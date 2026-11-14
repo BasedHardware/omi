@@ -319,6 +319,13 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect(headlineDelta("netCost", rows(2000, 2500)).tone).toBe("bad");
     expect(headlineDelta("costPerMau", rows(7, 7)).text).toBe("■\u00a00.0%");
     expect(headlineDelta("mrr", [{ date: "b", value: 1 }]).text).toBe(
+      "history gap"
+    );
+    expect(headlineDelta("arpmau", [{ date: "b", value: 1 }]).text).toBe(
+      "history gap"
+    );
+    expect(headlineDelta("mrr", rows(0, 10)).text).toBe("no prior");
+    expect(headlineDelta("wau", [{ date: "b", value: 1 }]).text).toBe(
       "no prior"
     );
     expect(headlineDelta("arpmau", [{ date: "b", value: null }]).text).toBe(
@@ -1757,8 +1764,9 @@ describe("variable margin frames (David 2026-10-23)", () => {
       STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
     const cost = perDay * MARGIN_DAYS_PER_MONTH;
     expect(last.costPerMonth).toBe(Math.round(cost));
-    // The cutoff point is settled, not live: its headline margin is no value.
-    expect(last.marginPct).toBeNull();
+    // The fallback uses this settled day and visibly names it.
+    expect(last.marginPct as number).toBeCloseTo((100 * (mrr - cost)) / mrr, 0);
+    expect(f.health.variableMarginSource[0].text).toContain("Settled");
     const prev = rows.at(-2)!;
     expect(prev.marginPct as number).toBeCloseTo(
       (100 * ((prev.mrr as number) - (prev.costPerMonth as number))) /
@@ -1792,12 +1800,13 @@ describe("variable margin frames (David 2026-10-23)", () => {
     );
   });
 
-  it("with no live estimate the headline is no value, never the settled cutoff as live", async () => {
+  it("with no live estimate the fallback is the latest settled day and is labelled settled", async () => {
     // sources() carries no live document: the last point is settled D−2.
     const f = await all(null, sources());
     const last = f.health.variableMargin.at(-1)!;
     expect(last.live).toBe(0);
-    expect(last.marginPct).toBeNull();
+    expect(last.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
     expect(last.costPerMonth).not.toBeNull(); // the cost stays visible
   });
 
@@ -1816,6 +1825,10 @@ describe("variable margin frames (David 2026-10-23)", () => {
     const text = String(f.health.variableMarginStatus[0].text);
     expect(text).toContain("Headline: margin meter hour");
     expect(text).toContain("basis 2026-11-06.1");
+    expect(f.health.variableMarginSource[0].text).toContain("Hourly meter");
+    expect(f.health.variableMarginSource[0].text).toContain(
+      asOf.slice(5, 16).replace("T", " ")
+    );
   });
 
   it("a fresh meter row wins over a metered live day for the headline", async () => {
@@ -1857,7 +1870,10 @@ describe("variable margin frames (David 2026-10-23)", () => {
       basisVersion: null,
     }));
     const f = await all(null, s);
-    expect(f.health.variableMargin.at(-1)!.marginPct).toBeNull();
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(
+      /^Settled · .*meter stale$/
+    );
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "Margin meter stale since"
     );
@@ -1870,13 +1886,14 @@ describe("variable margin frames (David 2026-10-23)", () => {
     });
     const f = await all(null, s);
     expect(f.health.variableMargin.length).toBeGreaterThan(0);
-    expect(f.health.variableMargin.at(-1)!.marginPct).toBeNull();
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "Margin meter row unavailable"
     );
   });
 
-  it("a meter row older than three hours is named stale and never shown as a number", async () => {
+  it("a stale meter value is replaced by an explicitly dated settled margin", async () => {
     const s = sources();
     const asOf = new Date(now.getTime() - 4 * 3_600_000).toISOString();
     s.meter = vi.fn(async () => ({
@@ -1886,18 +1903,23 @@ describe("variable margin frames (David 2026-10-23)", () => {
     }));
     const f = await all(null, s);
     const last = f.health.variableMargin.at(-1)!;
-    expect(last.marginPct).toBeNull();
+    expect(last.marginPct).not.toBe(41.3);
+    expect(last.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(
+      /^Settled · .*meter stale$/
+    );
     expect(last.live).toBe(0);
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       `Margin meter stale since ${asOf.slice(0, 16).replace("T", " ")}Z`
     );
   });
 
-  it("no meter row is disclosed as unavailable, and the headline stays no value", async () => {
+  it("no meter row is disclosed as unavailable, with a labelled settled fallback", async () => {
     const s = sources();
     s.meter = vi.fn(async () => null);
     const f = await all(null, s);
-    expect(f.health.variableMargin.at(-1)!.marginPct).toBeNull();
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "Margin meter row unavailable"
     );
@@ -1969,6 +1991,7 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(last.date).toBe(`${cutoff}T00:00:00Z`);
     expect(last.mrr).toBeNull();
     expect(last.marginPct).toBeNull(); // the headline then shows no value
+    expect(f.health.variableMarginSource[0].text).toMatch(/^No MRR book · /);
     expect(rows.at(-2)!.marginPct).not.toBeNull(); // yesterday's stands
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "MRR: n/a (no book snapshot that day)"

@@ -1150,8 +1150,8 @@ export function healthFrames(
   );
   // The headline is the margin meter's newest hourly row while it is fresh
   // (David 2026-11-13). A stale or missing row never shows as a number: the
-  // headline falls back to the metered live day when there is one, else no
-  // value, and the disclosure names the meter's age.
+  // headline falls back to the metered live day when there is one, else the
+  // latest settled day. The visible source label names the mode and date.
   const meter = legs.meter ?? null;
   const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
   const meterFresh =
@@ -1169,6 +1169,15 @@ export function healthFrames(
         METER_FRESH_MS / 3_600_000
       } h old): no meter headline`
     : "Margin meter row unavailable";
+  const marginSource = meterFresh
+    ? `Hourly meter · ${meter!.asOf.slice(5, 16).replace("T", " ")}Z`
+    : !liveHead
+    ? "No complete cost window"
+    : liveHead.mrr == null
+    ? `No MRR book · ${shortDay(liveHead.date)}`
+    : `${liveHead.date > settledEnd ? "Live estimate" : "Settled"} · ${shortDay(
+        liveHead.date
+      )}${meter ? " · meter stale" : ""}`;
   const marginLiveStatus =
     (liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
@@ -1207,15 +1216,14 @@ export function healthFrames(
     // fees), trailing-7-day run rate against that day's book. MRR comes from
     // the day's own snapshot — a day without one keeps its cost point and
     // nulls the margin, never borrowing a neighbour's book.
-    // The headline is live only when a live day sits after the cutoff. Otherwise
-    // the last point is a settled value and is shown as no value, never as live.
+    // A fresh meter wins; otherwise show this day's live or settled margin.
+    // The separate visible source label names the mode and date. Never skip
+    // a missing latest-day book to borrow an older non-null point.
     variableMargin: variable.map((p, i, all) => ({
       date: ts(p.date),
       marginPct:
         i === all.length - 1 && meterFresh
           ? round(meter!.variableMarginPct, 1)
-          : i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
-          ? null
           : round(p.marginPct, 1),
       // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
       live: p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
@@ -1231,6 +1239,7 @@ export function healthFrames(
       feesPerMonth: round(p.feesPerMonth, 0),
       missing: p.missing.length ? p.missing.join("+") : null,
     })),
+    variableMarginSource: [{ text: marginSource }],
     marginLive: liveHead
       ? [
           {
@@ -1444,7 +1453,9 @@ export function headlineDelta(key: string, rows: Row[]) {
   const text = missing
     ? "—"
     : shown == null
-    ? "no prior"
+    ? prior == null && (key === "mrr" || key === "arpmau")
+      ? "history gap"
+      : "no prior"
     : // Non-breaking spaces: a narrow stat must not wrap the glyph apart.
       `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"}\u00a0${Math.abs(
         shown
