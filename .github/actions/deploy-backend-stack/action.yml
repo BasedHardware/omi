@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  completions_canary:
+    description: 'Production completion canary: on or explicitly audited off'
+    required: false
+    default: 'on'
   record_token_lease_mode:
     description: 'Caller-supplied record token lease mode'
     required: false
@@ -152,6 +156,21 @@ runs:
                                'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
                 output.write(f'{key}={value}\n')
         PYTHON
+
+    - name: Require resolved first-attempt canary context
+      shell: bash
+      env:
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+        COMPLETIONS_CANARY: ${{ inputs.completions_canary }}
+        CANARY_RUN_ATTEMPT: ${{ github.run_attempt }}
+      run: |
+        # GitHub reruns use a fresh workspace and cannot prove the old attempt's
+        # unuploaded journal or remaining budget. Never create a fresh canary
+        # transaction from that unknown state. Captain reconciliation is needed.
+        if [[ "$CANARY_ENVIRONMENT" == "prod" && "$COMPLETIONS_CANARY" == "on" && "$CANARY_RUN_ATTEMPT" != "1" ]]; then
+          echo 'CANARY_REFUSED prior_attempt_resolution_required' >&2
+          exit 75
+        fi
 
     - name: Validate deploy profile boundary
       shell: bash
@@ -1335,11 +1354,54 @@ runs:
     - name: Shift Cloud Run traffic to validated revisions
       id: shift-cloud-run-traffic
       shell: bash
+      env:
+        COMPLETIONS_CANARY: ${{ inputs.completions_canary }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+        CANARY_ACTOR: ${{ github.actor }}
+        CANARY_RUN_ID: ${{ github.run_id }}
+        CANARY_RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
-        gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        set -euo pipefail
+        case "$COMPLETIONS_CANARY" in
+          on|off) ;;
+          *) echo 'Invalid completions_canary: expected on or off' >&2; exit 1 ;;
+        esac
+        if [[ "$CANARY_ENVIRONMENT" == "prod" && "$COMPLETIONS_CANARY" == "on" ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_completion_canary.py" \
+            --project "${{ inputs.project_id }}" \
+            --region "${{ inputs.region }}" \
+            --candidate backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --candidate backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --candidate backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
+            --candidate backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            --evidence-path "artifacts/backend-completions-canary-${CANARY_RUN_ID}-${CANARY_RUN_ATTEMPT}.json"
+        else
+          if [[ "$CANARY_ENVIRONMENT" == "prod" ]]; then
+            # Fixed reason plus bounded identity from GitHub, never caller text or secrets.
+            python3 - <<'PY_AUDIT'
+        import json
+        import os
+        from pathlib import Path
+        audit = {
+            'reason': 'COMPLETIONS_CANARY_BYPASS_EXPLICIT_WORKFLOW_INPUT_OFF',
+            'actor': os.environ['CANARY_ACTOR'],
+            'run_id': os.environ['CANARY_RUN_ID'],
+            'run_attempt': os.environ['CANARY_RUN_ATTEMPT'],
+        }
+        rendered = json.dumps(audit, sort_keys=True)
+        fd = os.open('artifacts/backend-completions-canary-bypass.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(rendered + '\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        print(rendered)
+        PY_AUDIT
+          fi
+          gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        fi
 
     - name: Verify serving backend release vector
       id: verify-serving-release-vector
@@ -1423,10 +1485,27 @@ runs:
         steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
         steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
       shell: bash
+      env:
+        COMPLETIONS_CANARY: ${{ inputs.completions_canary }}
+        CANARY_ENVIRONMENT: ${{ inputs.environment }}
+        CANARY_RUN_ID: ${{ github.run_id }}
+        CANARY_RUN_ATTEMPT: ${{ github.run_attempt }}
       run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
-          --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
-          --evidence-path artifacts/backend-cloud-run-traffic-restore.json
+        if [[ "$CANARY_ENVIRONMENT" == "prod" && "$COMPLETIONS_CANARY" == "on" ]]; then
+          # Retain exact ownership/CAS guards; generic restore must not undo
+          # foreign drift or reset the canary's durable per-service budgets.
+          python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_completion_canary.py" --rollback \
+            --project "${{ inputs.project_id }}" --region "${{ inputs.region }}" \
+            --candidate backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --candidate backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --candidate backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
+            --candidate backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
+            --evidence-path "artifacts/backend-completions-canary-${CANARY_RUN_ID}-${CANARY_RUN_ATTEMPT}.json"
+        else
+          python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
+            --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+            --evidence-path artifacts/backend-cloud-run-traffic-restore.json
+        fi
 
     - name: Cloud Run deploy status report
       if: always()
@@ -1489,6 +1568,7 @@ runs:
       with:
         name: ${{ inputs.deploy_profile == 'auto-dev' && format('dev-backend-deployment-acceptance-{0}', github.run_id) || format('backend-deployment-evidence-{0}-{1}', github.run_id, github.run_attempt) }}
         path: |
+          artifacts/backend-completions-canary-*.json
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-candidate-release-vector.json' || 'artifacts/backend-cloud-run-candidate-release-vector.json' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-deployment-composition.json' || 'artifacts/backend-deployment-composition.json' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json' || 'artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json' }}
