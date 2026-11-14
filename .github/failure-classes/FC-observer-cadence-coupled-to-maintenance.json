@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-observer-cadence-coupled-to-maintenance",
+  "violated_contract": "A bounded periodic observer must refresh within its declared freshness budget even while unrelated maintenance remains in flight. Sampling only inside a maintenance pass inherits that pass's unbounded duration and can publish an expired observation.",
+  "canonical_prevention": "Supervise the observer on its own interruptible timer and an executor independent of long maintenance, retaining the existing leader election, overlap coalescing, query budget and stale-sample suppression. Exercise the real sampler with maintenance deliberately stalled and a deterministic clock advancing beyond the freshness budget.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_fresh_guard.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/fresh_guard.py",
+    "backend/utils/batch_pipeline/serving.py"
+  ],
+  "status": "open"
+}

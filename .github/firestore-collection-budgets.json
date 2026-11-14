@@ -43,6 +43,18 @@
   ],
   "dynamic": [
     {
+      "site": "backend/scripts/fresh_guard_cohort.py",
+      "expression": "f'batch_pipeline_{stage}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "Goal: Pipeline fresh-delivery acceptance",
+      "unit": "one explicit comparison at up to 100,000 fresh results in its commit window",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 4000,
+      "basis": "planning-bound",
+      "source": "SCA-2012: operator-invoked count-only comparison, two aggregations costing max(1, ceil(index entries/1000)) each. Same 100,000-row planning envelope as the serving guard => <=200 reads/comparison; 20 comparisons/day across prod/dev => 4,000. Not a runtime cap or booked saving; revisit if cohort size or invocation volume exceeds this envelope. No polling, document reads, lease checks or writes in this CLI.",
+      "reviewed": "2026-11-14"
+    },
+    {
       "site": "backend/database/batch_pipeline_fresh_guard.py",
       "expression": "f'{namespace}_results'",
       "collection_pattern": "batch_pipeline_*_results",
