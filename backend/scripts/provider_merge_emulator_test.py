@@ -1,0 +1,265 @@
+# LIFECYCLE: permanent
+"""PL-583/584/585: provider delivery on old Firestore, replacement Postgres and sim.
+
+Admission, settlement, ordered merge, privacy and transactions are production code.
+Only vendor/audio IO and the outbox enqueue boundary are synthetic. This qualifies
+the stage/Store interface, not the unresolved PL-581 carrier-to-unit binding or
+background owner discovery. Require OMI_REQUIRE_STORE_BACKENDS=all for full proof.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault('OMI_ENV_STAGE', 'offline')
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+pytest_plugins = ['tests.conftest']
+
+import pytest
+
+from config.policy import BatchUnitPolicy
+from database import batch_pipeline_intake
+from database.outbox import EnqueueResult
+from testing.store_fixtures import store_backend  # noqa: F401
+from utils.batch_pipeline import provider_stt_admission
+from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.provider_stt import ProviderSttStage
+from utils.batch_pipeline.scheduler import owner_key
+
+pytestmark = pytest.mark.integration
+POLICY = BatchUnitPolicy(batch_enabled=True, batch_percent=100)
+ROUTE = provider_stt_admission.SttRoute('provider', 'unsupported_language', 'modulate', 'ja')
+MEMBERSHIP = 'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED'
+RELEASE = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
+LAG = 'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS'
+CAPTURE = 1_000_000.0
+SETTLED = CAPTURE + 100_000.0
+
+
+class EnqueueBoundary:
+    """No task transport: admission must still supply its owning transaction."""
+
+    def enqueue(self, dedupe_key, owner_id, payload, available_at, *, tx=None, now):
+        assert tx is not None
+        assert payload == {'segment_id': dedupe_key}
+        return EnqueueResult(dedupe_key, False, f'wake-{dedupe_key}')
+
+
+class Artifacts:
+    def fetch_audio(self, item):
+        return b'synthetic-only'
+
+    def persist_recovery_result(self, item, payload, token):
+        return f'gs://synthetic/results/{item.segment_id}/{token}.enc'
+
+    def find_recovery_result(self, item, token):
+        return None
+
+
+@pytest.fixture
+def h(store_backend, monkeypatch):  # noqa: F811
+    for name in (MEMBERSHIP, RELEASE, LAG):
+        monkeypatch.delenv(name, raising=False)
+    store_backend.seed_user('owner')
+    return store_backend
+
+
+def row(h, segment):
+    return h.store.run(lambda tx: tx.get('jobs', segment))
+
+
+def admit(h, segment, *, capture=CAPTURE, lag=60.0):
+    uid = h.uid('owner')
+    conversation = f'conv-{segment}'
+    h.customer.add_conversation(uid, conversation)
+    item = WorkItem(
+        segment,
+        uid,
+        capture,
+        f'gs://synthetic/audio/{segment}',
+        5.0,
+        Priority.FRESH,
+        conversation_id=conversation,
+        privacy_generation=0,
+    )
+    binding = ProjectionBinding(uid, conversation, f'content-{segment}', (segment,), language='ja')
+    outcome = batch_pipeline_intake.admit(
+        h.store,
+        [item],
+        binding,
+        capture + 5.0 + lag,
+        namespace=h.namespace,
+        enqueue=provider_stt_admission.provider_enqueue(ROUTE, EnqueueBoundary(), {}),
+        policy=POLICY,
+    )
+    assert outcome['outcome'] == 'batch'
+    return row(h, segment)
+
+
+def settle(h, segment, now=SETTLED):
+    calls = []
+
+    def vendor(item, language, inspected, *, service):
+        calls.append(item.segment_id)
+        return {
+            'audio_seconds': 5.0,
+            'speech_seconds': 0.5,
+            'speech_spans': [{'start': 0.5, 'end': 1.0}],
+            'words': [{'word': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00'}],
+            'diarization': {'turns': []},
+            'words_provider': service,
+            'language': language,
+            'recovery_version': 1,
+        }
+
+    stage = ProviderSttStage(
+        h.store,
+        Artifacts(),
+        stt=vendor,
+        allowed=lambda *_: True,
+        inspect=lambda *_: (b'\0\0' * 80_000, 5.0, [{'start': 0.5, 'end': 1.0}]),
+        clock=lambda: now,
+    )
+    result = stage.run(segment)
+    assert (result.outcome, result.reason) == ('done', 'processed')
+    assert calls == [segment]
+    return row(h, segment)
+
+
+@pytest.mark.parametrize(
+    'lag,fresh,late', [(600.0, True, False), (7200.0, True, True), (86400.0, True, True), (86401.0, False, False)]
+)
+def test_pl583_admission_keeps_provider_freshness_distinct_from_conflict_lane(h, lag, fresh, late):
+    from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict
+    from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
+
+    original = admit(h, 'unit', lag=lag)
+    assert original['fresh_capture'] is fresh
+    assert original.get('late_upload', False) is late
+    assert original['policy'] == POLICY.to_dict() and original['audio_uri'] == 'gs://synthetic/audio/unit'
+    # Restart/idempotent admission never reclassifies accepted work under a new clock.
+    assert admit(h, 'unit', lag=lag + 100_000.0) == original
+    error = SyncAssignmentConflict('synthetic', subtype=SyncAssignmentConflictReason.RECORD_FINALIZE_PENDING)
+    assert quarantines_assignment_conflict(error, original, now=CAPTURE + 2 * 86400.0) is (late or not fresh)
+
+
+def test_pl583_rollback_changes_only_future_admissions(h, monkeypatch):
+    original = admit(h, 'accepted', lag=7200.0)
+    monkeypatch.setenv(LAG, '600')
+    assert admit(h, 'after-rollback', capture=CAPTURE + 10.0, lag=7200.0)['fresh_capture'] is False
+    assert row(h, 'accepted') == original
+    from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
+
+    assert FRESH_CAPTURE_LAG_SECONDS == 600.0
+
+
+@pytest.mark.parametrize('depth', [0, 2])
+@pytest.mark.parametrize('recovered', [False, True], ids=['ordinary', 'recovery-release'])
+@pytest.mark.parametrize('rollback', [False, True], ids=['membership-on', 'membership-rollback'])
+def test_pl585_fresh_provider_passes_held_backlog_without_releasing_it(h, monkeypatch, depth, recovered, rollback):
+    monkeypatch.setenv(MEMBERSHIP, 'false')
+    admit(h, 'backlog', capture=CAPTURE - 100.0, lag=90_000.0)
+    settle(h, 'backlog')
+    if recovered:
+        h.store.run(lambda tx: tx.put('jobs', 'backlog', {**tx.get('jobs', 'backlog'), 'recovery_state': 'recovered'}))
+    retained = row(h, 'backlog')
+    monkeypatch.delenv(MEMBERSHIP)
+    admit(h, 'fresh', lag=7200.0)
+    settled = settle(h, 'fresh')
+    assert settled['ready_at'] == SETTLED
+    if rollback:
+        monkeypatch.setenv(MEMBERSHIP, 'false')
+    merge = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=depth)
+    entry = merge.commit_next(h.uid('owner'), SETTLED + 1)
+    assert entry['segment_id'] == 'fresh' and entry['fresh_first'] is True
+    assert entry['fresh_capture'] is True and entry['projection_state'] == 'pending'
+    assert merge.commit_next(h.uid('owner'), SETTLED + 1000) is None
+    assert merge.commit_next(h.uid('owner'), SETTLED + 1000, release=['backlog']) is None
+    assert row(h, 'backlog') == retained
+    assert merge.held_owners == set()
+    assert not h.store.run(lambda tx: tx.get('merge_holds', owner_key(h.uid('owner')))).get('held')
+    # Explicit release resumes the retained result, after the fresh log entry.
+    monkeypatch.setenv(RELEASE, 'true')
+    released = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=depth).commit_next(
+        h.uid('owner'), SETTLED + 1001
+    )
+    assert released['segment_id'] == 'backlog' and released['late_capture'] is True
+    assert released['previous_segment_id'] == 'fresh' and released['log_sequence'] == 2
+
+
+def test_pl584_legacy_settle_clock_obeys_exact_head_wait_and_late_chain(h, monkeypatch):
+    monkeypatch.setenv(MEMBERSHIP, 'false')
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    monkeypatch.delenv(MEMBERSHIP)
+    admit(h, 'waiting', capture=CAPTURE + 10)
+    admit(h, 'ready', capture=CAPTURE + 20)
+    monkeypatch.setenv(MEMBERSHIP, 'false')
+    ready = settle(h, 'ready')
+    assert 'ready_at' not in ready and ready['provider_intent']['settled_at'] == SETTLED
+    monkeypatch.delenv(MEMBERSHIP)
+    merge = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=2)
+    uid = h.uid('owner')
+    assert merge.commit_next(uid, SETTLED + 59.999) is None
+    entry = merge.commit_next(uid, SETTLED + 60)
+    assert entry['segment_id'] == 'ready' and entry['fresh_first'] is True
+    assert entry['head_wait_bypass'] is True and entry['log_sequence'] == 1
+    assert row(h, 'waiting')['merge_pending'] is True
+    assert row(h, 'backlog')['state'] == 'result_ready'
+    settle(h, 'waiting', now=SETTLED + 100)
+    late = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=2).commit_next(uid, SETTLED + 101)
+    assert late['segment_id'] == 'waiting' and late['late_capture'] is True
+    assert late['previous_segment_id'] == 'ready' and late['log_sequence'] == 2
+    assert OrderedMerge(h.store).commit_next(uid, SETTLED + 102) is None
+
+
+def test_pl585_privacy_revoke_between_probe_and_commit_preserves_custody(h, monkeypatch):
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    admit(h, 'fresh')
+    settle(h, 'fresh')
+    original = row(h, 'fresh')
+    real_probe = h.store.fresh_pending
+
+    def revoke_after_probe(*args):
+        rows = real_probe(*args)
+        h.customer.block_privacy(h.uid('owner'))
+        return rows
+
+    monkeypatch.setattr(h.store, 'fresh_pending', revoke_after_probe)
+    assert OrderedMerge(h.store).commit_next(h.uid('owner'), SETTLED + 100) is None
+    assert row(h, 'fresh') == original
+    assert not h.store.run(lambda tx: tx.get('results', 'fresh'))
+
+
+def test_pl584_a_predecessor_settled_after_probe_cannot_be_skipped(h, monkeypatch):
+    admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
+    settle(h, 'backlog')
+    admit(h, 'earlier', capture=CAPTURE + 10)
+    admit(h, 'later', capture=CAPTURE + 20)
+    settle(h, 'later')
+    real_probe = h.store.fresh_pending
+    raced = []
+
+    def settle_after_probe(*args):
+        rows = real_probe(*args)
+        if not raced:
+            raced.append(True)
+            settle(h, 'earlier', now=SETTLED + 30)
+        return rows
+
+    monkeypatch.setattr(h.store, 'fresh_pending', settle_after_probe)
+    uid = h.uid('owner')
+    assert OrderedMerge(h.store, head_wait_seconds=60).commit_next(uid, SETTLED + 60) is None
+    assert not h.store.run(lambda tx: tx.get('results', 'later'))
+    merge = OrderedMerge(h.store, head_wait_seconds=60)
+    first = merge.commit_next(uid, SETTLED + 61)
+    second = merge.commit_next(uid, SETTLED + 61)
+    assert [first['segment_id'], second['segment_id']] == ['earlier', 'later']
+    assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
