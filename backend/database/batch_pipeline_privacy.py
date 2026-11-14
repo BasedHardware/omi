@@ -13,7 +13,7 @@ from uuid import uuid4
 from enum import Enum
 from typing import Any
 
-from config.firestore_read_levers import lever_enabled
+from config.firestore_read_levers import lever_enabled, lever_percent
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.batch_privacy_attempt import SCHEMA_FIELD, TOKEN_FIELD, TOKEN_SCHEMA, current_attempt, token_version
 from database import privacy_check_metrics as metrics
@@ -117,6 +117,10 @@ def assert_batch_write_allowed(
     # intake). Requiring an attempt here would leave those paths enforcing the
     # memo with no comparison. Nontransactional calls cannot be compared (and
     # the memo cannot enforce there); the negative cache keeps its own shadow.
+    # The window is fleet-wide for the owner memo: while ANY shadow percentage
+    # is set, no uid enforces it — sampled uids compare a candidate and every
+    # other uid serves live (see owner_on below) — so an unsampled uid can
+    # never serve a decision the comparison cohort has not validated.
     shadow = lever_enabled('privacy_checks_shadow', uid) and not negative_shadow
     enforce = (
         (lever_enabled('bpp_generation_memo', uid) or lever_enabled('bpp_owner_memo', uid))
@@ -133,12 +137,15 @@ def assert_batch_write_allowed(
         verified_out=verified_out,
     )
     # The candidate always gets a throwaway export: a comparison may fill its
-    # own copy but can never publish rows or perturb the caller's export.
+    # own copy but can never publish rows or perturb the caller's export. It
+    # also decides with the owner path ON (owner_candidate): it must compute
+    # what the memo would serve after the window, not what the window allows.
     candidate_kwargs: dict[str, Any] = dict(
         conversation_ids=ids,
         expected_generation=expected_generation,
         snapshots={} if snapshots is not None else None,
         read_budget=read_budget,
+        owner_candidate=True,
     )
     function = _assert_batch_write_allowed_memo if enforce else _assert_batch_write_allowed_live
     live_evidence = metrics.DecisionEvidence() if shadow or enforce else None
@@ -198,6 +205,7 @@ def _assert_batch_write_allowed_memo(
     snapshots: dict | None = None,
     read_budget=None,
     verified_out: set | None = None,
+    owner_candidate: bool = False,
 ):
     # Keep the disabled path's live read order and counts unchanged.
     # A served owner decision exports no rows for ids the entry has already
@@ -211,7 +219,18 @@ def _assert_batch_write_allowed_memo(
     # the owner memo (bpp_owner_memo), which also admits snapshots calls
     # because a hit serves no rows. Short-circuit on the transaction and the
     # lever so nontransactional and lever-off calls never poll a kill switch.
-    owner_on = transaction is not None and lever_enabled('bpp_owner_memo', uid) and not ttl_disabled()
+    # Shadow window: while any privacy_checks_shadow percentage is set, the
+    # owner memo serves no one — sampled uids compare a candidate after the
+    # live decision (owner_candidate, set only by that comparison) and every
+    # other uid stays live — so a zero stale_allow is evidence for every path
+    # the memo will serve once the window clears. The already-shipped id-set
+    # memo is NOT gated by the window; it keeps its own levers and keying.
+    owner_on = (
+        transaction is not None
+        and lever_enabled('bpp_owner_memo', uid)
+        and not ttl_disabled()
+        and (owner_candidate or lever_percent('privacy_checks_shadow') == 0)
+    )
     # The id-set memo keeps its own levers so turning the owner memo off (or
     # on) never changes what the id-set path does.
     idset_on = lever_enabled('bpp_generation_memo', uid)

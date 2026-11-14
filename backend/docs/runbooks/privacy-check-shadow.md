@@ -192,21 +192,29 @@ Shadow window to run before the default-on revision serves decisions for real:
   structural, not evidence.
 - The candidate receives a throwaway export dict, so a comparison can never
   publish rows or perturb the caller's export.
-- Unsampled uids keep enforcing the memo; they are the documented sampling
-  remainder, not a coverage gap. Nontransactional provider-STT preflight stays
-  live and never enters the memo path (no transaction).
+- Unsampled uids do not enforce either: while any `privacy_checks_shadow`
+  percentage is set, the owner memo serves no one, so the unsampled cohort
+  serves plain live decisions (baseline reads, no memo saving) until the
+  lever clears. Nothing the comparison cohort has not validated serves a
+  decision during the window. Nontransactional provider-STT preflight stays
+  live and never enters the memo path (no transaction); it is live by
+  construction in every stage, so no later lever or stage enforces the memo
+  there. The already-shipped attempt-scoped id-set memo keeps its existing
+  levers and behavior throughout; it is not part of this release's change.
 - The negative lookup cache must stay off for the window: with it on,
   `negative_shadow` wins and the memo neither enforces nor compares.
 - Gate: `privacy_decision_mismatch_total{family="batch",reason="stale_allow"}`
   is zero and `privacy_shadow_checks_total{family="batch",result="mismatch"}`
   is zero, with `candidate_source="owner_hit"` comparisons observed on every
-  shape above.
-- Read cost: sampled uids serve live, so that cohort roughly doubles its reads —
-  a cold owner pays the live walk plus the candidate walk, a warm owner pays the
-  live walk plus one candidate token read, and every sampled check adds one
-  observation token read. Snapshot callers add per-new-id reads on candidate
-  misses. At 10% sampling this is about +0.5 read per check across the fleet;
-  the unsampled 90% keeps the saving.
+  shape above. A zero comparison count is not evidence: it means the negative
+  cache is still on or the window is not set.
+- Read cost: the window saves nothing. Sampled uids roughly double their reads
+  — a cold owner pays the live walk plus the candidate walk, a warm owner pays
+  the live walk plus one candidate token read, and every sampled check adds
+  one observation token read. Snapshot callers add per-new-id reads on
+  candidate misses. The unsampled cohort returns to baseline live reads. At
+  10% sampling that is about +0.5 read per check across the fleet, plus the
+  baseline (no-saving) reads for the unsampled 90% until the window ends.
 
 ## Deploy and ramp
 

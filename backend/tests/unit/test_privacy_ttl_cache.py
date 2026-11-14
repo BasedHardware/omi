@@ -1125,6 +1125,25 @@ def test_owner_memo_partial_export_covers_only_unseen_ids(world, monkeypatch):
     assert reads[-2:] == [('users', UID, 'deleted_conversations', 'other'), OTHER]
 
 
+def test_owner_memo_shadow_window_serves_no_enforcement_for_unsampled_uids(world, monkeypatch):
+    """While any privacy_checks_shadow percentage is set, the owner memo serves
+    no one: unsampled uids walk live every time instead of enforcing the memo
+    beside (never validated by) the compared cohort."""
+    from config.policy.batch import cohort_bucket
+
+    db, reads, _, _ = world
+    bucket = int(cohort_bucket(UID, 'privacy_checks_shadow', bits=64, formula='modulo'))
+    assert bucket > 0  # this uid must be able to sit above the sample
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'bpp_owner_memo': 100, 'privacy_checks_shadow': bucket}))
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    matches_before = matches._value.get()
+    reads.clear()
+    assert check(db) == 7
+    assert check(db) == 7  # still a full live walk: no owner serving, no saving
+    assert reads == [MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE] * 2
+    assert matches._value.get() == matches_before  # unsampled: no candidate at all
+
+
 def test_owner_memo_growth_cannot_extend_the_sixty_second_bound(world, monkeypatch):
     db, reads, _, clock = world
     owner_enable(monkeypatch)
