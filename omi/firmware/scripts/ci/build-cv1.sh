@@ -53,6 +53,12 @@ echo "Updating west modules (shallow)..."
 west update -o=--depth=1 -n
 west zephyr-export
 
+# Copy the custom MCUboot main.c that handles SD card init/deinit before boot_go().
+# Without this, the SD card holds the SPI3 bus (MISO high), preventing MCUboot from
+# reading SPI NOR flash where the OTA upgrade image is stored (#24100).
+echo "Installing custom MCUboot bootloader for Omi CV1 hardware..."
+cp "$FW/omi/src/mcuboot_boot_zephyr.c" bootloader/mcuboot/boot/zephyr/main.c
+
 # Select the production app config through sysbuild's image-scoped setting.
 # Do not create an untracked prj.conf: the later simulator gate requires a
 # clean firmware checkout when it records the exact source SHA.
