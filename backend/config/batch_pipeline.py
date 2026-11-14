@@ -736,6 +736,14 @@ def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
         return default
 
 
+def ready_discovery_cursor_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', log=False)
+
+
+def ready_discovery_owners_per_tick(default: int = 20) -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', str(default)), 20, 100)
+
+
 def serving_sweep_page_rows() -> int:
     """Bound projection discovery pages; unset restores the existing 100 rows."""
     return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 200, 50)

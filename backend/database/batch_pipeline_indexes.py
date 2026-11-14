@@ -14,6 +14,15 @@ def _desc(field):
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_ready_owners',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            tuple(_asc(field) for field in ('state', 'merge_pending', 'owner_key', '__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_fresh_guard_{"pending" if pending else "total"}',
             f'batch_pipeline_{stage}_results',
             'COLLECTION',

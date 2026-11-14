@@ -1262,3 +1262,17 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
     assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
     assert firsts and reads and writes and firsts[-1] is reads[-1] is writes[-1]
     probe.assert_not_called()
+
+
+def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
+    rows = [('jobs', f's{i}', job(h, f's{i}', state='result_ready', merge_pending=True)) for i in range(5)]
+    rows += [
+        ('jobs', 'p', job(h, 'p', owner='p', state='result_ready', merge_pending=True)),
+        ('jobs', 'unready', job(h, 'unready', owner_key='z1', merge_pending=True)),
+        ('jobs', 'done', job(h, 'done', owner_key='z2', state='result_ready')),
+    ]
+    put_all(h, rows)
+    expected = [(owner_key(h.uid(o)), h.uid(o)) for o in ('o', 'p')]
+    assert h.store.ready_owners(None, 1) == expected[:1]
+    assert h.store.ready_owners(expected[0][0], 1) == expected[1:]
+    assert h.store.ready_owners(expected[1][0], 1) == []

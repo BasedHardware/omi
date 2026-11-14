@@ -503,6 +503,18 @@ def entries():
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
         ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_owners',
+            domains={'namespace': namespaces, 'after_owner_key': [None, 'synthetic-cursor']},
+            neutrals={'limit': (2, 'bounded owner count only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.ready_owners',
+            covered_by=('database.batch_pipeline_store.ready_owners',),
+            reason='thin store adapter forwards the owner cursor unchanged',
+            expect_observed=False,
+            body_digest='943145bbda8b49a547ff3fdfdcde7efcd4748d39f424ec42d048fb88b67da86e',
+        ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.held_merge_owners',
             covered_by=('database.batch_pipeline_store.held_merge_owners',),

@@ -195,6 +195,17 @@ class MemoryStore:
         ]
         return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
 
+    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
+        owners = {
+            row['owner_key']: row.get('owner_id')
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'result_ready'
+            and row.get('merge_pending')
+            and (after_owner_key is None or row['owner_key'] > after_owner_key)
+        }
+        return sorted(owners.items())[: max(1, min(limit, 100))]
+
     def held_merge_owners(self, limit, *, after=None):
         owners = []
         for (table, key), row in sorted(self.rows.items()):

@@ -84,6 +84,7 @@ class Store(Protocol):
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
+    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
@@ -433,6 +434,9 @@ class FirestoreStore:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
         return fresh_pending(self.client, self.namespace, owner_key, limit)
 
+    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
+        return ready_owners(self.client, self.namespace, after_owner_key, limit)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
 
@@ -590,6 +594,26 @@ def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict |
         .stream()
     )
     return docs[0].to_dict() if docs else None
+
+
+def ready_owners(client: Any, namespace: str, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
+    # Seek past the entire owner, never through its potentially huge block.
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('state', '==', 'result_ready')
+        .where('merge_pending', '==', True)
+        .order_by('owner_key')
+    )
+    owners = []
+    for _ in range(max(1, min(limit, 100))):
+        page = query if after_owner_key is None else query.where('owner_key', '>', after_owner_key)
+        docs = list(page.limit(1).stream())
+        if not docs:
+            break
+        row = docs[0].to_dict()
+        after_owner_key = row['owner_key']
+        owners.append((after_owner_key, row.get('owner_id')))
+    return owners
 
 
 def held_merge_owners(

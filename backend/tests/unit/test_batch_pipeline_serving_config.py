@@ -18,9 +18,12 @@ from utils.batch_pipeline import projection, serving
     [
         ('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', config.serving_sweep_page_rows, 100, 50, 200),
         ('BATCH_PIPELINE_SERVING_TICK_SECONDS', config.serving_tick_seconds, 20, 10, 60),
+        ('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', config.ready_discovery_owners_per_tick, 20, 1, 100),
     ],
 )
-@pytest.mark.parametrize('raw', [None, '', 'bad', '2.5', 'nan', 'inf', '-1', '0', '5', '50', '200', '300', '999'])
+@pytest.mark.parametrize(
+    'raw', [None, '', 'bad', '2.5', 'nan', 'inf', '-1', '0', '5', '50', '200', '300', '999', '1000']
+)
 def test_serving_numeric_bounds(monkeypatch, name, reader, default, minimum, maximum, raw):
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', raising=False)
     if raw is None:
