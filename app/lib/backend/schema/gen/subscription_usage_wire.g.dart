@@ -383,17 +383,52 @@ class GeneratedProcessingBacklog {
   }
 }
 
+class GeneratedPaymentIssueMonthlySwitch {
+  final int amount;
+  final String currency;
+  final String priceId;
+  final int yearlyAmount;
+
+  const GeneratedPaymentIssueMonthlySwitch({
+    required this.amount,
+    required this.currency,
+    required this.priceId,
+    required this.yearlyAmount,
+  });
+
+  factory GeneratedPaymentIssueMonthlySwitch.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentIssueMonthlySwitch(
+      amount: _required(_readFieldValue<int>(_readField(json, const ["amount"]), "amount", _readInt, requiredField: true, nullable: false), "amount"),
+      currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: true, nullable: false), "currency"),
+      priceId: _required(_readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: true, nullable: false), "price_id"),
+      yearlyAmount: _required(_readFieldValue<int>(_readField(json, const ["yearly_amount"]), "yearly_amount", _readInt, requiredField: true, nullable: false), "yearly_amount"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'amount': amount,
+      'currency': currency,
+      'price_id': priceId,
+      'yearly_amount': yearlyAmount,
+    };
+  }
+}
+
 class GeneratedPaymentIssue {
+  final GeneratedPaymentIssueMonthlySwitch? monthlySwitch;
   final String plan;
   final String status;
 
   const GeneratedPaymentIssue({
+    this.monthlySwitch,
     required this.plan,
     required this.status,
   });
 
   factory GeneratedPaymentIssue.fromJson(Map<String, dynamic> json) {
     return GeneratedPaymentIssue(
+      monthlySwitch: _readFieldValue<GeneratedPaymentIssueMonthlySwitch>(_readField(json, const ["monthly_switch"]), "monthly_switch", (value) => _readObject(value, GeneratedPaymentIssueMonthlySwitch.fromJson), requiredField: false, nullable: true),
       plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: true, nullable: false), "plan"),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
@@ -401,6 +436,7 @@ class GeneratedPaymentIssue {
 
   Map<String, dynamic> toJson() {
     return {
+      'monthly_switch': monthlySwitch?.toJson(),
       'plan': plan,
       'status': status,
     };

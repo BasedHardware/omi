@@ -136,6 +136,10 @@ env:
     value: ""
   - name: STT_CAP_DISPATCH_LANES
     value: "live"
+  - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
+    value: "false"
+  - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
+    value: "24"
   - name: DEMAND_PROCESSING_ENABLED
     value: "false"
   - name: DEMAND_PROCESSING_LAZY_ENABLED
@@ -339,6 +343,8 @@ env:
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
     value: "account-deletion"
+  - name: CONVERSATION_ERASURE_TASKS_QUEUE
+    value: "conversation-erasure"
   - name: SYNC_TASKS_PROJECT
     value: "based-hardware"
   - name: SYNC_TASKS_LOCATION

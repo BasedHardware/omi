@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 from typing import Annotated, List, Dict, Any, Literal, Union, Optional
+import functools
 import hashlib
 import os
 import asyncio
@@ -145,7 +146,7 @@ from utils.cloud_tasks import (
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
 from database import conversation_batch_purge_jobs
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -398,7 +399,7 @@ async def run_account_deletion_wipe(
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
-# Rides the account-deletion queue and invoker identity; dispatched by the purge reconciler.
+# Rides the conversation-erasure queue with the account-deletion invoker identity; dispatched by the purge reconciler.
 # Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
 @router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
 async def run_conversation_batch_purge(
@@ -409,14 +410,24 @@ async def run_conversation_batch_purge(
         payload = await request.json()
         job_id = payload.get('job_id') if isinstance(payload, dict) else None
         generation = payload.get('generation') if isinstance(payload, dict) else None
+        kind = payload.get('kind', 'batch_purge') if isinstance(payload, dict) else None
         if not isinstance(job_id, str) or not job_id or not isinstance(generation, int) or generation < 1:
             raise ValueError('job_id and a positive generation are required')
+        if kind not in {'batch_purge', 'erasure'}:
+            raise ValueError('unknown obligation kind')
     except Exception as e:
         logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
+    if kind == 'erasure':
+        # An accepted delete's cascade erasure; the eraser is the delete route's own cascade.
+        from routers.conversations import erase_accepted_conversation
+
+        run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
+    else:
+        run = conversation_batch_purge_jobs.run_job
     try:
-        outcome = await run_blocking(cleanup_executor, conversation_batch_purge_jobs.run_job, job_id, generation)
+        outcome = await run_blocking(erasure_executor, run, job_id, generation)
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(

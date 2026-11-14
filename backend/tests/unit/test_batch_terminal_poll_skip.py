@@ -17,6 +17,7 @@ NONTERMINAL = (
     'retry',
     'result_ready',
     'record_pending',
+    'record_recovery_waiting',
     'held',
     'provider_pending',
     'provider_running',
@@ -46,10 +47,11 @@ class Query:
         query.filters = [*self.filters, (field, op, value)]
         return query
 
-    def order_by(self, field):
+    def order_by(self, field, direction='ASCENDING'):
         self.calls.append(('order_by', field))
         query = copy(self)
         query.orders = [*self.orders, field]
+        query.descending = direction == 'DESCENDING'
         return query
 
     def limit(self, count):
@@ -65,9 +67,20 @@ class Query:
             rows = [
                 r
                 for r in rows
-                if field in r and (r[field] == value if op == '==' else r[field] is not None and r[field] not in value)
+                if field in r
+                and (
+                    r[field] == value
+                    if op == '=='
+                    else (
+                        r[field] > value
+                        if op == '>'
+                        else r[field] <= value if op == '<=' else r[field] is not None and r[field] not in value
+                    )
+                )
             ]
-        rows = sorted(rows, key=lambda row: tuple(row[field] for field in self.orders))
+        rows = sorted(
+            rows, key=lambda row: tuple(row[field] for field in self.orders), reverse=getattr(self, 'descending', False)
+        )
         for row in rows[: self.count]:
             self.reads.append(row['segment_id'])
             yield SimpleNamespace(to_dict=lambda row=row: deepcopy(row))
@@ -163,6 +176,7 @@ def test_both_index_shapes_are_in_the_generated_registry():
 
 
 def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
+    from database.record_recovery_gate import WAITING_STATE
     from tests.support.lifecycle_state_table import STATES
     from utils.batch_pipeline.provider_stt import PENDING, RUNNING, SUPERSEDED
 
@@ -172,7 +186,10 @@ def test_excluded_set_is_the_terminal_union_and_nonterminal_complement():
     assert set(TERMINAL) == lifecycle | dispositions | {SUPERSEDED}
     from scripts.batch_pipeline_poll_state_census import KNOWN_STATES
 
-    known = batch | {PENDING, RUNNING, SUPERSEDED}
+    # record_recovery_waiting is a job state but is written with merge_pending
+    # False, so it is in the known vocabulary without appearing in this
+    # merge-pending complement.
+    known = batch | {PENDING, RUNNING, SUPERSEDED, WAITING_STATE}
     assert set(KNOWN_STATES) == known
     assert known - set(TERMINAL) == set(NONTERMINAL) - {'held', 'future_state'}
 
@@ -293,3 +310,19 @@ def test_census_cli_combines_both_collections_and_only_aggregates(monkeypatch, c
         assert (actual.field_path, actual.op_string, actual.value) == (
             ('merge_pending', '==', True) if index % 2 == 0 else ('state', 'in', tool.KNOWN_STATES)
         )
+
+
+def test_a_ready_provider_row_without_ready_at_waits_on_its_settle_instant(monkeypatch):
+    """2026-11-13: ready fresh provider rows without ready_at never passed an unready fresh head."""
+    provider = {'stt_route': {'stt_route': 'provider'}, 'provider_intent': {'settled_at': 10}}
+    rows = [row('vendor_held', 1), dict(row('result_ready', 2), **provider)]
+    assert _fresh_pick(rows, 100, 300) == (None, None)  # settled 90 s ago
+    picked, skipped = _fresh_pick(rows, 311, 300)
+    assert picked['state'] == 'result_ready' and skipped['segment_ids'] == ['vendor_held'] and skipped['waited'] == 301
+    # The settle instant stands in only for provider rows, and only while membership is on.
+    assert _fresh_pick([row('retry', 1), row('result_ready', 2, provider_intent={'settled_at': 10})], 311, 300) == (
+        None,
+        None,
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED', 'false')
+    assert _fresh_pick(rows, 311, 300) == (None, None)

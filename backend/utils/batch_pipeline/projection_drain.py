@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from config.batch_pipeline import (
     max_owner_drains,
+    owner_drain_first_turn_seconds,
     projection_drain_claim_aware_enabled,
     projection_drain_live_target_backoff_enabled,
     projection_drain_privacy_backoff_enabled,
@@ -62,6 +63,11 @@ logger = logging.getLogger(__name__)
 MAX_OWNER_DRAINS = max_owner_drains()
 # One owner's turn; with more rows it re-queues behind every waiting owner.
 DRAIN_TURN_SECONDS = 120.0
+# A newly requested owner's first turn: about one step. An owner with a few fresh rows
+# finishes inside it; one with a long chain continues as a backlog owner. 0: one FIFO queue.
+FIRST_TURN_SECONDS = float(owner_drain_first_turn_seconds())
+# Rounds of new owners (MAX_OWNER_DRAINS each) after which a waiting backlog owner goes first.
+BACKLOG_OWED_TURNS = 4
 # One blocking step: bounds a sync-pool slot and the owner-claim hold.
 DRAIN_STEP_SECONDS = 15.0
 MAX_DELAYED_OWNERS = 1024
@@ -78,6 +84,13 @@ class OwnerDrains:
     def __init__(self, projector: Projector):
         self.projector = projector
         self.queue: deque[str] = deque()
+        # Backlog owners (a productive turn ended with rows left) wait here, behind newly
+        # requested owners, and give their slot back at a step boundary when one is waiting.
+        self.backlog: deque[str] = deque()
+        self.backlog_running: set[str] = set()
+        self.yielding: set[str] = set()
+        # New owners launched since a backlog owner last was; bounds how long the backlog can wait.
+        self.new_since_backlog = 0
         self.tasks: dict[str, asyncio.Task] = {}
         # Owners requested again while draining: one more turn after this one.
         self.again: set[str] = set()
@@ -100,13 +113,43 @@ class OwnerDrains:
                 continue
             if owner in self.tasks:
                 self.again.add(owner)
-            elif owner not in self.queue:
+            elif owner not in self.queue and owner not in self.backlog:
                 self.queue.append(owner)
         self.launch()
 
+    def classes(self) -> bool:
+        return FIRST_TURN_SECONDS > 0
+
+    def next_owner(self) -> str | None:
+        """Newly requested owners first. With no backlog owner running, one goes ahead after
+        BACKLOG_OWED_TURNS rounds of new owners, so the backlog advances however many arrive."""
+        owed = not self.backlog_running and self.new_since_backlog >= BACKLOG_OWED_TURNS * MAX_OWNER_DRAINS
+        if self.backlog and (not self.queue or owed):
+            owner = self.backlog.popleft()
+            self.backlog_running.add(owner)
+            self.new_since_backlog = 0
+            return owner
+        if self.queue:
+            self.new_since_backlog += 1
+            return self.queue.popleft()
+        return None
+
+    def should_yield(self, owner: str) -> bool:
+        """A backlog turn ends at this step when newly requested owners wait with no free
+        slot: one backlog turn per waiting owner, and never the last one running."""
+        if owner not in self.backlog_running or owner in self.yielding:
+            return False
+        waiting = len(self.queue) - (MAX_OWNER_DRAINS - len(self.tasks)) - len(self.yielding)
+        if waiting <= 0 or len(self.backlog_running) - len(self.yielding) <= 1:
+            return False
+        self.yielding.add(owner)
+        return True
+
     def launch(self) -> None:
-        while self.queue and len(self.tasks) < MAX_OWNER_DRAINS and not self.closed:
-            owner = self.queue.popleft()
+        while len(self.tasks) < MAX_OWNER_DRAINS and not self.closed:
+            owner = self.next_owner()
+            if owner is None:
+                break
             self.projector.draining.add(owner)
             continuation = owner in self.continuations
             self.continuations.discard(owner)
@@ -141,7 +184,8 @@ class OwnerDrains:
             PROJECTION_DRAIN_CLAIM_HELD.inc()
             self.stops[owner] = 'claim_held'
             return False
-        return await self.run(owner)
+        first = self.classes() and not continuation
+        return await self.run(owner, turn_seconds=FIRST_TURN_SECONDS if first else DRAIN_TURN_SECONDS)
 
     def privacy_head_unchanged(self, owner: str) -> tuple[bool, bool]:
         """One cheap result read; missing version or read failure releases the wake."""
@@ -196,6 +240,9 @@ class OwnerDrains:
     def close(self) -> None:
         self.closed = True
         self.queue.clear()
+        self.backlog.clear()
+        self.backlog_running.clear()
+        self.yielding.clear()
         self.again.clear()
         self.stops.clear()
         self.stopped_heads.clear()
@@ -210,6 +257,8 @@ class OwnerDrains:
 
     def finished(self, owner: str, task: asyncio.Task) -> None:
         self.tasks.pop(owner, None)
+        self.backlog_running.discard(owner)
+        self.yielding.discard(owner)
         self.projector.draining.discard(owner)
         if task.cancelled():
             # Global background-task shutdown: do not start another turn.
@@ -224,7 +273,8 @@ class OwnerDrains:
         more = task.exception() is None and task.result() is True
         if more:
             self.continuations.add(owner)
-            self.queue.append(owner)  # Productive turns always continue at the FIFO tail.
+            # Productive turns always continue at a FIFO tail: the backlog's, when it has its own.
+            (self.backlog if self.classes() else self.queue).append(owner)
         elif stop == 'privacy_unchanged':
             if owner not in self.privacy_heads:
                 # The TTL fired after the check returned but before this callback.
@@ -269,10 +319,10 @@ class OwnerDrains:
         PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS.inc()
         return True
 
-    async def run(self, owner: str) -> bool:
+    async def run(self, owner: str, *, turn_seconds: float = DRAIN_TURN_SECONDS) -> bool:
         """One turn; True when the chain had more rows when the turn ended."""
         started = time.monotonic()
-        deadline = started + DRAIN_TURN_SECONDS
+        deadline = started + turn_seconds
         advanced = steps = 0
         more = False
         stop = 'end'
@@ -300,6 +350,10 @@ class OwnerDrains:
                     self.projector.owe_followups(walk.followups)
                 self.projector.schedule_index_flush()
                 if not walk.more:
+                    break
+                if self.should_yield(owner):
+                    more = True
+                    stop = 'yield'
                     break
         except Exception as error:
             stop = 'error'

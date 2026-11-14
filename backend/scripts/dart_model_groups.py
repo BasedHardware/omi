@@ -543,6 +543,7 @@ SCHEMA_GROUPS = {
             'HeldAudioRecording',
             'HeldAudioSummary',
             'ProcessingBacklog',
+            'PaymentIssueMonthlySwitch',
             'PaymentIssue',
             'UserSubscriptionResponse',
             'UsageStats',

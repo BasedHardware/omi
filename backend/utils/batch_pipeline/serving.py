@@ -33,6 +33,7 @@ from utils.executors import run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
+from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
@@ -86,6 +87,7 @@ class Serving:
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
         self.projection_held_dead_letter = ProjectionHeldDeadLetter(store, metrics=metrics)
         self.merge = OrderedMerge(store, metrics=metrics)
+        self.ready_discovery = ReadyDiscovery(store, 'serving')
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
         self.held_partial_due = 0.0
@@ -202,6 +204,9 @@ class Serving:
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
+        elif self.metrics:
+            self.metrics.fresh_guard.deactivate()
+            self.metrics.delivered_share.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -292,6 +297,14 @@ class Serving:
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        if self.metrics:
+            # Explicit reconcile bypasses the periodic lease; the guard never does.
+            if self._leads(True):
+                self.metrics.fresh_guard.refresh(self.store)
+                self.metrics.delivered_share.refresh(self.store)
+            else:
+                self.metrics.fresh_guard.deactivate()
+                self.metrics.delivered_share.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -353,6 +366,23 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time())
+        page = self.ready_discovery.page()
+        if page is not None:
+            for _, owner_id in self.ready_discovery.owners(page):
+                try:
+                    if owner_id:
+                        self.drain_owner(owner_id)
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'event=batch_merge action=ready_drain outcome=retry exception_type=%s count=1',
+                        type(error).__name__,
+                    )
+        if page is None or not self.ready_discovery.finish(page):
+            self._drain_ready_page()
+        # Held owners by durable marker: the page above can be all one held backlog.
+        self.merge.reoffer_marked(self.drain_owner)
+
+    def _drain_ready_page(self):
         owners = set()
         for segment in self.store.due('result_ready', time.time(), 100):
             job = self.store.run(lambda tx: tx.get('jobs', segment))
@@ -366,8 +396,6 @@ class Serving:
                         'event=batch_merge action=ready_drain outcome=retry exception_type=%s count=1',
                         type(error).__name__,
                     )
-        # Held owners by durable marker: the page above can be all one held backlog.
-        self.merge.reoffer_marked(self.drain_owner)
 
 
 @lru_cache(maxsize=2)

@@ -401,6 +401,13 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
     return replace(SimConfig(name=name, seed=seed, horizon_seconds=2 * 3600.0), workload=spec, **changes)
 
 
+# The provider traces admit late uploads as catch-up and pin that path: release on, and the
+# 10-minute bar the traces were recorded with (provider admission now defaults to a day).
+_PROVIDER_BACKLOG_RELEASE = {
+    'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': 'true',
+    'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS': '600',
+}
+
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.
     'healthy': lambda: _config('healthy'),
@@ -453,8 +460,14 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     ),
     # C8 with legacy draining: a language Parakeet cannot serve is admitted to the provider-STT stage,
     # never leased by a GPU pump, pays exactly one vendor call per unit and merges in capture order.
-    'provider_stt_ja': lambda: _config('provider_stt_ja', language='ja', legacy_sync='draining'),
-    'provider_stt_unsupported': lambda: _config('provider_stt_unsupported', language='sw', legacy_sync='draining'),
+    # These uploads are admitted more than the fresh lag after capture, so they are catch-up rows:
+    # the traces pin the release path (commit and projection), which is opt-in in production.
+    'provider_stt_ja': lambda: _config(
+        'provider_stt_ja', language='ja', legacy_sync='draining', flags=_PROVIDER_BACKLOG_RELEASE
+    ),
+    'provider_stt_unsupported': lambda: _config(
+        'provider_stt_unsupported', language='sw', legacy_sync='draining', flags=_PROVIDER_BACKLOG_RELEASE
+    ),
     # BYOK routes like everyone (David, 10-19): Parakeet, no vendor spend; the admission policy
     # records provider_reason=byok so the keyless dispatch re-check never re-holds it.
     'provider_stt_byok': lambda: _config('provider_stt_byok', byok=True, legacy_sync='draining', trace_policy=True),

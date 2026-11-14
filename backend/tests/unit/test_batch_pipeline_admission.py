@@ -459,7 +459,7 @@ def test_queued_authorization_uses_owner_and_batch_scope(monkeypatch, ladder, co
     assert result['allowed'] == ([] if held else ['segment'])
     assert allowance.call_count == int(held)
     if held:
-        allowance.assert_called_once_with('synthetic-owner', lane='batch')
+        allowance.assert_called_once_with('synthetic-owner', lane='batch', backfill=False)
 
 
 @pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 import json
 import os
 import pathlib
@@ -78,6 +78,34 @@ def usd(value) -> Decimal:
     return amount
 
 
+# BigQuery NUMERIC holds 29 integer and 9 fractional digits. The vendor sends
+# more fractional digits than that (its first real snapshot was rejected with
+# "Invalid NUMERIC value" on used_usd), so money is rounded half-up to nine
+# decimals at the artifact boundary, the same policy the derived daily spend
+# already uses (README: "NUMERIC outputs round to nine decimal places").
+NUMERIC_SCALE = Decimal("0.000000001")
+NUMERIC_LIMIT = Decimal(10) ** 29
+
+
+def numeric_usd(amount: Decimal, *, pad: bool = False) -> str:
+    """Render a parsed amount as a plain decimal string BigQuery NUMERIC accepts.
+
+    Values with at most nine fractional digits keep their digits (``12.5`` stays
+    ``12.5``, ``0`` stays ``0``). Longer ones round half-up to nine places. Never
+    exponent notation (a quantized zero is ``0.000000000``), and a value outside
+    the NUMERIC range after rounding is an invalid response, not a load error.
+    ``pad=True`` always renders nine places (the derived daily spend's historical
+    shape). Arithmetic runs at 60 digits so a 29-integer-digit value can be rounded.
+    """
+    with localcontext() as ctx:
+        ctx.prec = 60
+        if pad or amount.as_tuple().exponent < -9:
+            amount = amount.quantize(NUMERIC_SCALE, rounding=ROUND_HALF_UP)
+        if amount >= NUMERIC_LIMIT:
+            raise BalanceError("invalid_response", "balance value out of range")
+        return format(amount, "f")
+
+
 def parse_balance(payload) -> dict:
     """Validate the balance document and return parsed numbers only."""
     if not isinstance(payload, dict):
@@ -88,8 +116,8 @@ def parse_balance(payload) -> dict:
     if not isinstance(invoice, bool):
         raise BalanceError("invalid_response", "balance response missing invoice_billing_enabled")
     return {
-        "used_usd": str(used),
-        "available_usd": str(available),
+        "used_usd": numeric_usd(used),
+        "available_usd": numeric_usd(available),
         "invoice_billing_enabled": invoice,
     }
 
@@ -187,6 +215,20 @@ def _day(ts: str) -> str:
     return ts[:10]
 
 
+def _difference(current: Decimal, previous: Decimal) -> Decimal:
+    """Exact difference at 60 digits (the default 28 would round a 29-digit value)."""
+    with localcontext() as ctx:
+        ctx.prec = 60
+        return current - previous
+
+
+def _share(delta: Decimal, days: int) -> Decimal:
+    """One day's share of a gap-spread delta, divided at 60 digits."""
+    with localcontext() as ctx:
+        ctx.prec = 60
+        return delta / days
+
+
 def daily_deltas(snapshots: list[dict]) -> list[dict]:
     """Per-UTC-day spend from consecutive snapshots, oldest first.
 
@@ -216,7 +258,7 @@ def daily_deltas(snapshots: list[dict]) -> list[dict]:
                 }
             )
             continue
-        delta = used_cur - used_prev
+        delta = _difference(used_cur, used_prev)
         start = dt.date.fromisoformat(_day(prev["ts"])) + dt.timedelta(days=1)
         covered = [(start + dt.timedelta(days=i)).isoformat() for i in range((end_day - start).days + 1)]
         if not covered:  # two snapshots inside one UTC day: both spend to that day
@@ -227,7 +269,7 @@ def daily_deltas(snapshots: list[dict]) -> list[dict]:
                 {
                     "date": day,
                     "vendor": VENDOR,
-                    "usd": str((delta / len(covered)).quantize(Decimal("0.000000001"))),
+                    "usd": numeric_usd(_share(delta, len(covered)), pad=True),
                     "flag": flag,
                     "interval_start": prev["ts"],
                     "interval_end": cur["ts"],

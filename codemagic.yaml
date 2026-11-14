@@ -2726,7 +2726,7 @@ workflows:
           fi
           set -euo pipefail
 
-          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
+          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown --runtime-smoke-result "$BUILD_DIR/desktop-smoke-result.json")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')

@@ -3892,6 +3892,11 @@ export interface MobileFeedbackRequest {
   value: "-1" | "1";
 }
 
+export interface MonthlySwitchRequest {
+  expected_amount: number;
+  price_id: string;
+}
+
 export interface MoveConversationRequest {
   folder_id?: string | null;
 }
@@ -4076,8 +4081,16 @@ export interface PaymentCheckoutSessionResponse {
 }
 
 export interface PaymentIssue {
+  monthly_switch?: PaymentIssueMonthlySwitch | null;
   plan: PlanType;
   status: "past_due" | "unpaid";
+}
+
+export interface PaymentIssueMonthlySwitch {
+  amount: number;
+  currency: string;
+  price_id: string;
+  yearly_amount: number;
 }
 
 export interface PaymentMethodStatusResponse {
@@ -7183,6 +7196,7 @@ export interface OmiApiSchemas {
   "MobileFeedbackReason": MobileFeedbackReason;
   "MobileFeedbackReceipt": MobileFeedbackReceipt;
   "MobileFeedbackRequest": MobileFeedbackRequest;
+  "MonthlySwitchRequest": MonthlySwitchRequest;
   "MoveConversationRequest": MoveConversationRequest;
   "NormalizedContextMatch": NormalizedContextMatch;
   "NormalizedContextSnapshot": NormalizedContextSnapshot;
@@ -7210,6 +7224,7 @@ export interface OmiApiSchemas {
   "PayPalPaymentDetailsResponse": PayPalPaymentDetailsResponse;
   "PaymentCheckoutSessionResponse": PaymentCheckoutSessionResponse;
   "PaymentIssue": PaymentIssue;
+  "PaymentIssueMonthlySwitch": PaymentIssueMonthlySwitch;
   "PaymentMethodStatusResponse": PaymentMethodStatusResponse;
   "PaymentMutationResponse": PaymentMutationResponse;
   "PaymentStatusMessageResponse": PaymentStatusMessageResponse;
@@ -10734,6 +10749,16 @@ export interface OmiApiPaths {
       operationId: "get_overage_info_endpoint_v1_payments_overage_info_get";
       responses: {
         "200": OverageInfoResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/payment-issue/monthly-switch": {
+    post: {
+      operationId: "payment_issue_monthly_switch_endpoint_v1_payments_payment_issue_monthly_switch_post";
+      responses: {
+        "200": PaymentStatusMessageResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19269,6 +19294,27 @@ export async function get_overage_info_endpoint_v1_payments_overage_info_get(hea
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function payment_issue_monthly_switch_endpoint_v1_payments_payment_issue_monthly_switch_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: MonthlySwitchRequest, init?: OmiApiClientInit): Promise<PaymentStatusMessageResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/payment-issue/monthly-switch`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function redeem_code_endpoint_v1_payments_redeem_code_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemCodeResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/redeem-code`;
@@ -23991,4 +24037,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 548 client methods generated.
+// Total: 549 client methods generated.
