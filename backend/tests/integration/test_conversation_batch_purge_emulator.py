@@ -143,6 +143,7 @@ def _drain_erasures(monkeypatch, route, passes=30):
 
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
     outcomes = []
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     for _ in range(passes):
         sent = []
         monkeypatch.setattr(
@@ -280,6 +281,7 @@ def _reconcile(monkeypatch):
 
     sent = []
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     monkeypatch.setattr(
         deletion_batch_purge,
         'enqueue_conversation_batch_purge',

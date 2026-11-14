@@ -145,6 +145,7 @@ def cascade(monkeypatch, plane):
     monkeypatch.setattr(deletion_batch_purge, 'is_conversation_batch_purge_dispatch_configured', lambda: True)
     monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_consumer_ready', lambda: True)
     state.sent = []
+    monkeypatch.setattr(deletion_batch_purge, 'conversation_batch_purge_task_pending', lambda *a, **k: False)
     monkeypatch.setattr(
         deletion_batch_purge,
         'enqueue_conversation_batch_purge',
