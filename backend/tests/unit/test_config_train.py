@@ -16,6 +16,7 @@ ROOT = BACKEND.parent
 sys.path.insert(0, str(BACKEND / 'scripts'))
 
 import ops_train  # noqa: E402
+from scripts import select_backend_unit_tests as unit_selector  # noqa: E402
 
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
 
@@ -742,3 +743,35 @@ def test_staging_enrichment_stays_off_until_prod_turns_it_on():
     staging = yaml.safe_load((BACKEND / 'deploy/ops/staging.yaml').read_text())['cloud_tasks']
     for name, queue in prod.items():
         assert staging[f'staging-{name}'].get('enabled', True) == queue.get('enabled', True), name
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/config/firestore_read_levers.py',
+        'backend/deploy/runtime_env/_base.yaml',
+        'backend/deploy/runtime_env/dev.overlay.yaml',
+        'backend/deploy/runtime_env/prod.overlay.yaml',
+        'backend/deploy/runtime_env.yaml',
+        'backend/deploy/compose_runtime_env.py',
+        'backend/deploy/generate_read_lever_manifest.py',
+        'backend/deploy/firestore_read_levers_manifest.json',
+        'backend/charts/batch-pipeline-worker/values.yaml',
+        'backend/charts/batch-pipeline-worker/dev_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        'backend/charts/pusher/dev_omi_pusher_values.yaml',
+        'backend/charts/pusher/prod_omi_pusher_values.yaml',
+    ],
+)
+def test_read_lever_sources_select_existing_offline_unit_contracts(source):
+    required = {
+        'tests/unit/test_backend_runtime_env_validator.py',
+        'tests/unit/test_batch_pipeline_chart.py',
+        'tests/unit/test_config_train.py',
+        'tests/unit/test_runtime_env_sources.py',
+    }
+    selected, _ = unit_selector.tests_for_changed_paths([source], sorted(required | {'tests/unit/test_unrelated.py'}))
+    assert required <= set(selected)
+    assert 'tests/unit/test_unrelated.py' not in selected

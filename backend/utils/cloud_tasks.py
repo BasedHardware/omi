@@ -273,13 +273,25 @@ def conversation_batch_purge_task_id(job_id: str, generation: int) -> str:
     return f'conversation-batch-purge-{job_id}-g{int(generation)}'
 
 
-def enqueue_conversation_batch_purge(job_id: str, generation: int) -> None:
-    """Dispatch one generation of a durable purge obligation to backend-sync (opaque payload)."""
+def conversation_erasure_task_id(job_id: str, generation: int) -> str:
+    return f'conversation-erasure-{job_id}-g{int(generation)}'
+
+
+def enqueue_conversation_batch_purge(job_id: str, generation: int, *, erasure: bool = False) -> None:
+    """Dispatch one generation of a durable purge (or accepted-delete erasure) obligation to backend-sync.
+
+    The payload stays opaque. An erasure carries ``kind``; a consumer that predates
+    it looks the id up among purge obligations, answers ``missing``, and the
+    erasure is redriven.
+    """
+    payload: dict = {'job_id': job_id, 'generation': int(generation)}
+    if erasure:
+        payload['kind'] = 'erasure'
     enqueue_named_task(
         os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
         _conversation_batch_purge_handler_url(),
-        conversation_batch_purge_task_id(job_id, generation),
-        {'job_id': job_id, 'generation': int(generation)},
+        (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation),
+        payload,
         audience=_conversation_batch_purge_handler_url(),
         invoker_sa=_invoker_sa(),
     )

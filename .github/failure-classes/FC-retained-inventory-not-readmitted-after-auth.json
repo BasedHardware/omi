@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-retained-inventory-not-readmitted-after-auth",
+  "violated_contract": "A process-lived recording ledger must restore durable owner-scoped inventory after authentication, including when it loaded while signed out or retired its published rows on sign-out. Retaining bytes without restoring the owning account's recovery view strands pending work.",
+  "canonical_prevention": "Reconcile active, parked and retired inventory through the ledger on explicit authenticated refresh, after native ownership migration, with UID and generation fences. Never restore retired rows during ordinary reads while sign-out still holds the old UID. Preserve queued job receipts through preference clearing; retain foreign or unresolved ownership without exposing it or uploading another copy.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/wals/wal_account_purge.dart",
+    "app/test/unit/local_wal_sync_owner_uid_test.dart",
+    "app/test/unit/local_recordings_owner_test.dart",
+    "app/integration_test/waiting_recordings_reauthentication_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/services/wals/**", "app/lib/providers/local_recordings_provider.dart", "app/lib/pages/settings/sign_out.dart"],
+  "status": "open"
+}

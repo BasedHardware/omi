@@ -75,7 +75,14 @@ DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-mon
 # These native Cloud Monitoring queries explicitly select the production
 # project and datasource. The automatic development import must not install
 # production pages there or assume an equivalent native datasource exists.
-PRODUCTION_ONLY_IMPORT_UIDS = ("omi-enrichment-queue-depth-page", "omi-incluster-guard-unsafe-page")
+# omi-firestore-unattributed-reads reads the gmp-cloud-run shadow datasource,
+# which only the production overlay creates; development has no equivalent.
+PRODUCTION_ONLY_IMPORT_UIDS = (
+    "omi-enrichment-queue-depth-page",
+    "omi-incluster-guard-unsafe-page",
+    "omi-firestore-unattributed-reads",
+    "omi-firestore-unattributed-reads-blind",
+)
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {

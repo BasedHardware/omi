@@ -110,14 +110,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<void> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection is LimitlessDeviceConnection) {
-      try {
-        await connection.acknowledgeProcessedData(upToIndex);
-      } catch (e) {
-        Logger.debug('FlashPageSync: Could not acknowledge processed data: $e');
-      }
-    }
+    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection is! LimitlessDeviceConnection) throw StateError('Device is unavailable');
+    await connection.acknowledgeProcessedData(upToIndex);
   }
 
   Future<void> _enableRealTimeMode(String deviceId) async {
@@ -136,11 +131,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.flashPage || !_wals.any((w) => w.id == wal.id)) return;
-    _wals.removeWhere((w) => w.id == wal.id);
-
-    if (_device != null && wal.device == _device!.id && wal.status == WalStatus.synced) {
-      await _acknowledgeProcessedData(_device!.id, wal.storageTotalBytes);
+    // Flash-page ACK releases processed audio; it is not a targeted erase for
+    // pending recordings. Keep unsupported or active deletes visible (#24783).
+    if (_isSyncing || wal.isSyncing || wal.status != WalStatus.synced || _device?.id != wal.device) {
+      throw StateError('Device deletion is unavailable for this recording');
     }
+    await _acknowledgeProcessedData(wal.device, wal.storageTotalBytes);
+    _wals.removeWhere((w) => w.id == wal.id);
 
     listener.onWalUpdated();
   }

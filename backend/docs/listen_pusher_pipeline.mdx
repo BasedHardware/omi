@@ -715,6 +715,17 @@ recovery behavior.
 
 ## Funded transcription cap
 
+The SCA-1750 watch-only phase uses a shared transactional shadow ledger for
+verified monthly billing, operation reservations, and daily-budget PTT settlement.
+`STT_FREE_ALLOWANCE_WATCH_ENABLED` defaults to `true`; `false`, `0`, `off`, or `no`
+stops new observations/reservations. Existing confirmed operations may still settle.
+The core ledger has no cohort or rollout gate. Serving admission results and wire
+payloads remain unchanged. Async observations wait at most 2.5 seconds; sealed GPU
+authorization uses at most 100 ms of remaining authorization budget. The
+[change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md)
+documents billing-unit settlement, conservative expired holds, baseline proof,
+metrics, emulator coverage, and the full-day reconciliation gate before enforcement.
+
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
 Denial preserves receiving and existing audio storage paths; accepted provider
@@ -737,6 +748,25 @@ false/0/off uses generic finalize without reopening held providers. That emergen
 mode can flush sub-second speech fragments earlier because it omits the ordinary
 speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
 local-send phase/exception attribution and the listen-train acceptance checks.
+
+### unlimited_v2 backfill/import daily transcribed-hours cap
+
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) are a separate, default-off
+admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
+already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
+same basis `unit_cost_user_day.tx_sec` uses — and refuses managed **backfill/import**
+transcription once that day reached the cap level. Only the sync `backfill` lane
+and the batch `backfill` lane pass the backfill marker; live listen and fresh
+sync/batch capture never do, so live capture is untouched even on a user-day above
+the cap. The meter is the total day seconds (it cannot separate backfill from live
+seconds); the admission lane is the exact separation for the work being admitted.
+Above the cap the answer is identical to an exhausted allowance: offline segments
+are durably held. Free, Plus and the deprecated paid tiers are unchanged in both
+modes, and an unreadable plan or meter read admits transcription. Deployment,
+readback and activation: [runbook](runbooks/unlimited-v2-backfill-hours-cap.md);
+rollout note:
+[change note](listen_pusher_pipeline/changes/2026-11-14-unlimited-v2-backfill-hours-cap.md).
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
@@ -3120,7 +3150,10 @@ backend reconciliation sweep (or the opt-in self-heal sweep) as a
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
 kept output carrying only the deterministic minimum raises before the
-completed-status transaction. An explicit relevance discard is a valid
+completed-status transaction. The one exception is a kept, plain, decoded
+conversation whose enrichment returned no structure at all: it completes on the
+deterministic minimum unless `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED`
+is set off (default on; see `changes/2026-11-12-capfix-finalization.md`). An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level

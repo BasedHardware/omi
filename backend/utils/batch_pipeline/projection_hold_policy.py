@@ -27,7 +27,10 @@ def quarantines_assignment_conflict(error: BaseException, job: dict | None, *, n
     """
     if not isinstance(error, SyncAssignmentConflict):
         return False
-    lane = 'backfill' if (job or {}).get('fresh_capture') is False else 'fresh'
+    # A provider upload admitted late but within a day is fresh for the merge and carries
+    # late_upload: its target writer is as overdue as any backfill row's.
+    late = (job or {}).get('fresh_capture') is False or (job or {}).get('late_upload') is True
+    lane = 'backfill' if late else 'fresh'
     if not projection_hold_recovery_enabled():
         return sync_assignment_conflict_strikes(error.subtype, lane)
     if error.subtype in PROJECTION_TERMINAL_CONFLICTS:

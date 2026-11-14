@@ -259,6 +259,9 @@ PLATFORM_COLUMNS = [("mobile", "Mobile", "number"), ("macos", "macOS", "number")
                     ("other", "Other", "number")]
 PLATFORM_OVERRIDES = [color(n, h) for n, h in PLATFORM.items()]
 DATE = ("date", "date", "timestamp")
+# The uptime sidecar emits the UTC day as epoch milliseconds (a number); a plain "timestamp"
+# column parses it to null and the panel reads "Data outside time range".
+UPTIME_DATE = ("date", "date", "timestamp_epoch")
 
 
 MATURING = ("The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days "
@@ -374,13 +377,13 @@ def columns():
         stat("Revenue", "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR ÷ monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon–Sun week vs the prior week. Relative % change.",
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
-        (5, chart("MRR by plan",
+        (6, chart("MRR by plan",
                    "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
                    overrides=[color(n, h) for n, h in PLANS.items()], extra=mrr_extra)),
-        (6, chart("Shopify sales per week",
+        (5, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -424,7 +427,7 @@ def columns():
                    UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
                    "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
                    "failures for the last 7 days are in the Health stat's source frame `journeys`.",
-                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                   [target("uptime", "daily", [UPTIME_DATE, ("all", "All journeys", "number"),
                                                ("capture", "Live capture", "number"),
                                                ("saved", "Conversation saved", "number"),
                                                ("chat", "Chat answer", "number"),
@@ -499,10 +502,14 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
                    "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
-                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
+                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. "
+                   "The meter's figure is its own 24-hour basis, so the last point can step away from the "
+                   "trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. "
+                   "Settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame "
                    "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
@@ -659,7 +666,7 @@ def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
     return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
-            "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
+            "refresh": "5m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
             "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 

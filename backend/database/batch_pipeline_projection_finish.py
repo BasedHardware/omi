@@ -9,15 +9,13 @@ move writes the clock as due now in the same transaction, so no obligation
 waits on it, and the ``pending`` assignment page is untouched, so new work is
 never delayed.
 
-Both fields are additive and unread while the lever is off, so OFF keeps the
-current query shape and writes nothing: rollback is one env flip with no
-backfill. A row that predates the lever carries no clock, so the sweep's first
-unfiltered pass stamps it before the filtered page is used.
+Clock writes are unconditional, including on writer-only hosts with the read
+lever disabled. The lever controls query selection and no-change deferrals.
+Historical rows are stamped by the bounded maintenance pass before its durable
+completion marker allows serving processes to use the filtered page.
 """
 
 from google.cloud import firestore
-
-from config.batch_pipeline import projection_finish_backoff_enabled
 
 PROJECTION_FINISH_DUE_FIELD = 'projection_finish_due_at'
 PROJECTION_FINISH_STEP_FIELD = 'projection_finish_backoff_step'
@@ -28,12 +26,9 @@ PROJECTION_FINISH_STATES = ('persisted', 'ready')
 def projection_finish_state_fields(state: str | None, now: float) -> dict:
     """Patch fields for a state move: due now in a finish state, retired otherwise.
 
-    Empty while the lever is off, so every caller's write stays byte-identical.
     A row that enters a finish state must carry a clock at once: the filtered
     page cannot see a row without one, so deferring that write would strand it.
     """
-    if not projection_finish_backoff_enabled():
-        return {}
     if state in PROJECTION_FINISH_STATES:
         return {PROJECTION_FINISH_DUE_FIELD: now, PROJECTION_FINISH_STEP_FIELD: 0}
     return {
@@ -44,6 +39,6 @@ def projection_finish_state_fields(state: str | None, now: float) -> dict:
 
 def projection_finish_entry_fields(state: str | None, now: float) -> dict:
     """The same fields for a whole-document ``set``, where sentinels are not values."""
-    if not projection_finish_backoff_enabled() or state not in PROJECTION_FINISH_STATES:
+    if state not in PROJECTION_FINISH_STATES:
         return {}
     return {PROJECTION_FINISH_DUE_FIELD: now, PROJECTION_FINISH_STEP_FIELD: 0}

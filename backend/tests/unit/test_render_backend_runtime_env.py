@@ -1326,6 +1326,28 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
+    services = _MANIFEST['environments'][environment]['cloud_run']['services']
+    for name, service in services.items():
+        env = service['env']
+        # SCA-1993 17:32Z: integration stays off; the other roles drop backoff at their next rolls.
+        assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        expected = {}
+        if environment == 'prod':
+            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
+            if name in ('backend-sync', 'backend-integration'):
+                expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
+        switches = {
+            key: env[key]
+            for key in ('BATCH_HELD_POLL_SKIP_ENABLED', 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED')
+            if key in env
+        }
+        assert switches == {key: {'value': value, 'category': 'ops_kill'} for key, value in expected.items()}
+        rendered = {entry['name']: entry['value'] for entry in _MODULE['_render_env_entries'](switches)}
+        assert rendered == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(environment, monkeypatch):
     """A base edit must neither enable unqualified readers nor miss CR overrides."""
     config = _MANIFEST['environments'][environment]
@@ -1380,6 +1402,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # Ruling ec191a row 3: pin the live Cloud Run literals without widening other hosts.
         if enabled:
             wanted.update(
+                bpp_decision_cache=100,
                 privacy_negative_lookup_cache=100,
                 privacy_checks_shadow=100 if name == 'cloud_run/backend-sync-backfill' else 10,
                 batch_timeliness_leader=0,
