@@ -20,10 +20,9 @@ from utils.batch_pipeline.record_projection_rebuild import (
     discover,
 )
 from utils.observability.fallback import record_fallback
-from utils.executors import run_blocking, storage_executor, db_executor, start_background_task
+from utils.executors import run_blocking, storage_executor, playback_debt_executor, start_background_task
 from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
-from utils.pusher_receive_metrics import observe_work
 
 PROJECTIONS = Counter('omi_pusher_audio_file_projection_total', 'Pusher playback projection refreshes', ['mode'])
 # Why a refresh paid for a full prefix discovery. Closed values; one increment
@@ -120,9 +119,8 @@ class PusherAudioProjection:
         self.finished: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
-        self.pending_refresh: dict[str, tuple[list[str], bool]] = {}
-        self.refresh_task: asyncio.Task | None = None
-        self.refresh_worker: PusherAudioProjection | None = None
+        self.defer_metadata = False
+        self.durable_debt: set[str] = set()
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
@@ -270,6 +268,8 @@ class PusherAudioProjection:
             self.inventory.pop(conv_id, None)
             self.close_debt.discard(conv_id)
             return True
+        if self.defer_metadata:
+            return await self.defer_rebuild(conv_id)
         try:
             applied = await run_blocking(storage_executor, self.finish, conv_id)
         except Exception as exc:
@@ -315,73 +315,50 @@ class PusherAudioProjection:
         return True
 
     async def defer_close_refresh(self, conv_id: str, paths=None, *, closing: bool = True) -> bool:
-        """Keep optional playback discovery out of the proven audio drain."""
+        """Write debt before optional discovery; capacity overflow stays cold debt."""
+        from utils.pusher_playback_coordinator import coordinator
+
         if not closing:
             self.finished.discard(conv_id)
         if closing and conv_id in self.finished:
-            return True
+            return conv_id in self.durable_debt
         if not durable_debt_enabled():
             return False
-        previous, force = self.pending_refresh.get(conv_id, ([], False))
-        merged = list(dict.fromkeys([*previous, *(paths or [])]))
-        if (
-            conv_id not in self.pending_refresh
-            and len(self.pending_refresh) >= MAX_CONVERSATIONS
-            or sum(len(p) for cid, (p, _) in self.pending_refresh.items() if cid != conv_id) + len(merged) > MAX_CHUNKS
-        ):
+        self.defer_metadata = True
+        if paths:
+            self.durable_debt.discard(conv_id)  # A new upload needs a new durable request.
+        if not await self.defer_rebuild(conv_id):
             return False
-        self.pending_refresh[conv_id] = merged, closing or force
-        if self.refresh_task is None or self.refresh_task.done():
-            self.refresh_task = start_background_task(self._refresh_metadata(), name='pusher:playback_refresh')
-        if closing and not await self.defer_rebuild(conv_id):
-            return False
+        coordinator().submit(self.uid, conv_id, paths, closing, self.on_refresh)
         self.inventory.pop(conv_id, None)
         self.has_uploaded_paths = True
         if closing and len(self.finished) < MAX_CONVERSATIONS:
             self.finished.add(conv_id)
         return True
 
-    async def _refresh_metadata(self) -> None:
-        # Only this coordinator touches its separate synchronous cache owner.
-        # Audio/close tasks never wait on optional playback discovery.
-        if self.refresh_worker is None:
-            self.refresh_worker = PusherAudioProjection(self.uid)
-        while self.pending_refresh:
-            cid = next(iter(self.pending_refresh))
-            paths, closing = self.pending_refresh.pop(cid)
-            try:
-                with observe_work('drain_refresh'):
-                    applied = await run_blocking(
-                        storage_executor, self.refresh_worker.refresh, cid, paths, force=closing
-                    )
-                if self.on_refresh is not None:
-                    self.on_refresh(cid, applied)
-                if applied:
-                    schedule_person_voice_learning_retry(self.uid, cid)
-                elif applied is None:
-                    await self.defer_rebuild(cid)
-            except Exception:
-                await self.defer_rebuild(cid)
-                record_fallback(
-                    component='pusher',
-                    from_mode='incremental_audio_files',
-                    to_mode='audio_file_listing',
-                    reason='other',
-                    outcome='degraded',
-                    log=logger,
-                )
-
     async def defer_rebuild(self, conv_id: str) -> bool:
-        """Queue optional metadata without awaiting Firestore on the close path."""
+        """Success means a committed write, never only a scheduled task."""
         if not durable_debt_enabled():
+            return True
+        if conv_id in self.durable_debt:
             return True
         if conv_id not in self.marker_retry and len(self.marker_retry) >= MAX_MARKER_RETRIES - MAX_CONVERSATIONS:
             MARKER_WRITES.labels(outcome='marker_retry_overflow').inc()
-            logger.error('Projection debt retry inventory full; optional marker handoff refused')
             return False
         self.marker_sequence += 1
         self.marker_retry[conv_id] = self.marker_sequence
-        self._start_marker_task()
+        try:
+            async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
+                await run_blocking(playback_debt_executor, record_projection_rebuild.mark_many, self.uid, {conv_id})
+        except Exception as exc:
+            MARKER_WRITES.labels(outcome='marker_write_failed').inc()
+            logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
+            return False
+        self.marker_retry.pop(conv_id, None)
+        if len(self.durable_debt) < MAX_CONVERSATIONS:
+            self.durable_debt.add(conv_id)
+        self.close_debt.discard(conv_id)
+        MARKER_WRITES.labels(outcome='persisted').inc()
         return True
 
     def _start_marker_task(self) -> None:
@@ -397,7 +374,9 @@ class PusherAudioProjection:
                 return
             try:
                 async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
-                    await run_blocking(db_executor, record_projection_rebuild.mark_many, self.uid, set(pending))
+                    await run_blocking(
+                        playback_debt_executor, record_projection_rebuild.mark_many, self.uid, set(pending)
+                    )
             except Exception as exc:
                 MARKER_WRITES.labels(outcome='marker_write_failed').inc()
                 logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
@@ -406,6 +385,8 @@ class PusherAudioProjection:
                 if self.marker_retry.get(cid) == sequence:
                     self.marker_retry.pop(cid, None)
                     self.close_debt.discard(cid)
+                    if len(self.durable_debt) < MAX_CONVERSATIONS:
+                        self.durable_debt.add(cid)
             MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 
     async def persist_pending(self) -> None:
@@ -419,12 +400,14 @@ class PusherAudioProjection:
                 self.marker_sequence += 1
                 self.marker_retry[cid] = self.marker_sequence
         self._start_marker_task()
-        if self.marker_task is None and self.refresh_task is None:
+        if self.marker_task is None and not self.defer_metadata:
             return
         try:
             async with asyncio.timeout(MARKER_CLOSE_SECONDS):
-                if self.refresh_task is not None:
-                    await asyncio.shield(self.refresh_task)
+                if self.defer_metadata:
+                    from utils.pusher_playback_coordinator import coordinator
+
+                    await coordinator().wait_owner(self.uid)
                 for attempt in range(2):
                     self._start_marker_task()
                     if self.marker_task is not None:

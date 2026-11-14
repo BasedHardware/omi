@@ -413,6 +413,24 @@ def get_audio_signed_urls(
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not audio_files:
+        if conversation and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+            from database import record_projection_rebuild
+
+            try:
+                pending = record_projection_rebuild.pending(uid, conversation_id)
+            except Exception:
+                from utils.observability.fallback import record_fallback
+
+                record_fallback(
+                    component='sync',
+                    from_mode='playback_metadata',
+                    to_mode='pending',
+                    reason='other',
+                    outcome='degraded',
+                )
+                pending = True  # Unknown repair state cannot assert that no audio exists.
+            if pending:
+                return {'audio_files': [], 'metadata_status': 'pending', 'retry_after_seconds': 5}
         return {"audio_files": []}
 
     if is_audio_merge_dispatch_enabled():

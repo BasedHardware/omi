@@ -49,6 +49,17 @@ class FakeRequest:
         self.headers = headers or {}
 
 
+@pytest.mark.parametrize('pending', [False, True])
+def test_empty_batch_audio_distinguishes_durable_metadata_debt(monkeypatch, pending):
+    from database import record_projection_rebuild
+
+    monkeypatch.setattr(record_projection_rebuild, 'pending', lambda *args: pending)
+    result = playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'})
+    assert result == (
+        {'audio_files': [], 'metadata_status': 'pending', 'retry_after_seconds': 5} if pending else {'audio_files': []}
+    )
+
+
 class FakeFuture:
     def __init__(self, result=None):
         self._result = result

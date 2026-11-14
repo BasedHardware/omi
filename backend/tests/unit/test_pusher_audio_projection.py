@@ -790,8 +790,8 @@ async def test_overflow_inventory_is_bounded_and_reports_failed_handoff(world, m
     cache = projection.PusherAudioProjection('u')
     monkeypatch.setattr(projection, 'MAX_MARKER_RETRIES', projection.MAX_CONVERSATIONS + 2)
     projection.record_projection_rebuild.mark_many.side_effect = OSError()
-    assert await cache.defer_rebuild('one')
-    assert await cache.defer_rebuild('two')
+    assert not await cache.defer_rebuild('one')  # Failed writes are never durable ACKs.
+    assert not await cache.defer_rebuild('two')
     assert not await cache.defer_rebuild('three')
     assert set(cache.marker_retry) == {'one', 'two'}
     await cache.persist_pending()

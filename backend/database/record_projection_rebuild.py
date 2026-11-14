@@ -30,6 +30,11 @@ def mark_due(uid, cid, *, firestore_client=None):
     )
 
 
+def pending(uid, cid, *, firestore_client=None):
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return client.collection(COLLECTION).document(marker_id(uid, cid)).get(field_paths=['kind']).exists
+
+
 def mark_many(uid, conversation_ids, *, firestore_client=None):
     """One bounded cleanup RPC, rather than one timeout per socket obligation."""
     owners = set(conversation_ids)
