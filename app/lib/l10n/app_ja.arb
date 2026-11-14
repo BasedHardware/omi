@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "さらに友達3人が購入したら",
     "referralClaimShort": "受け取る",
     "paymentDeclinedTitle": "カードが拒否されました",
+    "paymentDeclinedMonthlyMessage": "カードを更新するか、{plan}を月額{price}で再開できます",
     "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください",
     "hasLinkedTasksLabel": "関連するタスクあり",
     "hasTasksFilter": "タスクあり",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "月払いに切り替える",
+    "monthlySwitchPlanValue": "{plan}、月額{price}",
+    "monthlySwitchNote": "未払いの年額{yearly}の請求に代わります。毎月更新されます。いつでも解約できます。",
+    "monthlySwitchDeclined": "お支払いが拒否されました。プランは変更されていません。",
+    "monthlySwitchUnavailable": "現在は切り替えできません。カードを更新してください。",
+    "monthlySwitchDoneTitle": "月払いに切り替わりました",
+    "monthlySwitchDoneBody": "本日{price}をお支払いいただきました。毎月更新されます。"
 }

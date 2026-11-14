@@ -9632,6 +9632,28 @@ owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 
 
 
+## Record drain pacing
+
+`RECORD_DRAIN_IDLE_WITHOUT_PROGRESS` defaults to `on`. Only `off` after
+trimming whitespace and lowercasing disables it; unset and other values keep
+it enabled. The capacity control lives in `config/record_drain.py`.
+
+A full record-drain page continues immediately only when a selected row left
+`record_pending` for a non-dead state and the pass was not privacy-blocked.
+Pages containing only deferred, failed, barrier-blocked, or dead-lettered rows
+keep the serving loop's idle wait (currently 20 seconds). Partial pages always
+idle. A partial-record coordinator that admits child units but remains
+`record_pending` also keeps the idle wait; child admission alone is not counted
+as parent-row progress. An unchanged inventory poll therefore cannot trigger
+an immediate rescan.
+
+Set `RECORD_DRAIN_IDLE_WITHOUT_PROGRESS=off` to restore the previous full-page
+continuation behavior. This does not disable privacy blocking or make partial
+pages continue immediately. `RECORD_DRAIN_PRIVACY_DEFER_SECONDS` remains a
+separate control, with its existing default of 900 seconds.
+
+[Change and verification](listen_pusher_pipeline/changes/2026-11-14-record-drain-pacing.md).
+
 ## Batch projection drain admission
 
 The deliberate off-only contract applies to

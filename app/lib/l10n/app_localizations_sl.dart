@@ -15427,6 +15427,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaša kartica je bila zavrnjena';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Posodobite kartico ali znova dobite $plan za $price na mesec';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Posodobite kartico, da znova dobite $plan';
   }
@@ -15451,4 +15456,31 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Preklopi na mesečno';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price na mesec';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nadomesti neplačano letno bremenitev $yearly. Obnavlja se mesečno. Prekličite kadar koli.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Preklop trenutno ni na voljo. Namesto tega posodobite kartico.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Zdaj plačujete mesečno';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Danes plačano $price. Obnavlja se mesečno.';
+  }
 }

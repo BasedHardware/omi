@@ -27021,6 +27021,12 @@ abstract class AppLocalizations {
   /// **'Your card was declined'**
   String get paymentDeclinedTitle;
 
+  /// Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'Update it, or get {plan} back for {price} a month'**
+  String paymentDeclinedMonthlyMessage(String plan, String price);
+
   /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
   ///
   /// In en, this message translates to:
@@ -27062,6 +27068,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirming installation… This may take up to 3 minutes.'**
   String get firmwareVerifyingInstallation;
+
+  /// Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Monthly'**
+  String get monthlySwitchTitle;
+
+  /// Value of the Plan row in the switch-to-monthly sheet, e.g. "Omi Pro, US$29.99 a month"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a month'**
+  String monthlySwitchPlanValue(String plan, String price);
+
+  /// Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91
+  ///
+  /// In en, this message translates to:
+  /// **'Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.'**
+  String monthlySwitchNote(String yearly);
+
+  /// Switch-to-monthly sheet: the monthly charge was declined; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. Your plan didn\'t change.'**
+  String get monthlySwitchDeclined;
+
+  /// Switch-to-monthly sheet: the server refused the switch for this subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Switching isn\'t available right now. Update your card instead.'**
+  String get monthlySwitchUnavailable;
+
+  /// Switch-to-monthly sheet title after a successful switch
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on monthly'**
+  String get monthlySwitchDoneTitle;
+
+  /// Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'{price} paid today. Renews monthly.'**
+  String monthlySwitchDoneBody(String price);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -5098,6 +5098,68 @@
         "subscription-payment-recovery"
       ],
       "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyShown",
+      "wire_name": "Subscription Payment Issue Monthly Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyTapped",
+      "wire_name": "Subscription Payment Issue Monthly Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlySwitched",
+      "wire_name": "Subscription Payment Issue Monthly Switched",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyFailed",
+      "wire_name": "Subscription Payment Issue Monthly Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
     }
   ],
   "transport_dispositions": {

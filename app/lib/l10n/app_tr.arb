@@ -4674,11 +4674,19 @@
     "referralRewardSecondDetail": "3 arkadaşın daha aldığında",
     "referralClaimShort": "Al",
     "paymentDeclinedTitle": "Kartınız reddedildi",
+    "paymentDeclinedMonthlyMessage": "Kartınızı güncelleyin veya {plan} planını aylık {price} ile geri alın",
     "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin",
     "hasLinkedTasksLabel": "Bağlı görevleri var",
     "hasTasksFilter": "Görev içerenler",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Aylığa geçin",
+    "monthlySwitchPlanValue": "{plan}, aylık {price}",
+    "monthlySwitchNote": "Ödenmemiş {yearly} yıllık ücretin yerine geçer. Her ay yenilenir. İstediğiniz zaman iptal edin.",
+    "monthlySwitchDeclined": "Ödeme reddedildi. Planınız değişmedi.",
+    "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
+    "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
+    "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir."
 }
