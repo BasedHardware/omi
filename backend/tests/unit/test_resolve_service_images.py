@@ -48,6 +48,7 @@ def test_empty_resolves_every_service_to_the_image_it_ships_today():
     outputs = resolve(' , ', deploy_targets='cloud-run-only', deploy_gateway=False)
     fat = f'gcr.io/{PROJECT}/backend:aaaaaaa'
     assert outputs == {
+        'build_runtime_image': 'true',
         'backend': fat,
         'backend_sync': fat,
         'backend_sync_backfill': fat,
