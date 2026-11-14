@@ -513,7 +513,7 @@ def test_recovered_segment_rechecks_original_lane_without_reholding(
     assert result is False and not errors
     assert allowance.call_count == int(checked)
     if checked:
-        allowance.assert_called_with('synthetic', lane=origin)
+        allowance.assert_called_with('synthetic', lane=origin, backfill=False)
     provider.assert_not_called()
     hold.assert_not_called()
 
