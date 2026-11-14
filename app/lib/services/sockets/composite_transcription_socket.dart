@@ -3,8 +3,10 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/sockets/pure_streaming_stt.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/logger.dart';
@@ -79,6 +81,18 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   PureSocketStatus get status => _status;
+
+  /// Sends a control message to the user's own live STT service (Custom live), never to Omi.
+  /// Built-in streaming providers (Deepgram, ...) speak a fixed protocol and may drop the
+  /// connection on a message they don't know, so only [SttProvider.customLive] gets one.
+  bool sendProviderControl(Map<String, dynamic> message) {
+    final primary = primarySocket;
+    if (sttProvider != SttProvider.customLive.name || primary is! ProviderControlSocket) {
+      return false;
+    }
+    // ProviderControlSocket is not an IPureSocket subtype, so the check above cannot promote.
+    return (primary as ProviderControlSocket).sendControl(message);
+  }
 
   @override
   void setListener(IPureSocketListener listener) {

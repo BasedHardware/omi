@@ -2118,12 +2118,17 @@ class CaptureController extends ChangeNotifier
   }
 
   @visibleForTesting
+  set transcriptSocketForTesting(TranscriptSegmentSocketService? socket) => _socket = socket;
+
+  @visibleForTesting
   void handleButtonEventForTesting(String deviceId, int buttonState) {
     _handleButtonEvent(deviceId, buttonState);
   }
 
   void _handleButtonEvent(String deviceId, int buttonState) {
     unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
+    // Custom live STT gets every press, ahead of the gates below (docs/doc/developer/custom-stt.mdx).
+    _socket?.sendButtonEvent(buttonState, _now());
     // Only an admitted capture transition may move the question UI. Raw
     // presses can be ignored (auto-submit grace / a reply already pending).
     final tutorial = deviceOnboardingProvider;
