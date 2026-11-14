@@ -885,47 +885,7 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "provider_intent.settled_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "batch_pipeline_prod_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "fresh_capture",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "enqueued_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -965,24 +925,6 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_dev_provider_stt_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "batch_pipeline_prod_provider_stt_outbox",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1001,42 +943,6 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_dev_provider_stt_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "memory_outbox",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "available_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "batch_pipeline_prod_jobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1055,43 +961,7 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "superseded_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "batch_pipeline_prod_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "recovery_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "enqueued_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -1153,50 +1023,6 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "compute_decision.outcome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "enqueued_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "compute_decision.outcome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "compute_decision.at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "batch_pipeline_prod_jobs",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1210,100 +1036,6 @@
         },
         {
           "fieldPath": "compute_decision.at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "compute_decision.outcome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "compute_decision.reason",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "compute_decision.at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_prod_speaker_final_pass_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "outcome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_prod_speaker_final_pass_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "terminal_pending",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_speaker_final_pass_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "outcome",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_speaker_final_pass_outbox",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "terminal_pending",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
           "order": "ASCENDING"
         },
         {

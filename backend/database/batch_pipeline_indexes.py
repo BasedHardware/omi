@@ -179,80 +179,54 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
-    # W3 census (SCA-1921): declarative only, no live index creation.
-    # Settled-not-delivered count and the exact custody clock of unmerged results.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_settled_not_delivered',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('state'), _asc('provider_intent.settled_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
+    # W3 census (SCA-1921 / SCA-2119): production only.
+    #
+    # The exporter reads exactly one collection per stock, so census composites
+    # are declared for the `prod` stage alone. Dev-stage rows are excluded from
+    # production totals (their collections are served by the app's own
+    # stage-paired declarations below/above, not by this census).
+    FirestoreIndexRequirement(
+        'prod_batch_census_settled_not_delivered',
+        'batch_pipeline_prod_jobs',
+        'COLLECTION',
+        (_asc('state'), _asc('provider_intent.settled_at'), _asc('__name__')),
     ),
     # Fresh-capture wait gauge per state; fresh_capture is stamped at admission.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_fresh_oldest',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('state'), _asc('fresh_capture'), _asc('enqueued_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
+    FirestoreIndexRequirement(
+        'prod_batch_census_fresh_oldest',
+        'batch_pipeline_prod_jobs',
+        'COLLECTION',
+        (_asc('state'), _asc('fresh_capture'), _asc('enqueued_at'), _asc('__name__')),
     ),
     # Provider outbox census oldest age and the 31-day custody leg.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_provider_outbox_created',
-            f'batch_pipeline_{stage}_provider_stt_outbox',
-            'COLLECTION',
-            (_asc('state'), _asc('created_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
+    FirestoreIndexRequirement(
+        'prod_batch_census_provider_outbox_created',
+        'batch_pipeline_prod_provider_stt_outbox',
+        'COLLECTION',
+        (_asc('state'), _asc('created_at'), _asc('__name__')),
     ),
     # Runnable-vs-parked provider stock; due_at is the wake clock.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_provider_outbox_due',
-            f'batch_pipeline_{stage}_provider_stt_outbox',
-            'COLLECTION',
-            (_asc('state'), _asc('due_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    # Fleet-wide memory-outbox census. The existing same-field index is
-    # COLLECTION-scoped and serves only the per-user worker page; rows live under
-    # {user_root}/memory_outbox, so the census needs the group-scoped twin.
     FirestoreIndexRequirement(
-        'memory_outbox_group_status_available_at',
-        'memory_outbox',
-        'COLLECTION_GROUP',
-        (_asc('status'), _asc('available_at'), _asc('__name__')),
+        'prod_batch_census_provider_outbox_due',
+        'batch_pipeline_prod_provider_stt_outbox',
+        'COLLECTION',
+        (_asc('state'), _asc('due_at'), _asc('__name__')),
     ),
-    # W3 census exporter (SCA-2119). Oldest-age readings order each stock by its
-    # own clock, so every (state, clock) pair the registry declares needs its own
-    # composite. Declarative only: code never creates these in production.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_jobs_{name}',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('state'), _asc(field), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-        for name, field in (
-            ('superseded', 'superseded_at'),
-        )
+    # Census oldest-row reads order each production stock by its own clock, so
+    # every (state, clock) pair the registry declares needs its own composite.
+    # Declarative only: code never creates these in production.
+    FirestoreIndexRequirement(
+        'prod_batch_census_jobs_superseded',
+        'batch_pipeline_prod_jobs',
+        'COLLECTION',
+        (_asc('state'), _asc('superseded_at'), _asc('__name__')),
     ),
     # Recovery-intent census: recovery_state equality ordered by acceptance.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_recovery_age',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('recovery_state'), _asc('enqueued_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
+    FirestoreIndexRequirement(
+        'prod_batch_census_recovery_age',
+        'batch_pipeline_prod_jobs',
+        'COLLECTION',
+        (_asc('recovery_state'), _asc('enqueued_at'), _asc('__name__')),
     ),
     # Ready split: runnable (unattempted/allowed) ordered by acceptance, and
     # parked holds ordered by the refusal clock. Two stocks, two composites,
@@ -260,42 +234,26 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     # split expressed as one filtered query would poison the oldest age.
     *(
         FirestoreIndexRequirement(
-            f'{stage}_batch_census_ready_{name}',
-            f'batch_pipeline_{stage}_jobs',
+            f'prod_batch_census_ready_{name}',
+            'batch_pipeline_prod_jobs',
             'COLLECTION',
             (_asc('state'), _asc('compute_decision.outcome'), _asc(field), _asc('__name__')),
         )
-        for stage in ('prod', 'dev')
         for name, field in (('runnable', 'enqueued_at'), ('parked', 'compute_decision.at'))
     ),
     # Allowance/budget holds: equality on the decision outcome, a bounded
     # reason set, then the decision clock. The count and the oldest age use the
     # same composite; ``in`` on a leading field is served by this ordering.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_compute_hold',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (
-                _asc('compute_decision.outcome'),
-                _asc('compute_decision.reason'),
-                _asc('compute_decision.at'),
-                _asc('__name__'),
-            ),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    # Speaker final-pass outbox: open rows and closed receipts waiting for their
-    # repair write. No acceptance clock exists, so ``due_at`` is the best clock.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_speaker_outbox_{name}',
-            f'batch_pipeline_{stage}_speaker_final_pass_outbox',
-            'COLLECTION',
-            (_asc(field), _asc('due_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-        for name, field in (('open', 'outcome'), ('terminal', 'terminal_pending'))
+    FirestoreIndexRequirement(
+        'prod_batch_census_compute_hold',
+        'batch_pipeline_prod_jobs',
+        'COLLECTION',
+        (
+            _asc('compute_decision.outcome'),
+            _asc('compute_decision.reason'),
+            _asc('compute_decision.at'),
+            _asc('__name__'),
+        ),
     ),
     # Enrichment outbox: the whole collection is one stock (no filter), and the
     # two durable sub-stocks filter on a boolean before the acceptance clock.

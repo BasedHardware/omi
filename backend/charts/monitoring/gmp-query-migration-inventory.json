@@ -410,48 +410,6 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
-      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} < 1800)) or vector(0)",
-      "file": "alerts/batch-census.json",
-      "issues": [],
-      "metrics": [
-        "omi_batch_pipeline_census_state_observed_at_seconds",
-        "omi_batch_pipeline_census_state_oldest_age_seconds"
-      ],
-      "owner_title": "Batch memory_outbox pending: oldest row older than 86400s",
-      "owner_uid": "omi-census-age-mo-pending",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"processing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} < 1800)) or vector(0)",
-      "file": "alerts/batch-census.json",
-      "issues": [],
-      "metrics": [
-        "omi_batch_pipeline_census_state_observed_at_seconds",
-        "omi_batch_pipeline_census_state_oldest_age_seconds"
-      ],
-      "owner_title": "Batch memory_outbox processing: oldest row older than 3600s",
-      "owner_uid": "omi-census-age-mo-processing",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} < 1800)) or vector(0)",
-      "file": "alerts/batch-census.json",
-      "issues": [],
-      "metrics": [
-        "omi_batch_pipeline_census_state_observed_at_seconds",
-        "omi_batch_pipeline_census_state_oldest_age_seconds"
-      ],
-      "owner_title": "Batch memory_outbox retryable_failure: oldest row older than 86400s",
-      "owner_uid": "omi-census-age-mo-retryable_failure",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
       "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"enrichment_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} < 1800)) or vector(0)",
       "file": "alerts/batch-census.json",
       "issues": [],
@@ -461,34 +419,6 @@
       ],
       "owner_title": "Batch enrichment_outbox pending: oldest row older than 86400s",
       "owner_uid": "omi-census-age-eo-pending",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} < 1800)) or vector(0)",
-      "file": "alerts/batch-census.json",
-      "issues": [],
-      "metrics": [
-        "omi_batch_pipeline_census_state_observed_at_seconds",
-        "omi_batch_pipeline_census_state_oldest_age_seconds"
-      ],
-      "owner_title": "Batch speaker_outbox open: oldest row older than 21600s",
-      "owner_uid": "omi-census-age-so-open",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} < 1800)) or vector(0)",
-      "file": "alerts/batch-census.json",
-      "issues": [],
-      "metrics": [
-        "omi_batch_pipeline_census_state_observed_at_seconds",
-        "omi_batch_pipeline_census_state_oldest_age_seconds"
-      ],
-      "owner_title": "Batch speaker_outbox terminal_pending: oldest row older than 86400s",
-      "owner_uid": "omi-census-age-so-terminal_pending",
       "panel": null,
       "pointer": "/data/0/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -4758,7 +4688,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 321
+    "query_consumers": 316
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

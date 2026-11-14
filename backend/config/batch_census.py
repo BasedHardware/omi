@@ -24,19 +24,18 @@ from dataclasses import dataclass
 COLLECTION = 'COLLECTION'
 COLLECTION_GROUP = 'COLLECTION_GROUP'
 
-# Physical collection names per logical stock. Stage-scoped collections are
-# shared by prod and dev in one Firestore project, so both are declared.
+# Physical collection names per logical stock: production only.
+#
+# Prod and dev stage collections live in one Firestore project, and reading both
+# doubles the cost of every stage-scoped stock. The production census therefore
+# reads exactly one collection per stock — one count aggregation and at most one
+# clock-only oldest-row read — and dev-stage rows are excluded from production
+# totals. Dev traffic is measured by its own environment, never folded in here.
 COLLECTIONS = {
-    'jobs': ('batch_pipeline_prod_jobs', 'batch_pipeline_dev_jobs'),
-    'results': ('batch_pipeline_prod_results', 'batch_pipeline_dev_results'),
-    'provider_outbox': (
-        'batch_pipeline_prod_provider_stt_outbox',
-        'batch_pipeline_dev_provider_stt_outbox',
-    ),
-    'speaker_outbox': (
-        'batch_pipeline_prod_speaker_final_pass_outbox',
-        'batch_pipeline_dev_speaker_final_pass_outbox',
-    ),
+    'jobs': ('batch_pipeline_prod_jobs',),
+    'results': ('batch_pipeline_prod_results',),
+    'provider_outbox': ('batch_pipeline_prod_provider_stt_outbox',),
+    'speaker_outbox': ('batch_pipeline_prod_speaker_final_pass_outbox',),
     'memory_outbox': ('memory_outbox',),
     'enrichment_outbox': ('sync_reprocess_outbox',),
     # Reads are collection-group: holds live under ``users/{uid}/stt_cap_holds``
@@ -520,6 +519,12 @@ PROVIDER_OUTBOX_ENTRIES = (
 # --- memory outbox ----------------------------------------------------------
 # Rows live under ``{user_root}/memory_outbox``, so the fleet census needs the
 # COLLECTION_GROUP twin of the existing COLLECTION-scoped due index.
+# ``MemoryOutboxEvent`` carries no immutable acceptance clock: ``available_at``
+# moves on every retry and may sit in the future, and ``lease_expires_at`` is a
+# wake. Aging from either would clamp to 0 and report old outstanding work as
+# healthy, so these stocks publish their count and the ``-1`` undated sentinel
+# until the writer stamps an acceptance timestamp. They have no dwell alarm for
+# the same reason: an unknown age cannot have a threshold.
 MEMORY_OUTBOX_ENTRIES = tuple(
     _simple(
         'memory_outbox',
@@ -527,18 +532,17 @@ MEMORY_OUTBOX_ENTRIES = tuple(
         'memory_outbox',
         'status',
         scope=COLLECTION_GROUP,
-        clock='available_at',
-        clock_verified=True,
+        clock=None,
+        clock_verified=False,
         ceiling=ceiling,
-        age_alarm_seconds=age_alarm_seconds,
-        note='available_at is a due/backoff clock: the reading is overdue-ness, not dwell',
+        note='no immutable acceptance clock (available_at is a retry/wake clock): count plus the -1 undated sentinel',
     )
-    for state, ceiling, age_alarm_seconds in (
-        ('pending', 2_000_000, 86400),
-        ('processing', 100_000, 3600),
-        ('delivered', 2_000_000, None),
-        ('retryable_failure', 100_000, 86400),
-        ('dead_letter', 100_000, None),
+    for state, ceiling in (
+        ('pending', 2_000_000),
+        ('processing', 100_000),
+        ('delivered', 2_000_000),
+        ('retryable_failure', 100_000),
+        ('dead_letter', 100_000),
     )
 )
 
@@ -584,34 +588,34 @@ ENRICHMENT_OUTBOX_ENTRIES = (
 )
 
 # --- speaker final-pass outbox ---------------------------------------------
-# One collection per stage; rows carry no acceptance clock, so ``due_at`` is a
-# wake and a lower bound on the wait. Open rows have no ``outcome`` yet.
+# Speaker obligations carry no acceptance timestamp at all: ``due_at`` and
+# ``repair_after`` move on retry and can be in the future. Publishing a count
+# with the ``-1`` undated sentinel is the honest reading; a dwell alarm waits for
+# a stamped acceptance clock at the writer.
 SPEAKER_OUTBOX_ENTRIES = (
     _stock(
         'speaker_outbox',
         'open',
         'speaker_outbox',
         (('outcome', '==', None),),
-        clock='due_at',
+        clock=None,
         clock_verified=False,
         custody=_SPEAKER_CUSTODY,
         ceiling=10_000,
         field='outcome',
-        note='no acceptance clock; due_at is a retry wake, a lower bound on the wait',
-        age_alarm_seconds=21600,
+        note='no acceptance clock (due_at is a retry wake): count plus the -1 undated sentinel',
     ),
     _stock(
         'speaker_outbox',
         'terminal_pending',
         'speaker_outbox',
         (('terminal_pending', '==', True),),
-        clock='due_at',
+        clock=None,
         clock_verified=False,
         custody=_SPEAKER_CUSTODY,
         ceiling=10_000,
         field='terminal_pending',
-        note='closed receipt waiting for its counter/repair write; due_at is a lower bound',
-        age_alarm_seconds=86400,
+        note='closed receipt waiting for its repair write; no acceptance clock, so count plus the -1 sentinel',
     ),
 )
 

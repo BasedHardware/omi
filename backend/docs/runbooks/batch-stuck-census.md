@@ -45,17 +45,31 @@ email or conversation id is read or exported.
   is younger than 30 minutes; the freshness and the age come from that same
   series. A replica that sampled once and then idled therefore cannot hold a
   page open with its last reading.
-- **Age is dwell from acceptance, never from a stamped deadline.** The age clock
-  is `enqueued_at` for job states and `committed_at` for result projections. A
-  deadline (`record_dead_letter_deadline_at`, `held_deadline_at`, `lease_until`)
-  is in the future for the whole legitimate wait; using it as an age reads `0`
-  and hides the stock. Deadlines stay in the entry's `Custody`, which is a
-  horizon guarantee, not a measurement.
+- **Age is dwell from acceptance, never from a stamped deadline or a retry
+  clock.** The age clock is `enqueued_at` for job states and `committed_at` for
+  result projections. A deadline (`record_dead_letter_deadline_at`,
+  `held_deadline_at`, `lease_until`) is in the future for the whole legitimate
+  wait, and a retry/wake clock (`available_at`, `due_at`, `repair_after`) moves
+  forward on every attempt; aging from either reads `0` and hides the stock.
+  Deadlines stay in the entry's `Custody`, which is a horizon guarantee, not a
+  measurement.
+- **A stock with no immutable acceptance clock publishes `-1`, not an age.**
+  The memory outbox (`MemoryOutboxEvent`) and the speaker final-pass outbox
+  carry only retry/wake clocks today, so those seven stocks publish their count
+  with the undated sentinel and deliberately have **no dwell alarm**: an unknown
+  age cannot have a threshold. Stamping an acceptance timestamp at those writers
+  is the follow-up that turns them into dwell stocks; until then their counts
+  are the reading and `-1` is honest.
+- **Production only, one collection per stock.** Every stage-scoped stock reads
+  its production collection (`batch_pipeline_prod_*`, `memory_outbox`,
+  `sync_reprocess_outbox`, `stt_cap_holds`, `pipeline_ledger`). Dev-stage
+  collections are excluded from production totals, so each registered
+  `(machine, state)` costs exactly one count aggregation and at most one
+  clock-only oldest-row read.
 - **Age is not lateness for every stock.** `provider_pending` may legitimately be
   days old while the provider backlog drains; `cap_hold:held` can be months old
   because it waits on credits. Those stocks are measured (and the deep-backlog
-  stock is banded at 7 days) but not paged. `memory_outbox` is aged from
-  `available_at`, a due/backoff clock: its reading is overdue-ness, not dwell.
+  stock is banded at 7 days) but not paged.
 - **A few stocks are visibility-only.** `batch:deep_backlog`, `batch:allowance_held`,
   `batch:leased`, `batch:dead`, `batch:partial_retired`, `cap_hold:held` /
   `retained` / `batch_admitted` and the terminal projection states have a count
@@ -73,9 +87,9 @@ generator renders one rule per stock that sets `age_alarm_seconds`.
 | `batch_projection` | result projection states (`pending`, `persisted`, `ready`, `quarantine_held`, `completed`, `erased`, `claimed`) |
 | `batch_recovery` | recovery intents (`held`, `prepared`, `running`, `failed_held`, `recovered`, `cancelled`) |
 | `provider_outbox` | `open`, `closed` |
-| `memory_outbox` | `pending`, `processing`, `delivered`, `retryable_failure`, `dead_letter` |
+| `memory_outbox` | `pending`, `processing`, `delivered`, `retryable_failure`, `dead_letter` (count + `-1`, no acceptance clock) |
 | `enrichment_outbox` | `pending`, `parked`, `sync_hold` (`sync_reprocess_outbox`) |
-| `speaker_outbox` | `open`, `terminal_pending` (`batch_pipeline_{stage}_speaker_final_pass_outbox`) |
+| `speaker_outbox` | `open`, `terminal_pending` (`batch_pipeline_prod_speaker_final_pass_outbox`, count + `-1`) |
 | `cap_hold` | over-cap holds: `held`, `staging`, `sealing`, `retained`, `batch_admitted` (`stt_cap_holds`) |
 | `pipeline_ledger` | live admission and later stages: `capturing`, `sealed`, `transcribed`, `noted` |
 
@@ -104,13 +118,15 @@ generated from the registry's `age_alarm_seconds`.
 ## Cost
 
 A pass costs one `count()` aggregation per stock plus at most one oldest-row
-pointer read. Firestore bills a count at one read per 1,000 matched index
-entries (minimum one), so a pass is bounded by roughly the registry's declared
-ceilings divided by 1,000: about 25k reads at today's ceilings, about 3.6M
-reads/day at the 10-minute cadence (on the order of a dollar a day), and much
-less in practice because the ceilings are upper bounds. Record the measured
-first production pass here; if it is materially above that bound, lower the
-cadence rather than removing stocks.
+pointer read, over production collections only. Firestore bills a count at one
+read per 1,000 matched index entries (minimum one), so a pass is bounded by
+roughly the registry's declared ceilings divided by 1,000: about 25k reads at
+today's ceilings, about 3.6M reads/day at the 10-minute cadence (on the order of
+a dollar a day), and much less in practice because the ceilings are upper
+bounds. Staging both prod and dev collections would have doubled every
+stage-scoped stock, which is why dev is excluded. Record the measured first
+production pass here; if it is materially above that bound, lower the cadence
+rather than removing stocks.
 
 ## Responding to a breach
 

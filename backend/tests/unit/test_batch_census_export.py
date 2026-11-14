@@ -102,27 +102,20 @@ class FakeClient:
         return FakeQuery(self, name, COLLECTION_GROUP)
 
 
-def test_count_and_oldest_use_the_declared_collections_without_reading_content():
-    client = FakeClient(counts={'batch_pipeline_prod_jobs': 7, 'batch_pipeline_dev_jobs': 5}, oldest={})
+def test_count_and_oldest_use_the_production_collection_without_reading_content():
+    client = FakeClient(counts={'batch_pipeline_prod_jobs': 7}, oldest={})
     entry = BY_KEY['batch:ready']
 
     sample = sample_entry(client, entry, now=1_000.0, timeout=9.0)
 
-    assert sample == StockSample(units=12, oldest_at=None)
+    assert sample == StockSample(units=7, oldest_at=None)
     counts = [call for call in client.calls if call[0] == 'count']
-    assert [call[1] for call in counts] == ['batch_pipeline_prod_jobs', 'batch_pipeline_dev_jobs']
+    assert [call[1] for call in counts] == ['batch_pipeline_prod_jobs']
     assert counts[0][3] == (('state', '==', 'ready'),)
     streams = [call for call in client.calls if call[0] == 'stream']
-    assert [call[1] for call in streams] == ['batch_pipeline_prod_jobs', 'batch_pipeline_dev_jobs']
+    assert [call[1] for call in streams] == ['batch_pipeline_prod_jobs']
     # Exactly the clock field: no document content can reach a log or a label.
     assert {call[5] for call in streams} == {('enqueued_at',)}
-
-
-def test_oldest_is_the_minimum_across_stage_collections():
-    client = FakeClient(counts={'batch_pipeline_prod_jobs': 1, 'batch_pipeline_dev_jobs': 1}, oldest={})
-    client.oldest = {'batch_pipeline_prod_jobs': 900.0, 'batch_pipeline_dev_jobs': 400.0}
-
-    assert sample_entry(client, BY_KEY['batch:ready'], now=1_000.0, timeout=1.0).oldest_at == 400.0
 
 
 def test_entry_without_a_clock_never_issues_an_oldest_read():
@@ -242,7 +235,16 @@ AUDIT_STOCKS = (
 @pytest.mark.parametrize('key', AUDIT_STOCKS)
 def test_every_stock_the_audit_named_is_registered_with_a_clock(key):
     entry = BY_KEY[key]
-    assert entry.clock, f'{key} has no ageable clock, so the audit finding is still blind'
+    if entry.machine in {'memory_outbox', 'speaker_outbox'}:
+        # No immutable acceptance clock exists at the writer, and the retry/wake
+        # clocks move into the future. The ruling requires the explicit undated
+        # sentinel rather than an age that clamps to a healthy 0.
+        assert entry.clock is None, key
+        assert entry.age_alarm_seconds is None, key
+        assert 'sentinel' in entry.note, key
+    else:
+        assert entry.clock, f'{key} has no ageable clock, so the audit finding is still blind'
+        assert not entry.clock.endswith(('_deadline_at', '_until')), key
     assert entry.collection in {
         'jobs',
         'results',
@@ -252,6 +254,53 @@ def test_every_stock_the_audit_named_is_registered_with_a_clock(key):
         'cap_holds',
         'pipeline_ledger',
     }
+
+
+def test_retry_and_wake_clocks_are_never_published_as_an_age():
+    """A retry/wake clock can move into the future; aging from it reads healthy."""
+    for key, retry_clock in (
+        ('memory_outbox:pending', 'available_at'),
+        ('memory_outbox:processing', 'available_at'),
+        ('memory_outbox:retryable_failure', 'available_at'),
+        ('speaker_outbox:open', 'due_at'),
+        ('speaker_outbox:terminal_pending', 'due_at'),
+    ):
+        entry = BY_KEY[key]
+        assert entry.clock != retry_clock, key
+        assert entry.clock is None, key
+        assert entry.age_alarm_seconds is None, key
+
+
+def test_undated_stocks_publish_a_count_and_no_oldest_read():
+    client = FakeClient(counts={'memory_outbox': 4})
+    entry = BY_KEY['memory_outbox:pending']
+
+    sample = sample_entry(client, entry, now=1_000.0, timeout=1.0)
+
+    assert sample.units == 4
+    assert sample.oldest_at is None
+    assert [call[0] for call in client.calls] == ['count']
+    metrics.publish({entry.key: sample}, now=1_000.0)
+    assert metrics.OLDEST_AGE.labels(machine='memory_outbox', state='pending')._value.get() == (
+        metrics.UNDATED_OLDEST_AGE_SENTINEL
+    )
+
+
+def test_every_stock_costs_one_count_and_at_most_one_oldest_read():
+    """The per-stock read budget: one collection, one count, <=1 clock-only read."""
+    from config.batch_census import COLLECTIONS
+
+    for entry in ENTRIES:
+        names = COLLECTIONS[entry.collection]
+        assert len(names) == 1, f'{entry.key} reads {names}; production census is one collection per stock'
+        assert not names[0].endswith('_dev_jobs') and 'dev' not in names[0], entry.key
+
+        client = FakeClient(counts={names[0]: 2}, oldest={names[0]: 500.0})
+        sample_entry(client, entry, now=1_000.0, timeout=1.0)
+        counts = [call for call in client.calls if call[0] == 'count']
+        streams = [call for call in client.calls if call[0] == 'stream']
+        assert len(counts) == 1, entry.key
+        assert len(streams) <= 1, entry.key
 
 
 def test_every_registered_collection_resolves_to_physical_names():
