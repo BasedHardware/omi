@@ -10,6 +10,8 @@ This change does not release held provider backlog, change discovery or projecti
 
 FailedPrecondition on either query logs fresh_tx_gate_unavailable, records a fallback, and restores the old probe for 300 seconds. Set BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED=false to restore the old probe path.
 
-Review round 1: distinguish an undetermined gate from a decided empty result; handle transient gate query errors with fresh_tx_gate_retry and no backoff, preserving commit-write error propagation. Deterministic settle/redrive interleavings and transaction identity spies cover selection and result writes; the scheduler transaction wrapper delegates both new queries. The Postgres migration is numbered 0007.
+Review round 1: distinguish an undetermined gate from a decided empty result; handle transient gate query errors with fresh_tx_gate_retry and no backoff, preserving commit-write error propagation. Deterministic settle/redrive interleavings and transaction identity spies cover selection and result writes; the scheduler transaction wrapper delegates both new queries. The Postgres migration is numbered 0006.
+
+Review round 2: with the head wait off the gate does not let a ready fresh row pass an unready earlier fresh row; an `Aborted` raised by a gate query is re-raised to the transaction retry (or to the caller when contention retries are off) rather than handled as a gate retry.
 
 fresh_probe_full_no_ready is not emitted on the decided gate path; a falling or zero count alone is therefore not proof of progress. Production proof requires ready fresh rows committing behind more than 32 unready rows, the shape covered locally by test_ready_fresh_beyond_probe_page_obeys_its_own_wait; production has not been checked.

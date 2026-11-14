@@ -1228,8 +1228,12 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
     probe = Mock(return_value=stale)
     monkeypatch.setattr(h.store, 'fresh_pending', probe)
     tx_type = h.store.run(type)
-    query, put = tx_type.fresh_first_ready_pending, tx_type.put
-    reads, writes = [], []
+    first_query, query, put = tx_type.fresh_first_pending, tx_type.fresh_first_ready_pending, tx_type.put
+    firsts, reads, writes = [], [], []
+
+    def first(tx, key):
+        firsts.append(tx)
+        return first_query(tx, key)
 
     def read(tx, key):
         reads.append(tx)
@@ -1240,6 +1244,7 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
             writes.append(tx)
         return put(tx, table, key, value)
 
+    monkeypatch.setattr(tx_type, 'fresh_first_pending', first)
     monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
     monkeypatch.setattr(tx_type, 'put', write)
     run, calls = h.store.run, []
@@ -1255,5 +1260,5 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
     monkeypatch.setattr(h.store, 'run', interleave)
     entry = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=4).commit_next(uid, 100.0)
     assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
-    assert reads and writes and reads[-1] is writes[-1]
+    assert firsts and reads and writes and firsts[-1] is reads[-1] is writes[-1]
     probe.assert_not_called()

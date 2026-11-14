@@ -81,25 +81,61 @@ def test_ready_without_clock_uses_probe_wait_of_later_ready_row(monkeypatch):
 def test_gate_query_and_result_write_share_transaction(sim, monkeypatch):
     store = large_owner(1, sim)
     tx_type = store.run(type)
-    query, put = tx_type.fresh_first_ready_pending, tx_type.put
-    reads, writes = [], []
+    first_query, ready_query, put = tx_type.fresh_first_pending, tx_type.fresh_first_ready_pending, tx_type.put
+    firsts, reads, writes = [], [], []
+
+    def first(tx, key):
+        firsts.append(tx)
+        return first_query(tx, key)
 
     def read(tx, key):
         reads.append(tx)
-        return query(tx, key)
+        return ready_query(tx, key)
 
     def write(tx, table, key, value):
         if table == 'results':
             writes.append(tx)
         return put(tx, table, key, value)
 
+    monkeypatch.setattr(tx_type, 'fresh_first_pending', first)
     monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
     monkeypatch.setattr(tx_type, 'put', write)
     probe = Mock(side_effect=AssertionError('outside probe used'))
     monkeypatch.setattr(store, 'fresh_pending', probe)
     assert merge_for(store, wait=60).commit_next('heavy', NOW + 60)['segment_id'] == 'f1'
-    assert len(reads) == len(writes) == 1 and reads[0] is writes[0]
+    # Both selection queries ran on the transaction that wrote the result.
+    assert len(firsts) == len(reads) == len(writes) == 1 and firsts[0] is reads[0] is writes[0]
     probe.assert_not_called()
+
+
+def test_head_wait_off_never_passes_an_unready_earlier_fresh_row(monkeypatch):
+    """Strict-order setting: with the head wait off, a ready fresh row behind an unready earlier
+    fresh row does not commit through the gate, however long it has been ready."""
+    store, queue, leases = admitted({'c': (1000, CATCH_UP), 'f0': (90000, FRESH), 'f1': (90010, FRESH)})
+    complete(queue, leases, 'c')
+    store.rows['jobs', 'c']['stt_route'] = {'stt_route': 'provider'}
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    complete(queue, leases, 'f1')
+    assert merge_for(store, wait=0).commit_next('heavy', NOW + 86400) is None
+    assert store.rows['jobs', 'f1']['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('method', ['fresh_first_pending', 'fresh_first_ready_pending'])
+def test_contention_on_a_gate_query_is_not_swallowed_as_a_gate_retry(method, monkeypatch, caplog):
+    """With contention retries off, an Aborted from a transactional gate query reaches the caller."""
+    from google.api_core.exceptions import Aborted
+
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
+    store, queue, leases = admitted({'c': (1000, CATCH_UP), 'f': (90000, FRESH)})
+    complete(queue, leases, 'f')
+
+    def query(tx, key):
+        raise Aborted('contention')
+
+    monkeypatch.setattr(MemoryTransaction, method, query)
+    with caplog.at_level(logging.WARNING), pytest.raises(Aborted):
+        merge_for(store, wait=60).commit_next('heavy', NOW)
+    assert 'outcome=fresh_tx_gate_retry' not in caplog.text
 
 
 @pytest.mark.parametrize('method', ['fresh_first_pending', 'fresh_first_ready_pending'])

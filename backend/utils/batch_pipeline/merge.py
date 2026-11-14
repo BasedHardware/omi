@@ -3,7 +3,7 @@
 import logging
 import time
 
-from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
+from google.api_core.exceptions import Aborted, FailedPrecondition, GoogleAPICallError
 
 from config.batch_pipeline import (
     merge_catch_up_depth,
@@ -270,6 +270,10 @@ class OrderedMerge:
                 try:
                     first = tx.fresh_first_pending(key)
                     fresh = tx.fresh_first_ready_pending(key)
+                except Aborted:
+                    # Contention belongs to the transaction's own retry (or to the caller when
+                    # retries are off), never to the gate's read fallback.
+                    raise
                 except GoogleAPICallError as error:
                     # Only query errors get probe-style handling; commit writes still raise.
                     raise _FreshGateReadError(error) from error
@@ -281,7 +285,9 @@ class OrderedMerge:
                         # The probe can measure a later ready row's wait and pick this row.
                         gate['determined'] = False
                         return None
-                    if now - since < wait:
+                    if wait <= 0 or now - since < wait:
+                        # With the head wait off (or unavailable) nothing passes an unready
+                        # earlier fresh row, as on the probe path.
                         return None
                     skipped = {'segment_ids': [], 'state': first.get('state') if first else None, 'waited': now - since}
             if exact is not None:
