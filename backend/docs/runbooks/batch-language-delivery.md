@@ -50,6 +50,19 @@ python -m scripts.batch_pipeline_delivered_share_report --project based-hardware
 
 The backfill derives delivery from the result receipt (`projection.persisted_at`)
 for rows that predate the acknowledge stamp, so it works on retained history.
+Only `--step 900` and nonempty ranges aligned to UTC quarter hours are supported,
+for both the target and baseline. Invalid windows fail before client creation.
+Cohorts are counted as `[start, end)`, so an admission exactly on a shared
+boundary belongs only to the following cohort.
+
+Result reads select only completion state, summary timestamp and part count.
+For legacy completed receipts without a summary timestamp, a second read selects
+explicit `projection_parts.<number>.persisted_at` leaves, never whole receipt
+maps containing conversation or speaker identifiers. Missing timestamps or part
+counts outside 1–5,000 abort the report. This costs at most two result reads per
+unstamped job, in addition to the bounded job page. The release operator must
+declare the full target and baseline query budget before any production read.
+
 The drill runs the hermetic simulator healthy and with the Japanese provider
 route down; it must print `FIRING provider/ja`.
 

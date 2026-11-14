@@ -95,11 +95,11 @@
       "expression": "f'{namespace}_results'",
       "collection_pattern": "batch_pipeline_*_results",
       "owner": "Goal: Pipeline delivered-share backfill report (operator-run)",
-      "unit": "one retained result read per unstamped job in a backfill window",
-      "reads_per_unit_budget": 1,
-      "reads_per_day_budget": 500000,
+      "unit": "one unstamped job in a backfill cohort, including a legacy timestamp-leaf fallback",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 1000000,
       "basis": "planning-bound",
-      "source": "Operator-run only, never scheduled. The same bounded job page is read per 15-minute window; rows without the acknowledge stamp get one get_all read each, so a full-day backfill is one result read per admitted unit (~400k at the 2026-11 peak). No transcript field is selected or printed; only projection_state, projection.persisted_at and projection_parts persisted_at.",
+      "source": "Operator-run only, never scheduled. One result read selects projection_state, projection.persisted_at and projection_part_count. A completed legacy receipt without a summary timestamp gets one additional read selecting projection_state and explicit projection_parts.<index>.persisted_at leaves for 1..5000 parts; unsupported counts abort the report. At most two result reads per admitted unstamped unit (~800k reads at 400k units/day). Job pages stay capped at 5000 rows per 900-second UTC cohort. No whole receipt map or identifiers are selected. The release operator must declare the complete target/baseline query budget before reading production.",
       "reviewed": "2026-11-14"
     }
   ],
