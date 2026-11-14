@@ -224,6 +224,8 @@ def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monke
     rows = _owner_rows(uid, 'cold') + [
         ('merge_holds', key, {'held': True}),
         ('pull_claims', scheduler_control_key(key), {'token': 'old', 'expires_at': 20}),
+        # Keyed by owner like merge_holds; erasure must not depend on the document naming its owner.
+        ('allowance_holds', key, {'active': True, 'check_at': 1.0}),
     ]
     _write(dual, rows)
     for table, name, _ in rows:

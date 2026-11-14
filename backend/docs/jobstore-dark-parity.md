@@ -42,9 +42,10 @@ unfenced old binaries; D's all-writer inventory remains an activation gate.
 ## Census and query evidence
 
 The census covers jobs, queues, owners, control, results, gpus, intakes, artifacts,
-pull_claims and merge_holds. Successful Firestore claim CAS operations refresh the
-cold copy; PG never acquires a shadow claim. Erasure reconciles owner-keyed merge
-holds and the owner's shared pull-claim/control shard as well as linked rows.
+allowance_holds, pull_claims and merge_holds. Successful Firestore claim CAS operations
+refresh the cold copy; PG never acquires a shadow claim. Erasure reconciles owner-keyed
+merge holds and allowance holds by key, whether or not the document names its owner, and
+the owner's shared pull-claim/control shard as well as linked rows.
 
 `serving_parity.compare_serving_query` executes the actual PostgresStore read
 methods and the actual PostgresTransaction reads, rather than parallel SQL.

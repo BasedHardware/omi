@@ -29,13 +29,25 @@ STORE_QUERIES = frozenset(
         'fresh_pending',
         'longest_ready_pending',
         'held_merge_owners',
+        'ready_owners',
+        'allowance_owners',
+        'allowance_page',
         'projection_pending',
         'projection_page',
         'projection_successor',
+        'projection_finish_backfill_complete',
     }
 )
 TRANSACTION_QUERIES = frozenset(
-    {'get', 'first_pending', 'first_ready_pending', 'ready_predecessor', 'service_frontier'}
+    {
+        'get',
+        'first_pending',
+        'first_ready_pending',
+        'fresh_first_pending',
+        'fresh_first_ready_pending',
+        'ready_predecessor',
+        'service_frontier',
+    }
 )
 SERVING_PARITY_TOTAL = Counter(
     'omi_jobstore_serving_parity_total',

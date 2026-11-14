@@ -110,12 +110,24 @@ READ_CASES = [
     ('projection_successor', ('owner', None), {}),
     ('projection_successor', ('owner', 'a'), {}),
     ('projection_successor', ('owner', 'absent'), {}),
+    ('projection_finish_backfill_complete', (), {}),
+    ('ready_owners', (None, 2), {}),
+    ('ready_owners', ('owner', 2), {}),
+    ('ready_owners', (None, 1), {'descending': True}),
+    ('ready_owners', (None, 2), {'ceiling_owner_key': 'owner'}),
+    ('allowance_owners', (10, 2), {}),
+    ('allowance_owners', (0.5, 2), {}),
+    ('allowance_page', (None, None, 2), {}),
+    ('allowance_page', ('owner', None, 2), {}),
+    ('allowance_page', ('owner', (1.0, 'h'), 2), {}),
 ]
 TX_READ_CASES = [
     ('get', ('queues', 'q'), {}),
     ('get', ('jobs', 'absent'), {}),
     ('first_pending', ('owner',), {}),
     ('first_ready_pending', ('owner',), {}),
+    ('fresh_first_pending', ('owner',), {}),
+    ('fresh_first_ready_pending', ('owner',), {}),
     ('ready_predecessor', ('owner', 1, 'target'), {}),
     ('service_frontier', (1,), {}),
 ]
@@ -150,6 +162,10 @@ def _seed_queries(store):
         }
     rows['queues', 'q'] = {'head': 'a', 'tail': 'r', 'nullable': None}
     rows['merge_holds', 'owner'] = {'held': True}
+    # An allowance-parked row and its owner hold (#25281), so those reads compare non-empty results.
+    rows['jobs', 'h'] = {**rows['jobs', 'a'], 'segment_id': 'h', 'state': 'allowance_held', 'merge_pending': False}
+    rows['jobs', 'h'].pop('fresh_capture')
+    rows['allowance_holds', 'owner'] = {'active': True, 'check_at': 1.0}
     for key in ['a', 'b']:
         rows['control', key] = {'p1_active': True, 'p1_service': 1.0, 'p1_batch_available_at': 1.0}
     for (table, key), value in rows.items():

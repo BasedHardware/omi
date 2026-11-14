@@ -490,7 +490,13 @@ class DualStore:
 
         namespace, key = self.shadow.namespace, privacy_owner_key(owner_id)
         shard = scheduler_control_key(key)
-        rows = {('control', shard), ('pull_claims', shard), ('owners', key), ('merge_holds', key)}
+        rows = {
+            ('control', shard),
+            ('pull_claims', shard),
+            ('owners', key),
+            ('merge_holds', key),
+            ('allowance_holds', key),
+        }
         rows.update(('queues', f'{priority}_{key}') for priority in range(3))
         owner_match = "(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)"
         jobs = conn.execute(
