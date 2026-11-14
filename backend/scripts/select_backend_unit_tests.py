@@ -731,7 +731,14 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         or path == 'backend/deploy/cloud_run_gmp_sync.yaml'
         for path in changed_paths
     ):
-        selected.update(test for test in ('tests/unit/test_timeliness_metrics_are_scraped.py',) if test in all_tests)
+        selected.update(
+            test
+            for test in (
+                'tests/unit/test_timeliness_metrics_are_scraped.py',
+                'tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py',
+            )
+            if test in all_tests
+        )
     if any(is_firestore_index_guard_path(path) for path in changed_paths):
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):
