@@ -219,47 +219,76 @@ def test_pl584_legacy_settle_clock_obeys_exact_head_wait_and_late_chain(h, monke
     assert OrderedMerge(h.store).commit_next(uid, SETTLED + 102) is None
 
 
-def test_pl585_privacy_revoke_between_probe_and_commit_preserves_custody(h, monkeypatch):
+def race_before_fresh_commit(h, monkeypatch, action, *, transactional):
+    """Interleave at the boundary the selected merge mode actually uses."""
+    raced = []
+
+    def change_once():
+        if not raced:
+            raced.append(True)
+            action()
+
+    if transactional:
+        run = h.store.run
+
+        def after_strict_transaction(body):
+            result = run(body)
+            change_once()
+            return result
+
+        monkeypatch.setattr(h.store, 'run', after_strict_transaction)
+    else:
+        probe = h.store.fresh_pending
+
+        def after_probe(*args):
+            rows = probe(*args)
+            change_once()
+            return rows
+
+        monkeypatch.setattr(h.store, 'fresh_pending', after_probe)
+    return raced
+
+
+@pytest.mark.parametrize('transactional', [False, True], ids=['probe', 'transactional'])
+def test_pl585_privacy_revoke_before_fresh_commit_preserves_custody(h, monkeypatch, transactional):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', str(transactional).lower())
     admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
     settle(h, 'backlog')
     admit(h, 'fresh')
     settle(h, 'fresh')
     original = row(h, 'fresh')
-    real_probe = h.store.fresh_pending
-
-    def revoke_after_probe(*args):
-        rows = real_probe(*args)
-        h.customer.block_privacy(h.uid('owner'))
-        return rows
-
-    monkeypatch.setattr(h.store, 'fresh_pending', revoke_after_probe)
+    raced = race_before_fresh_commit(
+        h, monkeypatch, lambda: h.customer.block_privacy(h.uid('owner')), transactional=transactional
+    )
     assert OrderedMerge(h.store).commit_next(h.uid('owner'), SETTLED + 100) is None
+    assert raced == [True], 'the selected merge mode must execute the privacy race'
     assert row(h, 'fresh') == original
     assert not h.store.run(lambda tx: tx.get('results', 'fresh'))
 
 
-def test_pl584_a_predecessor_settled_after_probe_cannot_be_skipped(h, monkeypatch):
+@pytest.mark.parametrize('transactional', [False, True], ids=['probe', 'transactional'])
+def test_pl584_a_predecessor_settled_before_fresh_commit_cannot_be_skipped(h, monkeypatch, transactional):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', str(transactional).lower())
     admit(h, 'backlog', capture=CAPTURE - 100, lag=90_000)
     settle(h, 'backlog')
     admit(h, 'earlier', capture=CAPTURE + 10)
     admit(h, 'later', capture=CAPTURE + 20)
     settle(h, 'later')
-    real_probe = h.store.fresh_pending
-    raced = []
-
-    def settle_after_probe(*args):
-        rows = real_probe(*args)
-        if not raced:
-            raced.append(True)
-            settle(h, 'earlier', now=SETTLED + 30)
-        return rows
-
-    monkeypatch.setattr(h.store, 'fresh_pending', settle_after_probe)
+    raced = race_before_fresh_commit(
+        h, monkeypatch, lambda: settle(h, 'earlier', now=SETTLED + 30), transactional=transactional
+    )
     uid = h.uid('owner')
-    assert OrderedMerge(h.store, head_wait_seconds=60).commit_next(uid, SETTLED + 60) is None
+    first = OrderedMerge(h.store, head_wait_seconds=60).commit_next(uid, SETTLED + 60)
+    assert raced == [True], 'the selected merge mode must execute the predecessor race'
+    if transactional:
+        # Selection and commit share a snapshot, which now includes the predecessor.
+        assert first is not None and first['segment_id'] == 'earlier'
+    else:
+        # The stale outside probe cannot pass a predecessor that became ready.
+        assert first is None
     assert not h.store.run(lambda tx: tx.get('results', 'later'))
     merge = OrderedMerge(h.store, head_wait_seconds=60)
-    first = merge.commit_next(uid, SETTLED + 61)
+    first = first or merge.commit_next(uid, SETTLED + 61)
     second = merge.commit_next(uid, SETTLED + 61)
     assert [first['segment_id'], second['segment_id']] == ['earlier', 'later']
     assert second['previous_segment_id'] == 'earlier' and second['log_sequence'] == 2
