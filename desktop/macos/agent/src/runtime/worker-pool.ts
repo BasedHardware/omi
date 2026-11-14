@@ -151,6 +151,17 @@ export class AdapterWorker {
 type AdapterFactory = () => RuntimeAdapter;
 type WorkerLeaseResolver = (worker: AdapterWorker) => void;
 
+export interface AdapterWorkerPoolOptions {
+  /**
+   * Called synchronously when a worker is recycled, before `adapter.stop()` is
+   * awaited. The pool slot is already gone, so the factory may hand the next
+   * worker a replacement instance. Adapters backed by a process the pool cannot
+   * prove dead (a singleton like ACP) must use this to retire the live instance;
+   * otherwise a replacement worker could inherit a surviving subprocess.
+   */
+  onAdapterRetired?: (adapter: RuntimeAdapter) => void;
+}
+
 interface WorkerLeaseOptions {
   onIdlePinnedBindingEvicted?: (bindingId: string) => void;
   protectPinnedBindingAfterWork?: boolean;
@@ -198,17 +209,23 @@ interface PendingWorkerLease {
 export class AdapterWorkerPool {
   private readonly maxWorkers: number;
   private readonly adapterFactory: AdapterFactory;
+  private readonly onAdapterRetired?: (adapter: RuntimeAdapter) => void;
   private readonly workers: AdapterWorker[] = [];
   private readonly waiters: PendingWorkerLease[] = [];
   private readonly protectedPinnedBindingIds = new Set<string>();
   private nextWorkerId = 1;
 
-  constructor(adapterFactory: AdapterFactory, maxWorkers = configuredMaxWorkers()) {
+  constructor(
+    adapterFactory: AdapterFactory,
+    maxWorkers = configuredMaxWorkers(),
+    options: AdapterWorkerPoolOptions = {},
+  ) {
     if (maxWorkers < 1) {
       throw new Error("AdapterWorkerPool maxWorkers must be at least 1");
     }
     this.adapterFactory = adapterFactory;
     this.maxWorkers = maxWorkers;
+    this.onAdapterRetired = options.onAdapterRetired;
   }
 
   get size(): number {
@@ -306,6 +323,16 @@ export class AdapterWorkerPool {
       const index = this.workers.indexOf(worker);
       if (index >= 0) this.workers.splice(index, 1);
       if (bindingId) this.protectedPinnedBindingIds.delete(bindingId);
+      // Retire the concrete adapter before awaiting shutdown. A shared adapter
+      // (ACP registers one process-wide instance) would otherwise be reused by a
+      // replacement worker while the abandoned call and its late completion
+      // still own the old process and notification handler.
+      try {
+        this.onAdapterRetired?.(worker.adapter);
+      } catch {
+        // Retirement is a safety fence; a failing hook must not abort cleanup.
+        console.error("[agent-runtime] adapter retirement hook failed");
+      }
       this.rejectWaitersForRecycledBinding(bindingId);
       let bindingInvalidationSucceeded = true;
       try {

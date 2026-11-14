@@ -1286,7 +1286,35 @@ function startOmiToolsRelay(): Promise<string> {
 
 // --- ACP subprocess management ---
 
-const acpAdapter = new AcpRuntimeAdapter({ log: logErr });
+/**
+ * The live ACP adapter. Kept mutable because the runtime pool can retire a
+ * worker whose process it cannot prove dead: `retireAcpAdapter()` swaps in a
+ * fresh instance so a replacement worker can never inherit a surviving
+ * subprocess or the abandoned attempt's notification handler.
+ */
+let acpAdapter = createAcpAdapter();
+
+function createAcpAdapter(): AcpRuntimeAdapter {
+  const adapter = new AcpRuntimeAdapter({ log: logErr });
+  adapter.onProcessExit = () => {
+    isInitialized = false;
+  };
+  return adapter;
+}
+
+/**
+ * Retire the current ACP adapter instance. The pool already bounded the
+ * retired instance's `stop()`, so this only fences ownership: bridge requests
+ * and the next worker use the replacement instance, and the old instance's
+ * late `executeAttempt` completion can no longer touch it.
+ */
+function retireAcpAdapter(): void {
+  const retired = acpAdapter;
+  acpAdapter = createAcpAdapter();
+  isInitialized = false;
+  // Best-effort: the pool's bounded stop may have given up on this instance.
+  void retired.stop().catch(() => {});
+}
 
 /** Send a JSON-RPC request to the ACP subprocess and wait for the response */
 async function acpRequest(
@@ -1308,10 +1336,6 @@ function acpNotify(
 async function startAcpProcess(): Promise<void> {
   await acpAdapter.start();
 }
-
-acpAdapter.onProcessExit = () => {
-  isInitialized = false;
-};
 
 // --- State ---
 
@@ -1663,7 +1687,16 @@ async function main(): Promise<void> {
   const registry = new AdapterRegistry();
   // Adapter registration is availability, not execution authority. Immutable
   // session profiles decide which registered adapter a run may use.
-  registry.register("acp", () => acpAdapter, 1);
+  registry.register("acp", () => acpAdapter, 1, {
+    // ACP is a process-wide singleton, so removing the worker slot alone would
+    // let a follow-up worker reuse a process the pool could not prove stopped.
+    // Swap the instance when a worker is recycled; the replacement starts its
+    // own process on demand.
+    onAdapterRetired: () => {
+      logErr("Retiring ACP adapter instance after worker recycle");
+      retireAcpAdapter();
+    },
+  });
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
   logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
   const prunedToolOutputs = artifactStorage.pruneExpiredToolOutputs();

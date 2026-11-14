@@ -72,6 +72,27 @@ class LateBindAdapter extends FakeRuntimeAdapter {
   }
 }
 
+/**
+ * A fake adapter whose `stop()` never returns, modelling an ACP subprocess
+ * that ignores SIGTERM. Used with a shared-instance factory to prove the pool
+ * retires the concrete adapter, not only the worker slot.
+ */
+class SharedHungStopAdapter extends FakeRuntimeAdapter {
+  stopStarted = 0;
+  private readonly stopWaiters: Array<() => void> = [];
+
+  override async stop(): Promise<void> {
+    this.stopStarted += 1;
+    await new Promise<void>((resolve) => {
+      this.stopWaiters.push(resolve);
+    });
+  }
+
+  releaseStop(): void {
+    for (const resolve of this.stopWaiters.splice(0)) resolve();
+  }
+}
+
 afterEach(() => {
   for (const dir of createdDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -127,6 +148,81 @@ describe("AgentRuntimeKernel run deadline", () => {
     expect(adapters[1].executed).toHaveLength(1);
     expect(abandoned.executed).toHaveLength(1);
     store.close();
+  });
+
+  it("retires a shared adapter instance so a follow-up never inherits a hung process", async () => {
+    const previousStopTimeout = process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS;
+    process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS = "100";
+    try {
+      const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+      const abandoned = new SharedHungStopAdapter("fake");
+      let current: FakeRuntimeAdapter = abandoned;
+      let retiredCount = 0;
+      const registry = new AdapterRegistry();
+      // Mirror index.ts: a singleton process-backed adapter is replaced when its
+      // worker is recycled, so a replacement worker starts its own instance.
+      registry.register("fake", () => current, 1, {
+        onAdapterRetired: () => {
+          retiredCount += 1;
+          current = new FakeRuntimeAdapter("fake");
+        },
+      });
+      const kernel = new AgentRuntimeKernel({
+        store,
+        registry,
+        toolCapabilityProfileForSession: (sessionId) => {
+          const profile = readSessionExecutionProfile(store, sessionId);
+          const adapterId = ["pi-mono", "acp", "hermes", "openclaw"].includes(profile.adapterId)
+            ? profile.adapterId
+            : "acp";
+          return { ...profile, adapterId };
+        },
+      });
+      abandoned.deferResult();
+
+      const running = kernel.executeRun({ ...baseRunInput, timeoutMs: 150 });
+      await waitUntil(() => abandoned.executed.length === 1);
+      await waitUntil(() => abandoned.stopStarted === 1);
+      const timedOut = await running;
+
+      expect(timedOut.run.status).toBe("timed_out");
+      expect(retiredCount).toBe(1);
+      expect(current).not.toBe(abandoned);
+
+      // The abandoned stop is still hanging. A follow-up run must execute on the
+      // replacement instance, never on the process the pool could not stop.
+      const followUp = await kernel.executeRun({
+        ...baseRunInput,
+        requestId: "request-after-hung-stop",
+        timeoutMs: 0,
+      });
+      expect(followUp.run.status).toBe("succeeded");
+      expect(current.executed).toHaveLength(1);
+      expect(abandoned.executed).toHaveLength(1);
+
+      // Late completion of the abandoned attempt must not resurrect its run or
+      // overwrite the follow-up.
+      abandoned.resolveDeferred({ terminalStatus: "succeeded", text: "late-old-result" });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [timedOut.run.runId]).status)
+        .toBe("timed_out");
+      expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [followUp.run.runId]).status)
+        .toBe("succeeded");
+      expect(store.allRows(
+        "SELECT type FROM events WHERE run_id = ? AND type = 'message.completed'",
+        [timedOut.run.runId],
+      )).toHaveLength(0);
+
+      abandoned.releaseStop();
+      store.close();
+    } finally {
+      if (previousStopTimeout === undefined) {
+        delete process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS;
+      } else {
+        process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS = previousStopTimeout;
+      }
+    }
   });
 
   it("applies the run deadline to binding resolution that never settles", async () => {
