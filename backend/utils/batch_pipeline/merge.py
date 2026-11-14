@@ -1,6 +1,7 @@
 """Ordered durable result log. Projection consumers must use stable segment IDs."""
 
 import logging
+import threading
 import time
 
 from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
@@ -95,9 +96,10 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     if rows[0].get('state') == 'result_ready':
         return rows[0], None
     ready = [row for row in rows if row.get('state') == 'result_ready']
-    # A provider row settled while the ready_at stamp was off (or had it removed) carries the
-    # same instant on its intent. Reading only ready_at left such rows behind an unready
-    # earlier fresh row for good (2026-11-13: 15 owners, 7,784 ready fresh units).
+    # A provider row settled while the ready_at stamp was off (or had it removed) carries a
+    # settle instant on its intent. Reading only ready_at left such rows behind an unready
+    # earlier fresh row until ready_at was restored (2026-11-13: 15 owners, 7,784 ready fresh
+    # units).
     waited = max((now - since for row in ready if (since := _ready_since(row)) is not None), default=None)
     if wait > 0 and waited is not None and waited >= wait:
         earlier = [row['segment_id'] for row in rows[: rows.index(ready[0])]]
@@ -145,6 +147,9 @@ class OrderedMerge:
         # Owner key -> (wall time its ready fresh rows were first left waiting with no commit
         # since, wall time last seen waiting).
         self._fresh_stalled: dict[str, tuple[float, float]] = {}
+        # Drains run on a shared executor: every read or write of the two structures above
+        # holds this lock. It is never held across a store call or a log call.
+        self._fresh_lock = threading.Lock()
         self._marked_after: str | None = None
 
     def _head_wait(self) -> float:
@@ -160,7 +165,9 @@ class OrderedMerge:
     def release_hold(self, key: str, *, force: bool = False) -> None:
         """Clear an owner's durable hold marker once it is below the depth cap (or has nothing pending)."""
         depth = self._catch_up_depth()
-        if not force and key in self._fresh_waiting:
+        with self._fresh_lock:
+            waiting = key in self._fresh_waiting
+        if not force and waiting:
             # Ready fresh rows still wait behind this owner's head: keep the marker so the
             # next maintenance pass drains it again.
             return
@@ -236,41 +243,46 @@ class OrderedMerge:
         in this process.
 
         The bound stops a row that never commits (for a reason this code does not foresee) from
-        keeping its owner on every maintenance pass for good. It is longer than any head wait,
+        keeping its owner on every maintenance pass without end. It is longer than any head wait,
         so a row inside its wait is never dropped. A commit, or a gap of
         ``FRESH_REOFFER_GAP_SECONDS`` between sightings, starts the clock again. The table
         holds ``FRESH_REOFFER_MARK_PRUNE`` owners; when it is full of owners seen within the
         gap, a further owner is not marked."""
         if not fresh_reoffer_marker_enabled():
             return False
-        stalled = self._fresh_stalled
-        if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
-            # Drop owners not seen for a gap (their clock would restart anyway). An owner
-            # still being seen is never evicted: that would restart its clock and undo the
-            # bound. If the table is still full, this owner is not tracked and not marked.
-            for other, value in list(stalled.items()):
-                if now - value[1] > FRESH_REOFFER_GAP_SECONDS and stalled.get(other) == value:
-                    stalled.pop(other, None)
-            if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
-                logger.warning(
-                    'event=batch_merge outcome=fresh_reoffer_table_full source=%s count=1', self.commit_source
-                )
-                return False
-        since, seen = stalled.get(key, (now, now))
-        if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
-            since = now
-        stalled[key] = (since, now)
-        if now - since >= max(0.0, wait) + FRESH_REOFFER_MAX_SECONDS:
-            logger.warning('event=batch_merge outcome=fresh_reoffer_gave_up source=%s count=1', self.commit_source)
-            return False
-        self._fresh_waiting.add(key)
-        return True
+        outcome = self._fresh_track(key, now, committed, wait)
+        if outcome != 'waiting':
+            logger.warning('event=batch_merge outcome=%s source=%s count=1', outcome, self.commit_source)
+        return outcome == 'waiting'
+
+    def _fresh_track(self, key: str, now: float, committed: bool, wait: float) -> str:
+        """Update the owner's clock under the lock; 'waiting', or the outcome name to log."""
+        with self._fresh_lock:
+            stalled = self._fresh_stalled
+            if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
+                # Drop owners not seen for a gap (their clock would restart anyway). An owner
+                # still being seen is never evicted: that would restart its clock and undo the
+                # bound. If the table is still full, this owner is not tracked and not marked.
+                for other in [name for name, value in stalled.items() if now - value[1] > FRESH_REOFFER_GAP_SECONDS]:
+                    del stalled[other]
+                if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
+                    return 'fresh_reoffer_table_full'
+            since, seen = stalled.get(key, (now, now))
+            if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
+                since = now
+            stalled[key] = (since, now)
+            if now - since >= max(0.0, wait) + FRESH_REOFFER_MAX_SECONDS:
+                return 'fresh_reoffer_gave_up'
+            self._fresh_waiting.add(key)
+            return 'waiting'
 
     def drain_budget_spent(self, owner_id: str, now: float) -> None:
         """A drain stopped at its commit budget. If its last commit left ready fresh rows on
         the probe page, mark the owner so maintenance comes back for them."""
         key = owner_key(owner_id)
-        if key in self._fresh_waiting:
+        with self._fresh_lock:
+            waiting = key in self._fresh_waiting
+        if waiting:
             self._reoffer_fresh(key, now)
 
     def _head_wait_unavailable(self) -> None:
@@ -315,7 +327,8 @@ class OrderedMerge:
         wait; only the recovered unit also passes the catch-up depth hold. The
         body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
-        self._fresh_waiting.discard(key)
+        with self._fresh_lock:
+            self._fresh_waiting.discard(key)
         wait = self._head_wait()
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held

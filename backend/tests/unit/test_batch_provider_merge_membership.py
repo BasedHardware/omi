@@ -392,6 +392,48 @@ def test_a_full_table_does_not_evict_owners_still_waiting(world, monkeypatch):
     assert set(merge._fresh_stalled) == {'d'}
 
 
+def test_concurrent_drains_keep_the_table_bounded_and_consistent(world, monkeypatch):
+    """Drains run on a shared executor: many threads track, prune and clear owners at once."""
+    import threading
+
+    import utils.batch_pipeline.merge as merge_module
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', 8)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    errors: list[BaseException] = []
+    largest: list[int] = []
+    start = threading.Barrier(8)
+
+    def worker(index: int) -> None:
+        try:
+            start.wait()
+            for step in range(400):
+                key = f'{index}-{step}'
+                # Every fourth call comes after the gap, so the prune runs while others insert.
+                now = 1000.0 + (700.0 * step if step % 4 == 0 else 0.0)
+                tracked = merge._fresh_left_waiting(key, now, False, 60.0)
+                with merge._fresh_lock:
+                    largest.append(len(merge._fresh_stalled))
+                    if tracked:
+                        assert key in merge._fresh_waiting
+                    else:
+                        assert key not in merge._fresh_stalled
+                with merge._fresh_lock:
+                    merge._fresh_waiting.discard(key)
+        except BaseException as error:  # noqa: BLE001
+            errors.append(error)
+
+    threads = [threading.Thread(target=worker, args=(index,)) for index in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert not errors and not any(thread.is_alive() for thread in threads)
+    # A new owner is admitted only while the table holds at most the limit.
+    assert max(largest) <= 9
+
+
 def test_a_marker_cleared_elsewhere_is_written_again_at_once(world, monkeypatch):
     """No per-process memory of "already marked": another process may have cleared the marker."""
     store, _ = _legacy_backlog(world, monkeypatch, 1)
