@@ -35,7 +35,19 @@ _OPTIONAL_LITERAL_VOCABULARIES: Dict[str, Tuple[str, ...]] = {
 # 500s on POST /v1/dev/user/conversations followed on 2026-08-20. Drop the element the extractor made
 # unusable and keep the conversation, and log which field it was -- the prod signature carried no
 # traceback, so there was no way to tell one of these apart from the next.
-_DEFAULTED_SCALARS: Tuple[str, ...] = ('title', 'overview', 'emoji')
+_DEFAULTED_SCALARS: Tuple[str, ...] = ('title', 'overview', 'emoji', 'gist')
+
+# The one-line row label: a hard word bound keeps a chatty model from turning it
+# into a second overview. The server clips rather than rejecting the note.
+GIST_MAX_WORDS = 12
+
+
+def clip_gist(value: Any) -> str:
+    """Collapse whitespace and keep at most ``GIST_MAX_WORDS`` words."""
+    text = ' '.join(str(value or '').split())
+    if not text:
+        return ''
+    return ' '.join(text.split(' ')[:GIST_MAX_WORDS])
 
 
 def _usable_elements(values: Any, element_model: Type[BaseModel], field: str) -> Any:
@@ -326,6 +338,10 @@ class StructuredExtraction(BaseModel):
         description="A brief overview of the conversation, highlighting the key details from it",
         default='',
     )
+    gist: str = Field(
+        description='One line of at most 12 words saying what this conversation was about',
+        default='',
+    )
     emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     sections: List[ExtractedSection] = Field(
@@ -358,8 +374,13 @@ class StructuredExtraction(BaseModel):
         except ValueError:
             return CategoryEnum.other
 
+    @field_validator('gist', mode='before')
+    @classmethod
+    def clip_gist_words(cls, value: Any) -> str:
+        return clip_gist(value)
+
     def to_structured(self) -> Structured:
-        return Structured(
+        structured = Structured(
             title=self.title,
             overview=self.overview,
             # The schema default (🧠) means the model never chose; persist the
@@ -370,6 +391,9 @@ class StructuredExtraction(BaseModel):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+        if self.gist:
+            structured.gist = self.gist
+        return structured
 
 
 class RichStructuredExtraction(StructuredExtraction):
@@ -433,6 +457,8 @@ class RichStructuredExtraction(StructuredExtraction):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+        if self.gist:
+            structured.gist = self.gist
         # Only mark the rich fields as set when the model actually answered
         # them — unset fields serialize away, so non-meeting notes keep the
         # baseline document shape even with the flag on.

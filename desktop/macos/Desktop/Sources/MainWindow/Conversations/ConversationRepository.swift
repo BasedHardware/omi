@@ -349,6 +349,7 @@ final class ConversationRepository {
 
   func load(query: ConversationListQuery, includeCache: Bool = true) async {
     let session = cacheWriteScope.capture()
+    let previous = conversations
     requestGeneration += 1
     let generation = requestGeneration
     let queryChanged = currentQuery != query
@@ -378,9 +379,14 @@ final class ConversationRepository {
           // that races a pending star/title/folder edit (e.g. the user toggles a
           // filter mid-mutation) paints the bare cached rows and visually reverts
           // the edit until the remote call lands.
-          conversations = cached.map {
-            ConversationReconciliationPolicy.apply(
-              mutation: pendingMutations[$0.id], to: confirmedRestores[$0.id] ?? $0)
+          conversations = cached.map { cachedRow in
+            // Local storage predates Home projections. Its omitted field must
+            // not restart a known failed row while the server is unavailable.
+            let projected = ConversationReconciliationPolicy.retainingHomeFailure(
+              server: confirmedRestores[cachedRow.id] ?? cachedRow,
+              current: previous.first { $0.id == cachedRow.id })
+            return ConversationReconciliationPolicy.apply(
+              mutation: pendingMutations[cachedRow.id], to: projected)
           }
           count = cachedCount
           emit(.cache)
@@ -518,17 +524,21 @@ final class ConversationRepository {
     onCached: ((ServerConversation) -> Void)?
   ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
+    let projection = conversations.first { $0.id == id } ?? seed
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
       onCached?(
         ConversationReconciliationPolicy.retainingLoadedTranscript(
-          server: confirmedRestores[id] ?? cached, current: cached))
+          server: ConversationReconciliationPolicy.retainingHomeFailure(
+            server: confirmedRestores[id] ?? cached, current: projection), current: cached))
     }
 
     do {
       let received = try await remote.detail(id: id)
       try ensureCurrentSession(session)
-      let server = applyingConfirmedRestore(received)
+      let server = ConversationReconciliationPolicy.retainingHomeFailure(
+        server: applyingConfirmedRestore(received),
+        current: conversations.first { $0.id == id } ?? projection)
       try? await local.store(server, scope: cacheWriteScope, generation: session)
       try ensureCurrentSession(session)
       if pendingMutations[id] != nil {
@@ -545,11 +555,15 @@ final class ConversationRepository {
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
         return ConversationReconciliationPolicy.retainingLoadedTranscript(
-          server: confirmedRestores[id] ?? cached, current: cached)
+          server: ConversationReconciliationPolicy.retainingHomeFailure(
+            server: confirmedRestores[id] ?? cached, current: conversations.first { $0.id == id } ?? projection),
+          current: cached)
       }
       try ensureCurrentSession(session)
-      guard let seed else { throw error }
-      return confirmedRestores[id] ?? seed
+      guard let current = conversations.first(where: { $0.id == id }) ?? confirmedRestores[id] ?? seed else {
+        throw error
+      }
+      return current
     }
   }
 
@@ -591,10 +605,11 @@ final class ConversationRepository {
   /// Replace a conversation in local state with a freshly-fetched server
   /// version. Used after reprocess so the row sees the new `status` and full
   /// `structured` payload (not just title), which matters when reprocess
-  /// transitions a `.failed` conversation back to `.completed`.
+  /// restarts processing or completes. Unlike ordinary detail reads, this response
+  /// acknowledges recovery even when it omits the list-only `home_step` field.
   func replace(_ conversation: ServerConversation) {
     let session = cacheWriteScope.capture()
-    replaceVisible(conversation)
+    replaceVisible(conversation, preserveHomeFailure: false)
     emit(.server)
     Task {
       try? await local.store(conversation, scope: cacheWriteScope, generation: session)
@@ -819,7 +834,7 @@ final class ConversationRepository {
     )
   }
 
-  private func replaceVisible(_ conversation: ServerConversation) {
+  private func replaceVisible(_ conversation: ServerConversation, preserveHomeFailure: Bool = true) {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
@@ -842,7 +857,10 @@ final class ConversationRepository {
     {
       return
     }
-    conversations[index] = conversation
+    conversations[index] =
+      preserveHomeFailure
+      ? ConversationReconciliationPolicy.retainingHomeFailure(server: conversation, current: existing)
+      : conversation
   }
 
   private func matchesCurrentQuery(_ conversation: ServerConversation) -> Bool {

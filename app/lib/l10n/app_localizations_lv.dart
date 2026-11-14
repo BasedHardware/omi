@@ -9198,6 +9198,24 @@ class AppLocalizationsLv extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nevar noteikt pašreizējo programmaparatūras versiju';
 
   @override
+  String get applyCodeToCurrentPlan => 'Piemērot pašreizējam plānam';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kods piemērots jūsu pašreizējam plānam.',
+        'refused': 'Šo kodu nevar piemērot. Pārbaudiet kodu un nepieciešamo plānu.',
+        'conflict': 'Kods jau izmantots vai jūsu plānam jau ir atlaide.',
+        'rateLimited': 'Pārāk daudz mēģinājumu. Uzgaidiet un mēģiniet vēlāk.',
+        'other': 'Kodu neizdevās piemērot. Mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Reklāmas kods';
 
   @override
@@ -13683,6 +13701,9 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Izveidot piezīmes vēlreiz';
 
   @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';

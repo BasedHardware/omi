@@ -9,6 +9,10 @@ import pytest
 from tests.unit.test_soniox_batch import FILE, TRANSCRIPTION, TRANSCRIPT, client as sync_client
 from utils.stt import soniox_batch as module
 
+# SCA-1998: first-call CPU cost flakes under load; keep coverage on every main
+# push in backend-slow-timing-tests.yml until the deterministic rewrite lands.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def configured(monkeypatch):

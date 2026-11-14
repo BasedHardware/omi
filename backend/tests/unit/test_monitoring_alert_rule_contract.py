@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 
 import yaml
+
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
 from prometheus_client import CollectorRegistry
 from utils.lifecycle_metrics import PhaseMetrics
 
@@ -101,13 +103,14 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         assert 'omi-batch-queue-uncommitted-2h' not in rules
         late = rules['omi-batch-unit-unpublished-2h']
         nodes = {node['refId']: node for node in late['data']}
-        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)', export_name
         selector = '{namespace="prod-omi-backend"}'
         assert nodes['A']['model']['expr'] == (
-            'max(omi_batch_timeliness_new_oldest_age_seconds'
-            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+            'max((omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) '
+            f'and ignoring(leg) {FRESH_NEWEST}) or vector(0)'
         )
-        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['B']['model']['expr'] == f'(time() - max({NEWEST})) or vector(1e9)'
         assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
         assert (
             nodes['F']['model']['expr']
@@ -317,6 +320,25 @@ def test_combined_alert_export_matches_every_split_source_rule():
     assert combined.keys() == split.keys()
     for uid in combined:
         assert combined[uid] == split[uid], uid
+
+
+def test_datasource_backed_alert_queries_carry_a_nonzero_relative_range():
+    """Grafana rejects a datasource query whose relative range is 0s..0s.
+
+    A merged rule shipped ``relativeTimeRange`` ``{from: 0, to: 0}`` on a
+    Prometheus selector node; source lint passed but provisioning failed with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062).
+    Expression nodes keep the 0s window Grafana ignores for them.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for query in rule["data"]:
+                if query["datasourceUid"] in ("__expr__", "-100"):
+                    continue
+                window = query["relativeTimeRange"]
+                assert window["from"] > window["to"], f"{export_name}:{uid}:{query['refId']}"
+                assert window["from"] > 0, f"{export_name}:{uid}:{query['refId']}"
+                assert window["to"] >= 0, f"{export_name}:{uid}:{query['refId']}"
 
 
 def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
@@ -1295,6 +1317,8 @@ EXTERNAL_ALERT_METRICS = {
     "container_memory_working_set_bytes": "cAdvisor",
     # prometheus-stackdriver-exporter
     "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    # GMP Cloud Monitoring native metric (gmp-cloud-run datasource)
+    "firestore_googleapis_com:document_read_count": "GMP Cloud Monitoring native metric",
     "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
     "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
         "prometheus-stackdriver-exporter"
@@ -1303,6 +1327,10 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Workspace gate runner (infra/metrics/pipeline-census/gate.py) writes a
+    # node_exporter textfile; it is not a backend process.
+    "omi_pipeline_ledger_gate_receipt_generated_at_seconds": "workspace census gate textfile",
+    "omi_pipeline_ledger_gate_verdict": "workspace census gate textfile",
     # Cloud Logging declarations, queried directly through GMP (never the local exporter).
     "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
     "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
@@ -1339,6 +1367,7 @@ _PROMQL_KEYWORDS = frozenset(
         "clamp_min",
         "clamp_max",
         "vector",
+        "scalar",
         "or",
         "and",
         "unless",
@@ -1396,8 +1425,11 @@ def _declared_backend_metric_names() -> set[str]:
             registry = CollectorRegistry()
             PhaseMetrics(prefix, ['state'], registry=registry)
             names.update(metric.name for metric in registry.collect())
-        if path == REPO / 'backend/utils/executors.py':
-            # This helper constructs/reuses registered Gauge objects with fixed names.
+        if path in (
+            REPO / 'backend/utils/executors.py',
+            REPO / 'backend/utils/conversations/pipeline_ledger_metrics.py',
+        ):
+            # These helpers construct/reuse registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
     return names
 

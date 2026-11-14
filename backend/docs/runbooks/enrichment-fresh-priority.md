@@ -13,12 +13,18 @@ queues, including when the backfill queue is not configured.
 Before deploying the production manifest, the rollout lead must provision
 `enrichment-fresh` in the same project/location as `enrichment`, with permission
 for the existing producers to enqueue and the existing invoker to call the
-handler. Start at 5 concurrent deliveries and 2 dispatches/s. This isolates queue
+handler. Production permanently uses 30 concurrent deliveries and 10 dispatches/s
+(2026-11-10 ruling 008024); primary enrichment independently stays 300/25. This isolates queue
 scheduling; it does not establish spare backend executor or LLM capacity. Check
 handler 5xx, 409 delivery-budget cuts, executor wait, LLM request latency/errors
 and title age before raising the cap. The new queue must exist before activation;
 `backend/deploy/ops/prod.yaml` reconciles these limits through config-train.
-Staging maps the reserved queue to `staging-enrichment-fresh`, with the same
+The operational Firestore-pressure guard may temporarily reduce live fresh
+concurrency to 15 while retaining 10 dispatches/s; Git remains 30/10. Only
+`cl2-deploy` applies production config. Re-evaluate the 168h age gate after the
+backlog drains; this capacity change does not alter admission policy. Track owed
+first summaries older than 15 minutes, targeting less than 1%.
+Staging maps the reserved queue to `staging-enrichment-fresh`, with an intentional
 5-concurrent/2-per-second ops contract. Its existing `create_queues.sh` helper
 provisions this queue before staging deployment; the lane did not run it.
 
@@ -31,7 +37,11 @@ is recovered by the existing sweep. Active leases, background backfill, custom
 bindings and lazy effects are not migrated. The old queue is not purged: it
 contains both background work and stale deliveries that must drain normally.
 
-Rollback: remove `ENRICHMENT_FRESH_TASKS_QUEUE` from the deployed configuration
+Capacity rollback: make a targeted fresh config edit to 15 concurrent / 10
+dispatches/s and coordinate its application with `cl2-deploy`; preserve primary
+300/25. Never revert this entire PR or restore fresh 5/2 during backlog.
+
+Routing rollback: remove `ENRICHMENT_FRESH_TASKS_QUEUE` from the deployed configuration
 and leave both queues running until admitted obligations drain. Valid bindings
 survive rollback. Pausing `enrichment-fresh` is an emergency stop, not a complete
 rollback: already promoted rows wait there until it resumes. Never delete either

@@ -24906,7 +24906,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+          "expr": "max((omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -24926,7 +24926,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -24986,7 +24986,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)",
+          "expression": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -25049,7 +25049,7 @@
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
       "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
+      "threshold": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
       "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
       "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
@@ -25098,7 +25098,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -25118,7 +25118,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 900",
+          "expression": "$A >= 1200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -25175,13 +25175,13 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The batch timeliness sample has not refreshed in 15 minutes, so the 2h alarm is blind.",
+      "summary": "The batch timeliness sample has not refreshed in 20 minutes, so the 2h alarm is blind.",
       "user_impact": "Late batch transcripts could go unnoticed while the sample is stale.",
-      "scope": "omi_batch_timeliness_observed_at_seconds; refreshed at most every 5 minutes per batch worker. A never-taken sample reads as stale.",
+      "scope": "Newest numeric timeliness observation across GKE and Cloud Run, retained over 20m; leader cadence defaults to 300s and clamps to 60-600s. Stale at 1200s, including delivery delay; never-taken samples read as stale.",
       "verification": "Check omi_batch_timeliness_samples_total by outcome: error means Firestore reads failed, disabled means the kill switch is off.",
       "safe_next_action": "If disabled, confirm that was intended. If error, read the batch_timeliness_sample warning log on the worker.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "$A >= 900 for 5m",
+      "threshold": "$A >= 1200 for 5m",
       "evaluated_bad": "Synthetic: no sample for 20 minutes, or the series never existed.",
       "evaluated_good": "Synthetic: a sample 4 minutes old."
     },
@@ -25231,7 +25231,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_scan_truncated)",
+          "expr": "max(omi_batch_timeliness_scan_truncated and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -28604,7 +28604,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and (time() - omi_batch_timeliness_observed_at_seconds < 900)) or vector(0)",
+          "expr": "max(omi_batch_projection_drain_oldest_age_seconds and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -28657,7 +28657,7 @@
       "summary": "Owner drain claim_busy share exceeds 50% or advanced rows fall below 10/s for 15 minutes while pending projection debt exists.",
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
-      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 900 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 1200 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
       "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
@@ -28711,7 +28711,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+          "expr": "max by (leg) (omi_batch_held_oldest_age_seconds{leg=~\"quarantine_held|assignment_held|record_pending\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -29390,7 +29390,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
+          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) >= 10000) or on() vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -29474,7 +29474,7 @@
       "scope": "Fleet-max pre-epoch assignment_held stock: growth below the 10000 count cap, or stock at/above it; fresh samples only.",
       "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
       "safe_next_action": "Inspect assignment/projection recovery and the aggregate batch custody census. At 10000 the bounded count means at least 10000, not measured growth; repair the held leg and drain below the cap without deleting audio.",
-      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <900s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
+      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <1200s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
       "runbook": "backend/charts/monitoring/critical-failures.md"
     },
     "labels": {
@@ -32598,7 +32598,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) (time() - omi_batch_timeliness_observed_at_seconds < 900))",
+          "expr": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 60000,
           "maxDataPoints": 43200,
@@ -32682,5 +32682,1080 @@
     },
     "record": null,
     "missingSeriesEvalsToResolve": 2
+  },
+  {
+    "uid": "omi-backlog-retry-cap-quarantine-rate",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Retry cap quarantine rate (enforcement off by default)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_capture_retry_cap_total{outcome=\"quarantine\"}[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Enforced retry caps are quarantining or failing more than 50 units in 30 minutes.",
+      "user_impact": "Affected recordings keep their audio but wait in a held state instead of retrying; sync uploads end failed and need a re-upload or operator redrive.",
+      "scope": "Counts committed cap decisions with outcome=quarantine across batch lease expiry and sync checks. Enforced for every uid only with CAPTURE_RETRY_CAP_ENFORCED on (default off); otherwise the CAPTURE_COVERAGE_MODE cohort. Agent tier only.",
+      "verification": "Read omi_capture_retry_cap_total by check and outcome, then batch worker failure reasons and sync dispatch errors.",
+      "safe_next_action": "Find the failure that exhausts attempts (worker crash, OOM, provider outage) before requeueing; requeue only after the cause is fixed. Rollback: CAPTURE_RETRY_CAP_ENFORCED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">50 quarantines in 30m for 5m; initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 51 quarantine decisions in 30m.",
+      "evaluated_good": "Synthetic: 50 quarantine decisions in 30m, or would_quarantine only."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-retry-cap-quarantine-rate",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-budget-spent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "Held units with a spent re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 64",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The nightly held pass or status-poll re-drives saw more than 64 units whose re-drive counter reached the max in an hour.",
+      "user_impact": "These recordings keep their audio but have been re-driven 3 times without a transcript and keep looping.",
+      "scope": "Counts new committed spent transitions once per unit, after the content/privacy CAS. Staging repairs, expired-today skips, refusals and later cycles of marked units are excluded. Agent tier only.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} and sample worker failure reasons with an authorized operator read.",
+      "safe_next_action": "Fix the failure cause before requeueing. Never delete audio. Rollback: BATCH_HELD_REDRIVE_COUNTER_ENABLED=false.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">64 in 1h for 5m (two nightly 32-row pages); initial agent threshold, not calibrated from production.",
+      "evaluated_bad": "Synthetic: 65 observations in 1h.",
+      "evaluated_good": "Synthetic: 64 observations in 1h."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-budget-spent",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-backlog-held-redrive-unit-looping",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backlog state machine",
+    "title": "A held unit is still being re-driven after spending its re-drive budget",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 691200,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"}[1h])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "C",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-07T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A held recording newly entered its spent re-drive state in the last hour.",
+      "user_impact": "The recording exhausted three held re-drives and failed again; retained audio needs investigation.",
+      "scope": "Pages only for a new committed held_redrive_budget_spent transition. The durable held_redrive_budget_spent_at marker prevents later cycles of the same unit from re-firing. Nightly, poll and operator paths share the content/privacy CAS; staging repairs are excluded. The >64/h rule covers volume.",
+      "verification": "Read omi_backlog_state_transitions_total{transition=\"held_redrive_budget_spent\"} over 1h, then inspect held_redrive_budget_spent_at and the unit failure history.",
+      "safe_next_action": "Investigate the worker, audio or provider failure before another re-drive. Audio and results are retained. BATCH_HELD_REDRIVE_COUNTER_ENABLED=false silences telemetry without changing custody or budget accounting.",
+      "runbook": "backend/docs/runbooks/backlog-state-machine.md",
+      "threshold": ">0 new spent transitions in 1h for 5m; the same unit cannot emit again.",
+      "evaluated_bad": "Synthetic: one unit commits its first re-drive after three held re-drives.",
+      "evaluated_good": "Synthetic: below-budget re-drives, refusals, staging repairs, or later cycles of an already marked unit."
+    },
+    "labels": {
+      "alert_identity": "omi-backlog-held-redrive-unit-looping",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "dazheng"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-record-token-lease-late-append",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease closed during uploader activity",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_record_token_late_append_total[5m])) > 0 or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease closed during uploader activity",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-late-append",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-record-token-lease-backlog",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Record token lease",
+    "title": "Record token lease backlog age is not falling",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(deriv((last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]))[30m:]) >= bool 0) and on() (last_over_time((max(omi_record_seal_oldest_age_seconds >= 0))[10m:]) > 0) and on() (sum(increase(omi_record_token_lease_expired_sealed_total[1h])) > 0) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "refId": "B",
+          "type": "threshold",
+          "expression": "A",
+          "conditions": [
+            {
+              "evaluator": {
+                "type": "gt",
+                "params": [
+                  0
+                ]
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "type": "last",
+                "params": []
+              },
+              "type": "query"
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "Record token lease backlog age is not falling",
+      "user_impact": "Audio remains retained; record closure must not race an active uploader.",
+      "scope": "Server-observed custody appends/frame batches only. Backlog warning requires recent lease-based release activity.",
+      "verification": "Inspect late-append rate, signal-gap histogram and oldest unsealed age. No user-data reads required.",
+      "safe_next_action": "P4 auto-revert RECORD_TOKEN_LEASE_MODE to shadow/off; retain all raw audio; lead2 go before the next step.",
+      "runbook": "backend/docs/listen_pusher_pipeline/changes/2026-11-09-record-token-lease.md",
+      "threshold": "Any late append pages immediately; non-falling backlog age warns during lease release activity.",
+      "evaluated_bad": "Synthetic late-append counter increases, or positive age slope with lease releases.",
+      "evaluated_good": "Synthetic zero late-appends and falling oldest-unsealed age."
+    },
+    "labels": {
+      "alert_identity": "omi-record-token-lease-backlog",
+      "component": "record-token-lease",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "record-token-lease"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed reads above 3% of billed reads",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "($B - $A) / $B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.03
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-13T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Unattributed Firestore reads are above 3% of billed reads on a 30m window: the instrumented read counters cover less than 97% of the native document/read_count.",
+      "threshold": "($B - $A) / $B > 0.03 for 30m, where A = sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0), B = avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60, and the same 30m window is used on both sides. The rule resolves at or below 0.03. The denominator's completeness and per-type freshness are guarded independently by omi-firestore-unattributed-reads-blind.",
+      "user_impact": "No direct user impact. A blind spot in read attribution means a read regression can grow without a named caller, so the next cost cut cannot be proven and the bill can rise unseen.",
+      "scope": "based-hardware, both Firestore databases, all read types (LOOKUP, QUERY, NOT_FOUND). A is the complete instrumented counter on the GMP datasource (Cloud Run and GKE); B is the native Cloud Monitoring document/read_count, which tracked the settled bill to 0.3% on the 2026-11-09 cross-check. A missing instrumented series reads as zero through or vector(0) and fires. The separate guard rule fires when the billed series is incomplete, stale or absent, so this rule's NoData is covered.",
+      "verification": "Exact expression replayed on GMP query_range 2026-11-02T06:51Z..2026-11-12T06:51Z at 1h steps (241 points): 0.134-0.568, mean 0.321. Daily means: 11-09 0.274, 11-10 0.196, 11-11 0.163, 11-12 0.162. No retained hour is at or below 0.03, so the resolve side is proven by fixtures, not by live history. The 95% acceptance figure in backend/docs/firestore-read-attribution.md is historical; the fresh measurement is 84% attributed.",
+      "evaluated_bad": "Live 2026-11-11T00:00Z..2026-11-12T00:00Z: 0.136-0.183 (mean 0.163), above 0.03 in every hour.",
+      "evaluated_good": "Fixture: instrumented 980/s against billed 1000/s (gap 0.02) for 2h produces no episode, and a firing episode resolves on the first chronological tick at exactly 0.03.",
+      "safe_next_action": "Read the by-caller coverage per kind on the Firestore dashboard, then confirm the instrumented fleet is on a probe build that exports by_caller. If omi-firestore-unattributed-reads-blind is firing, fix the billed series before reading this ratio. This rule reports the gap; it does not explain it, and the closed QUERY undercount RCA is not reopened here.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production. The guard rule has its own isPaused switch and its own gate UID."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-reads-blind",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - unattributed-reads guard: billed series incomplete or stale",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((count(count by (type) (firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"})) == bool 3) or vector(0)) * ((min((max by (type) (time() - timestamp(firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"}))) < bool 900)) or vector(0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-13T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The billed Firestore read series is incomplete, stale or absent, so the unattributed-reads ratio is blind.",
+      "threshold": "A < 1 for 30m, where A = (count of LOOKUP|QUERY|NOT_FOUND == 3) * (min per expected type of (max by type (time() - timestamp(...)) < 900)); the selectors name LOOKUP, QUERY and NOT_FOUND explicitly, so an unknown type cannot replace an expected type. NoData is Alerting.",
+      "user_impact": "No direct user impact. A blind denominator means the unattributed-reads alert cannot tell a real attribution gap from a vanished or stale billed series, so a read regression could pass unmeasured.",
+      "scope": "based-hardware, the three expected billed types (LOOKUP, QUERY, NOT_FOUND) on the gmp-cloud-run datasource. The guard is 1 only when all three expected types are present and every expected type is younger than 900s. An unknown type is excluded from both the count and the freshness check, so it cannot replace a missing expected type. Partial type loss, one stale type, total loss and a missing metric all drive the guard to 0; NoData is Alerting as a final fail-closed layer.",
+      "verification": "Measured 2026-11-13T10:39Z on GMP: count by type = 3, max age 143s, guard = 1. Fixtures exercise all three expected types fresh (guard 1), one stale type with two fresh (guard 0), an absent series (guard 0), and each of LOOKUP/QUERY/NOT_FOUND replaced by a fresh unknown type (guard 0).",
+      "evaluated_bad": "Fixture: LOOKUP 100s, QUERY 2000s, NOT_FOUND 100s -> guard 0 -> fires. Absent metric -> guard 0 -> fires. Each expected type replaced by FUTURE_TYPE at 100s -> guard 0 -> fires (unknown types cannot substitute). NoData is Alerting.",
+      "evaluated_good": "Fixture: all three types at 100s -> guard 1 -> no episode.",
+      "safe_next_action": "Check the GMP series for a missing type or a stale sample before reading the ratio. Do not treat the ratio's NoData as healthy.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "isPaused=false (enabled by default). Disable: set isPaused true and re-import; re-enable: set isPaused false. Selector: membership of this UID in backend/charts/monitoring/live-alert-gate.json uids[] controls fail-closed live import and verification; it is present by default and is listed in PRODUCTION_ONLY_IMPORT_UIDS because the gmp-cloud-run datasource exists only in production."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-reads-blind",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+{"uid":"omi-pipeline-ledger-stuck","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger rows are stuck past their stage deadline","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"max by (stage) (omi_pipeline_ledger_stuck_rows)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A > 0"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"10m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"A ledger row is past its stage deadline for 10 minutes.","user_impact":"A capture is not reaching Home; the stage label names where it stopped.","scope":"Owner-scoped ledger census gauges refreshed on the operator read. Stage is a bounded enum; no uid or conversation id is a label.","verification":"Run the operator explain read for one affected conversation, then the stage runbook. A missing sample is covered by the sample-stale rule, not a healthy zero.","safe_next_action":"Redrive or settle the row through the stage runbook. This alert authorizes no runtime change.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A > 0 for 10m"},"labels":{"alert_identity":"omi-pipeline-ledger-stuck","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
+{"uid":"omi-pipeline-ledger-sample-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger census sample is stale or never taken","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 900"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The ledger census has not refreshed for 15 minutes.","user_impact":"Stuck gauges may be blind; a missing sample is not a healthy zero.","scope":"The operator census route sets refreshed_at on every successful read. A failed or skipped read leaves the old timestamp.","verification":"Check the operator census route and its service-OIDC audience/invoker configuration. Do not read a stale gauge as zero.","safe_next_action":"Restore the census read; the gate fails closed while the sample is stale.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A >= 900 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-sample-stale","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
+{"uid":"omi-pipeline-ledger-gate-receipt-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline census gate receipt is older than one hour","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 3600"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The versioned census gate receipt is more than one hour old.","user_impact":"The ramp decision is using a stale receipt; G2 requires a fresh receipt.","scope":"The workspace gate runner writes the receipt timestamp as a Prometheus textfile. A missing file is Alerting, never a pass.","verification":"Run the gate runner for the current ramp profile and attach the new receipt. Do not advance on a stale receipt.","safe_next_action":"Re-run the gate; a PENDING/UNKNOWN receipt is not a pass.","runbook":"infra/metrics/pipeline-census/README.md","threshold":"$A >= 3600 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-gate-receipt-stale","component":"pipeline-ledger","impact":"product","severity":"warning","instatus_component":"speech-processing","tier":"agent","audience":"agent","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"5m","group_interval":"1h","repeat_interval":"24h","mute_time_intervals":["omi-tier-silent"]},"record":null},
+  {
+    "uid": "omi-firestore-caller-overflow",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - caller label set overflowed into other",
+    "condition": "F",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_caller_label_overflow_total[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0 || $B > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "vector(1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$C * $D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "E",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "F",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "F"
+                ],
+                "type": "query"
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "E",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "F",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-12T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "The Firestore read caller label set has overflowed into other: a new call site is no longer named, so by-caller attribution is silently folding.",
+      "user_impact": "No direct user impact; this is an attribution and cost-visibility signal. Reads keep being served, but a new or changed read path stops being named in the by-caller counter, so a read regression on it can no longer be attributed to a call site.",
+      "scope": "omi_firestore_billed_reads_by_caller_total{caller=\"other\"} and omi_firestore_caller_label_overflow_total from the Python Firestore read probe (backend/database/firestore_document_probe.py), queried on the managed gmp-cloud-run datasource so Cloud Run and GKE are both covered. The cap is MAX_CALLERS (1536) distinct module:function labels per process.",
+      "verification": "Run sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) and sum(rate(omi_firestore_caller_label_overflow_total[5m])) on gmp-cloud-run. A non-zero overflow rate means a well-formed new caller arrived after the cap filled; a non-zero other read rate without overflow means a malformed or frame-less caller label. Both are folding. Confirm the probe image is current before changing the cap. An empty result on both arms is the expected healthy state, because the caller=other bucket only exists after a fold; report it as \"no series\" and never as a measured clean zero.",
+      "safe_next_action": "Identify the folded call site from the deploy that started serving just before the first overflow, then either raise MAX_CALLERS in a reviewed PR with the measured function count, or fix the malformed label. Never add a uid, document id or query text as a label. Kill switch: set node D (vector(1)) to vector(0) and re-provision; restore vector(1) to re-enable. The rule also ships isPaused=false; pausing it is the operational switch.",
+      "threshold": "sum(rate(omi_firestore_billed_reads_by_caller_total{caller=\"other\"}[5m])) > 0 OR sum(rate(omi_firestore_caller_label_overflow_total[5m])) > 0, sustained 5m, gated by the enable selector node D vector(1).",
+      "evaluated_bad": "Fixture, not a live backtest: the counter is new in this program and no production overflow window exists yet. With MAX_CALLERS=1 a second well-formed caller folds to other and omi_firestore_caller_label_overflow_total increments by 1; the rule evaluates to 1. See backend/tests/unit/test_firestore_caller_overflow_alert.py.",
+      "evaluated_good": "Fixture: with the caller set not full, bound_caller returns the named label, the overflow counter does not move, and the rule evaluates to 0. Same test file.",
+      "kill_switch": "Enable selector node D vector(1) in this rule, enabled by default. Disable: set node D to vector(0) and run python3 backend/scripts/provision_monitoring_alerts.py --apply. Re-enable: restore vector(1) and re-provision. Operational switch: isPaused (ships false). No actuator flips either automatically."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-caller-overflow",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "observability",
+      "kill_switch": "omi-firestore-caller-overflow"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

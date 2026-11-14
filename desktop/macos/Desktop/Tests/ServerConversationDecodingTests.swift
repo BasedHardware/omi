@@ -3,7 +3,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class ServerConversationDecodingTests: XCTestCase {
-  private func decodeConversation(_ extraFields: String) throws -> ServerConversation {
+  private func decodeConversation(_ extraFields: String, status: String = "completed") throws -> ServerConversation {
     let json = """
       {
         "id": "conversation-1",
@@ -18,7 +18,7 @@ final class ServerConversationDecodingTests: XCTestCase {
           "action_items": [],
           "events": []
         },
-        "status": "completed",
+        "status": "\(status)",
         "source": "desktop",
         "discarded": false,
         "deleted": false,
@@ -64,6 +64,17 @@ final class ServerConversationDecodingTests: XCTestCase {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return try decoder.decode(ConversationSearchResult.self, from: Data(json.utf8))
+  }
+
+  func testOptionalHomeStepDecodesWithoutChangingPipelineStatus() throws {
+    let failed = try decodeConversation(",\n\"home_step\": \"failed\"", status: "processing")
+    XCTAssertEqual(failed.homeStep, "failed")
+    XCTAssertEqual(failed.status, .processing)
+    XCTAssertEqual(failed.displayState, .failed)
+    let legacy = try decodeConversation("", status: "processing")
+    XCTAssertNil(legacy.homeStep)
+    XCTAssertEqual(legacy.displayState, .processing)
+    XCTAssertNil(try decodeConversation(",\n\"home_step\": null").homeStep)
   }
 
   func testOmittedTranscriptSegmentsAreMarkedOmitted() throws {

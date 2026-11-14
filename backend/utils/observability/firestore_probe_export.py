@@ -7,16 +7,39 @@ import math
 import os
 import tempfile
 
-from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER, bound_caller
+from prometheus_client import CollectorRegistry, Gauge, start_http_server
+
+from database.firestore_document_probe import (
+    FIRESTORE_BILLED_READS,
+    FIRESTORE_BILLED_READS_BY_CALLER,
+    FIRESTORE_CALLER_LABEL_OVERFLOW,
+    bound_caller,
+)
+
+from database import record_token_lease_metrics as lease_metrics
+from config.record_seal_rules import token_lease_mode
 
 logger = logging.getLogger(__name__)
-COLLECTORS = (FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER)
+COLLECTORS = (
+    FIRESTORE_BILLED_READS,
+    FIRESTORE_BILLED_READS_BY_CALLER,
+    lease_metrics.EXPIRED_WOULD,
+    lease_metrics.EXPIRED_SEALED,
+    lease_metrics.LATE_APPEND,
+    # Custom-registry processes (batch pipeline worker, record-seal worker) serve
+    # this tuple, not the default REGISTRY. Without the overflow counter the
+    # caller-overflow alert's precise arm is blind to them.
+    FIRESTORE_CALLER_LABEL_OVERFLOW,
+)
 # Sample names and label keys of the served counters, pinned from their
 # declarations in database/firestore_document_probe.py. prometheus_client
 # exposes them only via private attributes (_name/_labelnames), which backend
 # typecheck forbids; the drift pin in test_record_seal_cluster_repair.py
 # fails if the probe renames either side.
 COUNTER_SAMPLES = {
+    'omi_record_token_lease_expired_would_total': (lease_metrics.EXPIRED_WOULD, ()),
+    'omi_record_token_lease_expired_sealed_total': (lease_metrics.EXPIRED_SEALED, ()),
+    'omi_record_token_late_append_total': (lease_metrics.LATE_APPEND, ()),
     'omi_firestore_billed_reads_total': (
         FIRESTORE_BILLED_READS,
         ('collection', 'kind', 'tier'),
@@ -25,9 +48,16 @@ COUNTER_SAMPLES = {
         FIRESTORE_BILLED_READS_BY_CALLER,
         ('collection', 'kind', 'caller'),
     ),
+    'omi_firestore_caller_label_overflow_total': (FIRESTORE_CALLER_LABEL_OVERFLOW, ()),
 }
 CHILD_FD_ENV = 'OMI_FIRESTORE_PROBE_TERMINAL_FD'
 MAX_TERMINAL_BYTES = 4 * 1024 * 1024
+REPAIR_OLDEST = Gauge(
+    'omi_record_seal_oldest_age_seconds',
+    'Oldest unsealed finish age in the repair discovery sample',
+    registry=None,
+)
+REPAIR_OLDEST.set(float('nan'))
 
 
 def _emit(payload, level=logging.INFO):
@@ -41,20 +71,39 @@ def _unavailable():
     _emit({'event': 'firestore_probe_terminal', 'outcome': 'unavailable'}, logging.WARNING)
 
 
-def register_probe_collectors(registry):
+def register_probe_collectors(registry, *, repair_age=False):
     for collector in COLLECTORS:
         registry.register(collector)
+    if repair_age:
+        registry.register(REPAIR_OLDEST)
+
+
+@contextmanager
+def repair_probe_server(*, port=9090, addr='0.0.0.0'):
+    """Scrape the active CronJob's aggregate sample and folded child counters."""
+    registry = CollectorRegistry()
+    register_probe_collectors(registry, repair_age=True)
+    server, thread = start_http_server(port, addr=addr, registry=registry)
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=1)
 
 
 def terminal_totals():
     # Only totals and the producer's bounded labels; no created timestamps,
     # document IDs, query operands, or a second SDK patch.
+    # Unlabelled lease counters expose zero samples at import time. Keep the
+    # old terminal wire/log output exact when dark, even after a mode rollback.
+    collectors = COLLECTORS[:2] if token_lease_mode() == 'off' else COLLECTORS
     return [
         [sample.name, sample.labels, sample.value]
-        for collector in COLLECTORS
+        for collector in collectors
         for family in collector.collect()
         for sample in family.samples
-        if sample.name.endswith('_total')
+        if sample.name.endswith('_total') and (collector in COLLECTORS[:2] or sample.value > 0)
     ]
 
 
@@ -136,6 +185,7 @@ def collect_child_probe(process):
         for name, labels, value in rows:
             if 'caller' in labels:
                 labels = {**labels, 'caller': bound_caller(labels['caller'])}
-            counters[name][0].labels(**labels).inc(value)
+            counter = counters[name][0]
+            (counter.labels(**labels) if labels else counter).inc(value)
     except Exception:
         _unavailable()

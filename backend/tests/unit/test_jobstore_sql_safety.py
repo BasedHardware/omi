@@ -185,6 +185,48 @@ def test_projection_page_binds_states_and_cursor():
     assert params[-1] == 10
 
 
+@pytest.mark.parametrize(
+    'due_before,after,cursor_params',
+    [
+        (None, (1.0, ''), (1.0,)),
+        (50.0, (40.0,), (40.0,)),
+        (50.0, (40.0, 7.0, HOSTILE), (40.0, 7.0, HOSTILE)),
+    ],
+)
+def test_projection_page_preserves_seed_and_due_cursor_bindings(due_before, after, cursor_params):
+    row = ('k', 7.0) if due_before is None else ('k', 7.0, 40.0)
+    conn = Conn([row])
+    keys, cursor = store(conn).projection_page(1, after=after, due_before=due_before)
+    statement, params = conn.statements[0]
+    assert keys == ['k']
+    assert cursor == ((7.0, 'k') if due_before is None else (40.0, 7.0, 'k'))
+    expected = ('batch_pipeline_test_sql', list(postgres_store.PROJECTION_DISCOVERY_STATES))
+    if due_before is not None:
+        expected += (due_before,)
+    assert params == (*expected, *cursor_params, 1)
+    assert statement.count('%s') == len(params)
+    assert HOSTILE not in statement
+    assert (' >= %s' in statement) == (len(cursor_params) == 1)
+
+
+@pytest.mark.parametrize('skip_terminal', [False, True])
+def test_pending_scans_preserve_terminal_filter_and_bind_owner(monkeypatch, skip_terminal):
+    monkeypatch.setattr(postgres_store, 'held_poll_skip_enabled', lambda: skip_terminal)
+    conn = Conn([], [])
+    pg = store(conn)
+    pg.first_pending_in(conn, HOSTILE)
+    pg.fresh_pending(HOSTILE, 100)
+    expected = ('batch_pipeline_test_sql', HOSTILE)
+    if skip_terminal:
+        expected += (list(postgres_store.MERGE_POLL_TERMINAL_STATES),)
+    for statement, params in conn.statements:
+        assert HOSTILE not in statement
+        assert ('state <> ALL(%s)' in statement) == skip_terminal
+        assert statement.count('%s') == len(params)
+    assert conn.statements[0][1] == expected
+    assert conn.statements[1][1] == (*expected, 32)
+
+
 def test_projection_successor_binds_previous_segment():
     conn = Conn([])
     store(conn).projection_successor('ok', HOSTILE)
@@ -271,13 +313,13 @@ def test_owner_rows_binds_owner_values_and_quotes_no_identifier():
 
 
 def test_statement_timeout_is_a_literal_not_interpolated_text():
-    assert sql.SQL('SET LOCAL statement_timeout = {}').format(sql.Literal(200)).as_string(None) == (
+    assert sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(200)).as_string(None) == (
         'SET LOCAL statement_timeout = 200'
     )
 
 
 def test_identifier_quoting_neutralises_a_hostile_name():
-    composed = sql.SQL('SELECT 1 FROM {}').format(sql.Identifier('a"; DROP TABLE x; --')).as_string(None)
+    composed = sql().SQL('SELECT 1 FROM {}').format(sql().Identifier('a"; DROP TABLE x; --')).as_string(None)
     assert composed == 'SELECT 1 FROM "a""; DROP TABLE x; --"'
 
 

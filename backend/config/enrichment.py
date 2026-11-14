@@ -9,7 +9,7 @@ New backfill obligations without a pending first summary use the existing
 ``SYNC_BACKFILL_TASKS_QUEUE`` when configured, retaining the enrichment handler
 and identity. ``ENRICHMENT_BACKFILL_ROUTING_ENABLED=false`` disables that split
 for new obligations. ``ENRICHMENT_FRESH_TASKS_QUEUE`` reserves dispatch slots for
-user-facing work, including pending first summaries, only within the bounded
+pending first summaries only, within the bounded
 conversation freshness window. Old work keeps draining on its existing queue.
 """
 
@@ -65,7 +65,8 @@ def recently_finished(value: object, *, now: float) -> bool:
 
 def dispatch_binding(*, backfill: bool = False, effects_only: bool = False, recent: bool = False) -> dict[str, str]:
     # Share the worker/auth binding; the outbox owns fenced promotion of
-    # existing unleased user-facing obligations.
+    # existing unleased first-summary obligations. Callers admit only pending
+    # first summaries through ``recent``.
     queue = primary_queue()
     if backfill and os.getenv('ENRICHMENT_BACKFILL_ROUTING_ENABLED', 'true').strip().lower() != 'false':
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip() or queue

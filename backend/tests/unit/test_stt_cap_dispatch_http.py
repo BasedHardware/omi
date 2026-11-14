@@ -31,17 +31,15 @@ def client(monkeypatch):
     )
     monkeypatch.setattr(router, 'get_hard_restriction_status', lambda _: (False, None))
     monkeypatch.setattr(router, 'is_daily_audio_ceiling_exceeded', lambda _: False)
-    monkeypatch.setattr(router, 'has_transcription_credits', lambda _: False)
-    monkeypatch.setattr(
-        router, 'resolve_transcription_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted')
-    )
+    allowance = SimpleNamespace(managed=False, reason='plan_allowance_exhausted')
+    monkeypatch.setattr(router, 'resolve_transcription_allowance', Mock(return_value=allowance))
     monkeypatch.setattr(router, 'retrieve_file_paths', lambda *_: ['omi_1792152000.bin'])
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_: [])
     monkeypatch.setattr(router, 'decode_files_to_wav', lambda _: ['1792152000.wav'])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
 
     async def held(*args, **kwargs):
-        kwargs['admission']['reason'] = router.resolve_transcription_allowance('synthetic').reason
+        kwargs['admission']['reason'] = allowance.reason
         return True
 
     monkeypatch.setattr(router, 'hold_capture_if_exhausted', AsyncMock(side_effect=held))

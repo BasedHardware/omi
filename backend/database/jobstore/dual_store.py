@@ -71,7 +71,7 @@ MIRRORED_TABLES = frozenset({'jobs', 'queues', 'owners', 'control', 'results', '
 
 def _statement_timeout(seconds: float):
     """A bounded ``SET LOCAL statement_timeout``; the value is a literal, never interpolated text."""
-    return sql.SQL('SET LOCAL statement_timeout = {}').format(sql.Literal(int(seconds * 1000)))
+    return sql().SQL('SET LOCAL statement_timeout = {}').format(sql().Literal(int(seconds * 1000)))
 
 
 # The original-capture lineage a missing-input repair restages with (geolocation, capture claims) stays
@@ -429,19 +429,19 @@ class DualStore:
         namespace, key = self.shadow.namespace, privacy_owner_key(owner_id)
         rows = {('control', scheduler_control_key(key)), ('owners', key)}
         rows.update(('queues', f'{priority}_{key}') for priority in range(3))
-        owner_match = sql.SQL("(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)")
+        owner_match = sql().SQL("(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)")
         jobs = conn.execute(
-            sql.SQL("SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {}").format(owner_match),
+            sql().SQL("SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {}").format(owner_match),
             (namespace, key, owner_id),
         ).fetchall()
         rows.update(('jobs', row[0]) for row in jobs)
         found = conn.execute(
-            sql.SQL('SELECT key FROM results WHERE namespace = %s AND {}').format(owner_match),
+            sql().SQL('SELECT key FROM results WHERE namespace = %s AND {}').format(owner_match),
             (namespace, key, owner_id),
         ).fetchall()
         rows.update(('results', row[0]) for row in found)
         found = conn.execute(
-            sql.SQL('SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) AND {}').format(owner_match),
+            sql().SQL('SELECT tbl, key FROM docs WHERE namespace = %s AND tbl = ANY(%s) AND {}').format(owner_match),
             (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
         ).fetchall()
         rows.update((row[0], row[1]) for row in found)

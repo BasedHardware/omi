@@ -26,7 +26,7 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
-from config.batch_pipeline import control_candidate_fanout
+from config.batch_pipeline import control_candidate_fanout, held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 
 import re
 import hashlib
@@ -37,9 +37,12 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -165,6 +168,25 @@ class PostgresTransaction:
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
         return self._locked_query_row(*row) if row else None
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        state = "AND state = 'result_ready' " if ready else ''
+        row = self.conn.execute(
+            sql()
+            .SQL(
+                "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                "AND doc->'fresh_capture' = 'true'::jsonb {}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1"
+            )
+            .format(sql().SQL(state)),
+            (self.store.namespace, owner_key),
+        ).fetchone()
+        return self._locked_query_row(*row) if row else None
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         # Two matches fail closed, exactly like the Firestore query.
         rows = self.conn.execute(
@@ -241,7 +263,7 @@ class PostgresStore:
                 try:
                     with conn.transaction():
                         conn.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
-                        conn.execute(sql.SQL('SET LOCAL lock_timeout = {}').format(sql.Literal(LOCK_TIMEOUT)))
+                        conn.execute(sql().SQL('SET LOCAL lock_timeout = {}').format(sql().Literal(LOCK_TIMEOUT)))
                         view = PostgresTransaction(self, conn)
                         result = body(view)
                         view.flush()
@@ -257,11 +279,13 @@ class PostgresStore:
             raise ValueError('only recoverable states may be scanned')
         field = _DUE_FIELDS[state]  # a fixed column name, never caller text
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {} <= %s '
+                'ORDER BY {}, key COLLATE "C" LIMIT %s'
+            ).format(psycopg_sql.Identifier(field), psycopg_sql.Identifier(field))
             rows = conn.execute(
-                sql.SQL(
-                    'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {} <= %s '
-                    'ORDER BY {}, key COLLATE "C" LIMIT %s'
-                ).format(sql.Identifier(field), sql.Identifier(field)),
+                query,
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
@@ -319,11 +343,19 @@ class PostgresStore:
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
+        state = 'AND state <> ALL(%s) ' if held_poll_skip_enabled() else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if state:
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         with self._read_conn() as conn:
             rows = conn.execute(
-                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND doc->'fresh_capture' = 'true'::jsonb ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
-                (self.namespace, owner_key, max(1, min(limit, 32))),
+                sql()
+                .SQL(
+                    "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                    "AND doc->'fresh_capture' = 'true'::jsonb {}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s"
+                )
+                .format(sql().SQL(state)),
+                (*params, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
 
@@ -338,7 +370,7 @@ class PostgresStore:
             ).fetchall()
             owners = []
             for (key,) in marks:
-                job = self.first_pending_in(conn, key)
+                job = self.first_pending_in(conn, key, skip_terminal=False)
                 owners.append((key, job[1].get('owner_id') if job else None))
         return owners
 
@@ -346,18 +378,20 @@ class PostgresStore:
         """The owner's result committed directly after ``previous``; two matches fail closed (a hint)."""
         # Firestore equality on None matches an explicit null only, never a missing field.
         previous_match = (
-            sql.SQL("doc->'previous_segment_id' = 'null'::jsonb")
+            sql().SQL("doc->'previous_segment_id' = 'null'::jsonb")
             if previous is None
-            else sql.SQL(
+            else sql().SQL(
                 "doc->>'previous_segment_id' = %(previous)s AND jsonb_typeof(doc->'previous_segment_id') = 'string'"
             )
         )
         with self._read_conn() as conn:
             rows = conn.execute(
-                sql.SQL(
+                sql()
+                .SQL(
                     "SELECT key FROM results WHERE namespace = %(ns)s AND doc->>'owner_key' = %(owner)s "
                     'AND {} ORDER BY key COLLATE "C" LIMIT 2'
-                ).format(previous_match),
+                )
+                .format(previous_match),
                 {'ns': self.namespace, 'owner': owner_key, 'previous': previous},
             ).fetchall()
         return rows[0][0] if len(rows) == 1 else None
@@ -395,13 +429,16 @@ class PostgresStore:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
-        service, active, at_column = sql.Identifier(f'{p}_service'), sql.Identifier(f'{p}_active'), sql.Identifier(at)
         with self._read_conn() as conn:
+            psycopg_sql = sql()
+            service, active = psycopg_sql.Identifier(f'{p}_service'), psycopg_sql.Identifier(f'{p}_active')
+            available_at = psycopg_sql.Identifier(at)
+            query = psycopg_sql.SQL(
+                'SELECT key, {} FROM control WHERE namespace = %s AND {} AND {} >= 0 '
+                'AND {} <= %s ORDER BY {}, {}, key COLLATE "C" LIMIT %s'
+            ).format(service, active, service, available_at, service, available_at)
             rows = conn.execute(
-                sql.SQL(
-                    'SELECT key, {} FROM control WHERE namespace = %s AND {} AND {} >= 0 '
-                    'AND {} <= %s ORDER BY {}, {}, key COLLATE "C" LIMIT %s'
-                ).format(service, active, service, at_column, service, at_column),
+                query,
                 (self.namespace, now, control_candidate_fanout(fanout) if worker_id else 1),
             ).fetchall()
         if worker_id:
@@ -438,6 +475,32 @@ class PostgresStore:
 
         return self.run(revoke)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revoke a prepared/running recovery when privacy blocks; same fence recheck and revoke-only write as Firestore."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        def cancel(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                tx.check_privacy(
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                cancelled = {**job, 'recovery_state': 'cancelled'}
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, cancelled)
+                return True
+            return False
+
+        return self.run(cancel)
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         """Same fence recheck and available_at-only change as the Firestore privacy defer."""
         from database.batch_pipeline_recovery import privacy_defer_update
@@ -463,29 +526,58 @@ class PostgresStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
-    def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
-    ) -> tuple[list[str], Any]:
-        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
-        states = PROJECTION_DISCOVERY_STATES if states is None else states
+    def projection_page(
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+    ) -> tuple[list[str], Any]:
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
-        size = max(1, min(limit, 100))
-        clause, params = sql.SQL(''), [self.namespace, list(states)]
+        size = max(1, min(limit, 200))
+        psycopg_sql = sql()
+        columns = [psycopg_sql.Identifier('committed_at'), psycopg_sql.SQL('key COLLATE "C"')]
+        fields = [psycopg_sql.Identifier('key'), psycopg_sql.Identifier('committed_at')]
+        clauses = [psycopg_sql.SQL('committed_at IS NOT NULL')]
+        params: list[Any] = [self.namespace, list(states)]
+        if due_before is not None:
+            due = psycopg_sql.SQL("(doc->>'projection_finish_due_at')::float8")
+            columns.insert(0, due)
+            fields.append(due)
+            clauses.append(psycopg_sql.SQL('{} <= %s').format(due))
+            params.append(float(due_before))
         if after is not None:
-            clause = sql.SQL('AND (committed_at, key COLLATE "C") > (%s, %s)')
-            params += [after[0], after[1]]
+            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+                clauses.append(psycopg_sql.SQL('{} >= %s').format(columns[0]))
+                params.append(after[0])
+            else:
+                clauses.append(
+                    psycopg_sql.SQL('({}) > ({})').format(
+                        psycopg_sql.SQL(', ').join(columns),
+                        psycopg_sql.SQL(', ').join([psycopg_sql.Placeholder()] * len(columns)),
+                    )
+                )
+                params.extend(after)
         with self._read_conn() as conn:
             rows = conn.execute(
-                sql.SQL(
-                    'SELECT key, committed_at FROM results WHERE namespace = %s '
-                    'AND projection_state = ANY(%s) {} '
-                    'ORDER BY committed_at, key COLLATE "C" LIMIT %s'
-                ).format(clause),
+                psycopg_sql.SQL(
+                    'SELECT {} FROM results WHERE namespace = %s AND projection_state = ANY(%s) '
+                    'AND {} ORDER BY {} LIMIT %s'
+                ).format(
+                    psycopg_sql.SQL(', ').join(fields),
+                    psycopg_sql.SQL(' AND ').join(clauses),
+                    psycopg_sql.SQL(', ').join(columns),
+                ),
                 (*params, size),
             ).fetchall()
-        cursor = (rows[-1][1], rows[-1][0]) if len(rows) == size else None
+        cursor = (*reversed(rows[-1][1:]), rows[-1][0]) if len(rows) == size else None
         return [row[0] for row in rows], cursor
 
     # -- internals ---------------------------------------------------------------------------
@@ -500,14 +592,14 @@ class PostgresStore:
 
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
         if table in _TYPED:
-            query = sql.SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s').format(sql.Identifier(table))
+            query = sql().SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s').format(sql().Identifier(table))
             if lock:
-                query = query + sql.SQL(' FOR UPDATE')
+                query = query + sql().SQL(' FOR UPDATE')
             row = conn.execute(query, (self.namespace, key))
         else:
-            query = sql.SQL('SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s')
+            query = sql().SQL('SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s')
             if lock:
-                query = query + sql.SQL(' FOR UPDATE')
+                query = query + sql().SQL(' FOR UPDATE')
             row = conn.execute(query, (self.namespace, table, key))
         found = row.fetchone()
         return found[0] if found else {}
@@ -516,25 +608,32 @@ class PostgresStore:
         """Hold one document's advisory lock until the transaction ends (the key may not exist yet)."""
         conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (lock_key(self.namespace, table, key),))
 
-    def first_pending_in(self, conn: Any, owner_key: str, *, result_ready: bool = False) -> tuple[str, dict] | None:
-        state = sql.SQL("AND state = 'result_ready' ") if result_ready else sql.SQL('')
+    def first_pending_in(
+        self, conn: Any, owner_key: str, *, result_ready: bool = False, skip_terminal: bool = True
+    ) -> tuple[str, dict] | None:
+        state = "AND state = 'result_ready' " if result_ready else ''
+        params: tuple[Any, ...] = (self.namespace, owner_key)
+        if not result_ready and skip_terminal and held_poll_skip_enabled():
+            state = 'AND state <> ALL(%s) '
+            params += (list(MERGE_POLL_TERMINAL_STATES),)
         return conn.execute(
-            sql.SQL(
+            sql()
+            .SQL(
                 'SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending {}'
                 'ORDER BY capture_at, key COLLATE "C" LIMIT 1'
-            ).format(state),
-            (self.namespace, owner_key),
+            )
+            .format(sql().SQL(state)),
+            params,
         ).fetchone()
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
-            conn.execute(
-                sql.SQL(
-                    'INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
-                    'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
-                ).format(sql.Identifier(table)),
-                (self.namespace, key, jsonb(value)),
-            )
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL(
+                'INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
+            ).format(psycopg_sql.Identifier(table))
+            conn.execute(query, (self.namespace, key, jsonb(value)))
         else:
             conn.execute(
                 'INSERT INTO docs (namespace, tbl, key, doc) VALUES (%s, %s, %s, %s) '
@@ -544,10 +643,11 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(
-                sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(sql.Identifier(table)),
-                (self.namespace, key),
+            psycopg_sql = sql()
+            query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(
+                psycopg_sql.Identifier(table)
             )
+            conn.execute(query, (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -556,10 +656,11 @@ class PostgresStore:
     def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
-        row = conn.execute(
-            sql.SQL('SELECT max({}) FROM control WHERE namespace = %s').format(sql.Identifier(f'p{priority}_service')),
-            (self.namespace,),
-        ).fetchone()
+        psycopg_sql = sql()
+        query = psycopg_sql.SQL('SELECT max({}) FROM control WHERE namespace = %s').format(
+            psycopg_sql.Identifier(f'p{priority}_service')
+        )
+        row = conn.execute(query, (self.namespace,)).fetchone()
         return row[0] if row[0] is not None else 0.0
 
     def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
@@ -578,7 +679,7 @@ class PostgresStore:
         if not self.namespace.startswith('batch_pipeline_test_'):
             raise RuntimeError('only test namespaces may be purged')
         with self._read_conn() as conn:
+            psycopg_sql = sql()
             for table in ('jobs', 'results', 'control', 'docs', 'outbox'):
-                conn.execute(
-                    sql.SQL('DELETE FROM {} WHERE namespace = %s').format(sql.Identifier(table)), (self.namespace,)
-                )
+                query = psycopg_sql.SQL('DELETE FROM {} WHERE namespace = %s').format(psycopg_sql.Identifier(table))
+                conn.execute(query, (self.namespace,))

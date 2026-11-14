@@ -91,6 +91,10 @@ def conv():
     request_validation_stub.NonNegativeOffset = int
     request_validation_stub.PositiveLimit = int
 
+    # Deletion's typed lake error is a lazy collaborator of this isolated router.
+    object_lake_stub = ModuleType("utils.other.object_lake")
+    object_lake_stub.LakeFetchError = type("LakeFetchError", (Exception,), {})
+
     fakes: dict[str, ModuleType] = {
         # third-party / heavy top-level deps
         "ulid": AutoMockModule("ulid"),
@@ -115,6 +119,7 @@ def conv():
         # utils.other.*
         "utils.other.endpoints": endpoints_stub,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
+        "utils.other.object_lake": object_lake_stub,
         # routers.conversations imports this at module load to close the screenshot deletion
         # loop (Firestore does not cascade-delete subcollections), so the stub map has to know
         # about it or collection dies with ModuleNotFoundError before a single test runs.

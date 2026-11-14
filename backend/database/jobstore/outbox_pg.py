@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, Literal, LiteralString, Mapping
 
 from database.jobstore.connection import sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction, jsonb
@@ -166,10 +166,12 @@ class PostgresOutbox:
                         self._close(conn, row_id, 'privacy_fenced', now)
                         continue
                     taken = conn.execute(
-                        sql.SQL(
+                        sql()
+                        .SQL(
                             'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
                             'wake_pending = false WHERE id = %s RETURNING {}'
-                        ).format(sql.SQL(_COLUMNS)),
+                        )
+                        .format(sql().SQL(_COLUMNS)),
                         (_token(), now + lease_seconds, row_id),
                     ).fetchone()
                     claims.append(self._claim_from(taken, ''))
@@ -184,9 +186,9 @@ class PostgresOutbox:
         taken: tuple | None = None
         with self.store.pool.connection() as conn, conn.transaction():
             row = conn.execute(
-                sql.SQL(
-                    'SELECT {}, done_at FROM outbox WHERE id = %s AND namespace = %s AND kind = %s FOR UPDATE'
-                ).format(sql.SQL(_COLUMNS)),
+                sql()
+                .SQL('SELECT {}, done_at FROM outbox WHERE id = %s AND namespace = %s AND kind = %s FOR UPDATE')
+                .format(sql().SQL(_COLUMNS)),
                 (numeric, self.store.namespace, self.kind.value),
             ).fetchone()
             if row is None or row[-1] is not None or row[6] != wake_token:
@@ -202,10 +204,12 @@ class PostgresOutbox:
                 rearmed = (fresh, row[4])
             else:
                 taken = conn.execute(
-                    sql.SQL(
+                    sql()
+                    .SQL(
                         'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
                         'wake_pending = false WHERE id = %s RETURNING {}'
-                    ).format(sql.SQL(_COLUMNS)),
+                    )
+                    .format(sql().SQL(_COLUMNS)),
                     (_token(), now + lease_seconds, numeric),
                 ).fetchone()
         if rearmed is not None:
@@ -248,16 +252,20 @@ class PostgresOutbox:
         except Exception:  # left wake_pending: the next sweep retries
             return False
 
-    def _fenced_update(self, claim: Claim, sets: str, params: tuple, *, live: bool = False, now: float = 0.0) -> Any:
+    def _fenced_update(
+        self, claim: Claim, sets: LiteralString, params: tuple, *, live: bool = False, now: float = 0.0
+    ) -> Any:
         """Run an UPDATE guarded by the claim's lease token; return the RETURNING row or None."""
-        guard = sql.SQL('AND lease_until > %s') if live else sql.SQL('')
+        guard = sql().SQL('AND lease_until > %s') if live else sql().SQL('')
         values = (*params, int(claim.row_id), self.store.namespace, claim.lease_token) + ((now,) if live else ())
         with self.store.pool.connection() as conn:
             return conn.execute(
-                sql.SQL(
+                sql()
+                .SQL(
                     'UPDATE outbox SET {} WHERE id = %s AND namespace = %s AND lease_token = %s '
                     'AND done_at IS NULL {} RETURNING id'
-                ).format(sql.SQL(sets), guard),
+                )
+                .format(sql().SQL(sets), guard),
                 values,
             ).fetchone()
 
@@ -300,13 +308,15 @@ class PostgresOutbox:
         """
         discarded = expired = 0
         to_wake: list[tuple[str, str]] = []
-        actionable = sql.SQL('((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s))')
+        actionable = sql().SQL('((lease_until > 0 AND lease_until <= %s) OR (wake_pending AND lease_until <= %s))')
         with self.store.pool.connection() as conn:
             candidates = conn.execute(
-                sql.SQL(
+                sql()
+                .SQL(
                     'SELECT id, owner_id, payload FROM outbox WHERE namespace = %s AND kind = %s AND done_at IS NULL '
                     'AND {} ORDER BY available_at, id LIMIT %s'
-                ).format(actionable),
+                )
+                .format(actionable),
                 (self.store.namespace, self.kind.value, now, now, limit),
             ).fetchall()
         if not candidates:
@@ -314,10 +324,12 @@ class PostgresOutbox:
         fenced = {row_id for row_id, owner_id, payload in candidates if self._fenced(owner_id, payload)}
         with self.store.pool.connection() as conn, conn.transaction():
             rows = conn.execute(
-                sql.SQL(
+                sql()
+                .SQL(
                     'SELECT id, lease_until, wake_token, wake_pending FROM outbox WHERE id = ANY(%s) '
                     'AND done_at IS NULL AND {} ORDER BY id FOR UPDATE SKIP LOCKED'
-                ).format(actionable),
+                )
+                .format(actionable),
                 ([row_id for row_id, _, _ in candidates], now, now),
             ).fetchall()
             for row_id, lease_until, wake_token, pending in rows:

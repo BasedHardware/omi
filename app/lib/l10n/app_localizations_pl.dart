@@ -9200,6 +9200,24 @@ class AppLocalizationsPl extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nie można określić bieżącej wersji oprogramowania układowego';
 
   @override
+  String get applyCodeToCurrentPlan => 'Zastosuj do obecnego planu';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod zastosowany do obecnego planu.',
+        'refused': 'Nie można zastosować tego kodu. Sprawdź kod i wymagany plan.',
+        'conflict': 'Kod został już użyty lub Twój plan ma już zniżkę.',
+        'rateLimited': 'Zbyt wiele prób. Poczekaj i spróbuj później.',
+        'other': 'Nie udało się zastosować kodu. Spróbuj ponownie.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kod promocyjny';
 
   @override
@@ -13692,6 +13710,9 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Wygeneruj notatki ponownie';
 
   @override
   String get attentionSummaryFailed => 'Nie udało się podsumować tej rozmowy';

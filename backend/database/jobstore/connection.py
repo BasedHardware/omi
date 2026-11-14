@@ -25,21 +25,9 @@ def _psycopg():
     return psycopg
 
 
-class _LazySql:
-    """``psycopg.sql`` behind a lazy import, so importing the job store never requires the driver.
-
-    Every dynamic identifier (table, column, namespace-derived name) is composed with
-    ``sql.Identifier`` and every value stays a bound parameter; no caller text is ever interpolated
-    into a statement.
-    """
-
-    def __getattr__(self, name: str) -> Any:
-        from psycopg import sql as _sql  # pyright: ignore[reportMissingImports]
-
-        return getattr(_sql, name)
-
-
-sql = _LazySql()
+def sql() -> Any:
+    """Return psycopg's SQL composition helpers without making the driver a package import requirement."""
+    return _psycopg().sql  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def configure(conn: Any) -> Any:

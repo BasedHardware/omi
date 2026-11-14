@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-content-write-omits-implied-obligation",
+  "violated_contract": "A write that lands content on a completed conversation must also record the durable obligation that content implies. The batch projection wrote a transcript onto a completed row with no title and no summary but stamped no first-summary debt, so Home classified the row as failed and hid it, and the debt repair refused it as unknown_provenance. The row's minutes were silently missing from Home and the episode notes.",
+  "canonical_prevention": "Stamp the first-summary debt fields (summary_first_pending_at, summary_due_at and the row-level summary_title_provenance) in the same projection write that lands a transcript on a completed untitled row, and never double-stamp a row that already carries debt or a summary. Do not write structured.title_provenance, so is_server_minimum does not suppress apps, goals, memories, folders or vectors on a later reprocess. Skip rows the repair would refuse, and give rows past the repair age gate provenance without debt. Gate the stamp behind a default-on kill switch so the pre-fix behavior is one env value away.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_live.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/batch_pipeline/live_projection.py",
+    "backend/utils/conversations/summary_delivery.py"
+  ],
+  "status": "open"
+}
