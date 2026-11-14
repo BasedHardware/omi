@@ -20,6 +20,7 @@ from utils.model_text import (
     format_span,
     truncation_note,
 )
+from utils.observability.fallback import record_fallback
 from utils.user_clock import clock_for_config
 from models.calendar_mutation import (
     CalendarMutationResult,
@@ -476,6 +477,18 @@ async def _get_selected_calendar_events(
                 if calendar_id != 'primary' and error.status_code in {403, 404, 410} and not error.is_quota_error:
                     if uid:
                         google_calendar_catalog_cache.invalidate(uid)
+                    # The read still returns the remaining calendars, so the
+                    # caller reports success. Record the degradation, otherwise
+                    # sync-success telemetry cannot be distinguished from a
+                    # complete read that is missing a selected calendar.
+                    record_fallback(
+                        component='calendar_read',
+                        from_mode='selected_calendars',
+                        to_mode='reachable_selected_calendars',
+                        reason='not_authorized' if error.status_code == 403 else 'unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
                     # Access can disappear after catalog enumeration. Keep other
                     # selected calendars; never substitute an unselected primary.
                     break

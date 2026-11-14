@@ -67,6 +67,8 @@ def _calendar_module():
         "utils.http_client",
         "utils.integration_telemetry",
         "utils.log_sanitizer",
+        "utils.observability",
+        "utils.observability.fallback",
         "utils.retrieval",
         "utils.retrieval.google_transport",
         "utils.retrieval.tools",

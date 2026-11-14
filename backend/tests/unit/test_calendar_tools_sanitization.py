@@ -113,6 +113,10 @@ def _calendar_module():
         google_api_request=AsyncMock(),
         GoogleAPIError=GoogleAPIError,
     )
+    observability_fallback = _module(
+        "utils.observability.fallback",
+        record_fallback=MagicMock(),
+    )
     telemetry = _module(
         "utils.integration_telemetry",
         GOOGLE_CALENDAR="google_calendar",
@@ -139,6 +143,8 @@ def _calendar_module():
         "utils.http_client": http_client,
         "utils.retrieval": _package("utils.retrieval"),
         "utils.retrieval.google_transport": google_transport,
+        "utils.observability": _package("utils.observability"),
+        "utils.observability.fallback": observability_fallback,
         "utils.retrieval.tools": _package("utils.retrieval.tools"),
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,

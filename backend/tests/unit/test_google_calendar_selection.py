@@ -431,12 +431,22 @@ async def test_secondary_failures_distinguish_quota_from_lost_access(provider, m
         raise GoogleAPIError(status, '{"error":{"errors":[{"reason":"%s"}]}}' % reason)
 
     monkeypatch.setattr(tools, 'google_api_request', request)
+    recorded = []
+    monkeypatch.setattr(tools, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
     if raises:
         with pytest.raises(GoogleAPIError):
             await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
+        # Quota is not a degraded read; it fails the caller instead.
+        assert recorded == []
     else:
         rows = await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
         assert [row['id'] for row in rows] == ['primary-event']
+        # The read succeeds without the skipped calendar, so the degradation
+        # must be observable rather than reported as a complete success.
+        assert len(recorded) == 1
+        assert recorded[0]['component'] == 'calendar_read'
+        assert recorded[0]['outcome'] == 'degraded'
+        assert recorded[0]['reason'] == ('not_authorized' if status == 403 else 'unavailable')
 
 
 @pytest.mark.asyncio
