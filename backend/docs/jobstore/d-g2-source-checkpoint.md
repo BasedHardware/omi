@@ -33,8 +33,8 @@ migration or database alteration was performed by this source correction.
 
 G2 Rev 3 retention (§3.5.5, §8 A4): effect registry rows exist only while the
 effect is unresolved. Every terminal path deletes the row and sink capability;
-GCS retirement first requires terminal session status and verified absence of
-the original generation. Ambiguous completion remains started for drain/janitor
+Fenced/failed GCS retirement first requires terminal session status and verified
+absence of the original generation. Ambiguous completion stays started for drain/janitor
 resolution. Post-wipe registry count is zero. Residue targets survive until their
 last residue pass (about 90 days). Only the named owner/conversation fence,
 fence-change and Firestore guard records retain pseudonymous identifiers and
