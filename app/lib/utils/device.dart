@@ -14,7 +14,10 @@ class DeviceUtils {
         final identity = '${device.modelNumber} ${device.name}'.toUpperCase();
         if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
         if (identity.contains('FRIEND')) return 'friend_devkit';
-        if (isOmiDevKit(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_devkit';
+        if (isOmiDevKit(
+          modelNumber: device.modelNumber,
+          deviceName: device.name,
+        )) return 'omi_devkit';
         if (identity.contains('GLASS')) return 'omi_glass';
         if (identity.contains('NEO')) return 'omi_neo';
         return 'omi_unknown';
@@ -66,7 +69,9 @@ class DeviceUtils {
     }
     String latestVersionStr = latestFirmwareDetails['version'];
     Version? latestVersion = _tryParseVersion(latestVersionStr);
-    Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
+    Version? minVersion = _tryParseVersion(
+      latestFirmwareDetails['min_version'],
+    );
     if (latestVersion == null || minVersion == null) {
       return ('Latest Version Not Available', false, '');
     }
@@ -77,9 +82,13 @@ class DeviceUtils {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
         final appVersion = _tryParseVersion(packageInfo.version);
-        final minAppVersion = _tryParseVersion(latestFirmwareDetails['min_app_version']);
+        final minAppVersion = _tryParseVersion(
+          latestFirmwareDetails['min_app_version'],
+        );
         final buildNumber = int.tryParse(packageInfo.buildNumber);
-        final minBuildNumber = int.tryParse('${latestFirmwareDetails['min_app_version_code']}');
+        final minBuildNumber = int.tryParse(
+          '${latestFirmwareDetails['min_app_version_code']}',
+        );
         if (appVersion != null &&
             minAppVersion != null &&
             buildNumber != null &&
@@ -92,10 +101,18 @@ class DeviceUtils {
             latestVersionStr,
           );
         } else {
-          return ('A new version is available! Update your Omi now.', true, latestVersionStr);
+          return (
+            'A new version is available! Update your Omi now.',
+            true,
+            latestVersionStr,
+          );
         }
       } else {
-        return ('You are already on the latest version', false, latestVersionStr);
+        return (
+          'You are already on the latest version',
+          false,
+          latestVersionStr,
+        );
       }
     }
   }
@@ -147,7 +164,11 @@ class DeviceUtils {
 
   /// Get device image path by device type and model number (most accurate)
   /// Falls back to device name if type/model not available
-  static String getDeviceImagePath({DeviceType? deviceType, String? modelNumber, String? deviceName}) {
+  static String getDeviceImagePath({
+    DeviceType? deviceType,
+    String? modelNumber,
+    String? deviceName,
+  }) {
     // Check deviceType first
     if (deviceType != null) {
       switch (deviceType) {
@@ -276,7 +297,11 @@ class DeviceUtils {
 
   /// Convenience method when you have a BtDevice object
   static String getDeviceImageFromBtDevice(BtDevice device) {
-    return getDeviceImagePath(deviceType: device.type, modelNumber: device.modelNumber, deviceName: device.name);
+    return getDeviceImagePath(
+      deviceType: device.type,
+      modelNumber: device.modelNumber,
+      deviceName: device.name,
+    );
   }
 
   /// Get device image with connection state (for special cases like Omi)
@@ -287,7 +312,7 @@ class DeviceUtils {
     required bool isConnected,
   }) {
     // Special case for Omi when disconnected
-    if (deviceType == DeviceType.omi && !isConnected) {
+    if ((deviceType == DeviceType.omi || deviceName == 'Omi') && !isConnected) {
       return Assets.images.omiWithoutRopeTurnedOff.path;
     }
 
@@ -296,6 +321,10 @@ class DeviceUtils {
       return Assets.images.friendPendant.path;
     }
 
-    return getDeviceImagePath(deviceType: deviceType, modelNumber: modelNumber, deviceName: deviceName);
+    return getDeviceImagePath(
+      deviceType: deviceType,
+      modelNumber: modelNumber,
+      deviceName: deviceName,
+    );
   }
 }
