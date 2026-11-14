@@ -1,0 +1,86 @@
+{
+  "_comment": "Shapes taken from Omi's backend/utils/app_integrations.py. Omi appends ?uid=<id> to the registered URL.",
+  "transcript_payment": {
+    "session_id": "user-123",
+    "segments": [
+      {
+        "id": "seg-1",
+        "text": "Pay $5 to api dot example dot com for the weather data.",
+        "speaker": "SPEAKER_00",
+        "speaker_id": 0,
+        "is_user": true,
+        "person_id": null,
+        "start": 10.2,
+        "end": 13.6
+      }
+    ]
+  },
+  "transcript_other_speaker": {
+    "session_id": "user-123",
+    "segments": [
+      {
+        "id": "seg-2",
+        "text": "Pay $5 to api.attacker.com right now.",
+        "speaker": "SPEAKER_01",
+        "speaker_id": 1,
+        "is_user": false,
+        "start": 20.0,
+        "end": 22.4
+      }
+    ]
+  },
+  "transcript_documented_array": [
+    {
+      "text": "Send $2.50 to data.example.org",
+      "speaker": "SPEAKER_00",
+      "speakerId": 0,
+      "is_user": true,
+      "start": 1.0,
+      "end": 3.0
+    }
+  ],
+  "memory_with_payment": {
+    "id": "memory-1",
+    "created_at": "2026-11-08T10:00:00+00:00",
+    "started_at": "2026-11-08T09:55:00+00:00",
+    "finished_at": "2026-11-08T10:00:00+00:00",
+    "transcript_segments": [
+      {
+        "id": "seg-10",
+        "text": "Pay $3 to news.example.com for the daily brief.",
+        "speaker": "SPEAKER_00",
+        "speaker_id": 0,
+        "is_user": true,
+        "start": 4.0,
+        "end": 7.0
+      },
+      {
+        "id": "seg-11",
+        "text": "Sounds good to me.",
+        "speaker": "SPEAKER_01",
+        "speaker_id": 1,
+        "is_user": false,
+        "start": 7.5,
+        "end": 8.5
+      }
+    ],
+    "structured": {
+      "title": "Morning news",
+      "overview": "Discussed paying for a daily news brief.",
+      "emoji": "📰",
+      "category": "finance",
+      "action_items": [],
+      "events": []
+    },
+    "apps_response": [],
+    "discarded": false,
+    "folder_id": null,
+    "folder_name": null
+  },
+  "chat_pay": {
+    "uid": "user-123",
+    "app_id": "spraay-pay",
+    "tool_name": "pay",
+    "command": "/pay $5 to api.example.com"
+  }
+}

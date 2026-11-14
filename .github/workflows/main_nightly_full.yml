@@ -179,6 +179,12 @@ jobs:
     with:
       nightly_main_sha: ${{ needs.source.outputs.main_sha }}
 
+  spraay-pay-ci:
+    needs: source
+    uses: ./.github/workflows/spraay-pay-ci.yml
+    with:
+      nightly_main_sha: ${{ needs.source.outputs.main_sha }}
+
   web-checks:
     needs: source
     uses: ./.github/workflows/web-checks.yml
@@ -217,6 +223,7 @@ jobs:
       - sdk-cpp
       - sdk-dart
       - sdk-rust
+      - spraay-pay-ci
       - web-checks
       - windows-preflight-portability
     runs-on: ubuntu-latest
