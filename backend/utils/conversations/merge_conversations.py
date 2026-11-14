@@ -304,7 +304,10 @@ def perform_merge_async(
         # generation per object per run (the 10-16..19 CloneObject burst).
         # The bridge copy skips a destination already holding the same bytes
         # and preconditions concurrent writers on the destination generation.
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
+        chunk_generations: Dict[Any, int] = {}
+        merged_audio_files = _copy_audio_chunks_for_merge(
+            uid, sorted_convs, new_conversation_id, skip_existing=True, out_generations=chunk_generations
+        )
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses
@@ -467,6 +470,7 @@ def perform_merge_async(
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
                 merged_into=new_conversation_id,
+                generations_by_path=chunk_generations,
             )
 
         # 10. Send FCM notification
@@ -669,6 +673,7 @@ def _copy_audio_chunks_for_merge(
     *,
     strict: bool = False,
     skip_existing: bool = False,
+    out_generations: Optional[Dict[Any, int]] = None,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -737,11 +742,23 @@ def _copy_audio_chunks_for_merge(
                 buckets[name] = _get_storage_client().bucket(name)
             target = buckets[name]
             source_blob = target.blob(chunk["path"])
+            source_generation = chunk.get("generation")
+            if source_generation is not None and out_generations is not None:
+                out_generations[(name, chunk["path"])] = source_generation
+                out_generations[chunk["path"]] = source_generation
             if not skip_existing:
-                _copy_chunk_with_backoff(uid, target, source_blob, new_path)
+                _copy_chunk_with_backoff(uid, target, source_blob, new_path, source_generation=source_generation)
             else:
                 identity = _copied_source_identity(chunk)
-                _copy_bridge_chunk(uid, target, source_blob, new_path, identity, existing_in(name).get(new_path))
+                _copy_bridge_chunk(
+                    uid,
+                    target,
+                    source_blob,
+                    new_path,
+                    identity,
+                    existing_in(name).get(new_path),
+                    source_generation=source_generation,
+                )
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -767,6 +784,7 @@ def _copy_chunk_with_backoff(
     source_blob: Any,
     new_path: str,
     *,
+    source_generation: Optional[int] = None,
     if_generation_match: Optional[int] = None,
     bridge: bool = False,
 ) -> None:
@@ -774,12 +792,13 @@ def _copy_chunk_with_backoff(
     for attempt in range(1, _COPY_RATE_LIMIT_ATTEMPTS + 1):
         try:
             with owner_storage_write_gate(uid, bucket):
-                if if_generation_match is None:
-                    bucket.copy_blob(source_blob, bucket, new_path)
-                else:
-                    # retry=None: the library's conditional policy would otherwise
-                    # retry 429 for up to two minutes, unbounded and uncounted.
-                    bucket.copy_blob(source_blob, bucket, new_path, if_generation_match=if_generation_match, retry=None)
+                kwargs: Dict[str, Any] = {}
+                if source_generation is not None:
+                    kwargs['source_generation'] = source_generation
+                if if_generation_match is not None:
+                    kwargs['if_generation_match'] = if_generation_match
+                    kwargs['retry'] = None
+                bucket.copy_blob(source_blob, bucket, new_path, **kwargs)
         except google_exceptions.TooManyRequests:
             if bridge:
                 OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
@@ -809,7 +828,16 @@ def _same_object(blob: Any, identity: Dict) -> bool:
     )
 
 
-def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, identity: Dict, current: Any) -> None:
+def _copy_bridge_chunk(
+    uid: str,
+    bucket: Any,
+    source_blob: Any,
+    new_path: str,
+    identity: Dict,
+    current: Any,
+    *,
+    source_generation: Optional[int] = None,
+) -> None:
     """Idempotent bridge copy: skip identical bytes, never overwrite a concurrent writer."""
     if current is not None and _same_object(current, identity):
         OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='skipped').inc()
@@ -819,7 +847,15 @@ def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, i
         # A GCS listing always carries a generation; None (test doubles only) keeps
         # the pre-idempotency unconditional copy.
         generation = getattr(current, 'generation', None) if current is not None else 0
-        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
+        _copy_chunk_with_backoff(
+            uid,
+            bucket,
+            source_blob,
+            new_path,
+            source_generation=source_generation,
+            if_generation_match=generation,
+            bridge=True,
+        )
     except google_exceptions.PreconditionFailed:
         winner = bucket.get_blob(new_path, retry=None)
         # Archive packs list no checksum; their capture-named object of the same size
@@ -984,6 +1020,7 @@ def _delete_conversation_and_related_data(
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
     merged_into: Optional[str] = None,
+    generations_by_path: Optional[Dict[Any, int]] = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -1077,9 +1114,11 @@ def _delete_conversation_and_related_data(
     try:
         # Delete audio chunks from GCS
         if merged_into:
-            delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
+            delete_conversation_audio_files(
+                uid, conversation_id, merged_into=merged_into, generations_by_path=generations_by_path
+            )
         else:
-            delete_conversation_audio_files(uid, conversation_id)
+            delete_conversation_audio_files(uid, conversation_id, generations_by_path=generations_by_path)
     except Exception as e:
         if merged_into:
             raise
