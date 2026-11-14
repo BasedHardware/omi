@@ -72,7 +72,10 @@ class OriginalCopies:
             if self._done(uid, identity, 'object', payload, conversation):
                 continue
             target = self.operations.prepare(uid, identity, authority, 'object', payload, conversation=conversation)
-            authority.remote(lambda: delete_batch_object(uid, uri, storage_client=self.storage_client), target=uri)
+            authority.remote(
+                lambda: delete_batch_object(uid, uri, storage_client=self.storage_client, namespace=row['namespace']),
+                target=uri,
+            )
             authority.remote(
                 lambda: self.operations.finish(uid, target, authority, conversation=conversation), target=target
             )

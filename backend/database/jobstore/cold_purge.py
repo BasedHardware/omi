@@ -10,6 +10,7 @@ from google.cloud import firestore
 from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.cold_sink import ColdSink, recording_id
 from database.jobstore.staging_census import cold_paths
+from database.jobstore import upload_cold_custody
 from database.privacy_fence.protocol import owner_key
 
 
@@ -23,6 +24,7 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
         original = handoff._required_row(conn, identity)
         if original['owner_key'] != owner or retained._manifest(original) != manifest:
             raise AuthorityRefused('cold purge original census changed')
+        sink.retain_original(conn, original)
         paths = manifest['cold_paths'] + cold_paths(conn, handoff.ticket.namespace, identity)
         rows = conn.execute(
             'SELECT seq,epoch,family,identity,operation,owner_key,body FROM queue_journal '
@@ -31,12 +33,18 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
         ).fetchall()
         if len(rows) > 1000:
             raise AuthorityRefused('cold owner journal census needs continuation paging')
-        keys, through = {}, 0
+        keys, uploads, through = {}, {}, 0
         for row in rows:
             # Unknown/shared families refuse before any deletion. Never infer
             # a missing cold copy from the serving/shadow mode selector.
             recording = recording_id(conn, handoff.ticket.namespace, row[2], row[3])
             if recording == identity:
+                if row[2] == upload_cold_custody.FAMILY:
+                    # Census the original capability's cold key even when no
+                    # copier has ever run. The original manifest stays intact.
+                    path = upload_cold_custody.retain(conn, handoff, original, row[3], row[6])
+                    paths.append(path)
+                    uploads[path] = upload_cold_custody.descriptor(row[6])
                 key = sink.ref(row[2], row[3]).path
                 if key not in paths:
                     raise AuthorityRefused('cold journal key outside original retained-copy census')
@@ -82,11 +90,27 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
             old.get('source_fingerprint') != digest or old.get('owner_key') != owner or old.get('through', -1) > through
         ):
             raise AuthorityRefused('cold erasure barrier changed or census regressed')
-        for value in values:
+        for ref, value in zip(refs, values):
             if value and (
                 value.get('owner_key') != owner or value.get('recording_id') != identity or not value.get('cold_only')
             ):
                 raise AuthorityRefused('cold destination owner/recording changed')
+            if (
+                value
+                and ref.path in uploads
+                and (
+                    value.get('namespace') != handoff.ticket.namespace
+                    or value.get('epoch') != handoff.ticket.value
+                    or type(value.get('seq')) is not int
+                    or value['seq'] > keys[ref.path]['seq']
+                    or value.get('identity') != keys[ref.path]['identity']
+                    or value.get('family') != upload_cold_custody.FAMILY
+                    or not isinstance(value.get('body'), dict)
+                    or set(value['body']) != upload_cold_custody.FIELDS
+                    or upload_cold_custody.descriptor(value['body']) != uploads[ref.path]
+                )
+            ):
+                raise AuthorityRefused('upload cold destination version/source changed')
         for ref in refs:
             transaction.delete(ref)
         transaction.set(barrier_ref, receipt)

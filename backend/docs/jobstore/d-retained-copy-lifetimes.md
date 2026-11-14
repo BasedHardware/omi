@@ -374,3 +374,31 @@ Earlier section numbers describe their original delivery; the published-original
 purpose expansion is now0022. These source changes were exercised only through
 disposable local fixture clusters in this task, not deployed migrations. Existing
 applied-checksum refusal remains unchanged; no live migration/rewrite is performed.
+
+
+### Original upload conditional cold cohort (0023)
+
+`queue_provider_uploads` journal rows now use the actual conditional ColdSink
+and mode-independent ColdPurge. A separate immutable `queue_upload_cold_custody`
+extension records each cold key's original paid admission, attempt, object
+identity/hash and exact original deadline. Existing original/cold manifests
+remain byte-for-byte unchanged. The extension commits under owner X before
+any remote write; SQL rejects mutations/deletion, mismatched source and missing
+owner guards. It references the original upload and base cold custodian.
+
+Replay checks the actual journal row/body, original sibling membership,
+immutable paid source and allowed upload phase history. No session capability
+is copied. Actual fresh A1/walk/A2, original P/PC and matching F token/namespace
+epoch still fence the writing transaction. Original paid admissions cannot be
+adopted after restore. SQL slots and owner guards end before SDK I/O.
+
+Purge inventories these keys even if copying never ran. Existing real hold,
+destructive-unit token, deletion intent/account F generation, namespace epoch
+and suppression-through-sequence checks cover their actual FS deletion COMMIT.
+Unknown/newer upload destinations refuse; delayed covered puts acknowledge
+without resurrection. The existing committed prefix and original upload,
+attempt/effect, typed PG records, intake repair context and all censuses remain
+retained. This is cold-copy phase proof, not remote C4, a final all-copy/parity
+certificate, a cold-to-serving conversion or destructive final PG permission.
+No runtime installs the adapter, TTL is not extended and no new policy chosen.
+The broad first-review P1 remains open and source readiness remains false.

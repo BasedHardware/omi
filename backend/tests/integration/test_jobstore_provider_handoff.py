@@ -21,7 +21,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, Priority, WorkItem
 pytestmark = pytest.mark.integration
 
 
-def upload(context, monkeypatch, *, count=2, **overrides):
+def upload(context, monkeypatch, *, count=2, audio_uris=None, **overrides):
     handoff, uid = context
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     store = FirestoreStore(handoff.ticket.namespace, firestore_client=handoff.client)
@@ -34,7 +34,7 @@ def upload(context, monkeypatch, *, count=2, **overrides):
             segment,
             uid,
             100 + i,
-            f'encrypted://audio/{segment}',
+            audio_uris[segment] if audio_uris is not None else f'encrypted://audio/{segment}',
             10,
             Priority.RECENT,
             conversation_id='c',

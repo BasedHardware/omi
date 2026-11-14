@@ -15,9 +15,12 @@ from database.jobstore.fs_fence import handoff_ref
 from database.jobstore.postgres_store import jsonb
 from database.jobstore.retained_manifest import original_manifest
 from database.jobstore.staging_census import cold_paths, recording_for
+from database.jobstore import upload_cold_custody
 from database.privacy_fence.protocol import lock, owner_key
 
-FAMILIES = frozenset({'units', 'recordings', 'queue_custody', 'queue_handoffs', 'outbox', 'docs'})
+FAMILIES = frozenset(
+    {'units', 'recordings', 'queue_custody', 'queue_handoffs', 'outbox', 'docs', upload_cold_custody.FAMILY}
+)
 
 
 def logical_identity(family, identity):
@@ -28,6 +31,8 @@ def logical_identity(family, identity):
             raise AuthorityRefused('original logical outbox generation required')
     if family == 'docs' and (set(identity) != {'tbl', 'key'} or identity['tbl'] != 'artifacts'):
         raise AuthorityRefused('unqualified document cold cohort')
+    if family == upload_cold_custody.FAMILY and set(identity) != {'unit_id', 'recording_id'}:
+        raise AuthorityRefused('original upload cold identity required')
     return identity
 
 
@@ -43,7 +48,7 @@ def recording_id(conn, namespace, family, identity):
         return identity['identity']
     if family == 'recordings':
         return identity['recording_id']
-    key = identity['unit_id'] if family == 'units' else identity['identity']
+    key = identity['unit_id'] if family in ('units', upload_cold_custody.FAMILY) else identity['identity']
     value = conn.execute(
         'SELECT recording_id FROM units WHERE namespace=%s AND unit_id=%s', (namespace, key)
     ).fetchone()
@@ -62,6 +67,23 @@ class ColdSink:
 
     def barrier(self, identity):
         return self.handoff.ref('cold_recording_erasure', identity)
+
+    def retain_original(self, conn, original):
+        manifest = original_manifest(self.handoff, original)
+        digest = fingerprint(dict(intent=original['intent'], admission=original['admission']))
+        existing = conn.execute(
+            'SELECT source_fingerprint,manifest FROM queue_cold_copy_custody ' 'WHERE namespace=%s AND recording_id=%s',
+            (self.handoff.ticket.namespace, original['identity']),
+        ).fetchone()
+        if existing and existing != (digest, manifest):
+            raise AuthorityRefused('original cold custody changed')
+        if not existing:
+            conn.execute(
+                'INSERT INTO queue_cold_copy_custody(namespace,recording_id,owner_key,source_fingerprint,manifest) '
+                'VALUES (%s,%s,%s,%s,%s)',
+                (self.handoff.ticket.namespace, original['identity'], original['owner_key'], digest, jsonb(manifest)),
+            )
+        return manifest
 
     def _context(self, row):
         seq, epoch, family, identity, operation, owner, _body = row
@@ -82,27 +104,15 @@ class ColdSink:
                 raise AuthorityRefused('cold source original owner changed')
             if family == 'outbox' and identity['generation'] != original['admission']['admission_id']:
                 raise AuthorityRefused('cold outbox does not belong to original admission')
-            manifest = original_manifest(self.handoff, original)
+            manifest = self.retain_original(conn, original)
             paths = manifest['cold_paths']
             if not isinstance(paths, list):
                 raise AuthorityRefused('original cold path census must be a list')
             paths = paths + cold_paths(conn, self.handoff.ticket.namespace, recording)
+            if family == upload_cold_custody.FAMILY:
+                paths = paths + [upload_cold_custody.retain(conn, self.handoff, original, identity, _body)]
             if self.ref(family, identity).path not in paths:
                 raise AuthorityRefused('cold key outside original retained-copy census')
-            digest = fingerprint(dict(intent=original['intent'], admission=original['admission']))
-            existing = conn.execute(
-                'SELECT source_fingerprint,manifest FROM queue_cold_copy_custody '
-                'WHERE namespace=%s AND recording_id=%s',
-                (self.handoff.ticket.namespace, recording),
-            ).fetchone()
-            if existing and existing != (digest, manifest):
-                raise AuthorityRefused('original cold custody changed')
-            if not existing:
-                conn.execute(
-                    'INSERT INTO queue_cold_copy_custody(namespace,recording_id,owner_key,source_fingerprint,manifest) '
-                    'VALUES (%s,%s,%s,%s,%s)',
-                    (self.handoff.ticket.namespace, recording, owner, digest, jsonb(manifest)),
-                )
         return recording, original
 
     def _erased(self, transaction, recording, original, seq):
