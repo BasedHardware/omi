@@ -116,7 +116,8 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final l10n = context.l10n;
     final episode = episodes.live;
     final listening = EpisodePresentation.isListening(state);
-    final running = EpisodePresentation.elapsed(episode, capture, now, anchor: episodes.liveAnchor);
+    final running = EpisodePresentation.elapsed(episode, capture, now,
+        anchor: episodes.liveAnchor, closedFloor: episodes.closedEpisodeFloor(now));
     // The same session duration the episode page counts; the page shows its seconds, the
     // tile its whole minutes, and the spoken label carries the page's form.
     final elapsed = EpisodePresentation.runningLength(running, l10n);

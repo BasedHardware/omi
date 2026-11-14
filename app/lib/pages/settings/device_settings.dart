@@ -785,7 +785,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     final episode = e.live;
     if (episode == null) return null;
     if (capture == null) return episode.startedAt.isAfter(now) ? null : episode.startedAt;
-    final elapsed = EpisodePresentation.elapsed(episode, capture, now, anchor: e.liveAnchor);
+    final elapsed = EpisodePresentation.elapsed(episode, capture, now,
+        anchor: e.liveAnchor, closedFloor: e.closedEpisodeFloor(now));
     return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
   }
 
@@ -855,7 +856,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       liveLengthNow: live == null || capture == null || connecting
           ? null
           : (_) => EpisodePresentation.runningLength(
-              EpisodePresentation.elapsed(live, capture, episodes!.now(), anchor: episodes.liveAnchor), l10n),
+              EpisodePresentation.elapsed(live, capture, episodes!.now(),
+                  anchor: episodes.liveAnchor, closedFloor: episodes.closedEpisodeFloor(episodes.now())),
+              l10n),
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
