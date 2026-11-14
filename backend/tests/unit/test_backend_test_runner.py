@@ -586,7 +586,8 @@ def test_shipped_allowlist_entries_are_partitioned_into_per_file_isolation(tmp_p
 
 @pytest.mark.skipif(os.name == 'nt', reason='Unix timeout and Bash 3 fallback probes')
 @pytest.mark.parametrize('with_timeout', [True, False])
-def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, with_timeout):
+@pytest.mark.parametrize('with_coverage', [True, False])
+def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, with_timeout, with_coverage):
     import shutil
 
     if with_timeout and shutil.which('timeout') is None:
@@ -597,6 +598,7 @@ def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, wit
     _write_executable(
         fake_python,
         '#!/usr/bin/env bash\n'
+        'echo "arguments: $*"\n'
         'if [[ "${!#}" == tests/unit/test_hanging_probe.py ]]; then\n'
         '  exec sleep 2\n'
         'fi\n'
@@ -610,6 +612,10 @@ def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, wit
         'BACKEND_PYTEST_PARALLEL_SESSION': '0',
         'BACKEND_UNIT_FILE_BUDGET_SECONDS': '0.1',
     }
+    if with_coverage:
+        environment['BACKEND_COVERAGE_MAP_DIR'] = str(tmp_path)
+    else:
+        environment.pop('BACKEND_COVERAGE_MAP_DIR', None)
     if not with_timeout:
         # Hide only the optional timeout lookup; preserve the caller's PATH.
         startup = tmp_path / 'no-timeout.sh'
@@ -630,6 +636,9 @@ def test_file_budget_bounds_hang_and_preserves_no_timeout_fallback(tmp_path, wit
     )
     assert result.returncode == (1 if with_timeout else 0), result.stdout + result.stderr
     assert 'after-probe-ran' in result.stdout
+    assert ('arguments: -m coverage run' in result.stdout) == with_coverage
+    if with_coverage:
+        assert (tmp_path / 'tests__unit__test_after_probe.py.path').read_text().strip() == 'tests/unit/test_after_probe.py'
     if with_timeout:
         assert 'Backend unit file timed out::tests/unit/test_hanging_probe.py exceeded 0.1s' in result.stdout
         assert 'tests/unit/test_hanging_probe.py (status 124)' in result.stdout

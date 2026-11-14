@@ -290,7 +290,16 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         # call-phase duration summary omits. Precision is one second.
         file_started=$SECONDS
         set +e
-        "${runner[@]}" -m pytest "${file_pytest_args[@]}" "$test_path"
+        if [[ -n "${BACKEND_COVERAGE_MAP_DIR:-}" ]]; then
+          # Coverage-map collection (scripts/build_test_coverage_map.py): one data file per isolated test file.
+          # Only the dedicated coverage-map workflow sets this; it installs `coverage` itself.
+          coverage_slug="${test_path//\//__}"
+          printf '%s\n' "$test_path" > "$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.path"
+          "${runner[@]}" -m coverage run --data-file="$BACKEND_COVERAGE_MAP_DIR/$coverage_slug.cov" --source="$PWD" \
+            -m pytest "${file_pytest_args[@]}" "$test_path"
+        else
+          "${runner[@]}" -m pytest "${file_pytest_args[@]}" "$test_path"
+        fi
         status=$?
         set -e
         echo "BACKEND-UNIT-FILE-WALL $((SECONDS - file_started))s $test_path"
