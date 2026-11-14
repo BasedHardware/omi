@@ -40,7 +40,9 @@ class Gate:
         counts = (gate.rate_per_hour, gate.reach_seconds, gate.window, gate.tokens_used)
         if any(type(value) is not int or value < 0 for value in counts):
             return None
-        if gate.state not in ('open', 'closed') or not _number(gate.updated_at):
+        if gate.state not in ('open', 'closed') or not _number(gate.updated_at) or gate.updated_at < 0:
+            return None
+        if gate.window > gate.hour():  # Tokens counted against an hour the heartbeat has not reached.
             return None
         return gate
 
@@ -54,16 +56,16 @@ class Gate:
             return 'job'
         if self.reach_seconds and now - capture - duration > self.reach_seconds:
             return 'reach'
-        if self.used(now) >= self.rate_per_hour:
+        if self.used() >= self.rate_per_hour:
             return 'rate'
         return None
 
-    def hour(self, now: float) -> int:
-        """The budget hour never moves backward: a retried body or a slow clock spends from the stored hour."""
-        return max(self.window, int(now // 3600))
+    def hour(self) -> int:
+        """The heartbeat is the one clock for the budget hour, so a committer's fast or slow clock cannot roll it."""
+        return int(self.updated_at // 3600)
 
-    def used(self, now: float) -> int:
-        return self.tokens_used if self.hour(now) == self.window else 0
+    def used(self) -> int:
+        return self.tokens_used if self.window == self.hour() else 0
 
 
 def read(tx, job: dict, now: float, source: str) -> tuple[dict | None, str | None]:
@@ -97,4 +99,4 @@ def read(tx, job: dict, now: float, source: str) -> tuple[dict | None, str | Non
     reason = gate.refusal(job, now)
     if reason:
         return None, reason
-    return {**row, 'window': gate.hour(now), 'tokens_used': gate.used(now) + 1}, None
+    return {**row, 'window': gate.hour(), 'tokens_used': gate.used() + 1}, None

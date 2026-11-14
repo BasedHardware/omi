@@ -104,6 +104,7 @@ def test_rate_fresh_is_free_and_rollover(monkeypatch):
         ({'state': 'OPEN'}, 'closed'),
         ({'updated_at': str(NOW)}, 'closed'),
         ({'updated_at': float('nan')}, 'closed'),
+        ({'updated_at': -1.0, 'window': 0}, 'closed'),
         ({'note': 'unknown field'}, 'closed'),
     ],
 )
@@ -135,25 +136,38 @@ def test_incomplete_gate_cannot_reset_the_budget(missing, monkeypatch):
     refused.labels.assert_called_with('closed')
 
 
-def test_budget_hour_never_moves_backward(monkeypatch):
-    """A retried body or a slow clock on the old side of the hour spends from the stored hour."""
+def test_only_the_heartbeat_rolls_the_budget_hour(monkeypatch):
+    """A committer whose clock crosses the hour early, or late, cannot reset the count."""
     store = MemoryStore()
-    for name in ('a', 'b', 'c', 'd'):
+    for name in ('a', 'b', 'c'):
         ready(store, name)
     opened(store)
     later = (int(NOW // 3600) + 1) * 3600.0
     row = store.rows['backlog_release', 'gate']
     put(store, 'backlog_release', 'gate', {**row, 'tokens_used': 2, 'updated_at': later - 1})
-    assert merge(store, later - 1) is None  # Old hour is spent.
-    assert merge(store, later)['segment_id'] == 'a'  # A fast clock opens the new hour once.
-    assert merge(store, later - 1)['segment_id'] == 'b'  # The slow clock spends from the new hour.
-    row = store.rows['backlog_release', 'gate']
-    assert (row['window'], row['tokens_used']) == (int(later // 3600), 2)
-    assert merge(store, later - 1) is None and merge(store, later) is None
     refused = Mock()
     monkeypatch.setattr(gate, 'REFUSED', refused)
-    assert merge(store, later + 1) is None
+    assert merge(store, later - 1) is None and merge(store, later + 5) is None  # A fast clock opens nothing.
     refused.labels.assert_called_with('rate')
+    put(store, 'backlog_release', 'gate', {**store.rows['backlog_release', 'gate'], 'updated_at': later})
+    assert merge(store, later - 1) is None  # A clock behind the heartbeat is refused.
+    refused.labels.assert_called_with('stale')
+    assert merge(store, later)['segment_id'] == 'a' and merge(store, later + 5)['segment_id'] == 'b'
+    row = store.rows['backlog_release', 'gate']
+    assert (row['window'], row['tokens_used'], row['updated_at']) == (int(later // 3600), 2, later)
+    assert merge(store, later + 5) is None
+    refused.labels.assert_called_with('rate')
+
+
+def test_window_ahead_of_the_heartbeat_is_closed(monkeypatch):
+    store = MemoryStore()
+    ready(store, 'a')
+    opened(store)
+    store.rows['backlog_release', 'gate']['window'] += 1
+    refused = Mock()
+    monkeypatch.setattr(gate, 'REFUSED', refused)
+    assert merge(store) is None
+    refused.labels.assert_called_with('closed')
 
 
 @pytest.mark.parametrize('reach', [0, 100])
@@ -180,6 +194,10 @@ def test_job_without_valid_times_is_refused(fields, reach, monkeypatch):
 def test_job_without_a_capture_time_gets_no_token(capture, reach):
     # The ordered queries cannot return a row with no capture time; the gate still refuses one.
     row = dict(state='open', rate_per_hour=2, reach_seconds=reach, window=0, tokens_used=0, updated_at=NOW)
+    assert (
+        gate.read(Mock(get=Mock(return_value=row)), {'capture_at': NOW - 20, 'duration_seconds': 10}, NOW, 'test')[1]
+        is None
+    )
     job = {'duration_seconds': 10} if capture is None else {'capture_at': capture, 'duration_seconds': 10}
     assert gate.read(Mock(get=Mock(return_value=row)), job, NOW, 'test') == (None, 'job')
 
