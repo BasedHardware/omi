@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, BACKFILL_VERSION
 from testing.store_fixtures import BackendUnavailable, postgres_connect, required_backends
 
 pytestmark = pytest.mark.integration
@@ -115,11 +116,13 @@ READ_CASES = [
     ('ready_owners', ('owner', 2), {}),
     ('ready_owners', (None, 1), {'descending': True}),
     ('ready_owners', (None, 2), {'ceiling_owner_key': 'owner'}),
+    ('ready_owners', (None, 1), {}),
     ('allowance_owners', (10, 2), {}),
     ('allowance_owners', (0.5, 2), {}),
     ('allowance_page', (None, None, 2), {}),
     ('allowance_page', ('owner', None, 2), {}),
     ('allowance_page', ('owner', (1.0, 'h'), 2), {}),
+    ('allowance_page', (None, (1.0, 'h'), 1), {}),
 ]
 TX_READ_CASES = [
     ('get', ('queues', 'q'), {}),
@@ -166,6 +169,12 @@ def _seed_queries(store):
     rows['jobs', 'h'] = {**rows['jobs', 'a'], 'segment_id': 'h', 'state': 'allowance_held', 'merge_pending': False}
     rows['jobs', 'h'].pop('fresh_capture')
     rows['allowance_holds', 'owner'] = {'active': True, 'check_at': 1.0}
+    # A second owner, so a cursor has a page to return after the first owner, and a second parked row.
+    rows['jobs', 'r2'] = {**rows['jobs', 'r'], 'segment_id': 'r2', 'owner_key': 'owner2', 'owner_id': 'synthetic2'}
+    rows['jobs', 'h2'] = {**rows['jobs', 'h'], 'segment_id': 'h2', 'capture_at': 2.0}
+    rows['allowance_holds', 'owner2'] = {'active': True, 'check_at': 20.0}
+    # A completed marker: an implementation that always answers False would otherwise pass.
+    rows['control', BACKFILL_KEY] = {'version': BACKFILL_VERSION, 'complete': True}
     for key in ['a', 'b']:
         rows['control', key] = {'p1_active': True, 'p1_service': 1.0, 'p1_batch_available_at': 1.0}
     for (table, key), value in rows.items():

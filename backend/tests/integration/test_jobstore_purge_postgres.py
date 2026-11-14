@@ -230,6 +230,9 @@ def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monke
     _write(dual, rows)
     for table, name, _ in rows:
         primary.delete(table, name)
+    # Purge keeps a physical GPU reservation in the primary; it names the erased segment until release.
+    _write(dual, [('gpus', 'gpu-cold', {'token': 't1', 'segment_id': 'cold', 'lease_until': 99.0})])
+    rows.append(('gpus', 'gpu-cold', {}))
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
     monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
     monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)

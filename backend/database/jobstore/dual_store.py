@@ -252,6 +252,18 @@ def read_current(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, s
     return {address: found.get(ref.path, {}) for address, ref in zip(keys, refs)}
 
 
+def read_current_without_reservations(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    """``read_current`` for a copy nothing refreshes: GPU reservation rows read as absent, so they are deleted.
+
+    Purge deliberately leaves a physical GPU reservation in the primary, and it names the leased segment until
+    release. A live mirror copies the release. A copy with mirror writes stopped never would, so the
+    reservation of an erased segment would stay in Postgres. No process reads GPU rows from such a copy.
+    """
+    docs = read_current(primary, [address for address in keys if address[0] != 'gpus'])
+    docs.update({address: {} for address in keys if address[0] == 'gpus'})
+    return docs
+
+
 def _is_timeout(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or getattr(exc, 'sqlstate', None) == _QUERY_CANCELED
 
@@ -292,6 +304,7 @@ class DualStore:
         self.shadow = shadow
         self.budget_s = budget_s
         self.inline = inline  # single-threaded harnesses mirror in the caller, deterministically
+        self.cold = False  # a retained copy opened only to erase; no mirror keeps it current
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._query_queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._query_worker: threading.Thread | None = None
@@ -526,11 +539,12 @@ class DualStore:
                 # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
                 conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
                 rows = self.owner_rows(conn, owner_id)
+        reader = read_current_without_reservations if self.cold or not shadow_writes_enabled() else None
         for start in range(0, len(rows), PURGE_CHUNK):
             with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
-                    self.copy_current(conn, rows[start : start + PURGE_CHUNK])
+                    self.copy_current(conn, rows[start : start + PURGE_CHUNK], reader=reader)
         return rows
 
     def purge_owner_now(self, owner_id: str) -> int:
@@ -867,6 +881,7 @@ def purge_owner(namespace: str, owner_id: str) -> int:
     store = _configured_copy(primary)
     if store is None:
         return 0
+    store.cold = True
     try:
         return store.purge_owner_now(owner_id)
     finally:
