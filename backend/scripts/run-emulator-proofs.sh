@@ -125,6 +125,12 @@ run_proof "enrichment revision-race conformance (PL-439)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
   "$PYTHON" -m pytest -q -p no:cacheprovider scripts/enrichment_revision_emulator_test.py
 
+# Retry grants survive rollback; spent signals belong to the winning commit.
+# CI requires sim/emulator; full local/staging qualification requires =all.
+run_proof "held retry grants and spent-signal conformance (PL-532/533)" \
+  env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" OMI_ENV_STAGE=offline \
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/held_retry_emulator_test.py
+
 # Daily architecture parity: require both local CI backends rather than letting
 # a missing emulator look green. Local/staging runs require all three stores.
 run_proof "recovery/admission parity PL-057/072/086 (sim + emulator)" \
