@@ -292,8 +292,11 @@ source level, not Nordic watchdog/reset enforcement or the signed image.
 Use the DK-probed board, J-Link, no antenna, and a reachable BLE central. Keep
 an app-only known-good OTA package ready before loading a fault build. Do not
 replace the fielded MCUboot, UICR, network image, partition map or keys. Full
-factory hex is only for an independently authorized baseline restore; follow
-`omi/BUILD.md`/`FLASH_3.0.8/` (network hex then app hex) in that case.
+factory recovery requires an independently authorized procedure; follow
+[the bootloader runbook](cv1-bootloader.md). For this fault campaign, preserve the
+installed loader by using only the exact OTA signed app bytes. A staged release
+HEX also replaces the bootloader and belongs to a separately authorized repair
+procedure. Never substitute release HEX into the archived two-core flasher.
 
 1. **Baseline.** Build per `omi/BUILD.md`, retaining maps/configs. Check release
    version `3.0.23` through DIS. Use the baseline jig console profile and

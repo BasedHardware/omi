@@ -134,6 +134,8 @@ def get_episode(
     projected = home_read.project_episode(uid, episode)
     if projected is None:
         raise HTTPException(status_code=404, detail='Episode not found')
+    # Opening the page is the trigger for a late episode's deferred compose.
+    home_read.schedule_opened_compose(uid, episode)
     return projected
 
 

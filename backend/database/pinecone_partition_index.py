@@ -11,7 +11,8 @@ import json
 import logging
 import os
 import time
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Iterator, Mapping, Sequence, cast
+from urllib.parse import quote
 
 from database import pinecone_partition_state as state
 from database import pinecone_query_metrics
@@ -19,6 +20,24 @@ from database.legal_holds import external_write_fence
 from database.pinecone_provider_errors import barrier_record, is_missing_namespace
 
 logger = logging.getLogger(__name__)
+
+# Pinecone fetch is a GET with every id in the query string. 1,000 production
+# ids (~69 KB) get HTTP 413 while 800 pass (measured 2026-11-14).
+_FETCH_QUERY_BUDGET_BYTES = 16_000
+
+
+def _fetch_batches(ids: list[str]) -> Iterator[list[str]]:
+    batch: list[str] = []
+    size = 0
+    for vector_id in ids:
+        cost = len('&ids=') + len(quote(vector_id, safe=''))
+        if batch and size + cost > _FETCH_QUERY_BUDGET_BYTES:
+            yield batch
+            batch, size = [], 0
+        batch.append(vector_id)
+        size += cost
+    if batch:
+        yield batch
 
 
 def _field(value: Any, name: str) -> Any:
@@ -140,8 +159,9 @@ class OwnerIndex:
             if ids and method in {'update', 'delete'}:
                 targets = (ticket.primary_namespace, other) if method == 'delete' else (ticket.primary_namespace,)
                 for target in targets:
-                    existing = self.index.fetch(ids=ids, namespace=target)
-                    self._check_records(_field(existing, 'vectors').values())
+                    for batch in _fetch_batches(ids):
+                        existing = self.index.fetch(ids=batch, namespace=target)
+                        self._check_records(_field(existing, 'vectors').values())
         except BaseException:
             # Only reads/validation have occurred, so this is a known no-op.
             state.finish_mutation(key, ticket, firestore_client=self.firestore_client)
@@ -233,7 +253,18 @@ class OwnerIndex:
         self._check_filter(filter)
         key = self._key(namespace)
         route = state.get_route(key, firestore_client=self.firestore_client)
-        if route.pending_count or route.uncertain_count or route.mode == 'copying':
+        # A late uncertain delete cannot resurrect data, so only other
+        # unresolved provider work blocks completion. Migration stays blocked.
+        if (
+            route.pending_count
+            or route.mode == 'copying'
+            or (
+                route.uncertain_count
+                and not state.uncertain_mutations_are_deletes(
+                    key, route.revision, firestore_client=self.firestore_client
+                )
+            )
+        ):
             raise state.PartitionBusy('Account purge must wait for outstanding vector work')
         lsns = self._deletion_lsns.get(namespace)
         if lsns is None or self._deletion_revisions.get(namespace) != route.revision:
@@ -268,7 +299,7 @@ class OwnerIndex:
                     raise state.PartitionBusy('Pinecone account purge is not yet visible')
                 time.sleep(1)
         after = state.get_route(key, firestore_client=self.firestore_client)
-        if after.revision != route.revision or after.pending_count or after.uncertain_count:
+        if after.revision != route.revision or after.pending_count or after.uncertain_count != route.uncertain_count:
             raise state.PartitionBusy('Vector activity changed during purge verification')
 
 

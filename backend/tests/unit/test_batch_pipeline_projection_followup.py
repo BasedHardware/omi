@@ -6,6 +6,8 @@ from dataclasses import asdict
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+import hashlib
+import logging
 
 import pytest
 
@@ -14,6 +16,52 @@ from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.serving import Serving
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['projection', 'privacy', 'unknown_privacy', 'retry'])
+async def test_followup_failure_logs_correlate_without_source_or_exception_content(followup, caplog, kind):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    private = 'private-owner@example.test/private-recording-content'
+    errors = {
+        'projection': ProjectionBlocked(private),
+        'privacy': BatchPrivacyBlocked('account_deleted', conversation_id=private),
+        'unknown_privacy': BatchPrivacyBlocked(private, conversation_id=private),
+        'retry': RuntimeError(private),
+    }
+    error = errors[kind]
+    error.block_reason = private  # An unregistered reason must never enter a log.
+    followup.runner.read_persisted = Mock(side_effect=error)
+    with caplog.at_level(logging.INFO, logger=projection_followup.__name__):
+        await followup.runner.run(private)
+    messages = [r.getMessage() for r in caplog.records if r.name == projection_followup.__name__]
+    assert len(messages) == 1
+    message = messages[0]
+    assert f'unit={hashlib.sha256(private.encode()).hexdigest()[:16]}' in message
+    assert private not in message and 'private-owner' not in message
+    assert ' site=' in message
+    assert f'outcome={"retry" if kind == "retry" else "blocked"}' in message
+    if kind != 'retry':
+        assert 'block_reason=other' in message
+    if kind == 'privacy':
+        assert 'fence_reason=account_deleted' in message
+    if kind == 'unknown_privacy':
+        assert 'fence_reason=unknown' in message
+    assert not followup.owner_claim
+    followup.projector.store.mark_enrichment.assert_not_called()
+    followup.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_followup_timeout_uses_same_private_safe_unit_key(followup, monkeypatch, caplog):
+    segment = 'private-recording@example.test'
+    followup.runner._run = AsyncMock(side_effect=TimeoutError('private audio URI'))
+    with caplog.at_level(logging.WARNING, logger=projection_followup.__name__):
+        await followup.runner.run(segment)
+    assert f'outcome=timeout unit={hashlib.sha256(segment.encode()).hexdigest()[:16]}' in caplog.text
+    assert segment not in caplog.text and 'private audio URI' not in caplog.text
+    assert not followup.runner.closed
 
 
 @pytest.fixture

@@ -31,8 +31,11 @@ class EpisodePage extends StatelessWidget {
     final history = context.read<ConversationProvider>();
     final l10n = context.l10n;
     if (!context.read<ConnectivityProvider>().isConnected) {
-      await showOmiAlert(context,
-          title: l10n.unableToDeleteConversation, message: l10n.pleaseCheckInternetConnectionAndTryAgain);
+      await showOmiAlert(
+        context,
+        title: l10n.unableToDeleteConversation,
+        message: l10n.pleaseCheckInternetConnectionAndTryAgain,
+      );
       return;
     }
     // conversationIds includes discarded members; the visible list intentionally does not.
@@ -44,11 +47,13 @@ class EpisodePage extends StatelessWidget {
               ServerConversation(id: id, createdAt: episode.startedAt, discarded: true, structured: Structured('', '')),
     ];
     if (targets.isEmpty) return;
-    final confirmed = await showOmiConfirm(context,
-        title: l10n.deleteConversationsTitle(targets.length),
-        message: l10n.deleteConversationsMessage,
-        confirmLabel: l10n.delete,
-        destructive: true);
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.deleteConversationsTitle(targets.length),
+      message: l10n.deleteConversationsMessage,
+      confirmLabel: l10n.delete,
+      destructive: true,
+    );
     if (!confirmed || !context.mounted) return;
     final listContext = Navigator.of(context).context;
     Navigator.pop(context);
@@ -80,24 +85,28 @@ class EpisodePage extends StatelessWidget {
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
     final opened = this.episode;
-    final episode = episodes?.homeEpisodes
+    final episode = episodes?.openedEpisode(opened.id) ??
+        episodes?.homeEpisodes
             .where(
-                (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id)
+              (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id,
+            )
             .firstOrNull ??
         opened;
     final known = {for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c};
     final members = [for (final member in episode.members) known[member.id] ?? member]
-        .where((m) =>
-            !m.discarded &&
-            !m.deleted &&
-            !hidden.contains(m.id) &&
-            !(history?.memoriesToDelete.containsKey(m.id) ?? false))
+        .where(
+          (m) =>
+              !m.discarded &&
+              !m.deleted &&
+              !hidden.contains(m.id) &&
+              !(history?.memoriesToDelete.containsKey(m.id) ?? false),
+        )
         .toList();
     final memberIds = members.map((m) => m.id).toSet();
     final items =
         episode.visibleItems.where((i) => i.conversationId == null || memberIds.contains(i.conversationId)).toList();
     final moments = episode.moments.where((m) => memberIds.contains(m.conversationId)).toList();
-    final composed = moments.any((m) => m.points.isNotEmpty);
+    final composed = episode.composed;
     final primary = members.firstOrNull;
     final title = episode.title.trim().isNotEmpty
         ? episode.title
@@ -110,77 +119,134 @@ class EpisodePage extends StatelessWidget {
       Text(title, style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4)),
       const SizedBox(height: OmiSpacing.sm),
       Text(
-          '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
-          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+        '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
+        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+      ),
     ];
     final memberRows = <Widget>[
       for (final member in members)
         Padding(
-            padding: const EdgeInsets.only(top: OmiSpacing.sm),
-            child: ConversationListItem(
-              key: ValueKey('episode_member_${member.id}'),
-              conversation: member,
-              date: member.startedAt ?? member.createdAt,
-              conversationIdx: -1,
-              allowSelection: false,
-              embedded: true,
-              openEpisodeFromSearch: false,
-            )),
+          padding: const EdgeInsets.only(top: OmiSpacing.sm),
+          child: ConversationListItem(
+            key: ValueKey('episode_member_${member.id}'),
+            conversation: member,
+            date: member.startedAt ?? member.createdAt,
+            conversationIdx: -1,
+            allowSelection: false,
+            embedded: true,
+            openEpisodeFromSearch: false,
+          ),
+        ),
     ];
     return Scaffold(
       key: const Key('episode_page'),
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(leading: const OmiBackButton(), actions: [
-        PullDownButton(
-          itemBuilder: (_) => [
-            PullDownMenuItem(
-              title: context.l10n.delete,
-              iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
-              isDestructive: true,
-              onTap: () => _delete(context),
-            )
-          ],
-          buttonBuilder: (_, showMenu) => OmiIconButton.filled(
-            key: const Key('episode_more'),
-            icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
-            label: context.l10n.moreOptions,
-            onPressed: showMenu,
-          ),
-        ),
-      ]),
-      body: processing
-          ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
-          : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              children: [
-                ...heading,
-                const SizedBox(height: OmiSpacing.lg),
-                if (composed) ...[
-                  // A composed episode reads like a conversation's summary: a lede, then a section per moment.
-                  if (episode.lede.trim().isNotEmpty)
-                    Text(episode.lede, key: const Key('episode_lede'), style: OmiType.callout.copyWith(height: 1.45)),
-                  EpisodeSections(moments: moments, onOpenMoment: (moment) => _openMoment(context, moment, members)),
-                  if (episode.followUps.isNotEmpty) ...[
-                    EpisodeSectionTitle(context.l10n.episodeFollowUps),
-                    EpisodeBullets(episode.followUps),
-                  ],
-                ] else
-                  EpisodeBullets(episode.bullets),
-                if (items.isNotEmpty) ...[
-                  EpisodeSectionTitle(context.l10n.tasks, count: items.length),
-                  EpisodeContentCard(
-                      children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())]),
-                ],
-                if (!composed && moments.isNotEmpty) ...[
-                  EpisodeSectionTitle(context.l10n.episodeMoments),
-                  EpisodeContentCard(
-                      children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)]),
-                ],
-                EpisodeSectionTitle(context.l10n.conversations),
-                ...memberRows,
-              ],
+      appBar: AppBar(
+        leading: const OmiBackButton(),
+        actions: [
+          PullDownButton(
+            itemBuilder: (_) => [
+              PullDownMenuItem(
+                title: context.l10n.delete,
+                iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+                isDestructive: true,
+                onTap: () => _delete(context),
+              ),
+            ],
+            buttonBuilder: (_, showMenu) => OmiIconButton.filled(
+              key: const Key('episode_more'),
+              icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
+              label: context.l10n.moreOptions,
+              onPressed: showMenu,
             ),
+          ),
+        ],
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: processing
+                ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
+                : ListView(
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    children: [
+                      ...heading,
+                      const SizedBox(height: OmiSpacing.lg),
+                      if (composed) ...[
+                        // A composed episode reads like a conversation's summary: a lede, then a section per moment.
+                        if (episode.lede.trim().isNotEmpty)
+                          Text(
+                            episode.lede,
+                            key: const Key('episode_lede'),
+                            style: OmiType.callout.copyWith(height: 1.45),
+                          ),
+                        EpisodeSections(
+                          moments: moments,
+                          onOpenMoment: (moment) => _openMoment(context, moment, members),
+                        ),
+                        if (episode.followUps.isNotEmpty) ...[
+                          EpisodeSectionTitle(context.l10n.episodeFollowUps),
+                          EpisodeBullets(episode.followUps),
+                        ],
+                      ] else
+                        EpisodeBullets(episode.bullets),
+                      if (items.isNotEmpty) ...[
+                        EpisodeSectionTitle(context.l10n.tasks, count: items.length),
+                        EpisodeContentCard(
+                          children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
+                        ),
+                      ],
+                      if (!composed && moments.isNotEmpty) ...[
+                        EpisodeSectionTitle(context.l10n.episodeMoments),
+                        EpisodeContentCard(
+                          children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)],
+                        ),
+                      ],
+                      EpisodeSectionTitle(context.l10n.conversations),
+                      ...memberRows,
+                    ],
+                  ),
+          ),
+          // A late episode composes on this open; the server starts it on the read below.
+          _OpenCompose(key: ValueKey('open-${episode.id}'), episode: episode),
+        ],
+      ),
     );
+  }
+}
+
+/// The page's first frame asks the server for the episode once. A late episode's compose
+/// starts on that read, and the provider folds the composed copy back into the page.
+class _OpenCompose extends StatefulWidget {
+  const _OpenCompose({super.key, required this.episode});
+  final Episode episode;
+
+  @override
+  State<_OpenCompose> createState() => _OpenComposeState();
+}
+
+class _OpenComposeState extends State<_OpenCompose> {
+  EpisodeProvider? _episodes;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final episodes = _episodes = context.read<EpisodeProvider?>();
+      final episode = widget.episode;
+      if (episodes == null || episode.id.isEmpty || episode.live) return;
+      unawaited(episodes.openEpisode(episode.id));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  void dispose() {
+    _episodes?.cancelOpenEpisode(widget.episode.id);
+    super.dispose();
   }
 }
 
@@ -199,7 +265,9 @@ class _ProcessingBody extends StatelessWidget {
           alignment: AlignmentDirectional.centerStart,
           widthFactor: widthFactor,
           child: Container(
-              height: 12, decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll)),
+            height: 12,
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          ),
         ),
       );
 
@@ -238,8 +306,10 @@ class _ProcessingBody extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 2),
-                            Text(l10n.episodeWritingNotesDetail,
-                                style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+                            Text(
+                              l10n.episodeWritingNotesDetail,
+                              style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                            ),
                             const SizedBox(height: OmiSpacing.xs),
                             _skeleton(0.92),
                             _skeleton(0.82),
@@ -250,7 +320,8 @@ class _ProcessingBody extends StatelessWidget {
                       if (items.isNotEmpty) ...[
                         EpisodeSectionTitle(l10n.tasks, count: items.length),
                         EpisodeContentCard(
-                            children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())]),
+                          children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
+                        ),
                       ],
                     ],
                   ),

@@ -1730,7 +1730,7 @@ def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, mon
                 )
             elif kind == 'generation':
                 lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set(
-                    {'generation': 1}
+                    {'generation': 1, 'blocked': False, 'purging': False}
                 )
             else:
                 batch.ledger.update({'job_id': 'other-job'})

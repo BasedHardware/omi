@@ -145,8 +145,8 @@ use the separate live/shadow counters when measuring the live decision path.
 | Metric | Meaning |
 | --- | --- |
 | `privacy_check_calls_total{family,mode}` | Calls, including invalid inputs and nested fences |
-| `privacy_checks_total{family,mode,reason}` | Allow/block/error decisions |
-| `privacy_check_reads_total{family,mode,result}` | Issued point reads, hit/miss/error |
+| `privacy_checks_total{family,mode,reason,plan_group}` | Allow/block/error decisions |
+| `privacy_check_reads_total{family,mode,result,plan_group}` | Issued point reads, hit/miss/error |
 | `privacy_conversations_walked_total{mode}` | Distinct conversation nodes walked per check |
 | `privacy_session_cycle_operations{plane,family,mode,kind}` | Completed 60-second intervals: listen after bootstrap; pusher from websocket entry, including bootstrap |
 | `privacy_shadow_checks_total{family,result}` | Match/mismatch/error denominator |

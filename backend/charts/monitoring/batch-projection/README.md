@@ -28,7 +28,7 @@ The ship-on `FIRESTORE_READ_LEVERS` lever `batch_timeliness_leader` (default 100
 `LeaderLease` role `timeliness_metrics` in `{namespace}_leases`, independent of queue
 metrics and maintenance. Its TTL covers the sampling interval (default 300 s, clamped to 60–600 s) plus a fixed 60 s
 refresh grace (default TTL 360 s, maximum 660 s for new leases). The 600 s ceiling leaves headroom below
-the <900 s freshness budget, so successful recurring samples can sustain the held-backlog page's
+the <1200 s freshness budget, so successful recurring samples can sustain the held-backlog page's
 full 15-minute pending window. Configuring 3600 s now clamps to 600 s; hourly sampling is no longer supported.
 This keeps a successful sample
 visible through normal supervised tick jitter and RPCs, preserving continuous
@@ -49,7 +49,7 @@ another replica's fresh timestamp. Lease-store errors fail open using the existi
 With `batch_timeliness_leader` enabled, each pre-epoch aggregation applies `limit(10000).count()`; a saturated value means
 **at least** 10,000 units. Post-epoch SLA counts and the oldest-unit queries retain
 their semantics. The separate `omi-batch-held-backlog-growing` page fires on assignment-held stock >1000
-with 1h growth >50, **or stock >=10,000**, with a <900 s fresh sample for 15 minutes. Each stock series is
+with 1h growth >50, **or stock >=10,000**, with a <1200 s fresh sample for 15 minutes. Each stock series is
 filtered by its own observation timestamp with `and ignoring(leg)` before taking the fleet maximum;
 only stock has the extra `leg` label. Every other replica/resource label must match. The comparison omits
 `bool` so a stale timestamp is absent from the set join. Both growth (including its 1h subquery) and
@@ -68,12 +68,48 @@ pre-epoch counts. Collection expiry remains bounded and the >=10,000 alert condi
 exact counts. No new environment key is added. The existing global
 `BATCH_PIPELINE_LEADER_LEASE_ENABLED=false` still bypasses election.
 
-The unchanged `batch-timeliness.json` rules use `max` across available series.
-Followers need not publish zeros. Freshness uses `time() - max(observed_at)` with
-`or vector(1e9)` when every sampler is absent; the stale rule retains its 900 s
-threshold and `noDataState: Alerting`. The breach rule retains its freshness gate,
-and the blind rule retains `noDataState: OK`. The separate held-backlog page adds the saturation condition
-above; its existing growth thresholds, <900 s freshness budget and 15-minute pending duration remain unchanged.
+The timeliness alert inputs join each value to its own source's observation,
+ignoring only the extra `leg` label. Before taking the fleet maximum, keep only
+sources whose observation equals the newest fleet observation. All shared
+resource labels (including namespace, job and instance) must match in the join.
+A superseded Cloud Run leader can be replayed by the bridge's 10-minute lookback
+with fresh scrape timestamps; numeric `observed_at` values, rather than scrape
+timestamps, determine which source is current. A healthy GKE successor therefore
+cannot lend freshness to the prior Cloud Run breach, or vice versa.
+
+Observation selection uses `max_over_time(observed_at[20m])` per source. The
+range retains observation values across instant-vector lookback gaps even if a
+bridge preserves old point timestamps. The sample-stale rule compares the newest
+numeric observation's age with 1200 seconds, retaining `or vector(1e9)` when all
+observations disappear, `noDataState: Alerting` and the 5-minute pending period.
+The 600-second maximum sample interval plus 60-second collection grace and up to
+180 seconds of Monitoring/offset/scrape delivery delay totals 840 seconds, leaving
+360 seconds for RPC/scheduling jitter below the 1200-second boundary. The same
+1200-second freshness condition applies to breach, held, drain, backlog and blind
+inputs; their business thresholds and pending periods stay unchanged. The blind
+rule retains `noDataState: OK`. A stopped sampler still pages after freshness
+expires; historical bridge replay cannot advance its numeric observation.
+
+Every eligible leader must have the same export coverage. Cloud Run integration uses
+`deploy/cloud_run_gmp_sync.yaml`; its GMP resource labels are
+`cluster="__run__"`, `namespace="backend-integration"` (from `K_SERVICE`) and
+`job="omi-cloud-run-application-metrics"` (the RunMonitoring name).
+GKE uses `namespace="prod-omi-backend"` and the batch worker PodMonitoring job;
+that PodMonitoring has no metric allowlist. The dev/prod sync Stackdriver exporter
+prefixes must also import the timeliness families. The Prometheus bridge scrapes
+them as `job="cloud-run-application-metrics"` and rewrites the metric names back to
+`omi_*`. Keep timeliness selectors independent of job and namespace: a production
+GKE namespace selector excludes the Cloud Run leader. For manual over-SLA
+verification, join `omi_batch_timeliness_new_over_sla_units`
+to the freshest observation as above before `max by (leg)`; this is guidance, not
+an existing live count query. No alert or recording expression
+currently consumes that count directly; the breach rule uses oldest age and
+the freshness rule uses the observation timestamp, both with fleet-wide `max`.
+`test_timeliness_metrics_are_scraped.py` derives all names from the producer's
+timeliness registration section and checks both export filters. Deployment still
+needs to qualify a sustained Cloud Run-led window in GMP and the alert datasource
+at the configured sample cadence, including freshness and both handoff directions;
+source coverage alone does not verify a live handoff.
 
 An interval reduction across a restart can wait for the previous holder's stored TTL.
 Older binaries could create a 3660 s lease under the former hourly interval contract; that stored lease

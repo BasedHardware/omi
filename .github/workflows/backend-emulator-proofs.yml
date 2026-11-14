@@ -34,6 +34,10 @@ on:
       - 'backend/utils/llm/memories.py'
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
+      - 'backend/tests/integration/test_record_custody_append_emulator.py'
+      - 'backend/tests/unit/test_record_seal_nojob_emulator.py'
+      - 'backend/testing/lifecycle_properties/**'
+      - 'backend/testing/lifecycle_sim/**'
       - 'backend/scripts/run-emulator-proofs.sh'
       - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
       - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
@@ -69,6 +73,10 @@ on:
       - 'backend/utils/llm/memories.py'
       - 'backend/models/product_memory.py'
       - 'backend/scripts/*_emulator_test.py'
+      - 'backend/tests/integration/test_record_custody_append_emulator.py'
+      - 'backend/tests/unit/test_record_seal_nojob_emulator.py'
+      - 'backend/testing/lifecycle_properties/**'
+      - 'backend/testing/lifecycle_sim/**'
       - 'backend/scripts/run-emulator-proofs.sh'
       - 'backend/tests/integration/test_summary_task_promotion_emulator.py'
       - 'backend/tests/integration/test_candidate_accept_expiry_emulator.py'
@@ -143,6 +151,14 @@ jobs:
           uv venv .venv
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install lifecycle local services
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y redis-server ffmpeg libopus0
 
       - name: Install firebase-tools
         run: npm install -g firebase-tools@15

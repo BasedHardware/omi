@@ -24,8 +24,16 @@ def held_section():
 
 def test_state_inventory_is_documented():
     # Match table keys, not incidental prose; grouping/reflow of cells is fine.
-    machines = {'batch', 'batch_projection', 'finalization', 'record_audio', 'record_audio_orphan', 'conversation'}
-    documented = set(re.findall(r'^\| `([a-z_]+:[a-z_]+)` \|', held_section(), re.MULTILINE))
+    machines = {
+        'batch',
+        'batch_projection',
+        'finalization',
+        'record_audio',
+        'record_audio_orphan',
+        'record_token',
+        'conversation',
+    }
+    documented = set(re.findall(r'^\| `([a-z_]+:[a-z_]+)`(?: \(computed\))? \|', held_section(), re.MULTILINE))
     expected = {row.key for row in STATES if row.machine in machines}
     assert documented == expected, f'Undocumented: {expected - documented}; stale: {documented - expected}'
 
@@ -62,6 +70,7 @@ def test_documented_flags_exist_in_runtime_and_registry():
 def test_documented_metrics_exist_and_expiry_alert_uses_them():
     metrics = set(re.findall(r'`((?:omi_|listen_)[a-z0-9_]+)`', held_section()))
     paths = [
+        'database/record_token_lease_metrics.py',
         'utils/metrics.py',
         'utils/batch_pipeline/metrics.py',
         'utils/batch_pipeline/vendor_route_contracts.py',

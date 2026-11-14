@@ -1318,9 +1318,10 @@ async def _send_bulk_summary_notification(
                 counters.timed_out += 1
                 daily_summary_metrics.RECIPIENTS.labels(outcome='timed_out').inc()
                 logger.error(
-                    'daily_summary_user_failed uid=%s hour=%s reason=user_budget_exceeded budget_seconds=%s',
+                    'daily_summary_user_failed uid=%s hour=%s reason=user_budget_exceeded error_type=%s budget_seconds=%s',
                     uid,
                     target_hour,
+                    type(result).__name__,
                     per_user_timeout,
                 )
                 _record_daily_summary_fallback(

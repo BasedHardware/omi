@@ -15,6 +15,8 @@ from typing import Callable, ParamSpec, TypeVar
 from prometheus_client import Counter, Gauge
 
 from database import record_audio as record_audio_db
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
 from utils.executors import ExecutorSaturatedError, record_barrier_executor, run_blocking, track_executor_future
 from utils.observability.fallback import record_fallback
 
@@ -214,11 +216,16 @@ class PusherRecordBarrier:
         self.record_upload_failed = False
         self.failed_recordings: set[str] = set()
         self.upload_sessions: dict[str, str] = {}
+        self.registered_sessions: set[str] = set()
+        self.late_appends: set[str] = set()
         self.checked_conversations: set[str] = set()
         self.pending_clears: set[tuple[str, str]] = set()
         self.close_failures: dict[str, int] = {}
         self.close_retry_at: dict[str, float] = {}
         self.keep_close_pending = False
+        self.lease_renewed_at: dict[str, float] = {}
+        self.lease_locks: dict[str, asyncio.Lock] = {}
+        self.lease_renewal_failed: set[str] = set()
 
     def _close_failed(self, conversation_id: str, stage: str) -> bool:
         _record_failure(stage)
@@ -306,6 +313,8 @@ class PusherRecordBarrier:
             # registration response. Abandon's transaction tolerates absent tokens.
             self.upload_sessions[conversation_id] = token
             registry.remember(self.uid, conversation_id, token, mint_order=mint_order)
+            began_at = time.monotonic()
+            observed = {}
             if await run_blocking(
                 record_barrier_executor,
                 record_audio_db.set_record_upload_pending,
@@ -314,7 +323,18 @@ class PusherRecordBarrier:
                 token,
                 True,
                 producer=producer_identity(),
+                **({'late_observation': observed} if lease.token_lease_mode() != 'off' else {}),
             ):
+                if conversation_id in self.failed_recordings:
+                    return
+                self.registered_sessions.add(conversation_id)
+                if observed.get('late'):
+                    self.late_appends.add(conversation_id)
+                if lease.token_lease_mode() != 'off':
+                    # A delayed commit response must not make an old lease
+                    # look newly renewed to the receive/projection cache.
+                    self.lease_renewed_at[conversation_id] = began_at
+                    lease_metrics.ACTIVE.inc()
                 return
             self.upload_sessions.pop(conversation_id, None)
             registry.forget(self.uid, conversation_id, token)
@@ -325,6 +345,74 @@ class PusherRecordBarrier:
             # Metadata outages must not interrupt the audio custody lane.
             _record_failure('begin')
             await self.fail_recording(conversation_id)
+
+    async def renew_recording(self, conversation_id: str) -> bool:
+        """Frame-bearing receive/projection batches only; no idle socket timer."""
+        if (
+            lease.token_lease_mode() == 'off'
+            or conversation_id not in self.upload_sessions
+            or conversation_id in self.failed_recordings
+            or conversation_id not in self.registered_sessions
+        ):
+            return conversation_id not in self.lease_renewal_failed
+        now = time.monotonic()
+        if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+            return conversation_id not in self.lease_renewal_failed
+        # Receive and projection are concurrent tasks on this socket. Both must
+        # await the same committed fence, rather than double-renew or let the
+        # second appender pass while the first metadata write is still pending.
+        async with self.lease_locks.setdefault(conversation_id, asyncio.Lock()):
+            if (
+                lease.token_lease_mode() == 'off'
+                or conversation_id not in self.upload_sessions
+                or conversation_id in self.failed_recordings
+                or conversation_id not in self.registered_sessions
+            ):
+                return conversation_id not in self.lease_renewal_failed
+            now = time.monotonic()
+            if now - self.lease_renewed_at.get(conversation_id, float('-inf')) < lease.token_lease_seconds() / 2:
+                return conversation_id not in self.lease_renewal_failed
+            observed = {}
+            try:
+                await run_blocking(
+                    record_barrier_executor,
+                    record_audio_db.renew_record_token_lease,
+                    self.uid,
+                    conversation_id,
+                    source='frames',
+                    session=self.upload_sessions[conversation_id],
+                    producer=producer_identity(),
+                    late_observation=observed,
+                )
+            except Exception:
+                # Retain/requeue this batch before storage can accept and clear
+                # it. Keep the old clock so the next attempt retries metadata.
+                self.lease_renewal_failed.add(conversation_id)
+                _record_failure('renew')
+                return False
+            if conversation_id not in self.registered_sessions or conversation_id in self.failed_recordings:
+                return False  # A concurrent failed drain already retired local lease ownership.
+            if observed.get('late'):
+                self.late_appends.add(conversation_id)
+            if conversation_id not in self.lease_renewed_at:
+                lease_metrics.ACTIVE.inc()
+            self.lease_renewed_at[conversation_id] = now
+            self.lease_renewal_failed.discard(conversation_id)
+            return True
+
+    def append_committed(self, conversation_id, *, observed=True):
+        """A successful durable window/object owns the late-append event."""
+        if observed and conversation_id in self.late_appends:
+            self.late_appends.remove(conversation_id)
+            lease_metrics.LATE_APPEND.inc()
+
+    def _forget_lease(self, conversation_id):
+        self.registered_sessions.discard(conversation_id)
+        self.lease_renewal_failed.discard(conversation_id)
+        self.late_appends.discard(conversation_id)
+        self.lease_locks.pop(conversation_id, None)
+        if self.lease_renewed_at.pop(conversation_id, None) is not None:
+            lease_metrics.ACTIVE.dec()
 
     async def finish_recording(self, conversation_id: str) -> bool:
         """Return whether settled (or the legacy bounded retry budget exhausted).
@@ -363,6 +451,7 @@ class PusherRecordBarrier:
                 registry.forget(self.uid, conversation_id, token)
                 if self.upload_sessions.get(conversation_id) == token:
                     self.upload_sessions.pop(conversation_id, None)
+                    self._forget_lease(conversation_id)
                 else:
                     logger.info('event=record_tokens_recleared count=1')
         except _CloseAdmissionRefused:
@@ -428,6 +517,7 @@ class PusherRecordBarrier:
             self.pending_clears.discard((cid, token))
             if self.upload_sessions.get(cid) == token:
                 self.upload_sessions.pop(cid, None)
+                self._forget_lease(cid)
 
     def _close_admission_refused(self, conversation_id: str) -> bool:
         # The drain loop already yields between scans. A positive, jittered
@@ -447,6 +537,7 @@ class PusherRecordBarrier:
 
     async def fail_recording(self, conversation_id: str) -> None:
         self.hold_recording(conversation_id)
+        self._forget_lease(conversation_id)
         # Terminal loss must not become recoverable if its durable failure
         # marker is unavailable. The persisted producer remains the fence.
         token = self.upload_sessions.get(conversation_id)

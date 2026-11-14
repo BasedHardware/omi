@@ -244,6 +244,10 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
         fields = [c["selector"] for c in target["columns"]]
         self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
+        # the sidecar emits the UTC day as epoch milliseconds; a plain "timestamp" column parses
+        # that to null and the panel reads "Data outside time range"
+        date_col = next(c for c in target["columns"] if c["selector"] == "date")
+        self.assertEqual(date_col["type"], "timestamp_epoch")
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
         hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
@@ -280,6 +284,10 @@ class WallV2Contract(unittest.TestCase):
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertEqual(panel["fieldConfig"]["defaults"]["unit"], "percent")
         self.assertTrue(custom["axisCenteredZero"])
+        # An empty frame names its cause; "Loading…" would read as a stuck query.
+        self.assertEqual(panel["fieldConfig"]["defaults"]["noValue"],
+                         "No day in the last 35 has both plan cost and revenue")
+        self.assertEqual(panel["timeFrom"], "35d")  # MARGIN_DAYS in lib/wall-series.ts
         self.assertFalse(custom["spanNulls"])
         self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
         # Tooltip rows: drawn invisibly on their own hidden scale (Grafana 13 drops

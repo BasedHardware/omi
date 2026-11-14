@@ -15,6 +15,7 @@ class SyncAssignmentConflictReason(StrEnum):
     SIZE_CAP_ROLLOVER_UNAVAILABLE = 'size_cap_rollover_unavailable'
     CORRECTED_SPEECH_CHANGED = 'corrected_speech_changed'
     BRIDGE_SOURCE_NOT_TOMBSTONE = 'bridge_source_not_tombstone'
+    CONTAINED_DONOR_NOT_CONTAINED = 'contained_donor_not_contained'
     LIVE_TARGET_NOT_PERSISTED = 'live_target_not_persisted'
     LINEAGE_OWNERSHIP_AMBIGUOUS = 'lineage_ownership_ambiguous'
     RECORD_TARGET_MISSING = 'record_target_missing'
@@ -38,6 +39,7 @@ SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL = frozenset(
         SyncAssignmentConflictReason.ANCESTRY_FLATTEN_REJECTED.value,
         SyncAssignmentConflictReason.SIZE_CAP_ROLLOVER_UNAVAILABLE.value,
         SyncAssignmentConflictReason.CORRECTED_SPEECH_CHANGED.value,
+        SyncAssignmentConflictReason.CONTAINED_DONOR_NOT_CONTAINED.value,
         SyncAssignmentConflictReason.RECORD_TARGET_RETIRED.value,
         SyncAssignmentConflictReason.RECORD_ROUTE_OWNER_CHANGED.value,
         SyncAssignmentConflictReason.RECORD_PRIVACY_CHANGED.value,

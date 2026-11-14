@@ -130,7 +130,7 @@ def test_historical_debt_cannot_hide_fresh_work_behind_the_admission_cap(monkeyp
     monkeypatch.setattr(repair, 'repair_enabled', lambda: True)
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(repair.delivery, 'refusal', lambda *_: None)
-    monkeypatch.setattr(repair, 'due_conversations', lambda *_args, **_kwargs: page)
+    monkeypatch.setattr(repair, 'due_conversations', lambda *_, phase, **__: page if phase == 'newest' else [])
     redrive = Mock(return_value=True)
     monkeypatch.setattr(repair, 'redrive', redrive)
     assert repair.tick(now=now, client=StrictFirestore()) == {
@@ -138,6 +138,7 @@ def test_historical_debt_cannot_hide_fresh_work_behind_the_admission_cap(monkeyp
         'admitted': 1,
         'errors': 0,
         'expired_seen': 99,
+        'near_expiry_admitted': 0,
     }
     assert redrive.call_args.args[1:] == ('u', 'fresh')
     redrive.assert_called_once()

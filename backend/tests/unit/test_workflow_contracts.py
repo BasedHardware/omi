@@ -118,6 +118,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
         ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
+        ".github/workflows/gcp_diarizer.yml": "tests/unit/test_record_seal_cluster_repair_deploy.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
     }
@@ -132,6 +133,23 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         assert expected_test in selected, source_path
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/charts/backend-secrets/templates/metrics-scrape-token.yaml',
+        'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml',
+        'backend/charts/pusher/templates/podmonitoring.yaml',
+        'backend/charts/backend-listen/templates/collector-rbac.yaml',
+    ],
+)
+def test_monitoring_sources_select_scrape_auth_contracts(selector_and_all_tests, source):
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
+    assert 'tests/unit/test_serving_podmonitoring_chart.py' in selected
+    assert 'tests/unit/test_backend_secrets_chart.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
 
 
 def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
@@ -1517,6 +1535,7 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
     'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',

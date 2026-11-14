@@ -34,6 +34,14 @@ def recovery_minimum_terminal_enabled() -> bool:
     }
 
 
+def recovery_empty_structure_minimum_enabled() -> bool:
+    """Kill switch (on unless set off) for completing a keep verdict whose enrichment returned nothing."""
+    value = os.getenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED')
+    if value is None:
+        return True
+    return value.strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
 def _field(structured: Any, name: str) -> Any:
     if isinstance(structured, Mapping):
         return structured.get(name)

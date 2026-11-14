@@ -6,6 +6,7 @@ import math
 from config.record_audio import restore_pending
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
+from utils.conversations.summary_delivery import stamp_projection_debt
 from utils.manual_speaker_assignments import (
     apply_manual_assignments,
     manual_assignment_decision,
@@ -141,6 +142,11 @@ def replace_record(
     finish = incoming.get('finished_at')
     if finish is not None and (result.get('finished_at') is None or finish > result['finished_at']):
         result['finished_at'] = finish
+    if new:
+        # A batch row that completes with no title never passes through the
+        # server-minimum intake path, so the projection is the only write that
+        # can stamp the first-summary debt Home and the repair read.
+        stamp_projection_debt(result)
     return result, new
 
 

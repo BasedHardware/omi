@@ -1790,7 +1790,11 @@ def _ledger_gate_conversation(conversation_id: str) -> Conversation:
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='hello there, this is a transcript segment',
+                text=(
+                    'hello there, this is a transcript segment with enough owner speech '
+                    'to clear the memory admission floor and reach the extraction boundary '
+                    'for the writer-mode admission tests that follow it here'
+                ),
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,

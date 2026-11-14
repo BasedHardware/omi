@@ -172,16 +172,23 @@ def test_conversation_and_person_delete_remove_sealed_evidence(db):
     assert ('users', 'u', store.COLLECTION, 'v') not in db.rows
 
 
-def test_real_assignment_transaction_binds_and_rejection_clears_authority(db, monkeypatch):
+@pytest.fixture(scope='module')
+def conversation_db():
+    # Dependency startup belongs to setup; the call-phase CPU guard should
+    # measure the real assignment/rejection transactions and their assertions.
     from database import conversations
 
-    monkeypatch.setattr(conversations, 'get_firestore_client', lambda: db)
+    return conversations
+
+
+def test_real_assignment_transaction_binds_and_rejection_clears_authority(db, monkeypatch, conversation_db):
+    monkeypatch.setattr(conversation_db, 'get_firestore_client', lambda: db)
     db.rows[('users', 'u', 'conversations', 'c1')]['transcript_segments'] = segments()
-    raw, resolved, *_ = conversations.assign_conversation_speaker('u', 'c1', person_id='p', segment_ids=['s1'])
+    raw, resolved, *_ = conversation_db.assign_conversation_speaker('u', 'c1', person_id='p', segment_ids=['s1'])
     assert resolved == ['s1'] and raw['transcript_segments'][0]['person_id'] == 'p'
     profile = store.open_profile('u', 'v', db.rows[('users', 'u', store.COLLECTION, 'v')]['sealed'])
     assert profile['bound_person_id'] == 'p'
-    conversations.assign_conversation_speaker(
+    conversation_db.assign_conversation_speaker(
         'u',
         'c1',
         segment_ids=['s1'],

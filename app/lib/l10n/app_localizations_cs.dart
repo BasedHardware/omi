@@ -9174,6 +9174,24 @@ class AppLocalizationsCs extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Nelze určit aktuální verzi firmwaru';
 
   @override
+  String get applyCodeToCurrentPlan => 'Použít na aktuální tarif';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kód byl použit na váš aktuální tarif.',
+        'refused': 'Tento kód nelze použít. Zkontrolujte kód a požadovaný tarif.',
+        'conflict': 'Kód již byl použit nebo váš tarif již má slevu.',
+        'rateLimited': 'Příliš mnoho pokusů. Počkejte a zkuste to později.',
+        'other': 'Kód se nepodařilo použít. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promo kód';
 
   @override
@@ -13654,6 +13672,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Znovu vytvořit poznámky';
+
+  @override
   String get attentionSummaryFailed => 'Tuto konverzaci se nepodařilo shrnout';
 
   @override
@@ -15376,6 +15397,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaše karta byla zamítnuta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Aktualizujte kartu, nebo obnovte $plan za $price měsíčně';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Aktualizujte kartu a obnovte $plan';
   }
@@ -15400,4 +15426,31 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Přejít na měsíční';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price měsíčně';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nahrazuje nezaplacenou roční platbu $yearly. Obnovuje se měsíčně. Zrušit můžete kdykoli.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Platba byla zamítnuta. Váš plán se nezměnil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Přechod teď není dostupný. Aktualizujte místo toho kartu.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Teď platíte měsíčně';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Dnes zaplaceno $price. Obnovuje se měsíčně.';
+  }
 }

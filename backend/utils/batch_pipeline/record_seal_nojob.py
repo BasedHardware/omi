@@ -25,6 +25,10 @@ from utils.batch_pipeline.record_seal_repair import (
     observe_orphan_parked,
 )
 
+from utils.batch_pipeline.record_producer_proof import leases_would_release
+from database import record_token_lease_metrics as lease_metrics
+from config import record_seal_rules as lease
+
 OPERATION = 'record-seal-nojob-v1'
 REGISTRATION_FIELDS = ('source', 'language', 'client_device_id', 'client_platform', 'uses_custom_stt', 'external_data')
 
@@ -94,7 +98,7 @@ class RegistrationPlan:
         self.job = value
 
 
-def refusal(row, producer_proof, *, repair_upload_failed=False):
+def refusal(row, producer_proof, *, uid=None, repair_upload_failed=False):
     if row.get('record_lane_owner') != 'batch_live_v1':
         return 'not_batch_owned'
     if row.get('uses_custom_stt') or row.get('data_protection_level') not in {None, 'standard', 'enhanced'}:
@@ -104,7 +108,7 @@ def refusal(row, producer_proof, *, repair_upload_failed=False):
         return 'upload_pending'
     # Never offer a producers-stopped escape hatch: token rows need pod proof.
     return seal_refusal(
-        {'state': 'record_pending', 'record_content_id': 'candidate'},
+        {'state': 'record_pending', 'record_content_id': 'candidate', 'owner_id': uid},
         row,
         producer_proof=producer_proof,
         repair_upload_failed=repair_upload_failed,
@@ -167,7 +171,7 @@ def plan_backfill(
                 if snapshot.exists:
                     observation.update(job=snapshot.to_dict() or {}, row=row)
                     return row, None, 'already_registered'
-                reason = refusal(row, producer_proof, repair_upload_failed=repair_upload_failed)
+                reason = refusal(row, producer_proof, uid=uid, repair_upload_failed=repair_upload_failed)
                 if reason:
                     return row, None, reason
                 return row, registration(tx, uid, cid, row, server_flags), None
@@ -176,6 +180,14 @@ def plan_backfill(
             observe_existing_orphan(observation, producer_proof, repair_upload_failed=repair_upload_failed)
             if reason:
                 entry['disposition'] = reason
+                if reason == 'upload_pending' and leases_would_release(
+                    row.get('record_upload_sessions'),
+                    producer_proof,
+                    uid=uid,
+                    row=row,
+                ):
+                    entry['lease_reason'] = 'lease_would_expire'
+                    lease_metrics.EXPIRED_WOULD.inc()
             else:
                 proof = retained_tail_proof(job, row, storage_client, artifacts, diagnostics=diagnostics)
                 # Refusals grant no write authority. Do not bind their volatile
@@ -239,7 +251,9 @@ def apply_backfill(store, plan, approved_digest):
                 return 'already_registered'
             if row_state(row) != entry['row']:
                 return 'state_changed'
-            reason = refusal(row, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False))
+            reason = refusal(
+                row, plan['producer_proof'], uid=uid, repair_upload_failed=plan.get('repair_upload_failed', False)
+            )
             if reason:
                 observation.update(job=entry['job'], row=row)
                 return reason
@@ -260,7 +274,19 @@ def apply_backfill(store, plan, approved_digest):
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed_registered'
 
         try:
-            outcomes[run_transactional(store.client, commit, transient=True)] += 1
+            result = run_transactional(store.client, commit, transient=True)
+            outcomes[result] += 1
+            if (
+                result in {'sealed_registered', 'upload_failed_cleared'}
+                and lease.token_lease_serving(uid)
+                and leases_would_release(
+                    entry['row'].get('record_upload_sessions'),
+                    plan['producer_proof'],
+                    uid=uid,
+                    row=entry['row'],
+                )
+            ):
+                lease_metrics.EXPIRED_SEALED.inc()
             observe_existing_orphan(
                 observation, plan['producer_proof'], repair_upload_failed=plan.get('repair_upload_failed', False)
             )

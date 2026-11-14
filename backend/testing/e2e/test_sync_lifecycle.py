@@ -6,6 +6,7 @@ import time
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -161,7 +162,11 @@ def _patch_sync_pipeline(
     monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
     monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
     monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 1.25)
-    monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
+    monkeypatch.setattr(
+        sync_router,
+        "resolve_transcription_allowance",
+        lambda uid: SimpleNamespace(managed=True, reason="plan_within_allowance"),
+    )
     monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
     monkeypatch.setattr(sync_pipeline, "get_syncing_file_temporal_signed_url", lambda path: path)
     monkeypatch.setattr(sync_pipeline, "prerecorded", fake_prerecorded)

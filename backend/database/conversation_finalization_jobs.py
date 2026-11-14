@@ -1634,7 +1634,7 @@ def mark_finalization_retryable(
 # a deliberate immediate-terminal policy ("a retry gives the same answer",
 # database/conversation_terminal_title.py SUMMARY_RETRYABLE_FAILURE_CODES), and
 # an unidentifiable job must not re-run a budget on garbage.
-NEVER_REQUEUE_CAUSES = frozenset({'recovery_structure_unavailable', 'invalid_job'})
+NEVER_REQUEUE_CAUSES = frozenset({'recovery_structure_unavailable', 'invalid_job', 'deterministic_processing_failed'})
 
 
 def _grant_finalization_budget_requeue_txn(

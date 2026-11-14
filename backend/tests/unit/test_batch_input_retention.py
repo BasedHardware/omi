@@ -10,6 +10,8 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
 from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import scheduler_control_key
@@ -423,8 +425,7 @@ def test_warning_rule_threshold_freshness_route_and_pending_period():
     )
     assert json.loads((BACKEND / 'charts/monitoring/alerts/batch-input-retention.json').read_text()) == [rule]
     assert rule['data'][0]['model']['expr'] == (
-        'max(omi_batch_held_oldest_age_seconds{leg="staged_input"} and ignoring(leg) '
-        '(time() - omi_batch_timeliness_observed_at_seconds < 900))'
+        'max(omi_batch_held_oldest_age_seconds{leg="staged_input"} and ignoring(leg) ' f'{FRESH_NEWEST})'
     )
     for age in (WARNING_SECONDS - 1, WARNING_SECONDS, WARNING_SECONDS + 1):
         assert b.evaluate(rule, {'A': {(): [age]}}) == {(): float(age > WARNING_SECONDS)}

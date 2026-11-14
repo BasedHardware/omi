@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-skip-reason-only-in-ephemeral-log",
+  "violated_contract": "An optional pull that records status=skipped must make its reason readable from the durable log surface the operator actually reads. pull_vendor_balance.py wrote the reason into the run's pull.log and the daily job copied only 'Soniox balance snapshot unavailable; see pull.log' onto stderr; on Cloud Run the run directory is ephemeral, so the one line that survived said a skip happened and nothing about why. Every transport and shape failure also collapsed into reason=error, so even a surviving artifact could not distinguish a missing key from a 401, a redirect, an HTTP status or a malformed body. The Soniox balance line stayed on a dated console constant for weeks with no diagnosable cause.",
+  "canonical_prevention": "A skip path writes a bounded, enumerated reason token (never free text, a URL, a header, a response body or an account value) into the artifact and onto the process stderr, and the orchestrator re-validates that token against the same fixed vocabulary before copying it to its own log. A hermetic test drives each skip branch and asserts the token appears where expected while a sentinel secret and a raw response body never appear in captured output.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_finops_vendor_balance.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/finops/"
+  ],
+  "status": "open"
+}

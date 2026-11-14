@@ -23,6 +23,7 @@ from database.batch_pipeline_projection_release import (
     release_scan_pass,
 )
 from database.batch_pipeline_store import projection_page
+from scripts import reconcile_batch_projection_ghost_holds as repair_module
 from scripts.reconcile_batch_projection_ghost_holds import reconcile
 from tests.integration.test_batch_pipeline_projection_firestore import lane
 from utils.batch_pipeline.contracts import ProjectionBinding
@@ -196,7 +197,16 @@ def test_completed_assignment_receipt_cannot_expire(holds, monkeypatch, enabled,
     assert projection.ref('jobs', segment).get().to_dict() == before['jobs']
     assert projection.ref('results', segment).get().to_dict() == {
         **before['results'],
-        **({'projection_state': 'ready', 'ghost_settled_cohort': 'g1'} if settled else {}),
+        **(
+            {
+                'projection_state': 'ready',
+                'ghost_settled_cohort': 'g1',
+                'projection_finish_due_at': NOW,
+                'projection_finish_backoff_step': 0,
+            }
+            if settled
+            else {}
+        ),
     }
 
 
@@ -213,7 +223,10 @@ def test_expected_gap_cannot_hide_scan_failures(holds, monkeypatch, caplog, fail
         scan(holds, NOW, caplog)
 
 
-def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds):
+def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds, monkeypatch):
+    script_clock = Mock(wraps=repair_module.time)
+    script_clock.time.return_value = NOW
+    monkeypatch.setattr(repair_module, 'time', script_clock)
     before_results, before_jobs = snapshot(holds, 'results'), snapshot(holds, 'jobs')
     dry = reconcile(holds.client, holds.store.namespace, batch_size=1)
     assert dry == dict(scanned=5, matched=2, updated=0, conflicts=0, errors=0, deadline_reached=0)
@@ -221,7 +234,14 @@ def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds):
     applied = reconcile(holds.client, holds.store.namespace, apply=True, batch_size=1)
     assert applied == {**dry, 'updated': 2}
     assert snapshot(holds, 'results') == {
-        segment: {**row, **({'projection_state': 'ready'} if segment in GHOSTS else {})}
+        segment: {
+            **row,
+            **(
+                {'projection_state': 'ready', 'projection_finish_due_at': NOW, 'projection_finish_backoff_step': 0}
+                if segment in GHOSTS
+                else {}
+            ),
+        }
         for segment, row in before_results.items()
     }
     assert snapshot(holds, 'jobs') == before_jobs
@@ -284,7 +304,12 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
     committed_at = ready['committed_at']
     counts, _ = release_scan_pass(lane.projector.store, limit=RELEASE_PAGE, after_id=None, now=committed_at + 86400)
     assert counts['ghost_settled'] == 1
-    assert ref.get().to_dict() == {**ready, 'ghost_settled_cohort': 'g1'}
+    assert ref.get().to_dict() == {
+        **ready,
+        'ghost_settled_cohort': 'g1',
+        'projection_finish_due_at': committed_at + 86400,
+        'projection_finish_backoff_step': 0,
+    }
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
     # Drive the ordinary ready-receipt replay path, including the real ledger,
     # accounting and acknowledgement transactions. Only external publication

@@ -30,6 +30,7 @@ from utils.batch_pipeline.contracts import (
     ValidationFailureWork,
 )
 from utils.batch_pipeline.contracts import Priority
+from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env, failure_outcome
@@ -103,6 +104,7 @@ class Pump:
         ):
             raise ValueError('invalid bounded pump configuration')
         self.scheduler = scheduler
+        self.ready_discovery = ReadyDiscovery(scheduler.store, 'gpu_pump')
         self.worker = worker
         self.merge = merge or OrderedMerge(scheduler.store, metrics=metrics, commit_source='gpu_pump')
         self.metrics = metrics
@@ -293,14 +295,28 @@ class Pump:
                 if self.project_pending:
                     await self._run_blocking('projection', sync_executor, self.project_pending)
                 await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
-                ready = await self._run_blocking(
-                    'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
-                )
-                try:
-                    await self._drain_ready_owners(ready)
-                except Exception as error:
-                    # A fenced head on the page must not stop the held-owner re-offer below.
-                    self._log_held_retry('ready_page', error)
+                page = await self._run_blocking('maintenance', db_executor, self.ready_discovery.page)
+                if page is not None:
+                    while owner := await self._run_blocking(
+                        'maintenance', db_executor, self.ready_discovery.next_owner, page
+                    ):
+                        _, owner_id = owner
+                        try:
+                            if owner_id:
+                                await self.drain_owner(owner_id)
+                        except Exception as error:
+                            self._log_held_retry('ready_cursor', error)
+                if page is None or not await self._run_blocking(
+                    'maintenance', db_executor, self.ready_discovery.finish, page
+                ):
+                    ready = await self._run_blocking(
+                        'maintenance', db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100
+                    )
+                    try:
+                        await self._drain_ready_owners(ready)
+                    except Exception as error:
+                        # A fenced head on the page must not stop the held-owner re-offer below.
+                        self._log_held_retry('ready_page', error)
                 # Durable hold markers outlive the in-memory set below (restarts).
                 marked = await self._run_blocking('maintenance', db_executor, self.merge.marked_page, 50)
                 for key, owner_id in marked:
