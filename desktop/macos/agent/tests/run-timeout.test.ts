@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
+import type { OpenedBinding, OpenBindingInput } from "../src/adapters/interface.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
@@ -27,6 +28,47 @@ class HangingBindAdapter extends FakeRuntimeAdapter {
   ): ReturnType<FakeRuntimeAdapter["openBinding"]> {
     this.bindAttempts += 1;
     return new Promise(() => {});
+  }
+}
+
+/**
+ * A fake adapter whose `stop()` never returns, modelling an ACP subprocess
+ * that ignores SIGTERM.
+ */
+class HangingStopAdapter extends FakeRuntimeAdapter {
+  stopStarted = 0;
+
+  override async stop(): Promise<void> {
+    this.stopStarted += 1;
+    await new Promise(() => {});
+  }
+}
+
+/**
+ * A fake adapter whose `session/new` answers only when the test releases it,
+ * modelling a reply that lands after the run deadline.
+ */
+class LateBindAdapter extends FakeRuntimeAdapter {
+  bindAttempts = 0;
+  private resolveBind!: (binding: OpenedBinding) => void;
+  private readonly bindGate = new Promise<OpenedBinding>((resolve) => {
+    this.resolveBind = resolve;
+  });
+
+  override async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    this.bindAttempts += 1;
+    this.opened.push(input);
+    return this.bindGate;
+  }
+
+  completeBind(): void {
+    this.resolveBind({
+      sessionId: "late-session",
+      adapterId: this.adapterId,
+      adapterNativeSessionId: "native-late",
+      resumeFidelity: "native",
+      cwd: "/tmp/work",
+    });
   }
 }
 
@@ -105,6 +147,69 @@ describe("AgentRuntimeKernel run deadline", () => {
     expect(result.run.errorCode).toBe("run_timed_out");
     expect(result.attempt.status).toBe("timed_out");
     expect(result.run.completedAtMs).toEqual(expect.any(Number));
+    store.close();
+  });
+
+  it("terminalizes the run before a hung adapter stop returns, and bounds the stop wait", async () => {
+    const previousStopTimeout = process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS;
+    process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS = "150";
+    try {
+      const adapter = new HangingStopAdapter("fake");
+      const { store, kernel } = createKernelHarness(
+        newDatabasePath(),
+        "fake",
+        1,
+        undefined,
+        undefined,
+        () => adapter,
+      );
+      adapter.deferResult();
+
+      const running = kernel.executeRun({ ...baseRunInput, timeoutMs: 200 });
+      await waitUntil(() => adapter.executed.length === 1);
+      await waitUntil(() => adapter.stopStarted === 1);
+
+      // `stop()` is still pending here: the run must already be terminal so
+      // its tool authority is revoked instead of waiting on subprocess exit.
+      expect(store.getRow("SELECT status FROM runs").status).toBe("timed_out");
+      expect(store.getRow("SELECT status FROM run_attempts").status).toBe("timed_out");
+
+      // The bounded stop wait lets the caller finish even though the adapter
+      // never exits; the worker stays quarantined (removed from the pool).
+      const result = await running;
+      expect(result.run.status).toBe("timed_out");
+      expect(result.run.errorCode).toBe("run_timed_out");
+      store.close();
+    } finally {
+      if (previousStopTimeout === undefined) {
+        delete process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS;
+      } else {
+        process.env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS = previousStopTimeout;
+      }
+    }
+  });
+
+  it("discards a binding that resolves after the run deadline", async () => {
+    const adapter = new LateBindAdapter("fake");
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "fake",
+      1,
+      undefined,
+      undefined,
+      () => adapter,
+    );
+
+    const result = await kernel.executeRun({ ...baseRunInput, timeoutMs: 150 });
+    expect(result.run.status).toBe("timed_out");
+    expect(adapter.bindAttempts).toBe(1);
+
+    // `session/new` answers only now, after the run is already terminal. The
+    // late result must not be published as an active binding.
+    adapter.completeBind();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(store.allRows("SELECT binding_id FROM adapter_bindings")).toHaveLength(0);
     store.close();
   });
 

@@ -22,6 +22,22 @@ export function configuredPiMonoMaxWorkers(env = process.env): number {
   return parsed;
 }
 
+/**
+ * Upper bound on how long a recycled worker's `adapter.stop()` may block the
+ * caller. A subprocess that ignores SIGTERM must not keep a terminal run's
+ * caller (and its tool leases) waiting; the worker is already removed from the
+ * pool, so a timed-out stop leaves it quarantined rather than reusable.
+ */
+export const DEFAULT_WORKER_STOP_TIMEOUT_MS = 5_000;
+
+export function configuredWorkerStopTimeoutMs(env = process.env): number {
+  const raw = env.OMI_AGENT_WORKER_STOP_TIMEOUT_MS;
+  if (!raw) return DEFAULT_WORKER_STOP_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_WORKER_STOP_TIMEOUT_MS;
+  return parsed;
+}
+
 export class AdapterWorker {
   readonly workerId: string;
   readonly adapter: RuntimeAdapter;
@@ -140,6 +156,8 @@ interface WorkerLeaseOptions {
   protectPinnedBindingAfterWork?: boolean;
   recycleWorkerOnError?: boolean;
   shouldRecycleWorkerOnError?: (error: unknown) => boolean;
+  /** Overrides `OMI_AGENT_WORKER_STOP_TIMEOUT_MS` for this lease. */
+  stopTimeoutMs?: number;
   onWorkerBindingInvalidated?: (bindingId: string | null) => void;
   onWorkerRecycled?: (
     bindingId: string | null,
@@ -299,7 +317,10 @@ export class AdapterWorkerPool {
       }
       let stopSucceeded = true;
       try {
-        await worker.adapter.stop();
+        await this.stopWorkerBounded(
+          worker.adapter,
+          options.stopTimeoutMs ?? configuredWorkerStopTimeoutMs(),
+        );
       } catch {
         stopSucceeded = false;
       }
@@ -324,6 +345,33 @@ export class AdapterWorkerPool {
         this.protectPinnedBinding(worker.idlePinnedBindingId);
       }
       this.drainWaiters();
+    }
+  }
+
+  /**
+   * Awaits `adapter.stop()` but never longer than `timeoutMs`. The worker has
+   * already been removed from the pool, so a timed-out stop leaves it
+   * quarantined; the caller only needs to stop waiting on it.
+   */
+  private async stopWorkerBounded(adapter: RuntimeAdapter, timeoutMs: number): Promise<void> {
+    if (timeoutMs <= 0) {
+      await adapter.stop();
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        adapter.stop(),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Adapter stop exceeded ${timeoutMs}ms`)),
+            timeoutMs,
+          );
+          timer.unref?.();
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 

@@ -222,6 +222,18 @@ export class RunDeadlineExceededError extends Error {
   }
 }
 
+/**
+ * Raised when a binding resolution finishes after the run it belonged to went
+ * terminal. The result is discarded instead of being published as an active
+ * binding, so a later run cannot resume a native session whose worker is gone.
+ */
+export class AbandonedBindingError extends Error {
+  constructor() {
+    super("Binding resolution was abandoned because the run is already terminal");
+    this.name = "AbandonedBindingError";
+  }
+}
+
 function externalSurfacePromptIsSynthetic(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object") return false;
   const external = (metadata as Record<string, unknown>).externalSurface;
@@ -1274,6 +1286,10 @@ export class KernelCore {
       let bindingResolutionProtectedBindingId: string | null = null;
       let adapterDispatchStarted = false;
       let bindingTimedOut = false;
+      // Set when the deadline abandons binding resolution. The abandoned
+      // `openBinding`/`resumeBinding` promise keeps running, so it must be
+      // fenced from publishing a binding for a run that is already terminal.
+      let bindingAbandoned = false;
       try {
         assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
@@ -1288,6 +1304,7 @@ export class KernelCore {
               const remainingMs = runDeadlineAtMs === null ? null : runDeadlineAtMs - Date.now();
               if (remainingMs !== null && remainingMs <= 0) {
                 bindingTimedOut = true;
+                bindingAbandoned = true;
                 throw new RunDeadlineExceededError(runTimeoutMs);
               }
               const resolution = this.resolveBindingForAttempt({
@@ -1296,6 +1313,7 @@ export class KernelCore {
                 adapter: worker.adapter,
                 attempt,
                 adapterId,
+                isAbandoned: () => bindingAbandoned || this.isTerminalRun(accepted.run.runId),
               });
               const resolved = remainingMs === null
                 ? await resolution
@@ -1304,6 +1322,23 @@ export class KernelCore {
                     remainingMs,
                     onDeadline: () => {
                       bindingTimedOut = true;
+                      bindingAbandoned = true;
+                      // Terminalize before the pool awaits `adapter.stop()`.
+                      // A slow or hung subprocess must not keep the run
+                      // `starting` with live tool authority while shutdown is
+                      // pending.
+                      try {
+                        this.finishRunAsTimedOut({
+                          sessionId: accepted.session.sessionId,
+                          runId: accepted.run.runId,
+                          attemptId: attempt.attemptId,
+                          adapterId,
+                          timeoutMs: runTimeoutMs,
+                        });
+                      } catch {
+                        // The catch path retries terminalization after the
+                        // race rejects; never throw out of a timer callback.
+                      }
                       return new RunDeadlineExceededError(runTimeoutMs);
                     },
                   });
@@ -1371,6 +1406,12 @@ export class KernelCore {
             adapterId,
             timeoutMs: runTimeoutMs,
           });
+          break;
+        }
+        if (error instanceof AbandonedBindingError) {
+          // The run went terminal while binding resolution was in flight. The
+          // terminal transition already owns the outcome; the late binding was
+          // discarded rather than published.
           break;
         }
         if (input.authoritySignal?.aborted) {
@@ -1520,6 +1561,22 @@ export class KernelCore {
             onDeadline: () => {
               timedOut = true;
               const error = new RunDeadlineExceededError(runTimeoutMs);
+              // Terminalize immediately, before the worker-pool recycling path
+              // awaits `adapter.stop()`. A subprocess that ignores SIGTERM (or
+              // shuts down slowly) must not keep the run `running` with live
+              // tool authority while shutdown is pending.
+              try {
+                this.finishRunAsTimedOut({
+                  sessionId: accepted.session.sessionId,
+                  runId: accepted.run.runId,
+                  attemptId: attempt.attemptId,
+                  adapterId,
+                  timeoutMs: runTimeoutMs,
+                });
+              } catch {
+                // The catch path retries terminalization after the race
+                // rejects; never throw out of a timer callback.
+              }
               // Ask the adapter to stop the in-flight prompt, then revoke the
               // signal. The race releases the worker even if the adapter never
               // settles, so a stalled provider cannot pin it forever.
@@ -2261,6 +2318,12 @@ export class KernelCore {
     adapter: RuntimeAdapter;
     attempt: RunAttempt;
     adapterId: string;
+    /**
+     * True once the run deadline (or another terminal transition) has
+     * abandoned this resolution. A late `openBinding`/`resumeBinding` result
+     * must never be published as an active binding in that case.
+     */
+    isAbandoned?: () => boolean;
   }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const active = this.readActiveBinding(input.session.sessionId, input.adapterId);
     if (active) {
@@ -2328,6 +2391,7 @@ export class KernelCore {
       adapter: RuntimeAdapter;
       attempt: RunAttempt;
       adapterId: string;
+      isAbandoned?: () => boolean;
     }
   ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
     if (!this.isBindingCompatible(binding, input)) {
@@ -2360,6 +2424,12 @@ export class KernelCore {
         ),
         metadata: runtimeAdapterMetadata(input.input, input.session),
       });
+      if (input.isAbandoned?.()) {
+        // The run went terminal while `session/resume` was in flight. Do not
+        // refresh the binding row for an attempt nobody will execute.
+        await this.discardAbandonedBinding(input.adapter, resumed);
+        throw new AbandonedBindingError();
+      }
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
           adapterInstanceId: this.runtimeNodeId,
@@ -2404,6 +2474,7 @@ export class KernelCore {
       adapter: RuntimeAdapter;
       attempt: RunAttempt;
       adapterId: string;
+      isAbandoned?: () => boolean;
     },
     generation: number,
     replacesBindingId: string | null
@@ -2422,6 +2493,14 @@ export class KernelCore {
       ),
       metadata: runtimeAdapterMetadata(input.input, input.session),
     });
+    if (input.isAbandoned?.()) {
+      // `session/new` answered after the deadline abandoned this resolution.
+      // The worker that owns the native session is already being recycled, so
+      // publishing an `active` row here would leave a binding the next run
+      // tries to resume against a stopped process.
+      await this.discardAbandonedBinding(input.adapter, opened);
+      throw new AbandonedBindingError();
+    }
     const binding = this.withTransaction(() => {
       this.closeConflictingNativeBinding(
         input.adapterId,
@@ -2472,6 +2551,25 @@ export class KernelCore {
         adapterId: input.adapterId,
       },
     };
+  }
+
+  /**
+   * Best-effort release of a native session whose binding was never published
+   * because the run went terminal first. The owning worker is normally being
+   * recycled, which stops the adapter process anyway; this covers adapters
+   * that keep the session alive across a worker recycle.
+   */
+  private async discardAbandonedBinding(
+    adapter: RuntimeAdapter,
+    opened: AdapterBindingHandle,
+  ): Promise<void> {
+    if (!adapter.closeBinding) return;
+    try {
+      await adapter.closeBinding(opened);
+    } catch {
+      // Best-effort only: the run is already terminal and the worker is
+      // quarantined, so a failed close must not surface as a run failure.
+    }
   }
 
   protected markAttemptRunning(attempt: RunAttempt, binding: AdapterBinding): void {
