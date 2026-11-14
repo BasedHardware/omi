@@ -1227,244 +1227,6 @@
         "x": 0,
         "y": 11
       },
-      "id": 95,
-      "panels": [],
-      "title": "Did the user get a transcript?",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Share of units admitted 20 to 5 minutes ago whose transcript was published within the 5-minute p90 target. Counts the admission cohort, so a unit still held at the provider lowers this row; a commit-based ratio cannot see it. Empty means no admitted units in the cohort.",
-      "fieldConfig": {
-        "defaults": {
-          "max": 100,
-          "min": 0,
-          "noValue": "no traffic",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "orange",
-                "value": 85
-              },
-              {
-                "color": "green",
-                "value": 95
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 6,
-        "x": 0,
-        "y": 12
-      },
-      "id": 96,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 * sum(omi_batch_pipeline_delivered_share_units) / clamp_min(sum(omi_batch_pipeline_delivered_share_admitted_units), 1)",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Delivered within 5 min",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "One line per route and language. A language whose provider route stalls falls on its own line while the fleet number stays near normal. Folded other/unknown cells are excluded.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "lineWidth": 1,
-            "showPoints": "never",
-            "spanNulls": 3600000
-          },
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 18,
-        "x": 6,
-        "y": 12
-      },
-      "id": 97,
-      "interval": "5m",
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 * omi_batch_pipeline_delivered_share_ratio{language!=\"other\"}",
-          "legendFormat": "{{route}} / {{language}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Delivered share by language",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "Latest cohort, per route and language. Use this table to see which language fell and whether its volume is real. Read the same table across a backfilled window with scripts/batch_pipeline_delivered_share_report.py.",
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 1,
-          "max": 100,
-          "min": 0,
-          "unit": "percent",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 85
-              },
-              {
-                "color": "green",
-                "value": 95
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 24,
-        "x": 0,
-        "y": 15
-      },
-      "id": 98,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Value"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "100 * omi_batch_pipeline_delivered_share_ratio",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Delivered share by route and language",
-      "type": "table",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "route": "Route",
-              "language": "Language",
-              "Value": "Delivered %"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
-      },
       "id": 27,
       "panels": [],
       "title": "Is anything stuck?",
@@ -1537,7 +1299,7 @@
         "h": 3,
         "w": 4,
         "x": 0,
-        "y": 19
+        "y": 12
       },
       "id": 30,
       "options": {
@@ -1615,7 +1377,7 @@
         "h": 3,
         "w": 4,
         "x": 4,
-        "y": 19
+        "y": 12
       },
       "id": 31,
       "options": {
@@ -1688,7 +1450,7 @@
         "h": 3,
         "w": 4,
         "x": 8,
-        "y": 19
+        "y": 12
       },
       "id": 78,
       "options": {
@@ -1766,7 +1528,7 @@
         "h": 3,
         "w": 4,
         "x": 12,
-        "y": 19
+        "y": 12
       },
       "id": 29,
       "options": {
@@ -1829,7 +1591,7 @@
         "h": 3,
         "w": 4,
         "x": 16,
-        "y": 19
+        "y": 12
       },
       "id": 21,
       "options": {
@@ -1894,7 +1656,7 @@
         "h": 3,
         "w": 4,
         "x": 20,
-        "y": 19
+        "y": 12
       },
       "id": 5,
       "options": {
@@ -1929,7 +1691,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 15
       },
       "id": 89,
       "panels": [],
@@ -1962,7 +1724,7 @@
         "h": 3,
         "w": 6,
         "x": 0,
-        "y": 23
+        "y": 16
       },
       "id": 13,
       "options": {
@@ -2017,7 +1779,7 @@
         "h": 3,
         "w": 6,
         "x": 6,
-        "y": 23
+        "y": 16
       },
       "id": 12,
       "options": {
@@ -2072,7 +1834,7 @@
         "h": 3,
         "w": 6,
         "x": 12,
-        "y": 23
+        "y": 16
       },
       "id": 15,
       "options": {
@@ -2127,7 +1889,7 @@
         "h": 3,
         "w": 6,
         "x": 18,
-        "y": 23
+        "y": 16
       },
       "id": 14,
       "options": {
@@ -2162,7 +1924,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 19
       },
       "id": 93,
       "title": "Home value \u2014 rows the user could see",
@@ -2195,7 +1957,7 @@
         "h": 3,
         "w": 6,
         "x": 0,
-        "y": 27
+        "y": 20
       },
       "id": 94,
       "options": {
@@ -2223,6 +1985,244 @@
       ],
       "title": "Home rows / user / day",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 95,
+      "panels": [],
+      "title": "Did the user get a transcript?",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Share of units admitted 20 to 5 minutes ago whose transcript was published within the 5-minute p90 target. Counts the admission cohort, so a unit still held at the provider lowers this row; a commit-based ratio cannot see it. Empty means no admitted units in the cohort.",
+      "fieldConfig": {
+        "defaults": {
+          "max": 100,
+          "min": 0,
+          "noValue": "no traffic",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 24
+      },
+      "id": 96,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(omi_batch_pipeline_delivered_share_units) / clamp_min(sum(omi_batch_pipeline_delivered_share_admitted_units), 1)",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Delivered within 5 min",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "One line per route and language. A language whose provider route stalls falls on its own line while the fleet number stays near normal. Folded other/unknown cells are excluded.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": 3600000
+          },
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 18,
+        "x": 6,
+        "y": 24
+      },
+      "id": 97,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * omi_batch_pipeline_delivered_share_ratio{language!=\"other\"}",
+          "legendFormat": "{{route}} / {{language}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Delivered share by language",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Latest cohort, per route and language. Use this table to see which language fell and whether its volume is real. Read the same table across a backfilled window with scripts/batch_pipeline_delivered_share_report.py.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "max": 100,
+          "min": 0,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 85
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 98,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * omi_batch_pipeline_delivered_share_ratio",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Delivered share by route and language",
+      "type": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "route": "Route",
+              "language": "Language",
+              "Value": "Delivered %"
+            }
+          }
+        }
+      ]
     },
     {
       "collapsed": true,
@@ -2260,7 +2260,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 30
           },
           "id": 6,
           "interval": "5m",
@@ -2315,7 +2315,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 30
           },
           "id": 7,
           "interval": "5m",
@@ -2379,7 +2379,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 31
+            "y": 38
           },
           "id": 8,
           "interval": "5m",
@@ -2434,7 +2434,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 38
+            "y": 45
           },
           "id": 9,
           "interval": "5m",
@@ -2502,7 +2502,7 @@
             "h": 8,
             "w": 6,
             "x": 0,
-            "y": 24
+            "y": 31
           },
           "id": 28,
           "options": {
@@ -2557,7 +2557,7 @@
             "h": 8,
             "w": 8,
             "x": 6,
-            "y": 24
+            "y": 31
           },
           "id": 32,
           "interval": "5m",
@@ -2615,7 +2615,7 @@
             "h": 8,
             "w": 8,
             "x": 14,
-            "y": 24
+            "y": 31
           },
           "id": 33,
           "interval": "5m",
@@ -2688,7 +2688,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 32
+            "y": 39
           },
           "id": 34,
           "interval": "5m",
@@ -2816,7 +2816,7 @@
             "h": 8,
             "w": 14,
             "x": 8,
-            "y": 32
+            "y": 39
           },
           "id": 90,
           "interval": "15m",
@@ -2886,7 +2886,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 25
+            "y": 32
           },
           "id": 62,
           "options": {
@@ -2941,7 +2941,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 32
           },
           "id": 64,
           "interval": "5m",
@@ -3019,7 +3019,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 26
+            "y": 33
           },
           "id": 46,
           "interval": "5m",
@@ -3097,7 +3097,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 26
+            "y": 33
           },
           "id": 47,
           "interval": "5m",
@@ -3137,7 +3137,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 26
+            "y": 33
           },
           "id": 48,
           "options": {
@@ -3190,7 +3190,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 34
+            "y": 41
           },
           "id": 49,
           "interval": "5m",
@@ -3238,7 +3238,7 @@
             "h": 10,
             "w": 24,
             "x": 0,
-            "y": 42
+            "y": 49
           },
           "id": 77,
           "options": {
@@ -3307,7 +3307,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 27
+            "y": 34
           },
           "hideTimeOverride": true,
           "id": 74,
@@ -3379,7 +3379,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 27
+            "y": 34
           },
           "hideTimeOverride": true,
           "id": 75,
@@ -3451,7 +3451,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 27
+            "y": 34
           },
           "hideTimeOverride": true,
           "id": 76,
@@ -3529,7 +3529,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 38
           },
           "id": 66,
           "options": {
@@ -3636,7 +3636,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 38
           },
           "id": 67,
           "options": {
@@ -3729,7 +3729,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 39
+            "y": 46
           },
           "id": 68,
           "options": {
@@ -3786,7 +3786,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 39
+            "y": 46
           },
           "id": 69,
           "options": {
@@ -3859,7 +3859,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 28
+            "y": 35
           },
           "id": 22,
           "options": {
@@ -3922,7 +3922,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 28
+            "y": 35
           },
           "id": 23,
           "options": {
@@ -3977,7 +3977,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 35
           },
           "id": 24,
           "interval": "5m",
@@ -4032,7 +4032,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 36
+            "y": 43
           },
           "id": 25,
           "interval": "5m",
@@ -4087,7 +4087,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 44
+            "y": 51
           },
           "id": 26,
           "interval": "5m",
@@ -4142,7 +4142,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 51
+            "y": 58
           },
           "id": 91,
           "interval": "5m",
@@ -4197,7 +4197,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 51
+            "y": 58
           },
           "id": 92,
           "interval": "5m",
@@ -4266,7 +4266,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 29
+            "y": 36
           },
           "id": 37,
           "options": {
@@ -4329,7 +4329,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 29
+            "y": 36
           },
           "id": 38,
           "options": {
@@ -4392,7 +4392,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 29
+            "y": 36
           },
           "id": 39,
           "options": {
@@ -4447,7 +4447,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 33
+            "y": 40
           },
           "id": 40,
           "interval": "5m",
@@ -4502,7 +4502,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 33
+            "y": 40
           },
           "id": 41,
           "interval": "5m",
@@ -4557,7 +4557,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 33
+            "y": 40
           },
           "id": 42,
           "interval": "5m",
@@ -4636,7 +4636,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 30
+            "y": 37
           },
           "id": 51,
           "options": {
@@ -4701,7 +4701,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 30
+            "y": 37
           },
           "id": 52,
           "options": {
@@ -4766,7 +4766,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 30
+            "y": 37
           },
           "id": 53,
           "options": {
@@ -4831,7 +4831,7 @@
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 30
+            "y": 37
           },
           "id": 54,
           "options": {
@@ -4896,7 +4896,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 34
+            "y": 41
           },
           "id": 55,
           "options": {
@@ -4961,7 +4961,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 34
+            "y": 41
           },
           "id": 56,
           "options": {
@@ -5016,7 +5016,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 34
+            "y": 41
           },
           "id": 57,
           "options": {
@@ -5071,7 +5071,7 @@
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 34
+            "y": 41
           },
           "id": 58,
           "options": {
@@ -5136,7 +5136,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 38
+            "y": 45
           },
           "id": 59,
           "options": {
@@ -5191,7 +5191,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 38
+            "y": 45
           },
           "id": 60,
           "interval": "5m",
@@ -5246,7 +5246,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 42
+            "y": 49
           },
           "id": 79,
           "interval": "5m",
@@ -5330,7 +5330,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 31
+            "y": 38
           },
           "id": 71,
           "options": {
@@ -5377,7 +5377,7 @@
             "h": 3,
             "w": 24,
             "x": 0,
-            "y": 32
+            "y": 39
           },
           "id": 11,
           "options": {
@@ -5414,7 +5414,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 35
+            "y": 42
           },
           "id": 16,
           "interval": "5m",
@@ -5469,7 +5469,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 43
+            "y": 50
           },
           "id": 17,
           "interval": "5m",
@@ -5524,7 +5524,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 43
+            "y": 50
           },
           "id": 18,
           "interval": "5m",
