@@ -129,7 +129,7 @@ def manage_daily_summary_tool(
     if not uid:
         return "Error: User ID not found"
 
-    if not isinstance(action, str) or not action.strip():
+    if not action or not action.strip():
         return "Error: Action must be specified. Use 'enable', 'disable', 'set_time', or 'get_settings'."
 
     action = action.lower().strip()
