@@ -55,6 +55,14 @@ class _FakeCollectionReference:
         return self
 
 
+class _AbsentCollection:
+    def document(self, _document_id: str) -> Any:
+        return self
+
+    def get(self, transaction=None) -> _FakeSnapshot:
+        return _FakeSnapshot(None)
+
+
 class _FakeTransaction:
     """Surface ``_Transactional.__call__`` drives on a real transaction."""
 
@@ -103,7 +111,10 @@ class _FakeFirestoreClient:
         self.transactions: List[_FakeTransaction] = []
         self.doc_ref = _FakeDocumentReference(self, 'doc')
 
-    def collection(self, _collection_id: str) -> _FakeCollectionReference:
+    def collection(self, _collection_id: str) -> Any:
+        if _collection_id == 'account_deletions':
+            # No wipe is in progress: the ledger's account fence reads an absent marker.
+            return _AbsentCollection()
         return _FakeCollectionReference(self)
 
     def transaction(self) -> _FakeTransaction:

@@ -434,6 +434,36 @@ def test_record_summary_writes_nothing_for_a_deleted_source(monkeypatch):
     )
 
 
+def test_a_write_during_an_account_wipe_is_refused_even_though_the_user_document_exists(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    client.store['users/uid'] = {'id': 'uid'}
+    client.store['users/uid/conversations/capture'] = {'id': 'capture'}
+    owner = client.collection('users').document('uid')
+    source = owner.collection('conversations').document('capture')
+    client.store['account_deletions/uid'] = {'wipe_status': 'in_progress'}
+    assert not ledger.advance(
+        'uid', 'capture', ledger.SEALED, source_ref=source, owner_ref=owner, firestore_client=client
+    )
+    assert 'users/uid/pipeline_ledger/capture' not in client.store
+    # A malformed marker is a wipe in an unknown state, never a miss.
+    client.store['account_deletions/uid'] = {}
+    assert not ledger.advance(
+        'uid', 'capture', ledger.SEALED, source_ref=source, owner_ref=owner, firestore_client=client
+    )
+    del client.store['account_deletions/uid']
+    assert ledger.advance('uid', 'capture', ledger.SEALED, source_ref=source, owner_ref=owner, firestore_client=client)
+
+
+def test_the_account_fence_does_not_depend_on_the_user_document(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    client.store['users/uid/conversations/capture'] = {'id': 'capture'}
+    owner = client.collection('users').document('uid')
+    source = owner.collection('conversations').document('capture')
+    assert ledger.advance('uid', 'capture', ledger.SEALED, source_ref=source, owner_ref=owner, firestore_client=client)
+
+
 def test_metrics_are_content_free(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     ledger.advance('uid-secret', 'capture-secret', ledger.SEALED, now=100, firestore_client=_FakeClient())

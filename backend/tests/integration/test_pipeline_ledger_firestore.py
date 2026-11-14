@@ -324,3 +324,23 @@ def test_census_window_never_reads_another_owner(client, monkeypatch):
 
     rows = pipeline_ledger.census_window(0, 10**12, uid='u-a', firestore_client=client)
     assert [row['owner_key'] for row in rows] == [pipeline_ledger.owner_key('u-a')]
+
+
+def test_a_write_during_an_account_wipe_is_refused_while_the_user_document_remains(client, monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    uid, capture_id = 'u-wiping', 'c-wiping'
+    _seed(client, uid, capture_id)
+    owner_ref = client.collection('users').document(uid)
+    source_ref = _conversation_ref(client, uid, capture_id)
+    marker = client.collection('account_deletions').document(uid)
+    marker.set({'wipe_status': 'in_progress'})
+    try:
+        assert not pipeline_ledger.advance(
+            uid, capture_id, pipeline_ledger.SEALED, source_ref=source_ref, owner_ref=owner_ref, firestore_client=client
+        )
+        assert _ledger(client, uid, capture_id) is None
+    finally:
+        marker.delete()
+    assert pipeline_ledger.advance(
+        uid, capture_id, pipeline_ledger.SEALED, source_ref=source_ref, owner_ref=owner_ref, firestore_client=client
+    )

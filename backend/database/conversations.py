@@ -2630,12 +2630,11 @@ def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
 
     The ledger is a sibling collection, not a child of the conversation, so the
     recursive child sweep in :func:`delete_conversation` never reaches it. A
-    nonterminal row would otherwise survive until its max-lifetime TTL.
+    failure is raised, not swallowed: a deletion that reports success must not
+    leave the user-owned row behind until its TTL. The delete is idempotent, so
+    the caller's retry completes it.
     """
-    try:
-        db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
-    except Exception:
-        logger.warning('pipeline ledger cleanup failed conversation=%s', conversation_id)
+    db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
 
 
 def delete_conversation(uid, conversation_id):
