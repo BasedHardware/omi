@@ -622,3 +622,18 @@ The required generic outbox available_at/max-coalescing contract conflicts with
 the specialized enrichment first-summary cap and earlier-task retention. Three
 failures remain open; this continuation does not change the policy or its tests.
 Exact37e focused staging crash failure also remains open, not rerun away.
+
+
+The complete ef6fb9889e local emulator lane ran with all store backends required.
+Provider merge57 and merge-gate units70 passed. Other sections exposed four
+failures: lifecycle_sim rejects the mandatory nonexistent-ADC environment value;
+Dream mark_dirty refused a synthetic owner; PL-042's two strict xfails now XPASS
+after the durable wake fix; pending-deletion PG fixtures still assumed a fake
+CustomerData.rows despite full qualification using the actual FS adapter.
+The latter two are corrected without weakening any behavior assertion: remove
+the stale PL-042 xfail markers (a leaked error now fails normally) and select
+marker write/cleanup by ClientCustomerData. Targeted all-backend42 cases pass.
+The complete intermediate log, all skips/xfails and remaining two unrelated
+harness failures are retained. This is not a full local-emulator green claim.
+Original37e focused349/1 and required431/3/9skip/3xfail remain historical failures,
+not silently rerun or reclassified. No source readiness or activation claimed.
