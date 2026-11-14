@@ -373,7 +373,7 @@ STATES = (
             metric='omi_batch_allowance_held_units',
             alert_required=False,
             deadline_exemption='SCA-2195: allowance policy parking has no recording expiry; owner generation releases it.',
-            entry_writers=(Writer('utils/batch_pipeline/allowance_hold.py', 'park'),),
+            entry_writers=(Writer('database/batch_pipeline_allowance_hold.py', 'park'),),
             note='Current held/allowance_exhausted only; custody retained, outside retry and pending-work sweeps.',
         ),
     )

@@ -1,7 +1,7 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
-    'utils/batch_pipeline/allowance_hold.py': [
+    'database/batch_pipeline_allowance_hold.py': [
         (
             'park',
             'state',

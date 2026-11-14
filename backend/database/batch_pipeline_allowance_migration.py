@@ -3,7 +3,7 @@
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from utils.batch_pipeline.allowance_hold import STATE, enabled, park
+from database.batch_pipeline_allowance_hold import STATE, enabled, park
 
 KEY = 'allowance_parking_v1'
 

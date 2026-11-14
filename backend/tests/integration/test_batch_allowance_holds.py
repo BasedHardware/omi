@@ -5,7 +5,8 @@ from unittest.mock import Mock
 import pytest
 
 from testing.store_fixtures import store_backend  # noqa: F401
-from utils.batch_pipeline.allowance_hold import AllowanceHolds, OWNERS, STATE, park
+from utils.batch_pipeline.allowance_hold import AllowanceHolds
+from database.batch_pipeline_allowance_hold import OWNERS, STATE, park
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, Priority
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key

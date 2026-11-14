@@ -11,17 +11,23 @@ keep their existing recovery.
 
 `Scheduler.defer` (GPU worker and backend) parks new refusals transactionally;
 `Scheduler.recover` (both services) parks old-worker retry decisions. The
-operator migration uses the same CAS helper. `allowance_holds` stores one
+operator migration and scheduler use the same CAS helper in
+`database/batch_pipeline_allowance_hold.py`; the backend controller depends on
+that persistence layer and the scheduler, with no reverse import or cycle. `allowance_holds` stores one
 owner-keyed generation, active count, claim and release cursor. The backend
 maintenance leader checks at most 20 owners per 30 seconds; each owner is due
 no more often than five minutes when caught up. Under a large owner population,
 the bounded due queue adds latency (about 55 minutes for 2,202 continuously
 held owners with one leader at this rate). There is no per-recording poll.
 
-The generation hashes the stored subscription, validity at its period end and
-the UTC usage month. A metadata read detects changes from every subscription
-writer, including referral/repair writers, without requiring each writer to
-send a wake. Funded allowance is evaluated once per changed generation, with
+The generation reads both the commercial subscription and
+`referral_campaign_grant`. It hashes commercial authority/validity, campaign
+enablement, the grant fields admission consumes, the shared effective plan
+projection, and the UTC usage month. Grant claims/extensions and starts, expiry
+or paid-coverage time boundaries therefore change discovery even without a
+commercial write. Other usage counters and profile fields do not. This uses
+`effective_subscription_payload`, the same promotion composition as admission;
+it does not introduce an entitlement rule or require writers to send a wake. Funded allowance is evaluated once per changed generation, with
 unavailability retried rather than recorded as a denial. A successful change
 releases existing rows in `(capture_at, segment_id)` order in pages of 100;
 each transaction appends through the existing scheduler and still requires
@@ -113,3 +119,40 @@ audio-hour, over-SLA counts and requeues on SCA-2173. Compare the new held gauge
 and census separately from lateness; a lower late-work count alone is not
 evidence of processing. `job:batch_allowance_hold:tick` attributes controller
 reads. SCA-2015 owns the residual fresh-selection defects.
+
+## Read planning envelope (round-1 correction)
+
+The prior 606-read release-page / <7M-day declaration understated queue-tail
+and privacy reads. It is withdrawn. Tests exercise the actual
+`FirestoreTransaction`, scheduler and flush on the strict document fixture:
+
+| Path | No conversation | One conversation | Two redirects |
+| --- | ---: | ---: | ---: |
+| Release into an existing queue (distinct held/tail conversations) | 9 | 16 | 24 |
+| Migration parking | 6 | 8 | 12 |
+
+Counts include one discovery read per row. Release reads owner, job, control,
+queue and tail, then privacy for **each distinct job identity**, not just the
+released job. Conversation tombstones and redirect targets add reads. These
+are synthetic source-derived measurements, not production billing evidence.
+
+The revised planning reserve is **64 reads per released or migrated row**:
+up to two attempts (one retry), short redirects (up to two per source in the
+tested profiles) and shadow refresh. A release page of 100 plans 6,406 reads,
+including controller metadata overhead. A 1M-row generation burst plus at most
+691,200 owner metadata reads across prod/dev plans **<65M reads/day**. A separate
+1M-row migration pass plans **64M reads**. If both occur together, disclose the
+combined **<129M-read** planning envelope before go. Unchanged owners incur
+only metadata polls; held recordings are not walked.
+
+This is planning headroom, **not an enforced maximum**: the privacy fence can
+follow up to 256 documents, and SDK/contention retries, shadow settings, repeated
+passes or repeated generation bursts can cost more. The rollout lead must
+accept the revised envelope alongside latency and rollback pacing before the
+first default-on deployment or migration. Longer redirect chains, more than
+two attempts or extra passes require remeasurement and budget revision; do not
+use the earlier <7M declaration as release approval. Measure actual attributed
+reads on SCA-2173 and retain count-only output. These reserves cover the new
+parking/release state transactions; the existing funded-allowance usage-ledger
+read once per changed generation and subsequent normal admission/projection
+work remain separate measured workloads, not zero-cost operations.

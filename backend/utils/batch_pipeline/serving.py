@@ -36,6 +36,7 @@ from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeld
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
 from utils.sync import reprocess
@@ -362,8 +363,6 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time())
-        from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
-
         if time.monotonic() >= self.allowance_hold_due and self._leads(True):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())
