@@ -199,7 +199,11 @@ const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
 enum WalCaptureTimeClass { live, historical, unknown }
 
 WalCaptureTimeClass walCaptureTimeClass(Wal wal, int nowSeconds) {
-  if (!walClockPriorityOff && (wal.timerStart <= 0 || wal.timerStart > nowSeconds)) {
+  if (!walClockPriorityOff &&
+      (wal.timerStart <= 0 ||
+          wal.timerStart > nowSeconds ||
+          (wal.status == WalStatus.uploadRejected &&
+              wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime))) {
     return WalCaptureTimeClass.unknown;
   }
   return nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds

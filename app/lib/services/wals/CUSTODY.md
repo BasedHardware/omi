@@ -147,6 +147,16 @@ start their window at the first recovery attempt. Each attempt uses one file so
 a request-level verdict never condemns siblings. Local-only custody stays closed;
 a held recording already submitted explicitly may recover automatically.
 
+The 2026-11-15 server capture-clock recovery rollout has one install migration,
+keyed `wal.invalid_capture_time_recovery.20261115.v1`: it reopens the seven-day
+window immediately only for disk WALs refused as `invalid_capture_time` that
+are neither held nor on-device-only. It persists the index before the install
+receipt, keeps the refusal status/reason and bytes, and preserves single-file
+attempts and the 25-refusal-per-drain cap. Valid audio keeps its ordinary
+priority; invalid clocks receive a separate bounded turn. Later restarts and
+ordinary app upgrades do not renew this migration. Kill switch:
+`OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF` (compile-time, default false).
+
 A framed file of at most four bytes has no audio payload and completes as a
 no-op. Larger files, including tiny compressed speech, always retain normal
 server decoding/VAD. Refusals emit the registered `WAL Upload Refused` event with

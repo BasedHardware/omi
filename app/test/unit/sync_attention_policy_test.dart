@@ -57,6 +57,126 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('install migration reopens only invalid-date recovery, behind valid audio and within the refusal cap', () async {
+    final today = now.millisecondsSinceEpoch ~/ 1000;
+    final expired = today - 10 * 86400;
+    final attempts = <List<String>>[];
+    final gate = SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      fairUseStatusLoader: () async => {'stage': 'none'},
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        attempts.add(files.map((file) => file.uri.pathSegments.last).toList());
+        return UploadFilesResult.queued('recovered-${attempts.length}');
+      },
+    );
+    final invalid = [
+      for (var i = 0; i < walMaxRefusalRetriesPerDrain + 5; i++)
+        _wal(DateTime.fromMillisecondsSinceEpoch((i == 0 ? today - 86400 : 2145916800 + i) * 1000))
+          ..filePath = 'invalid-$i.bin'
+          ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: expired),
+    ];
+    final excluded = [
+      for (final reason in [
+        WalUploadRejection.invalidFile,
+        WalUploadRejection.tooLarge,
+        WalUploadRejection.serverRefused
+      ])
+        _wal(now)..markUploadRejected(reasonCode: reason, nowSeconds: expired),
+      _wal(now)
+        ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: expired)
+        ..holdForUser = true,
+      _wal(now)
+        ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: expired)
+        ..onDeviceOnly = true,
+    ];
+    final valid = _wal(now)..filePath = 'valid.bin';
+    for (final wal in [valid, ...invalid]) {
+      await File('${dir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    final sync = LocalWalSyncImpl(_Listener(), now: () => now, uploadGate: gate)
+      ..testWals = [...invalid, ...excluded, valid];
+    await sync.syncAll();
+    expect(attempts.first, ['valid.bin']);
+    expect(attempts.length, 1 + walMaxRefusalRetriesPerDrain);
+    expect(attempts.every((files) => files.length == 1), isTrue);
+    expect(invalid.where((wal) => wal.status == WalStatus.uploaded), hasLength(walMaxRefusalRetriesPerDrain));
+    expect(invalid.every((wal) => wal.uploadRejectedAt == today), isTrue);
+    expect(invalid.first.timerStart, today - 86400);
+    expect(invalid.last.timerStart, 2145916800 + 29);
+    expect(
+        excluded.every((wal) => wal.uploadRejectedAt == expired && wal.uploadRefusalLastAttemptAt == expired), isTrue);
+    expect(SharedPreferencesUtil().getBool(invalidCaptureTimeRecoveryMigrationKey), isTrue);
+    for (final wal in invalid) {
+      expect(await File('${dir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
+    }
+    await sync.syncAll();
+    expect(attempts.length, 1 + invalid.length);
+  });
+
+  test('install migration does not reset daily attempts or renew again after restart or seven days', () async {
+    var calls = 0;
+    final gate = SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      fairUseStatusLoader: () async => {'stage': 'none'},
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        calls++;
+        throw const SyncUploadHttpException(400, 'not yet accepted', reasonCode: 'invalid_capture_time');
+      },
+    );
+    final wal = _wal(now)
+      ..markUploadRejected(
+        reasonCode: WalUploadRejection.invalidCaptureTime,
+        nowSeconds: now.subtract(const Duration(days: 10)).millisecondsSinceEpoch ~/ 1000,
+      );
+    await File('${dir.path}/audio.bin').writeAsBytes([1, 0, 0, 0, 42]);
+    var sync = LocalWalSyncImpl(_Listener(), now: () => now, uploadGate: gate)..testWals = [wal];
+    await sync.syncAll();
+    expect(calls, 1);
+    final reopenedAt = wal.uploadRejectedAt;
+    expect(wal.refusalReported(now.millisecondsSinceEpoch ~/ 1000), isFalse);
+    expect(wal.uploadRejectionReason, WalUploadRejection.invalidCaptureTime);
+    now = now.add(const Duration(hours: 1));
+    sync = LocalWalSyncImpl(_Listener(), now: () => now, uploadGate: gate)..testWals = await WalFileManager.loadWals();
+    await sync.syncAll();
+    expect(calls, 1, reason: 'restart must respect the attempted daily clock');
+    expect(sync.testWals.single.uploadRejectedAt, reopenedAt);
+    now = now.add(const Duration(days: 8));
+    await sync.syncAll();
+    expect(calls, 1);
+    expect(sync.testWals.single.refusalReported(now.millisecondsSinceEpoch ~/ 1000), isTrue);
+  });
+
+  test('failed migration persistence never records completion or calls the upload gate', () async {
+    final gateCalls = <String>[];
+    final wal = _wal(now)..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: 1);
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {
+          gateCalls.add('persist');
+          throw const FileSystemException('index unavailable');
+        })
+      ..testWals = [wal];
+    await expectLater(sync.syncAll(), throwsA(isA<FileSystemException>()));
+    expect(SharedPreferencesUtil().getBool(invalidCaptureTimeRecoveryMigrationKey), isFalse);
+    expect(gateCalls, ['persist']);
+  });
+
   test('daily refusal recovery survives restart, keeps bytes, stops at seven days', () async {
     final events = <RegisteredEvent>[];
     var calls = 0;

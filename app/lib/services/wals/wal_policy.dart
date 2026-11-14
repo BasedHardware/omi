@@ -1,5 +1,8 @@
 part of 'local_wal_sync.dart';
 
+/// Fixed rollout key: ordinary app upgrades must not renew refusal windows.
+const invalidCaptureTimeRecoveryMigrationKey = 'wal.invalid_capture_time_recovery.20261115.v1';
+
 /// Error string the backend's stale guard sets when a job sits queued past
 /// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
 /// #7469 — if this string changes, update here and keep the structural check
@@ -135,6 +138,31 @@ String uploadRejectionTokenForStatus(int statusCode) =>
 /// Capture-time refusals share the daily, bounded recovery policy. Dates and
 /// bytes stay intact so a server correction can recover the original audio.
 extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
+  Future<void> _migrateInvalidCaptureTimeRecovery(int generation) async {
+    if (const bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF')) return;
+    final prefs = SharedPreferencesUtil();
+    if (prefs.getBool(invalidCaptureTimeRecoveryMigrationKey)) return;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    // Include parked inventory without changing ownership or admitting it to
+    // this account. Its one install migration must survive a later sign-in.
+    final refused = {..._wals, ..._foreignWals, ..._retiredWals}.where((wal) =>
+        wal.storage == WalStorage.disk &&
+        wal.status == WalStatus.uploadRejected &&
+        wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime &&
+        !wal.holdForUser &&
+        !wal.onDeviceOnly);
+    for (final wal in refused) {
+      wal.uploadRejectedAt = now;
+      wal.uploadRefusalLastAttemptAt = 0;
+    }
+    // Persist before the install receipt. A failed save cannot spend the
+    // migration or reach an upload with an uncommitted recovery window.
+    if (!await _saveWalsToFile(generation) || !_isCurrent(generation)) return;
+    if (!await prefs.saveBool(invalidCaptureTimeRecoveryMigrationKey, true)) {
+      throw const FileSystemException('Could not persist capture-time recovery migration');
+    }
+  }
+
   /// A request-level refusal proves nothing about every member: isolate the
   /// batch so the next attempt names the actual file, exactly like a
   /// definitive 400/413. A single-file refusal gets that file's verdict.
