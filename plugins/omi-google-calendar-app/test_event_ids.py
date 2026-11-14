@@ -84,6 +84,7 @@ def load_app():
             "db": db,
             "models": models,
             "requests": requests,
+            "httpx": ModuleType("httpx"),
         },
     ):
         spec.loader.exec_module(module)
@@ -175,7 +176,9 @@ class ListedEventIdsAreUsable(unittest.TestCase):
     def test_listed_id_round_trips_through_get_event(self):
         for event_id in self._list_ids():
             with self.subTest(event_id=event_id):
-                response = _run(app.tool_get_event(_request({"uid": "u1", "event_id": event_id})))
+                response = _run(
+                    app.tool_get_event(_request({"uid": "u1", "event_id": event_id}))
+                )
                 self.assertIsNone(response.error, response.error)
                 self.assertEqual(_ids_in(response.result), [event_id])
 
@@ -183,32 +186,48 @@ class ListedEventIdsAreUsable(unittest.TestCase):
         for event_id in self._list_ids():
             with self.subTest(event_id=event_id):
                 response = _run(
-                    app.tool_update_event(_request({"uid": "u1", "event_id": event_id, "title": "Renamed"}))
+                    app.tool_update_event(
+                        _request(
+                            {"uid": "u1", "event_id": event_id, "title": "Renamed"}
+                        )
+                    )
                 )
                 self.assertIsNone(response.error, response.error)
-                self.assertEqual(self.api.calls[-1], ("PATCH", f"/calendars/primary/events/{event_id}"))
+                self.assertEqual(
+                    self.api.calls[-1],
+                    ("PATCH", f"/calendars/primary/events/{event_id}"),
+                )
 
     def test_listed_id_round_trips_through_delete_event(self):
         for event_id in self._list_ids():
             with self.subTest(event_id=event_id):
-                response = _run(app.tool_delete_event(_request({"uid": "u1", "event_id": event_id})))
+                response = _run(
+                    app.tool_delete_event(_request({"uid": "u1", "event_id": event_id}))
+                )
                 self.assertIsNone(response.error, response.error)
-                self.assertEqual(self.api.calls[-1], ("DELETE", f"/calendars/primary/events/{event_id}"))
+                self.assertEqual(
+                    self.api.calls[-1],
+                    ("DELETE", f"/calendars/primary/events/{event_id}"),
+                )
 
     def test_truncated_id_is_rejected_by_the_api_seam(self):
         # Documents why the full id matters: the prefix the old output produced
         # is not an event the Calendar API knows about.
         truncated = SINGLE_EVENT_ID[:20]
-        response = _run(app.tool_get_event(_request({"uid": "u1", "event_id": truncated})))
+        response = _run(
+            app.tool_get_event(_request({"uid": "u1", "event_id": truncated}))
+        )
         self.assertIsNotNone(response.error)
 
 
 class CreatedEventIdIsReported(unittest.TestCase):
     def test_create_event_prints_id_that_get_update_and_delete_accept(self):
         api = _FakeCalendarApi({})
-        with patch.object(app, "calendar_api_request", api), patch.object(
-            app, "get_valid_access_token", lambda uid: "token"
-        ), patch.object(app, "get_default_calendar", lambda uid: "primary"):
+        with (
+            patch.object(app, "calendar_api_request", api),
+            patch.object(app, "get_valid_access_token", lambda uid: "token"),
+            patch.object(app, "get_default_calendar", lambda uid: "primary"),
+        ):
             created = _run(
                 app.tool_create_event(
                     _request(
@@ -225,16 +244,30 @@ class CreatedEventIdIsReported(unittest.TestCase):
             ids = _ids_in(created.result)
             self.assertEqual(ids, [SINGLE_EVENT_ID], created.result)
 
-            fetched = _run(app.tool_get_event(_request({"uid": "u1", "event_id": ids[0]})))
+            fetched = _run(
+                app.tool_get_event(_request({"uid": "u1", "event_id": ids[0]}))
+            )
             self.assertIsNone(fetched.error, fetched.error)
 
-            updated = _run(app.tool_update_event(_request({"uid": "u1", "event_id": ids[0], "title": "Dentist (moved)"})))
+            updated = _run(
+                app.tool_update_event(
+                    _request(
+                        {"uid": "u1", "event_id": ids[0], "title": "Dentist (moved)"}
+                    )
+                )
+            )
             self.assertIsNone(updated.error, updated.error)
-            self.assertEqual(api.calls[-1], ("PATCH", f"/calendars/primary/events/{ids[0]}"))
+            self.assertEqual(
+                api.calls[-1], ("PATCH", f"/calendars/primary/events/{ids[0]}")
+            )
 
-            deleted = _run(app.tool_delete_event(_request({"uid": "u1", "event_id": ids[0]})))
+            deleted = _run(
+                app.tool_delete_event(_request({"uid": "u1", "event_id": ids[0]}))
+            )
             self.assertIsNone(deleted.error, deleted.error)
-            self.assertEqual(api.calls[-1], ("DELETE", f"/calendars/primary/events/{ids[0]}"))
+            self.assertEqual(
+                api.calls[-1], ("DELETE", f"/calendars/primary/events/{ids[0]}")
+            )
 
 
 if __name__ == "__main__":

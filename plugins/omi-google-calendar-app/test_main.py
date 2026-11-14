@@ -13,11 +13,11 @@ production handlers are executed through the calendar_api_request seam.
 """
 import asyncio
 import importlib.util
-from datetime import datetime
-from pathlib import Path
 import sys
 import types
 import unittest
+from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 
@@ -52,6 +52,7 @@ def module(name, **attributes):
 
 stubs = {
     "requests": module("requests", RequestException=OSError),
+    "httpx": module("httpx"),
     "dotenv": module("dotenv", load_dotenv=lambda *args, **kwargs: None),
     "fastapi": module(
         "fastapi",

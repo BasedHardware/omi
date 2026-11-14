@@ -5,7 +5,7 @@ Supports both local development (file fallback) and production (Redis).
 import json
 import os
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 # Try to import redis, fall back to file-based if not available
 try:
@@ -53,7 +53,7 @@ def _ensure_data_dir():
     os.makedirs(DATA_DIR, exist_ok=True)
 
 
-def _load_json(filepath: str) -> Dict[str, Any]:
+def _load_json(filepath: str) -> dict[str, Any]:
     """Load JSON from file, return empty dict if not exists."""
     _ensure_data_dir()
     if os.path.exists(filepath):
@@ -62,7 +62,7 @@ def _load_json(filepath: str) -> Dict[str, Any]:
     return {}
 
 
-def _save_json(filepath: str, data: Dict[str, Any]):
+def _save_json(filepath: str, data: dict[str, Any]):
     """Save data to JSON file."""
     _ensure_data_dir()
     with open(filepath, "w") as f:
@@ -92,7 +92,7 @@ def store_google_tokens(uid: str, access_token: str, refresh_token: str, expires
         r.set(key, json.dumps(token_data))
         # Set long TTL - we use refresh tokens to get new access tokens
         r.expire(key, 60 * 60 * 24 * 365)  # 1 year
-        print(f"DB: Tokens stored successfully in Redis")
+        print("DB: Tokens stored successfully in Redis")
         sys.stdout.flush()
     else:
         print(f"DB: Storing tokens in file for uid={uid}")
@@ -100,11 +100,11 @@ def store_google_tokens(uid: str, access_token: str, refresh_token: str, expires
         tokens = _load_json(TOKENS_FILE)
         tokens[uid] = token_data
         _save_json(TOKENS_FILE, tokens)
-        print(f"DB: Tokens stored successfully in file")
+        print("DB: Tokens stored successfully in file")
         sys.stdout.flush()
 
 
-def get_google_tokens(uid: str) -> Optional[Dict[str, Any]]:
+def get_google_tokens(uid: str) -> dict[str, Any] | None:
     """Get Google tokens for a user."""
     import sys
     r = _get_redis()
@@ -115,14 +115,14 @@ def get_google_tokens(uid: str) -> Optional[Dict[str, Any]]:
         sys.stdout.flush()
         data = r.get(key)
         if data:
-            print(f"DB: Found tokens in Redis")
+            print("DB: Found tokens in Redis")
             sys.stdout.flush()
             return json.loads(data)
         print(f"DB: No tokens found in Redis for {uid}")
         sys.stdout.flush()
         return None
     else:
-        print(f"DB: Using file storage (no Redis)")
+        print("DB: Using file storage (no Redis)")
         sys.stdout.flush()
         tokens = _load_json(TOKENS_FILE)
         result = tokens.get(uid)
@@ -146,7 +146,7 @@ def update_google_tokens(uid: str, access_token: str, expires_at: str):
             token_data["updated_at"] = datetime.utcnow().isoformat()
             r.set(key, json.dumps(token_data))
             r.expire(key, 60 * 60 * 24 * 365)
-            print(f"DB: Updated access token in Redis")
+            print("DB: Updated access token in Redis")
             sys.stdout.flush()
     else:
         tokens = _load_json(TOKENS_FILE)
@@ -155,7 +155,7 @@ def update_google_tokens(uid: str, access_token: str, expires_at: str):
             tokens[uid]["expires_at"] = expires_at
             tokens[uid]["updated_at"] = datetime.utcnow().isoformat()
             _save_json(TOKENS_FILE, tokens)
-            print(f"DB: Updated access token in file")
+            print("DB: Updated access token in file")
             sys.stdout.flush()
 
 
@@ -194,7 +194,7 @@ def store_oauth_state(uid: str, state: str):
         _save_json(OAUTH_STATES_FILE, states)
 
 
-def get_oauth_state(uid: str) -> Optional[str]:
+def get_oauth_state(uid: str) -> str | None:
     """Get stored OAuth state for a user."""
     r = _get_redis()
 
@@ -245,7 +245,7 @@ def store_user_setting(uid: str, key: str, value: Any):
         _save_json(USER_SETTINGS_FILE, settings)
 
 
-def get_user_setting(uid: str, key: str) -> Optional[Any]:
+def get_user_setting(uid: str, key: str) -> Any | None:
     """Get a setting for a user."""
     r = _get_redis()
 
@@ -260,7 +260,7 @@ def get_user_setting(uid: str, key: str) -> Optional[Any]:
         return settings.get(uid, {}).get(key)
 
 
-def get_user_settings(uid: str) -> Dict[str, Any]:
+def get_user_settings(uid: str) -> dict[str, Any]:
     """Get all settings for a user."""
     r = _get_redis()
 
