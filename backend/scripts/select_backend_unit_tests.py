@@ -182,6 +182,16 @@ CENSUS_GUARD_PREFIXES = (
     'backend/config/batch_census.py',
     'backend/scripts/batch_pipeline_poll_state_census.py',
 )
+# Census exporter (W3 / SCA-2119): a change to the sampler, the gauge families or
+# the scheduler glue must run the exporter contract in the same PR. The registry
+# entry already runs the completeness guard above.
+CENSUS_EXPORT_TESTS = ('tests/unit/test_batch_census_export.py',)
+CENSUS_EXPORT_PREFIXES = (
+    'backend/database/batch_census_export.py',
+    'backend/utils/observability/batch_census.py',
+    'backend/utils/sync/batch_census.py',
+    'backend/scripts/generate_batch_census_alerts.py',
+)
 BATCH_STAGE_ENV_RATCHET_PREFIXES = (
     'backend/utils/batch_pipeline/',
     'backend/database/batch_pipeline_',
@@ -758,6 +768,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(CENSUS_GUARD_PREFIXES) for path in changed_paths):
         selected.update(test for test in CENSUS_GUARD_TESTS if test in all_tests)
+    if any(path.startswith(CENSUS_EXPORT_PREFIXES) for path in changed_paths):
+        selected.update(test for test in CENSUS_EXPORT_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):

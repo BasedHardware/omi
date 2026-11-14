@@ -391,6 +391,7 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_held_content_',
     'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
     'prometheus.googleapis.com/omi_queue_oldest_ready_',
+    'prometheus.googleapis.com/omi_batch_pipeline_census_',
 ]
 
 

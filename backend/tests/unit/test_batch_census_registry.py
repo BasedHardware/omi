@@ -287,12 +287,11 @@ def test_memory_outbox_states_match_the_model():
 def test_collection_names_match_code():
     from database.outbox_provider_stt import collection_name as provider_outbox_name
 
-    assert batch_census.COLLECTIONS['provider_outbox'] == (
-        provider_outbox_name('prod'),
-        provider_outbox_name('dev'),
-    )
-    assert batch_census.COLLECTIONS['jobs'] == ('batch_pipeline_prod_jobs', 'batch_pipeline_dev_jobs')
-    assert batch_census.COLLECTIONS['results'] == ('batch_pipeline_prod_results', 'batch_pipeline_dev_results')
+    # Production census scope: one collection per stock, dev excluded.
+    assert batch_census.COLLECTIONS['provider_outbox'] == (provider_outbox_name('prod'),)
+    assert batch_census.COLLECTIONS['jobs'] == ('batch_pipeline_prod_jobs',)
+    assert batch_census.COLLECTIONS['results'] == ('batch_pipeline_prod_results',)
+    assert batch_census.COLLECTIONS['speaker_outbox'] == ('batch_pipeline_prod_speaker_final_pass_outbox',)
 
 
 # --- registry shape ---------------------------------------------------------
@@ -304,8 +303,12 @@ def test_registry_keys_are_unique_and_scoped():
     for entry in ENTRIES:
         assert entry.scope in {COLLECTION, COLLECTION_GROUP}
         assert entry.collection in batch_census.COLLECTIONS
-        assert entry.field in STATE_FIELDS
-        assert entry.filters and entry.filters[0][0] == entry.field
+        # ``field`` names what identifies the stock. Lifecycle stocks filter on a
+        # state field; whole-collection and derived stocks may filter on nothing
+        # or on several fields, so a declared identity must appear in its filters.
+        if entry.filters:
+            assert entry.field in {field for field, _operator, _value in entry.filters}
+        assert entry.field
 
 
 def test_custody_assumptions_are_marked():
@@ -416,16 +419,13 @@ def _signatures():
     'collection,scope,fields',
     [
         ('batch_pipeline_prod_jobs', COLLECTION, ('state', 'provider_intent.settled_at', '__name__')),
-        ('batch_pipeline_dev_jobs', COLLECTION, ('state', 'provider_intent.settled_at', '__name__')),
         ('batch_pipeline_prod_jobs', COLLECTION, ('state', 'fresh_capture', 'enqueued_at', '__name__')),
-        ('batch_pipeline_dev_jobs', COLLECTION, ('state', 'fresh_capture', 'enqueued_at', '__name__')),
         ('batch_pipeline_prod_provider_stt_outbox', COLLECTION, ('state', 'created_at', '__name__')),
-        ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'created_at', '__name__')),
         ('batch_pipeline_prod_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
-        ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
-        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
-        ('batch_pipeline_dev_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
-        ('memory_outbox', COLLECTION_GROUP, ('status', 'available_at', '__name__')),
+        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'committed_at', '__name__')),
+        # Memory count is a group read filtered by status; the group field
+        # requirement serves it, with no available_at ordering any more.
+        ('memory_outbox', COLLECTION, ('status', 'available_at', '__name__')),
     ],
 )
 def test_census_indexes_are_declared_with_expected_scope(collection, scope, fields):
@@ -433,11 +433,17 @@ def test_census_indexes_are_declared_with_expected_scope(collection, scope, fiel
     assert signature in _signatures()
 
 
-def test_memory_outbox_keeps_both_scopes():
+def test_memory_outbox_census_uses_the_group_status_field_index():
     signatures = _signatures()
     fields = (('status', 'ASCENDING'), ('available_at', 'ASCENDING'), ('__name__', 'ASCENDING'))
+    # The per-user worker page keeps its collection-scoped composite.
     assert ('memory_outbox', COLLECTION, fields) in signatures
-    assert ('memory_outbox', COLLECTION_GROUP, fields) in signatures
+    # The fleet count over the collection group needs only a group status field
+    # index; it must not keep an available_at composite that nobody orders by.
+    assert ('memory_outbox', COLLECTION_GROUP, fields) not in signatures
+    data = json.loads((ROOT / 'firestore.indexes.json').read_text(encoding='utf-8'))
+    overrides = {(entry['collectionGroup'], entry['fieldPath']) for entry in data.get('fieldOverrides', [])}
+    assert ('memory_outbox', 'status') in overrides
 
 
 def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
@@ -454,13 +460,27 @@ def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
         COLLECTION,
         (('state', 'ASCENDING'), ('listed_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
     ) in signatures
-    # This PR's census declarations add no conversations or cap-hold index; their
-    # existing scoped twins predate this change and are not duplicated here.
+    # Census declarations also add the per-clock composites the exporter's
+    # oldest-age reads need, the allowance-hold composite, the two stage-scoped
+    # speaker outbox composites, the enrichment outbox sub-stocks and the
+    # pipeline-ledger group index. No conversations or stt_cap_holds index is
+    # duplicated here; their scoped twins predate this change.
     census = [
         requirement
         for requirement in BATCH_PIPELINE_INDEX_REQUIREMENTS
         if '_batch_census_' in requirement.identifier
-        or requirement.identifier == 'memory_outbox_group_status_available_at'
+        or requirement.identifier
+        in {
+            'enrichment_outbox_parked',
+            'enrichment_outbox_sync_hold',
+            'pipeline_ledger_group_stage_admitted_at',
+        }
     ]
-    assert len(census) == 11
+    assert len(census) == 12
     assert not {requirement.collection_group for requirement in census} & {'conversations', 'stt_cap_holds'}
+    assert {requirement.collection_group for requirement in census} >= {
+        'batch_pipeline_prod_jobs',
+        'sync_reprocess_outbox',
+        'pipeline_ledger',
+    }
+    assert all('dev' not in requirement.collection_group for requirement in census)
