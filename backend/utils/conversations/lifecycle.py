@@ -1337,8 +1337,10 @@ def _ledger_terminal(
 ) -> None:
     """Record a reversible hide as the capture's ledger terminal, after the real close commits.
 
-    A later restore needs no ledger undo: the restored capture's next real
-    transition re-opens the row with its own higher source revision.
+    Fenced like every ledger write: nothing is written for a conversation
+    deleted since the close, or for an account being wiped. A later restore
+    needs no ledger undo: the restored capture's next real transition re-opens
+    the row with its own higher source revision.
     """
     client = firestore_client or get_firestore_client()
     user_ref = client.collection('users').document(uid)
@@ -1347,6 +1349,7 @@ def _ledger_terminal(
         conversation_id,
         stage,
         reason=stage,
+        source_ref=user_ref.collection('conversations').document(conversation_id),
         owner_ref=user_ref,
         firestore_client=client,
         **fields,

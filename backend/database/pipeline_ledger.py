@@ -31,6 +31,8 @@ from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from config.refactor_modes import pipeline_ledger_enabled
 from database._client import get_firestore_client, run_transactional
+from database.account_deletion_marker import ACCOUNT_DELETION_COLLECTION
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.observability.reasons import (
     PipelineLedgerFailureReason,
     PipelineLedgerOutcome,
@@ -371,8 +373,14 @@ def _commit(
         # Fence a delayed post-commit write against source deletion and account
         # erasure inside the same transaction that would create the row.
         if owner_ref is not None:
-            owner = owner_ref.get(transaction=transaction)
-            if not getattr(owner, 'exists', False):
+            # The user document outlives its subcollections during an account
+            # wipe, so its existence proves nothing. The wipe's own marker is
+            # the authority; reading it here serializes this write with purge.
+            marker = client.collection(ACCOUNT_DELETION_COLLECTION).document(uid).get(transaction=transaction)
+            wiping = bool(getattr(marker, 'exists', False))
+            if account_deletion_marker_blocks_access(
+                marker_exists=wiping, raw_status=(marker.to_dict() or {}).get('wipe_status') if wiping else None
+            ):
                 return 'deleted'
         if source_ref is not None:
             source = source_ref.get(transaction=transaction)
