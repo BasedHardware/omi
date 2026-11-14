@@ -335,4 +335,5 @@ def test_original_probe_refuses_dispatch_after_unit_deadline(published, monkeypa
     monkeypatch.setattr(LocalBlob, 'reload', lambda *a, **k: pytest.fail('expired probe was dispatched'))
     with pytest.raises(ConnectionError, match='absence unresolved'):
         r.copies._absent(r.uid, row(r.result))
+    monkeypatch.undo()  # restore the real clock before the assertion's FS RPC
     assert r.copies._reference(row(r.result)).get().exists
