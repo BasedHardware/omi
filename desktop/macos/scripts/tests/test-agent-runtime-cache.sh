@@ -149,30 +149,98 @@ rm -f "$STAMP"
 false || true
 [ ! -e "$STAMP" ] || fail "failed preparation retained a stamp"
 
-# Standalone invocations serialize their output/stamp critical section.
+# Standalone invocations serialize their output/stamp critical section. Two
+# real contender processes (each with its own pid and start stamp), a file
+# barrier instead of a timing sleep, and overlap detected by the section itself
+# rather than by the trace, which is kept as a diagnostic only.
 LOCK="$TMP_ROOT/concurrent.lock.d"
 TRACE="$TMP_ROOT/concurrent.trace"
-run_locked() {
-  local name="$1"
-  arc_acquire_lock "$LOCK" 5
-  printf '%s-start\n' "$name" >>"$TRACE"
-  sleep 0.2
-  printf '%s-end\n' "$name" >>"$TRACE"
-  arc_release_lock "$LOCK"
-}
-(set -x; run_locked one) 2>"$TMP_ROOT/lock-one.log" &
-pid_one=$!
-(set -x; run_locked two) 2>"$TMP_ROOT/lock-two.log" &
-pid_two=$!
-wait "$pid_one" "$pid_two"
+LEDGER="$TMP_ROOT/concurrent.ledger"
+BARRIER="$TMP_ROOT/concurrent.barrier"
+mkdir -p "$BARRIER"
+
+# shellcheck disable=SC2016 # expanded by the contender shell, not here
+contender_script='
+source "$1"
+name="$2"
+lock="$3"
+trace="$4"
+ledger="$5"
+barrier="$6"
+touch "$barrier/ready-$name"
+while [ ! -e "$barrier/release" ]; do sleep 0.01; done
+arc_acquire_lock "$lock" 30 || exit 1
+printf "%s-start\n" "$name" >>"$trace"
+# Append-only enter/exit ledger: the depth read after announcing entry is the
+# assertion. Unlike an exclusive marker file it never has to be cleared, so
+# there is no window in which a second entrant could go unnoticed.
+printf "enter %s\n" "$name" >>"$ledger"
+depth="$(awk "\$1 == \"enter\" { d++ } \$1 == \"exit\" { d-- } END { print d + 0 }" "$ledger")"
+if [ "$depth" -gt 1 ]; then
+  printf "%s-OVERLAP\n" "$name" >>"$trace"
+fi
+printf "%s-end\n" "$name" >>"$trace"
+printf "exit %s\n" "$name" >>"$ledger"
+arc_release_lock "$lock"
+'
+bash -c "$contender_script" _ "$SCRIPT_DIR/../agent-runtime-cache.sh" one "$LOCK" "$TRACE" "$LEDGER" "$BARRIER" 2>"$TMP_ROOT/lock-one.log" &
+bash -c "$contender_script" _ "$SCRIPT_DIR/../agent-runtime-cache.sh" two "$LOCK" "$TRACE" "$LEDGER" "$BARRIER" 2>"$TMP_ROOT/lock-two.log" &
+# Wait for both contenders to be staged, then open the barrier together.
+barrier_deadline=$((SECONDS + 20))
+while [ ! -e "$BARRIER/ready-one" ] || [ ! -e "$BARRIER/ready-two" ]; do
+  if [ "$SECONDS" -ge "$barrier_deadline" ]; then
+    cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" >&2
+    fail "contenders did not reach the barrier"
+  fi
+  sleep 0.05
+done
+: >"$BARRIER/release"
+wait || true
 trace="$(cat "$TRACE")"
 case "$trace" in
+  *-OVERLAP*)
+    cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" >&2
+    fail "lock allowed interleaved critical sections: $trace"
+    ;;
   $'one-start\none-end\ntwo-start\ntwo-end'|$'two-start\ntwo-end\none-start\none-end') ;;
   *)
     cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" >&2
     fail "lock allowed interleaved critical sections: $trace"
     ;;
 esac
+[ ! -d "$LOCK" ] || fail "contenders left the lock directory behind"
+
+# A held lock must survive a record that cannot confirm the holder. The pid
+# protocol read exactly that as staleness and deleted the live lock; the owner
+# record must make the contender wait instead. The bare `pid` record stays in
+# play because an in-flight older process may still write one.
+held_lock="$TMP_ROOT/held.lock.d"
+arc_acquire_lock "$held_lock" 5
+dead_pid=999999
+while kill -0 "$dead_pid" 2>/dev/null; do
+  dead_pid=$((dead_pid - 1))
+done
+printf '%s\n' "$dead_pid" >"$held_lock/pid"
+if bash -c 'source "$1"; arc_acquire_lock "$2" 1' _ "$SCRIPT_DIR/../agent-runtime-cache.sh" "$held_lock" 2>/dev/null; then
+  fail "a contender evicted the live owner's lock"
+fi
+[ -f "$held_lock/owner" ] || fail "a waiting contender deleted the live owner record"
+arc_release_lock "$held_lock"
+[ ! -d "$held_lock" ] || fail "releasing the held lock left the directory behind"
+
+# A recorded owner whose pid is gone is still reclaimed, so an interrupted
+# preparation cannot wedge every later run.
+stale_pid=999999
+while kill -0 "$stale_pid" 2>/dev/null; do
+  stale_pid=$((stale_pid - 1))
+done
+stale_lock="$TMP_ROOT/stale-owner.lock.d"
+mkdir -p "$stale_lock"
+printf '%s\t%s\n' "$stale_pid" "Thu Jan  1 00:00:00 1970" >"$stale_lock/owner"
+arc_acquire_lock "$stale_lock" 5
+assert_eq "$(cut -f1 "$stale_lock/owner")" "$$"
+arc_release_lock "$stale_lock"
+[ ! -d "$stale_lock" ] || fail "released lock left the directory behind"
 
 assert_eq "$(arc_node_runtime_cache_policy "" 0)" "reuse"
 assert_eq "$(arc_node_runtime_cache_policy false 0)" "reuse"
