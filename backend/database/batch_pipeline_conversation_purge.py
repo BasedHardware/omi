@@ -175,6 +175,10 @@ def purge_conversation(
         from database.jobstore.erasure_operations import ErasureOperations, PREFIX
 
         def resolve_original(target: str) -> bool:
+            from database.jobstore.staging_operations import StagingOperations, PREFIX as STAGING_PREFIX
+
+            if target.startswith(STAGING_PREFIX):
+                return StagingOperations(retained_copies).resolve(uid, target)
             if target.startswith(PREFIX):
                 return ErasureOperations(retained_copies).resolve(uid, target)
             from utils.batch_pipeline.retention import delete_batch_object

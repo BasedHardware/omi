@@ -193,3 +193,63 @@ cold-copy acknowledgement nor this phase receipt is a final erasure/reverse
 certificate. Owner paging, account orchestration, other cohorts, runtime
 injection and lifetime/residue scheduling remain gates. Source readiness is
 false and no savings are booked.
+
+
+Original staging custody and destructive PG artifact-copy units (0019)
+
+The actual account/conversation adapter now joins real production artifact
+registration, original FS intake verification and a bounded staging census.
+The intake's repair context remains solely in the original FS document: PG
+retains only its path/fingerprint, never a reconstructed or copied repair
+context. Original artifact URIs, existing cleanup/expiry/write-pending values
+and original typed per-record deadlines are sealed, not extended. All unpinned
+and late-upload references stay in their original staging rows and in immutable
+reference custody. No current GCS generation lookup substitutes for the original
+upload version, and no terminal-session or all-copy absence is inferred.
+
+Migration0019 protects registered artifact mutations with an already-held owner
+X lock, then the namespace row lock. The trigger acquires no owner guard.
+Immutable per-record census/key rows resolve old artifact journal identities.
+A prepared operation binds the original unit token, source, census hash, queue
+epoch and account purge generation. Actual artifact-mirror DELETEs, their new
+journal entries and committed outcome share one SQL transaction; deferred
+constraints reject split DELETE/ack or an ack with known copies outstanding.
+Recovery locks the same owner and operation row, then observes committed or
+persists cancelled. Missing rows, transport/COMMIT errors and lease expiry
+cannot prove rollback. A paused old executor refuses a cancelled operation.
+Closed queue phases admit only this bound destructive DELETE, never new work.
+
+The adapter seals actual original FS custody under hold/unit-token, queue epoch
+and real deletion intent before SQL mutation, and verifies it again before the
+remote unit. No SQL slot/owner guard spans FS or GCS I/O. Exact account F
+generation and original paid admission remain authoritative. The real progress
+resolver routes staging operation targets before allowing another unit.
+
+Order is now private/original phases, staging seal/census, cold erase,
+destructive PG artifact-copy COMMIT, then cold erase covering the actual new
+DELETE journal versions. This supersedes the earlier cold-first ordering:
+artifact keys need the original staging census to resolve. All copies remain
+reachable through their original PG custodian throughout. Conditional cold
+handling acknowledges only definitively suppressed artifact versions; a live
+artifact reverse conversion still refuses. Cold key cap399/journal cap1000,
+owner cap10 and staging cap128 refuse oversized inputs pending paging.
+
+These are redundant PG artifact-mirror deletions, not final custody retirement.
+The original intake, original FS staging/upload capabilities, typed PG
+handoff/attempt/effect/recording/custody/outbox, journal prefix, reference census
+and operation barriers stay retained. No journal gaps, identity scrubbing, TTL,
+final erasure/reverse certificate or runtime selection is introduced. Real C4,
+late terminal-session proof, final destructive journal/typed PG cleanup,
+account orchestration, recovery injection, paging and scheduling remain gates.
+The broad first-review P1 remains open; readiness is false, no savings booked.
+
+New staging coverage exercises 21 actual emulator/private-PG cases: original
+registration and production purge entrypoint; missing/changed unique custody;
+raw SQL split-outcome/census/recreation refusal; exact copy mismatch rollback;
+unknown operation refusal; cancellation fencing; free pool/owner guards during
+FS; lost PG replies; os._exit before/after actual PG DELETE/outcome and FS seal
+COMMIT; actual progress target recovery; stale epoch/closed queue handling.
+The intake counter observes one read each for actual seal and verify. Killed
+FS read leases use at most12 synthetic redeliveries under unchanged deadlines.
+Initial new phase fixtures used invalid raw transitions; corrected to the
+existing transition API without changing production policy/refusal assertions.

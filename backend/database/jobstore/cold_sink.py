@@ -14,9 +14,10 @@ from database.jobstore.authority import AuthorityRefused, fingerprint, replay_pa
 from database.jobstore.fs_fence import handoff_ref
 from database.jobstore.postgres_store import jsonb
 from database.jobstore.retained_manifest import original_manifest
+from database.jobstore.staging_census import cold_paths, recording_for
 from database.privacy_fence.protocol import lock, owner_key
 
-FAMILIES = frozenset({'units', 'recordings', 'queue_custody', 'queue_handoffs', 'outbox'})
+FAMILIES = frozenset({'units', 'recordings', 'queue_custody', 'queue_handoffs', 'outbox', 'docs'})
 
 
 def logical_identity(family, identity):
@@ -25,11 +26,15 @@ def logical_identity(family, identity):
     if family == 'outbox':
         if set(identity) != {'kind', 'dedupe_key', 'generation'} or not all(identity.values()):
             raise AuthorityRefused('original logical outbox generation required')
+    if family == 'docs' and (set(identity) != {'tbl', 'key'} or identity['tbl'] != 'artifacts'):
+        raise AuthorityRefused('unqualified document cold cohort')
     return identity
 
 
 def recording_id(conn, namespace, family, identity):
     logical_identity(family, identity)
+    if family == 'docs':
+        return recording_for(conn, namespace, identity)
     if family == 'outbox':
         if identity['kind'] != 'project_conversation':
             raise AuthorityRefused('cold outbox cohort adapter missing')
@@ -78,7 +83,8 @@ class ColdSink:
             if family == 'outbox' and identity['generation'] != original['admission']['admission_id']:
                 raise AuthorityRefused('cold outbox does not belong to original admission')
             manifest = original_manifest(self.handoff, original)
-            if self.ref(family, identity).path not in manifest['cold_paths']:
+            paths = manifest['cold_paths'] + cold_paths(conn, self.handoff.ticket.namespace, recording)
+            if self.ref(family, identity).path not in paths:
                 raise AuthorityRefused('cold key outside original retained-copy census')
             digest = fingerprint(dict(intent=original['intent'], admission=original['admission']))
             existing = conn.execute(
@@ -130,6 +136,8 @@ class ColdSink:
         # data or reopening privacy. No absence scan stands in for this marker.
         if erased(client.transaction()):
             return
+        if family == 'docs':
+            raise AuthorityRefused('staging document copy requires completed cold erasure; no live reverse adapter')
         if operation != 'put' or body is None:
             raise AuthorityRefused('cold delete requires real destructive-unit custody')
         if body.get('namespace') != self.handoff.ticket.namespace:

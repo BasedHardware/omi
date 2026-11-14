@@ -43,6 +43,7 @@ def original_manifest(handoff, row):
         ]
         + [handoff.client.collection(ns + '_intakes').document(identity).path],
         cold_barrier_path=handoff_ref(handoff.client, ns, 'cold_recording_erasure', identity).path,
+        staging_barrier_path=handoff_ref(handoff.client, ns, 'staging_erasure', identity).path,
         cold_paths=[
             handoff_ref(handoff.client, ns, 'cold_' + family, fingerprint(key)).path for family, key in cold_keys
         ],

@@ -12,7 +12,7 @@ from google.cloud import firestore
 from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.postgres_store import jsonb
 from database.jobstore.retained_manifest import original_manifest
-from database.jobstore.cold_purge import erase_recording
+from database.jobstore.staging_copies import StagingCopies
 from database.privacy_fence.protocol import conversation_key, lock, owner_key, row_dict
 
 
@@ -159,15 +159,15 @@ class RetainedCopies:
         while the new durable census still has unresolved remote copy families.
         """
         for identity, manifest in self.inventory(uid, conversation):
-            erase_recording(
-                self, uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
-            )
             self.retire_private(
                 uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
             )
             from database.jobstore.original_copies import OriginalCopies
 
             OriginalCopies(self).retire(
+                uid, identity, authority, conversation=conversation, fs_generation=fs_generation
+            )
+            StagingCopies(self).retire_mirrors(
                 uid, identity, authority, conversation=conversation, fs_generation=fs_generation
             )
         raise RetainedCopiesPending('private copies retired; original/object/journal/cold-copy certification remains')

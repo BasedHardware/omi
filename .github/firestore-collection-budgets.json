@@ -37,7 +37,7 @@
       "reads_per_unit_budget": 1000,
       "reads_per_day_budget": 1,
       "basis": "planning-bound",
-      "source": "SCA-1959 dark source planning bound: generic handoff cycle remains 9 reads with one attempt per phase. Typed projection adds a private view: guard reads 2n sibling docs plus authority/root/cursor; completion repeats the guard for the actual session and reads the sibling receipts/accounting, bounded by 7n+20 <=916 reads per attempt for n<=128. Retries/redeliveries are separately counted. Privacy/customer ledger/outbox reads belong to their respective families. tests/integration/test_jobstore_provider_projection.py counts actual direct reads for the two-sibling real projection path. No production selector: expected 0/day, existing 1/day sentinel only. Measured fleet/conflict/recovery/writer volume and a replacement reviewed daily budget remain required before activation; source delivery books no savings. Ordinary typed cold source adds 5 direct family reads per row/attempt (<=500/page); recording cold erasure reads authority/barrier plus <=399 original cold keys (<=401/attempt). test_jobstore_cold_sink.py counts the actual two-sibling direct-read paths (5 for one copied row; 9 for recording erasure). These planning counts reuse the existing 1000 bound and 0 expected production/1 sentinel per day; they are not a new funded budget or fleet qualification. All retry attempts/redeliveries count separately.",
+      "source": "SCA-1959 dark source planning bound: generic handoff cycle remains 9 reads with one attempt per phase. Typed projection adds a private view: guard reads 2n sibling docs plus authority/root/cursor; completion repeats the guard for the actual session and reads the sibling receipts/accounting, bounded by 7n+20 <=916 reads per attempt for n<=128. Retries/redeliveries are separately counted. Privacy/customer ledger/outbox reads belong to their respective families. tests/integration/test_jobstore_provider_projection.py counts actual direct reads for the two-sibling real projection path. No production selector: expected 0/day, existing 1/day sentinel only. Measured fleet/conflict/recovery/writer volume and a replacement reviewed daily budget remain required before activation; source delivery books no savings. Ordinary typed cold source adds 5 direct family reads per row/attempt (<=500/page); recording cold erasure reads authority/barrier plus <=399 original cold keys (<=401/attempt). test_jobstore_cold_sink.py counts the actual two-sibling direct-read paths (5 for one copied row; 9 for recording erasure). These planning counts reuse the existing 1000 bound and 0 expected production/1 sentinel per day; they are not a new funded budget or fleet qualification. All retry attempts/redeliveries count separately. Staging seal/verify reads one opaque marker per attempt; bounded cold erasure retains the existing <=399-key cap (<=401 family reads). Additional staging keys count toward that same cap and require paging beyond it; no numeric bound increases.",
       "reviewed": "2026-11-13"
     },
     {
@@ -96,6 +96,18 @@
       "reads_per_day_budget": 1,
       "basis": "planning-bound",
       "source": "Reference census only; this phase does not read or delete the original intake. One read is a conservative sentinel per attempt, not a new serving grant. Private view erasure reads at most 2n+1 private documents plus one queue authority, n<=128, within the existing 1000 handoff-family bound. Hold/gate/deletion-intent reads stay with their original families. Retries/redeliveries are separately counted. Production selection remains absent, expected volume 0/day, sentinel 1/day. Fleet and daily volume remain a reviewed activation gate; no savings booked. Census reference construction moved to the pure retained_manifest helper; construction itself performs no Firestore read. Existing numeric budget and original unique intake custody are unchanged.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/jobstore/staging_copies.py",
+      "expression": "source['namespace'] + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "pgfoundation / SCA-1959 dark original staging custody",
+      "unit": "one explicit recording staging seal or verify transaction attempt",
+      "reads_per_unit_budget": 3,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Actual original intake point read: one per seal or verify transaction attempt; reuses the existing typed-provider intake bound of 3, expected production 0/day and sentinel 1/day. Repair context stays solely in its original FS custodian. No new TTL or serving selector. Retries/redeliveries count separately; fleet and funded daily budget remain activation gates. Source delivery books no savings.",
       "reviewed": "2026-11-13"
     }
   ],

@@ -9,6 +9,7 @@ from google.cloud import firestore
 
 from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.cold_sink import ColdSink, recording_id
+from database.jobstore.staging_census import cold_paths
 from database.privacy_fence.protocol import owner_key
 
 
@@ -22,6 +23,7 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
         original = handoff._required_row(conn, identity)
         if original['owner_key'] != owner or retained._manifest(original) != manifest:
             raise AuthorityRefused('cold purge original census changed')
+        paths = manifest['cold_paths'] + cold_paths(conn, handoff.ticket.namespace, identity)
         rows = conn.execute(
             'SELECT seq,epoch,family,identity,operation,owner_key,body FROM queue_journal '
             'WHERE namespace=%s AND owner_key=%s ORDER BY seq LIMIT 1001',
@@ -36,7 +38,7 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
             recording = recording_id(conn, handoff.ticket.namespace, row[2], row[3])
             if recording == identity:
                 key = sink.ref(row[2], row[3]).path
-                if key not in manifest['cold_paths']:
+                if key not in paths:
                     raise AuthorityRefused('cold journal key outside original retained-copy census')
                 keys[key] = dict(family=row[2], identity=row[3], seq=row[0])
                 through = max(through, row[0])
