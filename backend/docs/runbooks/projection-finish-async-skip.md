@@ -70,8 +70,10 @@ policy/privacy amplification. The reported 6M/hour is the potential affected
 pool, not a proven saving from this PR. The production owner must separate
 unchanged follow-up reads from eliminated finish reads.
 
-For the approximately 518k historical rows, classification temporarily adds up
-to 1.036M transaction document reads and 518k clock-only writes, in addition to
-one final legacy page/read pass. New async session writes need no classification
-read or extra write. Completion and reclassification races are transactionally
+For the approximately 518k historical rows, a nominal single classification
+pass adds about 1.036M transaction document reads and 518k clock-only writes,
+in addition to one final legacy page/read pass. Concurrent discoveries,
+transaction retries and later state transitions can add reads or reclassification;
+an already-classified row is never rewritten merely because another replica
+discovers it. New async session writes need no classification read or extra write. Completion and reclassification races are transactionally
 fenced; a failed classification remains eligible and retries.
