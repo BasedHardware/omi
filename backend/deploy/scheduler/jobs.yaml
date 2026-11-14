@@ -406,6 +406,31 @@ environments:
           min_backoff: 5s
         attempt_deadline: 1740s
         owner: backend/docs/runbooks/cap-hold-durability.md
+      - name: batch-stock-census
+        region: us-central1
+        # Ten-minute cadence: one pass is ~106 exact counts plus oldest-row
+        # projections (53 stocks, two stages for batch collections). Keep it
+        # below the alert's staleness budget so a missed run is visible, and
+        # above the cost of recomputing exact counts over multi-million-row
+        # collections.
+        schedule: "*/10 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/batch-census/run
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        # 53 stocks at a 60s per-RPC budget, four at a time: well inside this.
+        attempt_deadline: 600s
+        owner: backend/docs/runbooks/batch-stuck-census.md
       - name: error-class-alerts-sweep
         region: us-central1
         schedule: "*/15 * * * *"

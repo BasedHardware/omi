@@ -2413,7 +2413,13 @@
     "omi_transcription_final_pass_unit_skips_total",
     "omi_record_seal_oldest_age_seconds",
     "omi_record_token_late_append_total",
-    "omi_record_token_lease_expired_sealed_total"
+    "omi_record_token_lease_expired_sealed_total",
+    "omi_batch_pipeline_census_state_units",
+    "omi_batch_pipeline_census_state_oldest_age_seconds",
+    "omi_batch_pipeline_census_state_observed_at_seconds",
+    "omi_batch_pipeline_census_snapshot_timestamp_seconds",
+    "omi_batch_pipeline_census_registered_stocks",
+    "omi_batch_pipeline_census_sample_failures_total"
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {

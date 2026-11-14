@@ -304,8 +304,12 @@ def test_registry_keys_are_unique_and_scoped():
     for entry in ENTRIES:
         assert entry.scope in {COLLECTION, COLLECTION_GROUP}
         assert entry.collection in batch_census.COLLECTIONS
-        assert entry.field in STATE_FIELDS
-        assert entry.filters and entry.filters[0][0] == entry.field
+        # ``field`` names what identifies the stock. Lifecycle stocks filter on a
+        # state field; whole-collection and derived stocks may filter on nothing
+        # or on several fields, so a declared identity must appear in its filters.
+        if entry.filters:
+            assert entry.field in {field for field, _operator, _value in entry.filters}
+        assert entry.field
 
 
 def test_custody_assumptions_are_marked():
@@ -454,13 +458,28 @@ def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
         COLLECTION,
         (('state', 'ASCENDING'), ('listed_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
     ) in signatures
-    # This PR's census declarations add no conversations or cap-hold index; their
-    # existing scoped twins predate this change and are not duplicated here.
+    # Census declarations also add the per-clock composites the exporter's
+    # oldest-age reads need, the allowance-hold composite, the two stage-scoped
+    # speaker outbox composites, the enrichment outbox sub-stocks and the
+    # pipeline-ledger group index. No conversations or stt_cap_holds index is
+    # duplicated here; their scoped twins predate this change.
     census = [
         requirement
         for requirement in BATCH_PIPELINE_INDEX_REQUIREMENTS
         if '_batch_census_' in requirement.identifier
-        or requirement.identifier == 'memory_outbox_group_status_available_at'
+        or requirement.identifier
+        in {
+            'memory_outbox_group_status_available_at',
+            'enrichment_outbox_parked',
+            'enrichment_outbox_sync_hold',
+            'pipeline_ledger_group_stage_admitted_at',
+        }
     ]
-    assert len(census) == 11
+    assert len(census) == 30
     assert not {requirement.collection_group for requirement in census} & {'conversations', 'stt_cap_holds'}
+    assert {requirement.collection_group for requirement in census} >= {
+        'batch_pipeline_prod_jobs',
+        'batch_pipeline_prod_speaker_final_pass_outbox',
+        'sync_reprocess_outbox',
+        'pipeline_ledger',
+    }

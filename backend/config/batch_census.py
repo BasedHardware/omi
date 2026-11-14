@@ -33,7 +33,16 @@ COLLECTIONS = {
         'batch_pipeline_prod_provider_stt_outbox',
         'batch_pipeline_dev_provider_stt_outbox',
     ),
+    'speaker_outbox': (
+        'batch_pipeline_prod_speaker_final_pass_outbox',
+        'batch_pipeline_dev_speaker_final_pass_outbox',
+    ),
     'memory_outbox': ('memory_outbox',),
+    'enrichment_outbox': ('sync_reprocess_outbox',),
+    # Reads are collection-group: holds live under ``users/{uid}/stt_cap_holds``
+    # and ledger rows under ``users/{uid}/pipeline_ledger``.
+    'cap_holds': ('stt_cap_holds',),
+    'pipeline_ledger': ('pipeline_ledger',),
 }
 
 # Bounded reason vocabularies. ``legacy`` is the single bucket for free-text or
@@ -64,6 +73,38 @@ PRIVACY_REASONS = (
     'unknown',
     'legacy',
 )
+
+# The spend-gate subset of ``utils.observability.reasons.AdmissionHoldReason``:
+# a refusal that lasts until the owner's plan or budget changes. Fair use, the
+# daily ceiling, privacy and consent holds stay in ``batch:ready_parked``.
+ALLOWANCE_HOLD_REASONS = ('allowance_exhausted', 'allowance_unavailable', 'budget_exhausted')
+
+# States that represent an unpublished unit in the deep-backlog band. Terminal
+# and delivered states are excluded: an old ``dead`` row is not a backlog.
+DEEP_BACKLOG_STATES = (
+    'record_pending',
+    'ready',
+    'leased',
+    'retry',
+    'result_ready',
+    'vendor_held',
+    'quarantined',
+    'provider_pending',
+    'provider_running',
+)
+DEEP_BACKLOG_SECONDS = 7 * 86400
+
+
+@dataclass(frozen=True)
+class AgeCutoff:
+    """A relative ``clock < now - seconds`` filter, resolved by the exporter.
+
+    Bands (for example the 7-day deep backlog) cannot be expressed as a static
+    value in a declarative registry, and a registry must not read the wall clock
+    at import. The exporter resolves the cutoff from the sample moment.
+    """
+
+    seconds: float
 
 
 @dataclass(frozen=True)
@@ -100,7 +141,6 @@ class CensusEntry:
     scope: str
     field: str
     filters: tuple[tuple[str, str, object], ...]
-    runnable_exclude: tuple[tuple[str, str, object], ...]
     clock: str | None
     clock_verified: bool
     custody: Custody | None
@@ -111,6 +151,10 @@ class CensusEntry:
     reason_field: str | None = None
     reasons: tuple[str, ...] = ()
     note: str = ''
+    # Per-stock age alarm rendered into backend/charts/monitoring/alerts by
+    # scripts/generate_batch_census_alerts.py. None means "measured, not alarmed".
+    age_alarm_seconds: int | None = None
+    age_alarm_severity: str | None = None
 
     @property
     def key(self) -> str:
@@ -132,6 +176,9 @@ _HELD_CUSTODY = Custody('held_deadline_at', 0, 'declared', 'stamped deadline; ex
 _RECORD_CUSTODY = Custody('record_dead_letter_deadline_at', 0, 'declared', 'stamped 14-day barrier deadline')
 _OUTBOX_CUSTODY = Custody('created_at', 31 * 86400, 'unverified', 'Cloud Tasks retention is documented, not measured')
 _VENDOR_CUSTODY = Custody('enqueued_at', 29 * 86400, 'unverified', 'enqueue proxy; no dedicated vendor clock')
+# Speaker obligations carry no acceptance timestamp at all; the only clock is the
+# retry wake, so an age reading is a lower bound on the wait.
+_SPEAKER_CUSTODY = Custody('due_at', None, 'none', 'no stamped acceptance clock; due_at is a retry wake')
 _OWNER = 'batch-pipeline'
 
 
@@ -144,8 +191,9 @@ def _job(
     alarm: Alarm = _CENSUS_ALARM,
     reason_field: str | None = None,
     reasons: tuple[str, ...] = (),
-    runnable_exclude: tuple[tuple[str, str, object], ...] = (),
     note: str = '',
+    age_alarm_seconds: int | None = None,
+    age_alarm_severity: str = 'warning',
 ) -> CensusEntry:
     return CensusEntry(
         'batch',
@@ -154,16 +202,17 @@ def _job(
         COLLECTION,
         'state',
         (('state', '==', state),),
-        runnable_exclude,
-        clock,
-        True,
-        custody,
-        _OWNER,
-        ceiling,
-        alarm,
+        clock=clock,
+        clock_verified=True,
+        custody=custody,
+        owner=_OWNER,
+        ceiling=ceiling,
+        alarm=alarm,
         reason_field=reason_field,
         reasons=reasons,
         note=note,
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity=age_alarm_severity if age_alarm_seconds is not None else None,
     )
 
 
@@ -177,6 +226,8 @@ def _projection(
     alarm: Alarm = _CENSUS_ALARM,
     legacy: bool = False,
     note: str = '',
+    age_alarm_seconds: int | None = None,
+    age_alarm_severity: str = 'warning',
 ) -> CensusEntry:
     return CensusEntry(
         'batch_projection',
@@ -185,19 +236,20 @@ def _projection(
         COLLECTION,
         'projection_state',
         (('projection_state', '==', state),),
-        (),
-        clock,
-        clock_verified,
-        custody,
-        _OWNER,
-        ceiling,
-        alarm,
+        clock=clock,
+        clock_verified=clock_verified,
+        custody=custody,
+        owner=_OWNER,
+        ceiling=ceiling,
+        alarm=alarm,
         legacy=legacy,
         note=note,
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity=age_alarm_severity if age_alarm_seconds is not None else None,
     )
 
 
-def _recovery(state: str, *, ceiling: int | None = None) -> CensusEntry:
+def _recovery(state: str, *, ceiling: int | None = None, age_alarm_seconds: int | None = None) -> CensusEntry:
     # recovery_state literals are not yet part of the AST discovery guard
     # (SCA-1921 follow-up): the shared writer inventory does not track this
     # field, so a new recovery state can ship without a registry entry. The
@@ -209,14 +261,51 @@ def _recovery(state: str, *, ceiling: int | None = None) -> CensusEntry:
         COLLECTION,
         'recovery_state',
         (('recovery_state', '==', state),),
-        (),
-        'enqueued_at',
-        True,
-        None,
-        _OWNER,
-        ceiling,
-        _CENSUS_ALARM,
+        clock='enqueued_at',
+        clock_verified=True,
+        custody=None,
+        owner=_OWNER,
+        ceiling=ceiling,
+        alarm=_CENSUS_ALARM,
         note='recovery_state is not AST-guarded yet, so a new recovery state would not fail CI (follow-up)',
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity='warning' if age_alarm_seconds is not None else None,
+    )
+
+
+def _stock(
+    machine: str,
+    state: str,
+    collection: str,
+    filters: tuple[tuple[str, str, object], ...],
+    *,
+    scope: str = COLLECTION,
+    clock: str | None = None,
+    clock_verified: bool = False,
+    custody: Custody | None = None,
+    ceiling: int | None = None,
+    field: str = 'state',
+    note: str = '',
+    age_alarm_seconds: int | None = None,
+    age_alarm_severity: str = 'warning',
+) -> CensusEntry:
+    """A stock outside the job/projection lifecycle, declared by explicit filters."""
+    return CensusEntry(
+        machine,
+        state,
+        collection,
+        scope,
+        field,
+        filters,
+        clock=clock,
+        clock_verified=clock_verified,
+        custody=custody,
+        owner=_OWNER,
+        ceiling=ceiling,
+        alarm=_CENSUS_ALARM,
+        note=note,
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity=age_alarm_severity if age_alarm_seconds is not None else None,
     )
 
 
@@ -231,6 +320,7 @@ def _simple(
     clock_verified: bool = False,
     custody: Custody | None = None,
     ceiling: int | None = None,
+    age_alarm_seconds: int | None = None,
 ) -> CensusEntry:
     return CensusEntry(
         machine,
@@ -239,13 +329,14 @@ def _simple(
         scope,
         field,
         ((field, '==', state),),
-        (),
-        clock,
-        clock_verified,
-        custody,
-        _OWNER,
-        ceiling,
-        _CENSUS_ALARM,
+        clock=clock,
+        clock_verified=clock_verified,
+        custody=custody,
+        owner=_OWNER,
+        ceiling=ceiling,
+        alarm=_CENSUS_ALARM,
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity='warning' if age_alarm_seconds is not None else None,
     )
 
 
@@ -261,21 +352,38 @@ JOB_ENTRIES = (
         custody=_RECORD_CUSTODY,
         ceiling=50_000,
         alarm=_RECORD_ALARM,
+        age_alarm_seconds=86400,
+        age_alarm_severity='critical',
     ),
     _job(
         'ready',
         ceiling=100_000,
         alarm=_UNPUBLISHED_ALARM,
-        runnable_exclude=(('compute_decision.outcome', '==', 'held'),),
+        note='every ready row, including parked holds; the runnable/parked split is published separately',
     ),
-    _job('leased', clock='lease_until', ceiling=50_000, alarm=_UNPUBLISHED_ALARM),
-    _job('retry', ceiling=100_000, alarm=_UNPUBLISHED_ALARM),
+    _job(
+        'leased',
+        clock='lease_until',
+        ceiling=50_000,
+        alarm=_UNPUBLISHED_ALARM,
+        age_alarm_seconds=3600,
+        age_alarm_severity='critical',
+    ),
+    _job(
+        'retry',
+        ceiling=100_000,
+        alarm=_UNPUBLISHED_ALARM,
+        age_alarm_seconds=21600,
+        age_alarm_severity='critical',
+    ),
     _job(
         'result_ready',
         custody=_RESULT_CUSTODY,
         ceiling=2_000_000,
         alarm=_UNPUBLISHED_ALARM,
         note='provider-lane rows only; record-lane rows have no provider_intent, so their horizon is null',
+        age_alarm_seconds=7200,
+        age_alarm_severity='critical',
     ),
     _job(
         'vendor_held',
@@ -284,6 +392,7 @@ JOB_ENTRIES = (
         alarm=_UNPUBLISHED_ALARM,
         reason_field='vendor_hold.reason',
         reasons=VENDOR_HOLD_REASONS,
+        age_alarm_seconds=86400,
     ),
     _job(
         'quarantined',
@@ -293,12 +402,14 @@ JOB_ENTRIES = (
         alarm=_HELD_ALARM,
         reason_field='quarantine_reason',
         reasons=QUARANTINE_REASONS,
+        age_alarm_seconds=86400,
     ),
     _job(
         'privacy_blocked',
         ceiling=10_000,
         reason_field='privacy_blocked_reason',
         reasons=PRIVACY_REASONS,
+        age_alarm_seconds=86400,
     ),
     _job('partial_retired', ceiling=10_000),
     _job(
@@ -315,27 +426,35 @@ JOB_ENTRIES = (
         reason_field='dead_letter_reason',
         reasons=DEAD_REASONS,
     ),
-    _job('provider_pending', ceiling=400_000, alarm=_FRESH_ALARM),
-    _job('provider_running', ceiling=50_000, alarm=_FRESH_ALARM),
+    _job('provider_pending', ceiling=400_000, alarm=_FRESH_ALARM, age_alarm_seconds=604800),
+    _job('provider_running', ceiling=50_000, alarm=_FRESH_ALARM, age_alarm_seconds=21600),
     _job('provider_superseded', clock='superseded_at', ceiling=50_000),
     _job(
         'record_recovery_waiting',
         ceiling=10_000,
         note='merge_pending=False; not covered by the merge-pending complement census',
+        age_alarm_seconds=86400,
     ),
 )
 
 # --- result projection states ----------------------------------------------
 PROJECTION_ENTRIES = (
-    _projection('pending', ceiling=100_000),
-    _projection('persisted', ceiling=100_000),
-    _projection('ready', custody=_PROJECTION_CUSTODY, ceiling=2_000_000),
+    _projection('pending', ceiling=100_000, age_alarm_seconds=3600, age_alarm_severity='critical'),
+    _projection('persisted', ceiling=100_000, age_alarm_seconds=3600, age_alarm_severity='critical'),
+    _projection(
+        'ready',
+        custody=_PROJECTION_CUSTODY,
+        ceiling=2_000_000,
+        age_alarm_seconds=7200,
+        age_alarm_severity='critical',
+    ),
     _projection(
         'quarantine_held',
         clock='held_deadline_at',
         custody=_HELD_CUSTODY,
         ceiling=50_000,
         alarm=_HELD_ALARM,
+        age_alarm_seconds=86400,
     ),
     _projection('completed', ceiling=2_000_000),
     _projection('erased', clock=None, clock_verified=False, ceiling=100_000),
@@ -350,14 +469,14 @@ PROJECTION_ENTRIES = (
 
 # --- job recovery states ----------------------------------------------------
 RECOVERY_ENTRIES = tuple(
-    _recovery(state, ceiling=ceiling)
-    for state, ceiling in (
-        ('held', 50_000),
-        ('prepared', 50_000),
-        ('running', 50_000),
-        ('failed_held', 50_000),
-        ('recovered', 100_000),
-        ('cancelled', 10_000),
+    _recovery(state, ceiling=ceiling, age_alarm_seconds=age_alarm_seconds)
+    for state, ceiling, age_alarm_seconds in (
+        ('held', 50_000, 86400),
+        ('prepared', 50_000, 3600),
+        ('running', 50_000, 3600),
+        ('failed_held', 50_000, 86400),
+        ('recovered', 100_000, None),
+        ('cancelled', 10_000, None),
     )
 )
 
@@ -372,6 +491,7 @@ PROVIDER_OUTBOX_ENTRIES = (
         clock_verified=True,
         custody=_OUTBOX_CUSTODY,
         ceiling=400_000,
+        age_alarm_seconds=86400,
     ),
     _simple(
         'provider_outbox',
@@ -397,17 +517,231 @@ MEMORY_OUTBOX_ENTRIES = tuple(
         clock='available_at',
         clock_verified=True,
         ceiling=ceiling,
+        age_alarm_seconds=age_alarm_seconds,
     )
-    for state, ceiling in (
-        ('pending', 2_000_000),
-        ('processing', 100_000),
-        ('delivered', 2_000_000),
-        ('retryable_failure', 100_000),
-        ('dead_letter', 100_000),
+    for state, ceiling, age_alarm_seconds in (
+        ('pending', 2_000_000, 86400),
+        ('processing', 100_000, 3600),
+        ('delivered', 2_000_000, None),
+        ('retryable_failure', 100_000, 86400),
+        ('dead_letter', 100_000, None),
     )
 )
 
-ENTRIES = JOB_ENTRIES + PROJECTION_ENTRIES + RECOVERY_ENTRIES + PROVIDER_OUTBOX_ENTRIES + MEMORY_OUTBOX_ENTRIES
+# --- enrichment outbox ------------------------------------------------------
+# ``sync_reprocess_outbox`` rows are deleted when the obligation completes, so
+# the whole collection is one stock. ``first_pending_at`` is stamped on every
+# durable obligation and is not reset by an append or a retry.
+ENRICHMENT_OUTBOX_ENTRIES = (
+    _stock(
+        'enrichment_outbox',
+        'pending',
+        'enrichment_outbox',
+        (),
+        clock='first_pending_at',
+        clock_verified=True,
+        ceiling=100_000,
+        field='first_pending_at',
+        note='every row is a live obligation; parked rows are counted separately',
+        age_alarm_seconds=86400,
+    ),
+    _stock(
+        'enrichment_outbox',
+        'parked',
+        'enrichment_outbox',
+        (('age_gate_parked', '==', True),),
+        clock='first_pending_at',
+        clock_verified=True,
+        ceiling=2_000_000,
+        field='age_gate_parked',
+        note='age-gate parking is deliberate and reversible; old parked rows are expected, not stuck',
+    ),
+    _stock(
+        'enrichment_outbox',
+        'sync_hold',
+        'enrichment_outbox',
+        (('sync_hold', '==', True),),
+        clock='first_pending_at',
+        clock_verified=True,
+        ceiling=100_000,
+        field='sync_hold',
+        note='held behind a live capture; the hold has a stamped maximum, so age is a wait not a leak',
+    ),
+)
+
+# --- speaker final-pass outbox ---------------------------------------------
+# One collection per stage; rows carry no acceptance clock, so ``due_at`` is a
+# wake and a lower bound on the wait. Open rows have no ``outcome`` yet.
+SPEAKER_OUTBOX_ENTRIES = (
+    _stock(
+        'speaker_outbox',
+        'open',
+        'speaker_outbox',
+        (('outcome', '==', None),),
+        clock='due_at',
+        clock_verified=False,
+        custody=_SPEAKER_CUSTODY,
+        ceiling=10_000,
+        field='outcome',
+        note='no acceptance clock; due_at is a retry wake, a lower bound on the wait',
+        age_alarm_seconds=21600,
+    ),
+    _stock(
+        'speaker_outbox',
+        'terminal_pending',
+        'speaker_outbox',
+        (('terminal_pending', '==', True),),
+        clock='due_at',
+        clock_verified=False,
+        custody=_SPEAKER_CUSTODY,
+        ceiling=10_000,
+        field='terminal_pending',
+        note='closed receipt waiting for its counter/repair write; due_at is a lower bound',
+        age_alarm_seconds=86400,
+    ),
+)
+
+# --- over-cap (.stt) holds --------------------------------------------------
+# Pending pre-STT holds live under ``{user_root}/stt_cap_holds``; the fleet
+# census is a collection-group read. ``listed_at`` is the stamped hold clock.
+_CRITICAL_CAP_HOLDS = frozenset({'staging', 'sealing'})
+CAP_HOLD_ENTRIES = tuple(
+    _stock(
+        'cap_hold',
+        state,
+        'cap_holds',
+        (('state', '==', state),),
+        scope=COLLECTION_GROUP,
+        clock='listed_at',
+        clock_verified=True,
+        ceiling=ceiling,
+        note=note,
+        age_alarm_seconds=age_alarm_seconds,
+    )
+    for state, ceiling, note, age_alarm_seconds in (
+        (
+            'held',
+            6_000_000,
+            'over-cap audio waiting on credits; months old is expected, so the stock is measured and not paged',
+            None,
+        ),
+        ('staging', 10_000, 'live capture being encrypted into durable staging', 3600),
+        ('sealing', 10_000, 'live staging being sealed into a hold', 3600),
+        ('retained', 500_000, 'terminal retained hold; not actionable by this census', None),
+        ('batch_admitted', 100_000, 'handed to a batch job; the job is the continuing obligation', None),
+    )
+)
+
+# --- pipeline ledger (live admission) --------------------------------------
+# ``pipeline_ledger`` is the in-flight capture ledger; rows live under
+# ``{user_root}/pipeline_ledger``. ``capturing`` is live admission before seal.
+LEDGER_ENTRIES = tuple(
+    _stock(
+        'pipeline_ledger',
+        stage,
+        'pipeline_ledger',
+        (('stage', '==', stage),),
+        scope=COLLECTION_GROUP,
+        clock='admitted_at',
+        clock_verified=True,
+        ceiling=ceiling,
+        field='stage',
+        note=note,
+        age_alarm_seconds=age_alarm_seconds,
+        age_alarm_severity='critical',
+    )
+    for stage, ceiling, note, age_alarm_seconds in (
+        ('capturing', 100_000, 'live admission before seal', 21600),
+        ('sealed', 100_000, 'sealed capture waiting for transcription', 3600),
+        ('transcribed', 100_000, 'transcript landed waiting for notes/enrichment', 1800),
+        ('noted', 100_000, 'notes landed waiting for terminal projection', 1800),
+    )
+)
+
+# --- derived stocks ---------------------------------------------------------
+# Stocks that are a predicate over an existing collection rather than a state
+# field. Each is the audit's own framing, spelled out as filters so the count
+# and the oldest-age reading answer the same question.
+_DERIVED_ENTRIES = (
+    _stock(
+        'batch',
+        'committed_hidden',
+        'results',
+        (('projection_state', 'in', ('pending', 'persisted', 'ready', 'quarantine_held')),),
+        clock='committed_at',
+        clock_verified=True,
+        ceiling=2_000_000,
+        field='projection_state',
+        note='committed results whose projection has not completed, so the conversation is not visible yet',
+        age_alarm_seconds=7200,
+        age_alarm_severity='critical',
+    ),
+    _stock(
+        'batch',
+        'ready_runnable',
+        'jobs',
+        (('state', '==', 'ready'), ('compute_decision.outcome', 'in', ('unattempted', 'allowed'))),
+        clock='enqueued_at',
+        clock_verified=True,
+        ceiling=100_000,
+        field='state',
+        note='admissible ready rows; fields an earlier allow/unevaluated decision stamps, so no row can be hidden by the split',
+        age_alarm_seconds=7200,
+        age_alarm_severity='critical',
+    ),
+    _stock(
+        'batch',
+        'ready_parked',
+        'jobs',
+        (('state', '==', 'ready'), ('compute_decision.outcome', '==', 'held')),
+        clock='compute_decision.at',
+        clock_verified=True,
+        ceiling=100_000,
+        field='state',
+        note='ready rows parked by a policy/capacity refusal; the hold clock is when the latest refusal landed',
+    ),
+    _stock(
+        'batch',
+        'allowance_held',
+        'jobs',
+        (
+            ('compute_decision.outcome', '==', 'held'),
+            ('compute_decision.reason', 'in', ALLOWANCE_HOLD_REASONS),
+        ),
+        clock='compute_decision.at',
+        clock_verified=True,
+        ceiling=100_000,
+        field='compute_decision.outcome',
+        note='spend-gate refusals (allowance/budget); durable until the plan changes, so measured and not paged',
+    ),
+    _stock(
+        'batch',
+        'deep_backlog',
+        'jobs',
+        (
+            ('state', 'in', DEEP_BACKLOG_STATES),
+            ('enqueued_at', '<', AgeCutoff(DEEP_BACKLOG_SECONDS)),
+        ),
+        clock='enqueued_at',
+        clock_verified=True,
+        ceiling=400_000,
+        field='state',
+        note='unpublished units older than the 7-day depth band; exact count where the timeliness backlog walk caps at 10000',
+    ),
+)
+
+ENTRIES = (
+    JOB_ENTRIES
+    + PROJECTION_ENTRIES
+    + RECOVERY_ENTRIES
+    + PROVIDER_OUTBOX_ENTRIES
+    + MEMORY_OUTBOX_ENTRIES
+    + ENRICHMENT_OUTBOX_ENTRIES
+    + SPEAKER_OUTBOX_ENTRIES
+    + CAP_HOLD_ENTRIES
+    + LEDGER_ENTRIES
+    + _DERIVED_ENTRIES
+)
 BY_KEY = {entry.key: entry for entry in ENTRIES}
 
 # The job vocabulary the merge-pending complement census treats as known. It is
