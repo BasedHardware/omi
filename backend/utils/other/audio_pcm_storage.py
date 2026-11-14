@@ -7,7 +7,9 @@ import threading
 from prometheus_client import Counter, Histogram
 
 DECISIONS = Counter('omi_audio_pcm_storage_total', 'New PCM representation attempts', ['result'])
-INPUT_BYTES = Counter('omi_audio_pcm_storage_input_bytes_total', 'PCM bytes considered for new writes')
+INPUT_BYTES = Counter(
+    'omi_audio_pcm_storage_input_bytes_total', 'PCM bytes admitted to encoding attempts, including retries'
+)
 SAVED_BYTES = Counter('omi_audio_pcm_storage_saved_bytes_total', 'Bytes saved by verified encoding attempts')
 STORAGE_SECONDS = Histogram(
     'omi_audio_pcm_storage_seconds',
@@ -37,13 +39,13 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
     if os.getenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'true').strip().lower() != 'true':
         DECISIONS.labels(result).inc()
         return payload, codec
-    INPUT_BYTES.inc(len(pcm))
     if not (_MIN_BYTES <= len(pcm) <= _MAX_BYTES) or channels != 1 or len(pcm) % 2:
         result = 'ineligible'
     elif not _ENCODERS.acquire(blocking=False):
         result = 'busy'
     else:
         try:
+            INPUT_BYTES.inc(len(pcm))
             common = ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-threads', '1']
             encoded = subprocess.run(
                 common

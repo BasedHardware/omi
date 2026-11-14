@@ -49,6 +49,45 @@ def test_incompressible_pcm_does_not_grow():
     assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
 
 
+@pytest.mark.parametrize('outcome', ['disabled', 'ineligible', 'busy', 'timeout', 'flac', 'retry'])
+def test_attempt_byte_metrics_follow_encoder_admission_and_verified_savings(monkeypatch, outcome):
+    amounts = {'input': 0, 'saved': 0}
+
+    def meter(name):
+        def inc(amount):
+            amounts[name] += amount
+
+        return SimpleNamespace(inc=inc)
+
+    monkeypatch.setattr(audio_pcm_storage, 'INPUT_BYTES', meter('input'))
+    monkeypatch.setattr(audio_pcm_storage, 'SAVED_BYTES', meter('saved'))
+    pcm = bytes(2 if outcome == 'ineligible' else 64000)
+    encoded = b'compressed'
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append(kwargs['input'])
+        assert amounts['input'] >= len(pcm)  # counted before invoking the child
+        if outcome == 'timeout':
+            raise subprocess.TimeoutExpired('ffmpeg', 2)
+        return SimpleNamespace(stdout=encoded if kwargs['input'] == pcm else pcm)
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    if outcome == 'disabled':
+        monkeypatch.setenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'false')
+    if outcome == 'busy':
+        monkeypatch.setattr(audio_pcm_storage, '_ENCODERS', SimpleNamespace(acquire=lambda **k: False))
+    attempts = 2 if outcome == 'retry' else 1
+    for _ in range(attempts):
+        result = audio_pcm_storage.compact_pcm(pcm, 16000, 1)
+        assert result == ((encoded, 'flac') if outcome in {'flac', 'retry'} else (pcm, 'pcm16'))
+    admitted = outcome in {'timeout', 'flac', 'retry'}
+    assert amounts['input'] == (len(pcm) * attempts if admitted else 0)
+    verified = outcome in {'flac', 'retry'}
+    assert amounts['saved'] == ((len(pcm) - len(encoded)) * attempts if verified else 0)
+    assert len(calls) == (2 * attempts if verified else 1 if admitted else 0)
+
+
 def test_unproven_zero_sample_payload_keeps_original_container(monkeypatch):
     monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('unproven PCM must not invoke encoder'))
     pack = CapturePack('pcm16', 16000)
