@@ -63,6 +63,7 @@ from utils.conversations.speaker_resolution_inputs import (
     manifest_span_load as _manifest_span_load,
 )
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_rejected_speakers
+from utils.transcribe_decisions import preserve_upstream_speaker_identity
 from utils.metrics import (
     OMI_AUDIO_PLACEMENT_TOTAL,
     OMI_CONVERSATION_SPEAKER_RESOLUTION_REASONS_TOTAL,
@@ -774,6 +775,8 @@ def apply_speaker_resolution(
                 'end': origin + segment.end,
             }
         segment.assign_resolved_speaker(new_id, scope)
+        if getattr(conversation, 'uses_custom_stt', False) and preserve_upstream_speaker_identity(segment):
+            continue
         identity = identities.get(new_id)
         if new_id in preserved_voices:
             # A reduced roster cannot reject an established owner or establish
