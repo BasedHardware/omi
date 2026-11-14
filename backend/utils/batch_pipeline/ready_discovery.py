@@ -68,7 +68,14 @@ class ReadyDiscovery:
             if not state.get('ceiling_owner_key') and time.monotonic() >= deadline:
                 # The cursor read spent the tick: start the pass (its ceiling query) next tick.
                 return dict(
-                    state=state, deadline=deadline, owners=0, missing=0, spent=1, wrapped=0, failed=False, deferred=True
+                    cursor=state,
+                    deadline=deadline,
+                    owners=0,
+                    missing=0,
+                    spent=1,
+                    wrapped=0,
+                    failed=False,
+                    deferred=True,
                 )
             if not state.get('ceiling_owner_key'):
                 ceiling = self.store.ready_owners(None, 1, descending=True)
@@ -77,13 +84,13 @@ class ReadyDiscovery:
                     ceiling_owner_key=ceiling[0][0] if ceiling else None,
                     pass_started_at=time.time(),
                 )
-            return dict(state=state, deadline=deadline, owners=0, missing=0, spent=0, wrapped=0, failed=False)
+            return dict(cursor=state, deadline=deadline, owners=0, missing=0, spent=0, wrapped=0, failed=False)
         except Exception as error:
             self.retry(error)
             return None
 
     def owners(self, page):
-        state = page['state']
+        state = page['cursor']
         if page.get('deferred'):
             return
         try:
@@ -124,7 +131,7 @@ class ReadyDiscovery:
     def finish(self, page):
         if page['failed']:
             return False
-        state = page['state']
+        state = page['cursor']
         if page['wrapped']:
             state.update(after_owner_key=None, ceiling_owner_key=None)
         try:
