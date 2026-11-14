@@ -1276,3 +1276,6 @@ def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
     assert h.store.ready_owners(None, 1) == expected[:1]
     assert h.store.ready_owners(expected[0][0], 1) == expected[1:]
     assert h.store.ready_owners(expected[1][0], 1) == []
+
+    assert h.store.ready_owners(None, 1, descending=True) == expected[-1:]
+    assert h.store.ready_owners(None, 2, ceiling_owner_key=expected[0][0]) == expected[:1]

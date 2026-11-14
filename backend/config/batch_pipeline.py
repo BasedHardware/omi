@@ -744,6 +744,10 @@ def ready_discovery_owners_per_tick(default: int = 20) -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', str(default)), 20, 100)
 
 
+def ready_discovery_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '10'), 10, 60)
+
+
 def serving_sweep_page_rows() -> int:
     """Bound projection discovery pages; unset restores the existing 100 rows."""
     return _pump_bound(os.getenv('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS', '100'), 100, 200, 50)

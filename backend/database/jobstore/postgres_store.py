@@ -350,16 +350,21 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
-    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
         owners = []
         with self._read_conn() as conn:
             for _ in range(max(1, min(limit, 100))):
                 bound = 'AND owner_key COLLATE "C" > %s ' if after_owner_key is not None else ''
                 params = (self.namespace, after_owner_key) if bound else (self.namespace,)
+                if ceiling_owner_key is not None:
+                    bound += 'AND owner_key COLLATE "C" <= %s '
+                    params += (ceiling_owner_key,)
                 row = conn.execute(
                     "SELECT owner_key, doc->>'owner_id' FROM jobs "
                     "WHERE namespace = %s AND state = 'result_ready' AND merge_pending "
-                    f'{bound}ORDER BY owner_key COLLATE "C" LIMIT 1',
+                    f'{bound}ORDER BY owner_key COLLATE "C" {"DESC" if descending else "ASC"} LIMIT 1',
                     params,
                 ).fetchone()
                 if row is None:

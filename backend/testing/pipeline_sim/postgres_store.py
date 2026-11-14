@@ -170,8 +170,10 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
-    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
-        return self.pg.ready_owners(after_owner_key, limit)
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        return self.pg.ready_owners(after_owner_key, limit, ceiling_owner_key=ceiling_owner_key, descending=descending)
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return self.pg.held_merge_owners(limit, after=after)

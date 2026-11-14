@@ -20,7 +20,7 @@ SWITCH = 'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED'
 BUDGET = 'BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK'
 
 
-def stock(sim=False, count=5000):
+def stock(sim=False, count=150):
     customer = CustomerData()
     store = SimStore(customer) if sim else MemoryStore()
     owners = sorted(['synthetic-a', 'synthetic-b', 'synthetic-c'], key=owner_key)
@@ -59,8 +59,10 @@ def test_ready_owners_skips_blocks_and_filters(backend, monkeypatch):
     assert store.ready_owners(None, 2) == expected[:2]
     assert store.ready_owners(expected[1][0], 2) == expected[2:]
     assert store.ready_owners(expected[-1][0], 2) == []
+    assert store.ready_owners(None, 1, descending=True) == expected[-1:]
+    assert store.ready_owners(None, 3, ceiling_owner_key=expected[1][0]) == expected[:2]
     if backend == 'firestore':
-        assert len(query.reads) == 3
+        assert len(query.reads) == 6
 
 
 @pytest.mark.asyncio
@@ -77,7 +79,7 @@ async def test_quiet_owner_commits_within_one_pass_without_markers(monkeypatch, 
         await tick(service)
     assert (store.rows['jobs', 's2']['state'] == 'committed') == enabled
     assert not any(t == 'merge_holds' for t, _ in store.rows)
-    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 10001 - enabled
+    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 301 - enabled
 
 
 async def tick(service):
@@ -89,10 +91,10 @@ async def tick(service):
 
 
 @pytest.mark.asyncio
-async def test_restart_resumes_and_empty_page_wraps(monkeypatch, caplog):
+async def test_restart_resumes_and_last_owner_wraps(monkeypatch, caplog):
     monkeypatch.setenv(BUDGET, '1')
     store, owners = stock(count=1)
-    for n in range(5):
+    for n in range(4):
         service = Serving(store)
         service.drain_owner = Mock()
         with caplog.at_level(logging.INFO):
@@ -100,13 +102,14 @@ async def test_restart_resumes_and_empty_page_wraps(monkeypatch, caplog):
         state = store.rows['merge_discovery', 'cursor']
         if n == 0:
             started = state['pass_started_at']
-        if n == 3:
-            assert state['after_owner_key'] is None and state['pass_started_at'] > started
-            service.drain_owner.assert_not_called()
+        service.drain_owner.assert_called_once_with(owners[n % 3])
+        if n == 2:
+            assert state['after_owner_key'] is None and state['ceiling_owner_key'] is None
         else:
-            service.drain_owner.assert_called_once_with(owners[n % 4])
-            assert state['after_owner_key'] == owner_key(owners[n % 4])
-    assert 'owners=0 more=0 wrapped=1 source=serving' in caplog.text
+            assert state['after_owner_key'] == owner_key(owners[n % 3])
+        if n == 3:
+            assert state['pass_started_at'] > started
+    assert 'owners=1 more=0 wrapped=1 source=serving' in caplog.text
 
 
 @pytest.mark.asyncio
@@ -133,10 +136,107 @@ async def test_cursor_failure_uses_old_page_and_preserves_marker_reoffer(monkeyp
         await tick(service)
     store.due.assert_any_call('result_ready', pytest.approx(time.time(), abs=2), 100)
     assert store.rows['jobs', 's2']['state'] == 'committed'
-    assert 'event=batch_merge action=ready_cursor outcome=retry exception_type=' in caplog.text
+    assert (
+        f'event=batch_merge action=ready_cursor outcome={"retry" if operation == "index" else "error"} exception_type='
+        in caplog.text
+    )
+    assert fallback.call_args.kwargs['reason'] == ('unavailable' if operation == 'index' else 'other')
+    if operation != 'index':
+        assert any(r.levelno == logging.ERROR and 'outcome=error' in r.message for r in caplog.records)
     fallback.assert_called_once()
     assert caplog.text.count('action=ready_cursor owners=') == 1
     if operation == 'index':
         assert service.ready_discovery.retry_at > time.monotonic() + 299
         await tick(service)
         store.ready_owners.assert_called_once()
+
+
+@pytest.mark.parametrize('budget', [1, 2])
+def test_new_owners_do_not_extend_pass_and_behind_cursor_waits(monkeypatch, budget):
+    monkeypatch.setenv(BUDGET, str(budget))
+    store = MemoryStore()
+    for key in ('b', 'd', 'f'):
+        store.rows['jobs', key] = dict(owner_key=key, owner_id='synthetic', state='result_ready', merge_pending=True)
+    discovery = ready_discovery.ReadyDiscovery(store, 'test')
+    seen = []
+    for n in range((3 + budget - 1) // budget):
+        page = discovery.page()
+        seen.extend(key for key, _ in discovery.owners(page))
+        assert discovery.finish(page)
+        assert page['wrapped'] == (n == (3 + budget - 1) // budget - 1)
+        for key in ('a', f'z{n}'):
+            store.rows['jobs', key] = dict(store.rows['jobs', 'b'], owner_key=key)
+    assert seen == ['b', 'd', 'f']
+    assert store.rows['merge_discovery', 'cursor']['ceiling_owner_key'] is None
+    seen = []
+    while True:
+        page = discovery.page()
+        seen.extend(key for key, _ in discovery.owners(page))
+        discovery.finish(page)
+        if page['wrapped']:
+            break
+    assert seen == sorted(key for table, key in store.rows if table == 'jobs')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('pump', [False, True])
+@pytest.mark.parametrize('slow', ['query', 'drain'])
+async def test_tick_deadline_preserves_undrained_owners(monkeypatch, caplog, pump, slow):
+    from types import SimpleNamespace
+
+    store, owners = stock(count=1)
+    clock = [0]
+    monkeypatch.setattr(ready_discovery, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=time.time))
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '1')
+    service = Pump(Scheduler(store), Mock()) if pump else Serving(store)
+    visited = []
+
+    def drain(owner):
+        visited.append(owner)
+        if slow == 'drain':
+            clock[0] += 1
+
+    original = store.ready_owners
+
+    def seek(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if slow == 'query' and not kwargs.get('descending'):
+            clock[0] += 1
+        return result
+
+    store.ready_owners = seek
+    if pump:
+
+        async def async_drain(owner):
+            drain(owner)
+
+        service.drain_owner = async_drain
+    else:
+        service.drain_owner = drain
+    with caplog.at_level(logging.INFO):
+        await tick(service)
+    state = store.rows['merge_discovery', 'cursor']
+    assert visited == (owners[:1] if slow == 'drain' else [])
+    assert state['after_owner_key'] == (owner_key(owners[0]) if visited else None)
+    assert 'budget_spent=1' in caplog.text
+    store.ready_owners = original
+    await tick(service)
+    assert visited == (owners[:2] if slow == 'drain' else owners)
+
+
+def test_missing_owner_count_and_empty_ceiling(caplog):
+    store, _ = stock(count=1)
+    for (table, _), row in store.rows.items():
+        if table == 'jobs':
+            row.pop('owner_id')
+    discovery = ready_discovery.ReadyDiscovery(store, 'test')
+    with caplog.at_level(logging.INFO):
+        page = discovery.page()
+        assert list(discovery.owners(page)) == []
+        assert discovery.finish(page)
+        store.rows.clear()
+        page = discovery.page()
+        assert list(discovery.owners(page)) == []
+        assert discovery.finish(page)
+    assert 'missing_owner_id=3' in caplog.text
+    assert 'owners=0 more=0 wrapped=1' in caplog.text

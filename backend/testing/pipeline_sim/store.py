@@ -474,7 +474,9 @@ class SimStore:
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
-    def ready_owners(self, after_owner_key: str | None, limit: int) -> list[tuple[str, str | None]]:
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
         owners = {
             row['owner_key']: row.get('owner_id')
             for (table, _), row in self.rows.items()
@@ -482,8 +484,9 @@ class SimStore:
             and row.get('state') == 'result_ready'
             and row.get('merge_pending')
             and (after_owner_key is None or row['owner_key'] > after_owner_key)
+            and (ceiling_owner_key is None or row['owner_key'] <= ceiling_owner_key)
         }
-        return sorted(owners.items())[: max(1, min(limit, 100))]
+        return sorted(owners.items(), reverse=descending)[: max(1, min(limit, 100))]
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         keys = sorted(

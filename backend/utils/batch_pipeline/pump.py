@@ -297,7 +297,10 @@ class Pump:
                 await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
                 page = await self._run_blocking('maintenance', db_executor, self.ready_discovery.page)
                 if page is not None:
-                    for _, owner_id in page[0]:
+                    while owner := await self._run_blocking(
+                        'maintenance', db_executor, self.ready_discovery.next_owner, page
+                    ):
+                        _, owner_id = owner
                         try:
                             if owner_id:
                                 await self.drain_owner(owner_id)

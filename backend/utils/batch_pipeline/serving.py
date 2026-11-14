@@ -365,7 +365,7 @@ class Serving:
         self.queue().recover(time.time())
         page = self.ready_discovery.page()
         if page is not None:
-            for _, owner_id in page[0]:
+            for _, owner_id in self.ready_discovery.owners(page):
                 try:
                     if owner_id:
                         self.drain_owner(owner_id)
