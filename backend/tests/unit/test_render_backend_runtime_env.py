@@ -1326,20 +1326,12 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_firestore_cut_switches_preserve_production_operator_settings(environment):
+def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2185 supersedes SCA-1993's next-roll removal: persist the serving
-        # production overrides without enabling backoff on sync or any dev host.
-        backoff = {'backend': 'true', 'backend-sync-backfill': 'true', 'backend-integration': 'true'}
-        if environment == 'prod' and name in backoff:
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {
-                'value': backoff[name],
-                'category': 'rollout' if name == 'backend-integration' else 'ops_kill',
-            }
-        else:
-            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # SCA-1993 17:32Z: integration stays off; the other roles drop backoff at their next rolls.
+        assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
         expected = {}
         if environment == 'prod':
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'

@@ -540,7 +540,6 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1300,7 +1299,6 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
@@ -1655,9 +1653,6 @@ overlay:
         env:
           BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH: {value: '1', category: reliability}
           BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED: {value: 'true', category: ops_kill}
-          # SCA-2166 / SCA-2173: the captain authorized integration backoff after the
-          # clean post-Train 1 gate. Keep the next train aligned with PR #25307.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
           SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED: {value: 'off', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
