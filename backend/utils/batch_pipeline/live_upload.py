@@ -13,6 +13,7 @@ import io
 import hashlib
 import json
 import logging
+import os
 import wave
 
 from fastapi.responses import JSONResponse
@@ -22,7 +23,7 @@ from config.batch_pipeline import (
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
-from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled
+from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
@@ -75,18 +76,26 @@ class RecordUploadWait(Enum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
-def _pending(reason: RecordUploadWait, record: str | None = None):
+def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str = '-', memo: str = '-'):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
     # ``record`` is a 16-hex prefix of the record content hash (the intake key
     # bp_<content>), so repeated waits can be grouped per recording without ids.
+    # ``path`` names the bounded answer branch and ``memo`` whether a memo
+    # answered it, so a memo-hit share is readable without any identifier.
     # No Retry-After: shipped clients read any 5xx carrying one as an
     # account-wide pause, so one conversation's wait stalled every other WAL
     # on the phone (2026-11-07 503 storm). Without it the drain skips this
     # recording for the pass and keeps uploading the rest, after the client's
     # own short unscoped-5xx pause (2-30s, reset by a success); the WAL is kept.
     # The body's retry_after_seconds paces only this recording in new apps.
-    logger.info('event=sync_record_upload outcome=pending reason=%s record=%s', reason.value, (record or '-')[:16])
+    logger.info(
+        'event=sync_record_upload outcome=pending reason=%s record=%s path=%s memo=%s',
+        reason.value,
+        (record or '-')[:16],
+        path,
+        memo,
+    )
     return JSONResponse(
         status_code=503,
         content={
@@ -106,7 +115,7 @@ _MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadW
 async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
     if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
         await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
-    return _pending(reason, _record_key(uid, conversation_id))
+    return _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
 
 
 def _record_key(uid: str, conversation_id: str | None) -> str | None:
@@ -124,7 +133,11 @@ async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
         reason = RecordUploadWait(cached)
     except ValueError:
         return None
-    return _pending(reason, _record_key(uid, conversation_id)) if reason in _MEMOIZED_WAITS else None
+    return (
+        _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='hit')
+        if reason in _MEMOIZED_WAITS
+        else None
+    )
 
 
 def _pcm(wav):
@@ -132,13 +145,35 @@ def _pcm(wav):
         return stream.readframes(stream.getnframes())
 
 
-def _coverage_wait_key(uid, conversation_id, content_id, jobs):
+def _upload_identity(paths):
+    """Count and total bytes on disk; the byte hash itself is ``content_id``.
+
+    ``compute_sync_content_id`` already HMACs the basename and the SHA-256 of
+    every uploaded file, so a memo keyed on it can never move to different
+    bytes. Carrying the count and the sizes beside it makes that property
+    legible at the key, and keeps it true for any adapter that supplies its own
+    content id. Both are free: the files are already on temp disk.
+    """
+    total = 0
+    for path in paths:
+        try:
+            total += os.path.getsize(path)
+        except OSError:
+            # A file removed under us makes this identity useless for a memo:
+            # the caller treats a missing size as "no identity" and checks in full.
+            return None
+    return (len(paths), total)
+
+
+def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
     # content_id already hashes each uploaded basename (capture timestamp and
     # codec) plus its bytes, without decoding. record_identity is stable for the
     # conversation, NOT a revision: hash the current jobs too, so added units or
     # changed artifact references/timing invalidate immediately. Existing reads
     # supply all inputs; no extra Firestore lookup or local file read is needed.
-    payload = json.dumps([uid, conversation_id, content_id, jobs], sort_keys=True, default=str)
+    # ``upload_identity`` keeps the key sensitive to the upload as well: a second,
+    # different WAL for the same record must never inherit this one's miss.
+    payload = json.dumps([uid, conversation_id, content_id, upload_identity, jobs], sort_keys=True, default=str)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -367,8 +402,25 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
-    from utils.batch_pipeline.record_lease_append import retain_upload
+    from utils.batch_pipeline.record_lease_append import rearm_partial, retain_upload
 
+    coverage_key = None
+    if coverage_wait_memo_enabled():
+        identity = _upload_identity(paths)
+        if identity is not None:
+            coverage_key = _coverage_wait_key(uid, conversation_id, content_id, jobs, identity)
+    memo_checked = False
+    if coverage_key is not None and record_wait_memo_first_enabled() and not prior and jobs:
+        # Fast path: the same bytes were already compared against these same
+        # record units and lost, so the copy below would be a create-only no-op
+        # and the decode/fetch would repeat a proven negative. Answer before
+        # either. The partial wake still runs: it is what lets the record
+        # discover chunks it already holds, and dropping it would trade one
+        # kind of wasted work for slower delivery.
+        memo_checked = True
+        if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
+            await rearm_partial(uid, conversation_id, row, store)
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
     await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
@@ -393,11 +445,14 @@ async def registered_record_response(
             if acked:
                 return covered_response()
         return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
-    coverage_key = None
-    if coverage_wait_memo_enabled():
-        coverage_key = _coverage_wait_key(uid, conversation_id, content_id, jobs)
-        if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
-            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+    if (
+        coverage_key is not None
+        and not memo_checked
+        and await run_blocking(db_executor, cached_coverage_wait, coverage_key)
+    ):
+        # Memo disabled at the fast path, or a receipt/jobs branch kept this
+        # request below it: the identical check still answers without decoding.
+        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
@@ -405,7 +460,12 @@ async def registered_record_response(
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
             if coverage_key is not None:
                 await run_blocking(db_executor, remember_coverage_wait, coverage_key)
-            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+            return _pending(
+                RecordUploadWait.AUDIO_COVERAGE_UNPROVEN,
+                content,
+                path='coverage',
+                memo='miss' if coverage_key is not None else 'off',
+            )
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')

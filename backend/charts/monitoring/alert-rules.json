@@ -28402,10 +28402,10 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "Backend-sync upload admission exceeds 100 size-class 266-byte 503s/min for 10 minutes.",
+      "summary": "Backend-sync upload admission exceeds 100 503s/min on the sync upload route for 10 minutes.",
       "user_impact": "Batch audio may wait longer for admission or publication.",
-      "scope": "POST /v2/sync-local-files on backend-sync; 266-byte request-log response, not every 503. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
-      "verification": "Compare the exact log-metric filter to a one-minute request-log count; exclude the separate 259-byte sync_batch_unavailable class. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
+      "scope": "POST /v2/sync-local-files on backend-sync; every 503 in the request log, whatever the response body size (the old 266-byte size class blinded this alert when the body changed). Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
+      "verification": "Compare the exact log-metric filter to a one-minute request-log count for POST /v2/sync-local-files with status 503. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
       "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "$A > 100 for 10m",

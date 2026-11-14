@@ -64,6 +64,9 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(live_upload, 'artifacts_for', lambda *_: object())
     monkeypatch.setattr(live_upload, '_covered', lambda *_: False)
+    # A stable upload identity keeps the coverage memo in play without a real file.
+    monkeypatch.setattr(live_upload, '_upload_identity', lambda paths: (len(paths), 0))
+    monkeypatch.setattr(live_upload, 'cached_coverage_wait', lambda *_: False)
     monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **kw: True)
     if case == 'reservation':
         row.pop('record_lane_owner')
@@ -132,7 +135,15 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     messages = [record.getMessage() for record in caplog.records]
     # A hashed record key groups waits per recording; raw ids never reach the log.
     record = '-' if case == 'mismatch' else content[:16]
-    assert messages == [f'event=sync_record_upload outcome=pending reason={expected} record={record}']
+    branch, memo = {
+        'reservation': ('conversation', 'miss'),
+        'missing_jobs': ('conversation', 'miss'),
+        'uncovered': ('coverage', 'miss'),
+    }.get(case, ('-', '-'))
+    # The bounded branch and memo state are appended; no identifier joins them.
+    assert messages == [
+        f'event=sync_record_upload outcome=pending reason={expected} record={record} path={branch} memo={memo}'
+    ]
     assert uid not in messages[0] and conversation not in messages[0]
 
 
@@ -189,7 +200,8 @@ async def test_intake_contention_logs_phase_and_monotonic_elapsed_without_error_
     assert response.headers['retry-after'] == '30'
     assert json.loads(response.body)['code'] == 'sync_batch_unavailable'
     assert [record.getMessage() for record in caplog.records] == [
-        'event=batch_intake outcome=retry exception_type=FirestoreContentionExhausted phase=receipt_read elapsed_ms=500'
+        'event=batch_intake outcome=retry exception_type=FirestoreContentionExhausted phase=receipt_read'
+        ' deterministic=no elapsed_ms=500'
     ]
 
 
