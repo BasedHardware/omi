@@ -126,8 +126,9 @@ def compare_serving_query(
 
         def read(store):
             value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
-            if query == 'get' and isinstance(value, dict):
-                # The copy never holds a table's Firestore-only fields; compare what it is meant to hold.
+            if query == 'get' and store is primary and isinstance(value, dict):
+                # The copy never holds a table's Firestore-only fields. Strip them from the primary side only,
+                # as dual_store.compare does: a copy that still holds one must read as a mismatch.
                 from database.jobstore.dual_store import mirrored
 
                 value = mirrored(value, args[0] if args else kwargs.get('table'))

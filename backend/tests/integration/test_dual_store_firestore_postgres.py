@@ -220,6 +220,18 @@ def test_actual_query_drift_is_a_failure_and_mutations_are_refused(dual):
         compare_serving_query(store.primary, shadow, 'acquire_pull_claim', 'a', 'token', 10, 30)
 
 
+def test_a_copy_that_still_holds_a_reservations_segment_is_a_mismatch(dual):
+    """A row copied before the field became Firestore-only must not read as parity."""
+    from database.jobstore.serving_parity import compare_serving_query
+
+    store, shadow, pool = dual
+    _seed_queries(store)
+    assert compare_serving_query(store.primary, shadow, 'get', 'gpus', 'g', transaction=True, budget_s=5) == 'match'
+    with pool.connection() as conn:
+        shadow.write_doc(conn, 'gpus', 'g', {'token': 't', 'segment_id': 'a', 'lease_until': 9.0})
+    assert compare_serving_query(store.primary, shadow, 'get', 'gpus', 'g', transaction=True, budget_s=5) == 'mismatch'
+
+
 def test_complete_census_includes_claims_and_holds_without_claiming_on_pg(dual, monkeypatch):
     from database.jobstore.backfill import backfill
     from database.jobstore.dual_store import MIRRORED_TABLES
