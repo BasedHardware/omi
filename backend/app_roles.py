@@ -52,6 +52,7 @@ from routers import (
     people,
     agents,
     users,
+    webhook_signing,
     support,
     trends,
     sync,
@@ -220,6 +221,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(integration),
     Mount(agents),
     Mount(users, roles=API_WORKERS),  # Cloud Tasks: account-deletion wipes + conversation batch purges
+    Mount(webhook_signing),
     Mount(support),
     Mount(referrals),
     Mount(csat),
