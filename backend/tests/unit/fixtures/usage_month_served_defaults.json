@@ -204,9 +204,9 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     },
     "/environments/prod/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
@@ -230,7 +230,7 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -243,9 +243,9 @@
         "category": "rollout",
         "value": "60"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     },
     "/environments/prod/desktop_backend/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
@@ -438,9 +438,9 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     },
     "/overlay/cloud_run/services/backend-sync-backfill/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
@@ -456,7 +456,7 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "bc1bd88de9207ea05bbbe5a1147902748961f15d16a092644eadc067f7468abe",
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
       "usage_month_cache": 100,
       "usage_month_total": 100
     },
@@ -465,9 +465,9 @@
         "category": "rollout",
         "value": "c2fs_20261026_r1"
       },
-      "all_levers_sha256": "ed73753726c8140f17bdf882f50ce06ce64604f7e3bb45228eca5f796ec8ee59",
-      "usage_month_cache": 0,
-      "usage_month_total": 0
+      "all_levers_sha256": "9f2dc6074260626bbb5876adc200102ba2a6d6b3e6db672d4e8c9e887a7be189",
+      "usage_month_cache": 100,
+      "usage_month_total": 100
     }
   }
 }

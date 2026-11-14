@@ -4681,11 +4681,19 @@
     "referralRewardSecondDetail": "Når 3 venner mere køber",
     "referralClaimShort": "Indløs",
     "paymentDeclinedTitle": "Dit kort blev afvist",
+    "paymentDeclinedMonthlyMessage": "Opdater kortet, eller få {plan} tilbage for {price} om måneden",
     "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage",
     "hasLinkedTasksLabel": "Har tilknyttede opgaver",
     "hasTasksFilter": "Med opgaver",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Skift til månedlig",
+    "monthlySwitchPlanValue": "{plan}, {price} om måneden",
+    "monthlySwitchNote": "Erstatter den ubetalte årlige betaling på {yearly}. Fornyes månedligt. Opsig når som helst.",
+    "monthlySwitchDeclined": "Betalingen blev afvist. Dit abonnement er uændret.",
+    "monthlySwitchUnavailable": "Skiftet er ikke tilgængeligt lige nu. Opdater kortet i stedet.",
+    "monthlySwitchDoneTitle": "Du betaler nu månedligt",
+    "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedligt."
 }

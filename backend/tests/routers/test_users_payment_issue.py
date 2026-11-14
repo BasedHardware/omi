@@ -33,6 +33,7 @@ def _client(
     period_end=NOW + 29 * 86400,
     platform='ios',
     billing_reason='subscription_cycle',
+    price_id=OMI_PRO_MONTHLY,
 ):
     stored = users_router.Subscription(
         plan=users_router.PlanType.basic,
@@ -51,7 +52,9 @@ def _client(
                 'metadata': {'uid': 'fixture-user'},
                 'current_period_start': NOW - 86400,
                 'latest_invoice': 'in_1',
-                'items': {'data': [{'price': {'id': OMI_PRO_MONTHLY}}]},
+                'currency': 'usd',
+                'collection_method': 'charge_automatically',
+                'items': {'data': [{'id': 'si_1', 'quantity': 1, 'price': {'id': price_id, 'currency': 'usd'}}]},
             }
         )
 
@@ -64,6 +67,7 @@ def _client(
                 'attempted': True,
                 'amount_remaining': 2999,
                 'billing_reason': billing_reason,
+                'currency': 'usd',
             }
         )
 
@@ -165,3 +169,51 @@ def test_failed_upgrade_does_not_show_a_renewal_recovery_row(monkeypatch):
     body, _ = _client(monkeypatch, billing_reason='subscription_update')
 
     assert 'payment_issue' not in body
+
+
+NEO_YEARLY = 'price_1RtJQ71F8wnoWYvwKMPaGlGY'
+NEO_MONTHLY = 'price_1RtJPm1F8wnoWYvwhVJ38kLb'
+
+
+def _neo_catalog(monkeypatch):
+    monkeypatch.setattr(
+        billing_recovery.monthly_switch,
+        '_plan_definitions',
+        lambda: [
+            {
+                'plan_type': users_router.PlanType.unlimited,
+                'monthly_price_id': NEO_MONTHLY,
+                'annual_price_id': NEO_YEARLY,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        billing_recovery.monthly_switch.stripe.Price,
+        'retrieve',
+        lambda price_id: {
+            'id': price_id,
+            'active': True,
+            'currency': 'usd',
+            'unit_amount': 1999,
+            'recurring': {'interval': 'month', 'interval_count': 1},
+        },
+    )
+
+
+def test_declined_yearly_renewal_offers_the_plans_monthly_price(monkeypatch):
+    _neo_catalog(monkeypatch)
+    body, _ = _client(monkeypatch, price_id=NEO_YEARLY)
+
+    assert body['payment_issue'] == {
+        'status': 'past_due',
+        'plan': 'unlimited',
+        'monthly_switch': {'price_id': NEO_MONTHLY, 'amount': 1999, 'currency': 'usd', 'yearly_amount': 2999},
+    }
+    assert body['subscription']['plan'] == 'basic'
+
+
+def test_unpaid_yearly_renewal_keeps_the_row_without_the_monthly_offer(monkeypatch):
+    _neo_catalog(monkeypatch)
+    body, _ = _client(monkeypatch, stripe_status='unpaid', price_id=NEO_YEARLY)
+
+    assert body['payment_issue'] == {'status': 'unpaid', 'plan': 'unlimited'}

@@ -15447,6 +15447,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша карта отклонена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Обновите карту или верните $plan за $price в месяц';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Обновите карту, чтобы вернуть $plan';
   }
@@ -15471,4 +15476,31 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перейти на ежемесячный';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price в месяц';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Заменяет неоплаченный годовой платёж $yearly. Продлевается ежемесячно. Отменить можно в любой момент.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Платёж отклонён. Ваш план не изменился.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Переход сейчас недоступен. Вместо этого обновите карту.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Теперь вы платите ежемесячно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сегодня оплачено $price. Продлевается ежемесячно.';
+  }
 }

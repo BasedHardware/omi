@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "Kapag bumili ang 3 pang kaibigan",
     "referralClaimShort": "Kunin",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
+    "paymentDeclinedMonthlyMessage": "I-update ang card, o ibalik ang {plan} sa {price} bawat buwan",
     "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}",
     "hasLinkedTasksLabel": "May mga naka-link na gawain",
     "hasTasksFilter": "May mga gawain",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Lumipat sa Buwanan",
+    "monthlySwitchPlanValue": "{plan}, {price} bawat buwan",
+    "monthlySwitchNote": "Papalitan ang hindi pa nababayarang taunang singil na {yearly}. Nire-renew buwan-buwan. Kanselahin anumang oras.",
+    "monthlySwitchDeclined": "Tinanggihan ang bayad. Hindi nagbago ang plan mo.",
+    "monthlySwitchUnavailable": "Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.",
+    "monthlySwitchDoneTitle": "Buwanan ka na",
+    "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan."
 }

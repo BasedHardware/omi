@@ -15392,6 +15392,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paymentDeclinedTitle => 'আপনার কার্ড প্রত্যাখ্যাত হয়েছে';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'কার্ডটি আপডেট করুন, অথবা $plan আবার পান মাসে $price-এ';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'আবার $plan পেতে কার্ডটি আপডেট করুন';
   }
@@ -15416,4 +15421,31 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'মাসিকে যান';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, মাসে $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly-এর অপরিশোধিত বার্ষিক চার্জের বদলে। প্রতি মাসে নবায়ন হয়। যেকোনো সময় বাতিল করুন।';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'পেমেন্ট প্রত্যাখ্যাত হয়েছে। আপনার প্ল্যান বদলায়নি।';
+
+  @override
+  String get monthlySwitchUnavailable => 'এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।';
+
+  @override
+  String get monthlySwitchDoneTitle => 'আপনি এখন মাসিক প্ল্যানে';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'আজ $price পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।';
+  }
 }
