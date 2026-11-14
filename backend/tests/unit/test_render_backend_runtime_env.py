@@ -1439,3 +1439,56 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
         assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_episode_switches_render_on_every_composition_host(environment):
+    keys = (
+        'EPISODE_COMPOSER_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_DETAIL_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
+    )
+    config = _MANIFEST['environments'][environment]
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = config['cloud_run']['services'][name]['env']
+        for key in keys:
+            assert env[key] == {'value': 'true', 'category': 'ops_kill'}
+            assert _MODULE['_render_env_entries']({key: env[key]}) == [{'name': key, 'value': 'true'}]
+            # An operator override must survive the renderer rather than fall back to code defaults.
+            assert _MODULE['_render_env_entries']({key: {'value': 'false', 'category': 'ops_kill'}}) == [
+                {'name': key, 'value': 'false'}
+            ]
+    for chart in ('backend-listen', 'pusher'):
+        chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+        values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+        result = subprocess.run(
+            [
+                'helm',
+                'template',
+                f'{environment}-{chart}',
+                str(chart_dir),
+                '-f',
+                str(values),
+                '--set-string',
+                'image.digest=sha256:' + 'a' * 64,
+                '--set',
+                'image.tag=',
+                '--set',
+                'image.pullPolicy=IfNotPresent',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+        entries = [
+            entry
+            for container in deployment['spec']['template']['spec']['containers']
+            for entry in container.get('env', [])
+            if entry['name'] in keys
+        ]
+        assert sorted(entries, key=lambda entry: entry['name']) == [
+            {'name': key, 'value': 'true'} for key in sorted(keys)
+        ]

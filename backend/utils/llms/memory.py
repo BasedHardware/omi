@@ -7,6 +7,7 @@ from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.knowledge_ledger_policy import (
     PROFILE_CHARACTER_BUDGET,
+    canonicalize_ledger_slot,
     render_bounded_profile,
 )
 from models.memories import Memory, MemoryDB
@@ -94,17 +95,7 @@ def _render_legacy_prompt_context(
 
 def _render_ledger_prompt_context(user_name: Optional[str], rows: List[MemoryDB]) -> str:
     """Render current slotted self-facts."""
-    facts = [
-        row
-        for row in rows
-        if row.kind == MemoryKind.fact
-        and row.subject_scope == MemorySubjectScope.primary_user
-        and row.intent_backed
-        and row.user_review is not False
-        and row.invalid_at is None
-        and row.slot
-        and row.content.strip()
-    ]
+    facts = [row for row in rows if is_prompt_memory_eligible(row)]
     profile = render_bounded_profile(facts, character_budget=PROFILE_CHARACTER_BUDGET)
     return f"Current profile for {user_name or 'the user'}:\n{profile or '(no current slotted facts)'}\n"
 
@@ -147,6 +138,25 @@ def _is_prompt_visible(memory: MemoryDB) -> bool:
     if memory.invalid_at is not None:
         return False
     return True
+
+
+def is_prompt_memory_eligible(memory: Any) -> bool:
+    """The chat profile admission policy, shared by bounded background consumers.
+
+    Legacy rows retain chat's compatibility intake. Canonical ledger documents,
+    triggers, third-party facts and unconfirmed inferences never become self-facts.
+    """
+    if not _is_prompt_visible(memory):
+        return False
+    if memory.ledger_schema_version != LEDGER_SCHEMA_VERSION:
+        return True
+    return bool(
+        memory.kind == MemoryKind.fact
+        and memory.subject_scope == MemorySubjectScope.primary_user
+        and memory.intent_backed
+        and canonicalize_ledger_slot(memory.slot, strict=False)
+        and memory.content.strip()
+    )
 
 
 def get_prompt_data(

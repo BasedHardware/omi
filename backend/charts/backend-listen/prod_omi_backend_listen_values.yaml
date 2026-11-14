@@ -101,6 +101,16 @@ envFrom:
 privateEnv: {}
 
 env:
+  - name: EPISODE_COMPOSER_CONTEXT_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSER_DETAIL_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED
+    value: "true"
+  - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
+    value: "true"
   - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
     value: "true"
   - name: SYNC_RECORD_COVERAGE_WAIT_MEMO

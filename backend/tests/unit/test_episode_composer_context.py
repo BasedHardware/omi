@@ -41,6 +41,54 @@ def test_relevance_and_visibility_filter_before_prompt_budget():
     assert all(word not in block for word in ('violin', 'locked', 'rejected', 'invalidated'))
 
 
+def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
+    from database import goals, users
+    from models.memories import MemoryDB
+    from utils.llms import memory as chat_memory
+    from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
+    from utils.episodes import composer
+
+    def fact(label, **overrides):
+        return MemoryDB.model_construct(
+            id=label,
+            content=f'Garden irrigation {label}',
+            **{
+                'ledger_schema_version': LEDGER_SCHEMA_VERSION,
+                'kind': 'fact',
+                'subject_scope': 'primary_user',
+                'intent_backed': True,
+                'slot': 'current_focus',
+                **overrides,
+            },
+        )
+
+    rows = [
+        fact('eligible-self'),
+        fact('third-party', subject_scope='third_party'),
+        fact('unknown-person', subject_scope='unknown'),
+        fact('document', kind='document'),
+        fact('trigger', kind='trigger'),
+        fact('inference', intent_backed=False),
+        fact('unslotted', slot=None),
+        fact('future-slot', slot='unreleased_slot'),
+        fact('locked', is_locked=True),
+        fact('rejected', user_review=False),
+        fact('invalidated', invalid_at=datetime.now(timezone.utc)),
+    ]
+    monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: ('Synthetic', [], [], rows))
+    monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
+    monkeypatch.setattr(goals, 'get_user_goals', lambda *_args, **_kw: [])
+    background = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
+    messages = composer.build_messages(
+        [member()], owner='Synthetic', tz=ZoneInfo('UTC'), language='English', context=background
+    )
+    prompt = messages[1][1]
+    assert 'eligible-self' in prompt
+    assert all(row.id not in prompt for row in rows[1:])
+    assert 'eligible-self' in chat_memory._render_ledger_prompt_context('Synthetic', rows)
+    assert all(row.id not in chat_memory._render_ledger_prompt_context('Synthetic', rows) for row in rows[1:])
+
+
 def test_background_is_token_bounded_for_multilingual_long_facts():
     memories = [{'content': 'irrigation ' + '园艺浇水计划。' * 2000} for _ in range(50)]
     assert 0 < tokens(context.relevant_memories([member()], memories)) <= config.COMPOSER_MEMORY_TOKENS

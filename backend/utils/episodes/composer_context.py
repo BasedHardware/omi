@@ -12,6 +12,7 @@ import math
 import re
 from collections import Counter
 from typing import Any, Mapping, Sequence
+from types import SimpleNamespace
 
 from config.episodes import COMPOSER_MEMORY_TOKENS, COMPOSER_PROFILE_TOKENS
 
@@ -42,6 +43,8 @@ def _terms(text: str) -> set[str]:
 
 def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any]) -> str:
     """IDF overlap over <=1000 vetted candidates; retain at most 20 relevant facts."""
+    from utils.llms.memory import is_prompt_memory_eligible
+
     query: set[str] = set()
     for row in members:
         structured = row.get('structured') or {}
@@ -51,7 +54,11 @@ def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[A
     candidates = []
     for memory in list(memories)[:1000]:
         data = memory if isinstance(memory, Mapping) else memory.model_dump()
-        if data.get('is_locked') or data.get('user_review') is False or data.get('invalid_at'):
+        # Use chat's policy, including canonical ledger subject/kind/intent/slot checks.
+        row = SimpleNamespace(
+            **{'is_locked': False, 'user_review': None, 'invalid_at': None, 'ledger_schema_version': None, **data}
+        )
+        if not is_prompt_memory_eligible(row):
             continue
         content = str(data.get('content') or '').strip()
         if content:

@@ -191,6 +191,11 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "EPISODE_COMPOSER_CONTEXT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED", "value": "true"},
+        {"name": "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},

@@ -1134,9 +1134,19 @@ def _compose(
     if state == 'waiting':
         if waiting_until:
             now = datetime.now(timezone.utc)
-            if not episode.get('compose_pending_since'):
-                _write(uid, episode_id, c, {'compose_pending_since': now})
-            _defer(uid, episode_id, c, max(0.0, (min(waiting_until) - now).total_seconds()))
+            due = min(waiting_until)
+            if _utc(episode.get('compose_transcript_wait_until')) != due:
+                _write(
+                    uid,
+                    episode_id,
+                    c,
+                    {
+                        'compose_pending_since': episode.get('compose_pending_since') or now,
+                        'compose_transcript_wait_until': due,
+                        'compose_transcript_wait_started_at': now,
+                    },
+                )
+            _defer(uid, episode_id, c, max(0.0, (due - now).total_seconds()))
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):
@@ -1441,6 +1451,8 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
         'composed_evidence': _evidence(members),
         'composed_membership': sorted(_retained_ids(episode)),
         'compose_pending_since': None,
+        'compose_transcript_wait_until': None,
+        'compose_transcript_wait_started_at': None,
         'compose_activity_at': None,
         'compose_pending_evidence': None,
         'compose_pending_membership': None,
@@ -1527,6 +1539,14 @@ def needs_compose(
         return False
     projected = _utc(episode.get('_member_transcript_updated_at'))
     composed_at = _utc(episode.get('composed_at'))
+    wait_until = _utc(episode.get('compose_transcript_wait_until'))
+    wait_started = _utc(episode.get('compose_transcript_wait_started_at'))
+    if episode_compose_transcript_wait_enabled() and wait_until and wait_until > datetime.now(timezone.utc):
+        # Home already read the bounded member metadata. A newer transcript receipt
+        # can wake this wait, including an episode that has never been composed.
+        return bool(
+            episode_compose_transcript_ready_enabled() and projected and wait_started and projected > wait_started
+        )
     if episode_compose_transcript_ready_enabled() and projected and composed_at and projected > composed_at:
         return True  # A committed late transcript outlives a lost post-commit signal.
     if episode_late_compose_enabled() and not opened and _deferred_within_grace(episode):
@@ -1716,6 +1736,18 @@ def schedule_for_conversation(
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
+            if transcript_updated and episode.get('compose_transcript_wait_until'):
+                # Receipt is authoritative even if the worker that deferred the wait died.
+                _write(
+                    uid,
+                    str(episode['id']),
+                    c or SimpleNamespace(firestore_client=None),
+                    {
+                        'compose_transcript_wait_until': None,
+                        'compose_transcript_wait_started_at': None,
+                    },
+                )
+                episode = {**episode, 'compose_transcript_wait_until': None, 'compose_transcript_wait_started_at': None}
             # An already composed partial episode must catch up even when the original capture is old.
             catch_up = transcript_updated and episode.get('composed_fingerprint')
             if not catch_up and defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):

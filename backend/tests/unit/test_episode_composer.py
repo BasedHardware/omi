@@ -1719,13 +1719,75 @@ def test_waits_for_completed_member_with_pending_transcript_and_recovers_after_r
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls), force=True) == 'waiting'
     assert calls == []
     assert store.episode['compose_pending_since'] >= now
-    assert composer.needs_compose(store.episode)
+    assert not composer.needs_compose(store.episode)
     assert 21590 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= 21600
     composer._deferred.clear()  # A restarted process recovers the persisted debt on read.
+    assert not composer.needs_compose(store.episode)
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
     store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     assert 'The late launch details.' in calls[0][1][1]
+    assert store.episode['compose_transcript_wait_until'] is None
+
+
+def test_home_wait_reads_do_not_requeue_until_deadline_or_new_receipt(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    # Simulate process restart: only persisted debt and the existing Home metadata remain.
+    composer._deferred.clear()
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', lambda *_a, **_kw: pytest.fail('extra episode read'))
+    monkeypatch.setattr(
+        composer.conversations_db, 'get_conversation', lambda *_a, **_kw: pytest.fail('extra member read')
+    )
+    for _ in range(10):
+        assert not composer.needs_compose(store.episode)
+    store.episode['_member_transcript_updated_at'] = datetime.now(timezone.utc)
+    assert composer.needs_compose(store.episode)
+    store.episode.pop('_member_transcript_updated_at')
+    store.episode['compose_transcript_wait_until'] = datetime.now(timezone.utc) - timedelta(seconds=1)
+    assert composer.needs_compose(store.episode)
+
+
+def test_transcript_receipt_rearms_active_wait(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    queued = []
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **kw: queued.append(kw))
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    composer.transcript_projected(UID, store.rows['c2'])
+    assert queued and store.episode['compose_transcript_wait_until'] is None
+    assert composer.needs_compose(store.episode)
+
+
+def test_home_active_wait_eliminates_redundant_composer_reads(store, monkeypatch):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    reads = {'episode': 0, 'member': 0}
+
+    def episode(*args, **kwargs):
+        reads['episode'] += 1
+        return store.get_episode(*args, **kwargs)
+
+    def member(*args, **kwargs):
+        reads['member'] += 1
+        return store.get_conversation(*args, **kwargs)
+
+    monkeypatch.setattr(composer.episodes_db, 'get_episode', episode)
+    monkeypatch.setattr(composer.conversations_db, 'get_conversation', member)
+    monkeypatch.setattr(
+        composer, 'schedule', lambda *_args, **_kwargs: bool(composer.compose(UID, 'ep1', collaborators=_c()))
+    )
+    wires = [{'id': 'ep1', 'members': [{'id': 'c1'}, {'id': 'c2'}]}]
+    # Prior read recovery treats pending debt as due on every request.
+    with monkeypatch.context() as previous:
+        previous.setattr(composer, 'needs_compose', lambda *_args, **_kwargs: True)
+        assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 1
+    assert reads == {'episode': 1, 'member': 2}
+    reads.update(episode=0, member=0)
+    for _ in range(10):
+        assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 0
+    assert reads == {'episode': 0, 'member': 0}
 
 
 @pytest.mark.parametrize('expired,disabled', [(True, False), (False, True)])
