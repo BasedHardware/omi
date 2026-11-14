@@ -48,6 +48,7 @@ from utils.capture.batch_coverage import covered_response
 from utils.batch_pipeline import record_gap_fill
 from config.record_gap_fill import gap_fill_enabled
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
+from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.sync.stage import current_stage
 from utils.sync.legacy_dark import LegacySyncMode
 
@@ -89,6 +90,9 @@ def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str =
     # recording for the pass and keeps uploading the rest, after the client's
     # own short unscoped-5xx pause (2-30s, reset by a success); the WAL is kept.
     # The body's retry_after_seconds paces only this recording in new apps.
+    OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(reason=reason.value).inc()
+    if memo == 'hit' and path in {'conversation', 'coverage'}:
+        OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo=path).inc()
     logger.info(
         'event=sync_record_upload outcome=pending reason=%s record=%s path=%s memo=%s',
         reason.value,

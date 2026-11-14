@@ -34,12 +34,18 @@ there is no new durable state.
 
 After the change serves, read both denominators: the whole-service 503 share
 and the share on `POST /v2/sync-local-files`, from the unsampled request log.
-Read the answer mix from the INFO log line
-`event=sync_record_upload outcome=pending reason=… path=… memo=…`; that log
-family is sampled (`app-stdout-info-sample90`), so use it for proportions, never
-as a count. The paired log-based metric `omi_pipeline_upload_admission_503` no
-longer pins a response byte class: the record-wait body moved from 266 to 271
-bytes, so the old predicate read zero while the service answered 503.
+Read exact answer and memo-hit counts from the per-instance Prometheus counters
+`omi_pipeline_record_wait_answers_total{reason=…}` and
+`omi_pipeline_record_wait_memo_hits_total{memo=…}`. Their labels are closed
+tokens only (`reason` is a `RecordUploadWait` value or `record_router_missing`;
+`memo` is `conversation`, `coverage` or `decode_failure`); sum across
+backend-sync instances and revisions for a serving window. The INFO log line
+`event=sync_record_upload outcome=pending reason=… path=… memo=…` remains useful
+for proportions, but is sampled by
+`app-stdout-info-sample90` and must not be used as a count. The paired
+log-based metric `omi_pipeline_upload_admission_503` no longer pins a response
+byte class: the record-wait body moved from 266 to 271 bytes, so the old
+predicate read zero while the service answered 503.
 
 ## Rollback
 

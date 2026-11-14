@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import json
 
 import pytest
+from prometheus_client import REGISTRY
 
 from config.policy import BatchUnitPolicy
 from database import sync_record_wait_cache as cache
@@ -111,6 +112,8 @@ class Synthetic400(Exception):
 @pytest.mark.parametrize('error', DETERMINISTIC + [Synthetic400('Audio decode failed')])
 async def test_deterministic_failure_keeps_the_503_and_stops_re_decoding(world, error):
     world.failure['error'] = error
+    memo_labels = {'memo': 'decode_failure'}
+    memo_hits_before = REGISTRY.get_sample_value('omi_pipeline_record_wait_memo_hits_total', memo_labels) or 0
     first = await world.upload()
     assert first.status_code == 503
     assert first.headers['retry-after'] == '30'
@@ -131,6 +134,9 @@ async def test_deterministic_failure_keeps_the_503_and_stops_re_decoding(world, 
     # The proven failure answers the same retryable 503 with no decode at all.
     assert world.counts['decode'] == 1
     assert world.redis.reads == 2
+    assert (
+        REGISTRY.get_sample_value('omi_pipeline_record_wait_memo_hits_total', memo_labels) or 0
+    ) == memo_hits_before + 1
 
 
 async def test_the_memo_expires_and_the_check_runs_again(world):

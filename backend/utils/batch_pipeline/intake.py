@@ -55,6 +55,7 @@ from utils.batch_pipeline.language_metrics import record_admission_exclusion, re
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
+from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
@@ -609,6 +610,7 @@ async def accept_upload(
         if target.get('record_lane_owner') == 'batch_live_v1':
             phase = 'record_routing'
             if record_router is None:
+                OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(reason='record_router_missing').inc()
                 logger.info('event=sync_record_upload outcome=pending reason=record_router_missing')
                 return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
             return await record_router(
@@ -839,6 +841,7 @@ async def accept_upload(
             # keeps custody exactly as it does on any other 503.
             deterministic_key = await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
             if deterministic_key and await run_blocking(db_executor, cached_decode_failure, deterministic_key):
+                OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo='decode_failure').inc()
                 logger.info('event=batch_intake_decode_memo outcome=hit')
                 return _sync_unavailable_response()
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
