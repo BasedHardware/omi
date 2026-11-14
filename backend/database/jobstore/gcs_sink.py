@@ -57,6 +57,7 @@ class GCSSink:
                     raise ConnectionError('GCS recovery target changed')
 
         check(self.handoff.client.transaction())
+        return authority
 
     def _row(self, conn, sink):
         if set(sink) != {'protocol', 'namespace', 'unit_id', 'attempt_token', 'bucket', 'key', 'size', 'session'} or (
@@ -100,7 +101,7 @@ class GCSSink:
                 if not effect or effect['sink'] != sink or row['phase'] not in {'registered', 'draining'}:
                     raise ConnectionError('GCS capability/original custody unresolved')
                 target = PREFIX + row['namespace'] + ':' + str(row['effect_id'])
-            self._gate(uid, target)
+            authority = self._gate(uid, target)
             with self.pool.connection(timeout=2) as conn, conn.transaction():
                 lock(conn, row['owner_key'], exclusive=True)
                 row, uid = self._row(conn, sink)
@@ -127,9 +128,7 @@ class GCSSink:
                     (row['namespace'], row['unit_id'], row['attempt_token']),
                 )
             call = lambda: self.transport.fence(sink, uid=uid, known_generation=row['generation'])
-            status, generation = (
-                call() if self.recovery_target is not None else self.authority.remote(call, target=target)
-            )
+            status, generation = call() if self.recovery_target is not None else authority.remote(call, target=target)
             return TerminalProof(fingerprint(sink), status, generation)
         except PostgresError as error:
             raise ConnectionError('GCS drain PG barrier outcome unresolved') from error

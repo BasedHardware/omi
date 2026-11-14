@@ -63,7 +63,10 @@ class ResultUploadRows:
                     job['custody_deadline'],
                 ),
             )
-            return self.row(conn)
+            reserved = self.row(conn)
+            if reserved is None:
+                raise ConnectionError('original upload reservation outcome unresolved')
+            return reserved
 
     def register(self, session, row, size, *, lease_seconds):
         sink = dict(
@@ -79,7 +82,7 @@ class ResultUploadRows:
         with self.pool.connection(timeout=2) as conn, conn.transaction():
             self.source(conn, pending=True)
             current = self.row(conn)
-            if current != row or current['phase'] != 'prepared':
+            if current is None or current != row or current['phase'] != 'prepared':
                 raise AuthorityRefused('result registration reservation changed')
             effect = self.units.fence.register(
                 conn,

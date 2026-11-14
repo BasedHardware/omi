@@ -56,7 +56,12 @@ class GCSTransport:
         if method == 'PUT':
             headers['Content-Range'] = f'bytes 0-{len(body)-1}/{len(body)}' if body else f'bytes */{size}'
         try:
-            response = self.client._http.request(
+            # The GCS SDK exposes resumable capabilities through its authorized
+            # HTTP session; it has no public whole-session PUT/status method.
+            http = getattr(self.client, '_http', None)
+            if http is None:
+                raise ConnectionError('GCS SDK authorized transport unavailable')
+            response = http.request(
                 method,
                 session,
                 data=body,
