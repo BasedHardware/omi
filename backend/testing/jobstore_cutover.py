@@ -21,7 +21,7 @@ import xml.etree.ElementTree as ET
 MISSING = [
     'all-writer runtime FS mutation binding and native/partial/coalesced/recovery cross-store cohort integration',
     'production runner/funding/failover qualification and outbox/vector/push FenceTicket wiring/H-25',
-    'real C4 GCS terminal-session adapter (local registry custody test is not a sink proof)',
+    'remote C4 qualification and audio/native/recovery upload session bindings (ordinary result SDK session adapter/local transport is partial, not remote proof)',
     'complete original lifetime/journal/cold-copy purge and per-record final custody retirement (generation-pinned objects/original FS source, staging census and destructive PG artifact-mirror barriers are partial; unique intake/staging and real C4/late-copy proof remain)',
     'complete reverse cohorts/cold-to-serving conversion, final parity certificate and certified reverse-open edge (ordinary typed conditional cold sink/erasure is partial)',
     'process-kill/restart coverage at every cross-store commit gap, not exception-only rollback',
@@ -152,6 +152,7 @@ def races(args):
         'tests/integration/test_jobstore_provider_handoff.py',
         'tests/integration/test_jobstore_provider_projection.py',
         'tests/integration/test_jobstore_provider_effect.py',
+        'tests/integration/test_jobstore_result_sessions.py',
         'tests/integration/test_jobstore_retained_copies.py',
         'tests/integration/test_jobstore_original_copies.py',
         'tests/integration/test_jobstore_original_metadata_crashes.py',

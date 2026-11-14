@@ -226,3 +226,17 @@ final erasure/reverse certificate or runtime selection is introduced. Real C4,
 late terminal-session proof, final destructive journal/typed PG cleanup,
 account orchestration, recovery injection, paging and scheduling remain gates.
 The broad first-review P1 remains open; readiness is false, no savings booked.
+
+
+## Ordinary result session source (migration 0020)
+
+The same first FIX remains open. Migration 0020 binds actual ordinary typed
+`ArtifactStore.persist_result` to durable original session custody, START/one PUT,
+COMPLETE publication/registry retirement and an exclusive drain claim that
+excludes late COMPLETE. Actual legal-hold units and observed-target recovery are
+required. Local resumable process-exit evidence does not qualify remote C4.
+See `d-g2-source-checkpoint.md` for the source contract and
+`d-retained-copy-lifetimes.md` for outstanding original custody. Audio/native/
+recovery sessions, reverse conversion of this new journal family and final
+custody retirement remain missing; readiness=false. No additional review or
+activation requested, no savings booked.

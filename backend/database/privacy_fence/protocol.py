@@ -405,6 +405,9 @@ class Fence:
                 if kind == 'gcs_put' and not terminal:
                     continue
                 if row['state'] == 'registered' or expired or terminal:
+                    retire = getattr(fence_gcs, 'retire', None) if kind == 'gcs_put' else None
+                    if retire is not None:
+                        retire(conn, row, terminal)
                     self._retire(conn, row)
         with self.pool.connection() as conn:
             return conn.execute(

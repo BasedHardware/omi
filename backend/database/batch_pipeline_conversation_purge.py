@@ -176,7 +176,15 @@ def purge_conversation(
 
         def resolve_original(target: str) -> bool:
             from database.jobstore.staging_operations import StagingOperations, PREFIX as STAGING_PREFIX
+            from database.jobstore.gcs_sink import GCSSink, PREFIX as GCS_PREFIX
 
+            if target.startswith(GCS_PREFIX):
+                from utils.other.local_storage import create_storage_client
+                from utils.batch_pipeline.upload_policy import UPLOAD_TIMEOUT
+
+                return GCSSink(retained_copies.handoff, create_storage_client(), timeout=UPLOAD_TIMEOUT).recover(
+                    uid, target
+                )
             if target.startswith(STAGING_PREFIX):
                 return StagingOperations(retained_copies).resolve(uid, target)
             if target.startswith(PREFIX):

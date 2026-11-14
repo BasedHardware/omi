@@ -199,3 +199,23 @@ final erasure/reverse certificate or runtime selection is introduced. Real C4,
 late terminal-session proof, final destructive journal/typed PG cleanup,
 account orchestration, recovery injection, paging and scheduling remain gates.
 The broad first-review P1 remains open; readiness is false, no savings booked.
+
+
+## Ordinary result session source (migration 0020)
+
+`batch_pipeline_purge.provider_result_artifacts` explicitly composes the actual
+ordinary result ArtifactStore with `ProviderUpload`, `ResultUploadRows`,
+`GCSTransport` and `GCSSink`. No serving factory selects it. Legacy upload policy
+and the lake authority are unchanged. Durable original name/hash/deadline precede
+FS reference registration and exact-size create-only session creation; registry
+START precedes one full PUT; publication and registry retirement share SQL COMMIT.
+The later paid terminal transition requires that exact original result URI.
+
+A real legal-hold unit is mandatory for destructive drain. The original namespace
+epoch/FS authority are checked; the durable draining claim excludes late COMPLETE.
+No SQL guard spans remote I/O. The real conversation resolver routes
+`jobstore-gcs-v1` before another destructive unit; original account orchestration
+and runtime injection remain missing. See the source checkpoint for terminal
+status/generation rules. The new original session journal family intentionally
+refuses cold conversion pending its own adapter. Local transport tests are not
+remote C4 proof; remaining cohorts/all-copy/final-custody gates stay open.

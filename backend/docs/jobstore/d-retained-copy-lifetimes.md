@@ -253,3 +253,60 @@ The intake counter observes one read each for actual seal and verify. Killed
 FS read leases use at most12 synthetic redeliveries under unchanged deadlines.
 Initial new phase fixtures used invalid raw transitions; corrected to the
 existing transition API without changing production policy/refusal assertions.
+
+
+## Ordinary result session source (migration 0020)
+
+The explicit `batch_pipeline_purge.provider_result_artifacts` factory now binds
+actual `ArtifactStore.persist_result` to an ordinary typed paid attempt. No
+runtime selects it. Audio, native, recovery and pre-unit uploads keep their
+existing policy and require separate bindings. The lake adapter and its
+settlement authority are unchanged. This is source/local transport evidence,
+not remote GCS C4 qualification or a final all-copy certificate.
+
+Before any object bytes, PG reserves the immutable original name, payload hash,
+paid admission/attempt and exact unit custody deadline. The actual FS artifact
+reference commits with fresh A1/walk/A2, valid matching F token, original P/PC
+and namespace authority, under the real Coordinator through SDK COMMIT. It has
+no replacement TTL. It contains no unique intake repair context. The SDK then
+creates an exact-size `ifGenerationMatch=0` resumable session with retries off.
+The session capability is durable only in the GCS effect registry before START;
+one full PUT follows START on the same stack. Unknown/prepared outcomes refuse
+a second session or PUT. COMPLETE joins original positive generation/reference
+publication and capability retirement in SQL; the later paid terminal CAS must
+reference that exact published original object. No restored admission adoption.
+
+The actual SDK HTTP adapter uses explicit existing upload socket deadlines,
+suppresses sensitive capability exception text, cancels/queries the original
+session and calls the production generation-pinned retention deletion path.
+A real legal-hold destructive unit is mandatory for cleanup. An open-owner
+lease janitor first commits an irreversible `draining` claim under owner X;
+this excludes concurrent valid COMPLETE before any storage deletion. No SQL
+slot/owner guard crosses FS or storage I/O. A successful COMPLETE that won
+first is never deleted by that janitor. Terminal proof joins phase `fenced` and
+registry retirement in SQL. Missing generation on finalized or expired/missing
+sessions is unresolved; current object metadata is never substituted. A sticky
+499 proves cancellation before finalize; sticky 412 is not adopted and does not
+authorize deleting a foreign collision. Recovery uses `jobstore-gcs-v1` targets
+and the existing observed-target/token CAS; missing operations are not rollback
+proof. Holds never close P. Normal false returns never settle an unknown unit.
+
+New PG `queue_provider_uploads` is original per-record custody, not disposable
+mirror state: immutable original deadline/name/hash/admission/attempt and
+original effect ID, positive generation when known, no independent expiry.
+Its FK and mutation constraints retain the original typed unit/handoff and
+refuse identity scrubbing or final deletion. Its journal entries contain no
+session URL. The current cold converter refuses this new family without
+advancing the journal checkpoint. These unresolved originals, the unique FS
+intake/staging and original references remain retained; no journal gaps or
+final certificate is fabricated. A crash between empty-session creation and
+registry registration leaves a prepared original reservation, no authorized
+bytes and no automatic retry; reconciliation remains a liveness gate.
+
+The local disk-backed resumable fixture now retains finalized session metadata
+across process exit, allowing tests of the actual adapter's original generation
+handling. This does not establish the remote terminal-status/absence contract.
+Actual GCS qualification, complete upload cohorts, original lifetime scheduling,
+account drain/runtime recovery injection, all-copy proof and final destructive
+PG/journal barriers remain missing. Broad first-review P1 and readiness=false
+remain unchanged; no new review, activation or savings follows.

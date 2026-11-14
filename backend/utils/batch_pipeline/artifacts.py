@@ -64,6 +64,7 @@ class ArtifactStore:
         register_artifact: Callable[[WorkItem, str, str, ProtectionContext], None],
         shadow_result: Callable | None = None,
         authorize_read: Callable | None = None,
+        session_upload: Any = None,
     ) -> None:
         if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]', bucket):
             raise ValueError('explicit staging bucket required')
@@ -78,6 +79,7 @@ class ArtifactStore:
         self.key_for_owner = key_for_owner
         self.register_artifact = register_artifact
         self.shadow_result = shadow_result
+        self.session_upload = session_upload
 
     def owner_prefix(self, owner_id: str) -> str:
         return f'batch-pipeline/{self.namespace}/owners/{hashlib.sha256(owner_id.encode()).hexdigest()}/'
@@ -127,6 +129,8 @@ class ArtifactStore:
     def _write(self, item: WorkItem, kind: str, body: bytes, limit: int, *, result_key: str | None = None) -> str:
         if not body or len(body) > limit:
             raise ValueError('batch artifact exceeds bounded payload size')
+        if self.session_upload is not None:
+            return self.session_upload.write(self, item, kind, body, result_key=result_key)
         context = self.authorize(item)
         if item.privacy_generation is None or context.generation != item.privacy_generation:
             raise PermissionError('batch artifacts require the admitted privacy generation')

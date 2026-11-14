@@ -16,6 +16,18 @@ NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
 
 
+def provider_result_artifacts(
+    ticket: Any, storage_client: Any, bucket: str, master_secret: bytes, *, lease_seconds: float
+) -> Any:
+    """Explicit customer/storage-role factory; no runtime selector or new policy.
+
+    Keep this composition out of the default paid-provider worker closure.
+    """
+    from database.jobstore.provider_upload import ProviderUpload
+
+    return ProviderUpload(ticket, storage_client, lease_seconds=lease_seconds).artifacts(bucket, master_secret)
+
+
 def retained_provider_copies(handoff: Any) -> Any:
     """Explicit customer-role adapter; no runtime selection or final purge proof."""
     from database.jobstore.retained_copies import RetainedCopies

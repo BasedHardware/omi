@@ -109,6 +109,18 @@
       "basis": "planning-bound",
       "source": "Actual original intake point read: one per seal or verify transaction attempt; reuses the existing typed-provider intake bound of 3, expected production 0/day and sentinel 1/day. Repair context stays solely in its original FS custodian. No new TTL or serving selector. Retries/redeliveries count separately; fleet and funded daily budget remain activation gates. Source delivery books no savings.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/jobstore/provider_upload.py",
+      "expression": "self.namespace + '_artifacts'",
+      "collection_pattern": "batch_pipeline_*_artifacts",
+      "owner": "pgfoundation / SCA-1959 dark original result session custody",
+      "unit": "one original result reference registration transaction attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Actual immutable original reference registration point-read: one per transaction attempt before session creation, never a runnable FS job or per-unit wake. Original custody deadline is copied unchanged; no TTL. Reuses the existing original artifact family, production selection absent (0 expected/day, 1/day sentinel). Retries/redeliveries counted separately. No fleet/daily funded budget or savings qualification.",
+      "reviewed": "2026-11-14"
     }
   ],
   "exempt": []
