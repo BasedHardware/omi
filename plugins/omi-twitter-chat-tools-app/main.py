@@ -14,6 +14,7 @@ from typing import Optional, List, Dict, Any
 from urllib.parse import quote, urlencode
 
 import requests
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -33,6 +34,7 @@ from models import ChatToolResponse
 from twitter_link_auth import require_signed_link, sign_uid
 
 REQUEST_TIMEOUT = (5, 30)
+ASYNC_REQUEST_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
 load_dotenv()
 
@@ -1182,45 +1184,46 @@ async def twitter_callback(
             "code_verifier": code_verifier
         }
 
-        if TWITTER_CLIENT_SECRET:
-            # Confidential client
-            response = requests.post(
-                TWITTER_TOKEN_URL,
-                data=token_data,
-                auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
-                timeout=REQUEST_TIMEOUT,
+        async with httpx.AsyncClient() as client:
+            if TWITTER_CLIENT_SECRET:
+                # Confidential client
+                response = await client.post(
+                    TWITTER_TOKEN_URL,
+                    data=token_data,
+                    auth=(TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET),
+                    timeout=ASYNC_REQUEST_TIMEOUT,
+                )
+            else:
+                # Public client
+                token_data["client_id"] = TWITTER_CLIENT_ID
+                response = await client.post(
+                    TWITTER_TOKEN_URL,
+                    data=token_data,
+                    timeout=ASYNC_REQUEST_TIMEOUT,
+                )
+
+            if response.status_code != 200:
+                log(f"Token exchange failed: {response.status_code}")
+                return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+
+            token_response = response.json()
+            access_token = token_response.get("access_token")
+            refresh_token = token_response.get("refresh_token", "")
+            expires_in = token_response.get("expires_in", 7200)
+
+            if not access_token:
+                return HTMLResponse(content="No access token received", status_code=400)
+
+            expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+
+            # Get user info
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_response = await client.get(
+                f"{TWITTER_API_BASE}/users/me",
+                headers=headers,
+                params={"user.fields": "username"},
+                timeout=ASYNC_REQUEST_TIMEOUT,
             )
-        else:
-            # Public client
-            token_data["client_id"] = TWITTER_CLIENT_ID
-            response = requests.post(
-                TWITTER_TOKEN_URL,
-                data=token_data,
-                timeout=REQUEST_TIMEOUT,
-            )
-
-        if response.status_code != 200:
-            log(f"Token exchange failed: {response.status_code}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
-
-        token_response = response.json()
-        access_token = token_response.get("access_token")
-        refresh_token = token_response.get("refresh_token", "")
-        expires_in = token_response.get("expires_in", 7200)
-
-        if not access_token:
-            return HTMLResponse(content="No access token received", status_code=400)
-
-        expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
-
-        # Get user info
-        headers = {"Authorization": f"Bearer {access_token}"}
-        user_response = requests.get(
-            f"{TWITTER_API_BASE}/users/me",
-            headers=headers,
-            params={"user.fields": "username"},
-            timeout=REQUEST_TIMEOUT,
-        )
 
         username = ""
         twitter_user_id = ""
