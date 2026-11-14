@@ -28,6 +28,7 @@ from tests.unit.test_live_recovery_shutdown_tail import (
 from utils.stt import parakeet_window as window, streaming as st
 from utils.stt.live_metrics import WINDOW_FIRST_TEXT, REPLAY_SKIPPED
 from utils.stt.live_failure import send_live_stt_audio
+from utils.stt.allowance_session import Operation
 from utils.stt.resilient_stream import ResilientAudio
 from utils.stt.replay_delivery import ReplayTailSocket
 from utils.stt import replay_delivery
@@ -43,11 +44,14 @@ def recovery_on(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('code', [1000, 1001, 1006])
-async def test_client_disconnect_without_provider_death_stays_cancelled(monkeypatch, code):
+@pytest.mark.parametrize('allowance_observed', [False, True])
+async def test_client_disconnect_without_provider_death_stays_cancelled(monkeypatch, code, allowance_observed):
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
     monkeypatch.setattr(window, 'get_stt_client', lambda: Client())
     ws = ClientSocket()
     rt = make_runtime(ws, monkeypatch)
+    if allowance_observed:
+        rt.allowance_operation = Operation(rt.request.uid, 'live_open', live=True)
     stub_transcript_persistence(rt, [], monkeypatch)
     monkeypatch.setattr(rt.receiver, '_run_on_listen_loop', lambda action, segments: action(segments))
     monkeypatch.setattr(rt.receiver, '_capture', lambda *a, **k: None)
@@ -64,6 +68,8 @@ async def test_client_disconnect_without_provider_death_stays_cancelled(monkeypa
         await asyncio.wait_for(run, timeout=10)
         assert not rt.state.stt_terminal_failure
         assert not rt.state.live_transcription_failed
+        if allowance_observed:
+            assert rt.allowance_operation.closed
         finish.assert_called_once_with('cancelled', phase='teardown')
     finally:
         run.cancel()

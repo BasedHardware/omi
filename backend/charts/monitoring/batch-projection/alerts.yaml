@@ -24,3 +24,15 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: "Batch projection obligation observation is stale or was never taken"
+        # The oldest-age max above is saturated by a multi-week held obligation,
+        # so it cannot see a sub-900 s finish delay. This ratio can: it moves
+        # when the finish page keeps reading rows without completing them.
+        - alert: OmiBatchProjectionFinishReadsPerCompletion
+          expr: >-
+            (sum(rate(omi_batch_projection_finish_reads_total[15m]))
+            / clamp_min(sum(rate(omi_batch_projection_finish_completed_total[15m])), 0.001)) > 1200
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "Batch projection finish page reads far exceed completions"
+            description: "Baseline is about 579 reads per completion. A sustained ratio above 1200 means the finish page is replaying without advancing; inspect the finish-backoff deferral and the oldest-age guard, which is saturated and cannot detect a sub-900 s delay."

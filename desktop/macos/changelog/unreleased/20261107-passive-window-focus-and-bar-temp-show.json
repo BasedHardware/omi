@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "The Floating Bar no longer steals keyboard focus or stays visible while snoozed when you work in another app"
+  ]
+}

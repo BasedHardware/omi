@@ -9205,6 +9205,24 @@ class AppLocalizationsKn extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 
   @override
+  String get applyCodeToCurrentPlan => 'ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಅನ್ವಯಿಸಿ';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಿದೆ.',
+        'refused': 'ಈ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗುವುದಿಲ್ಲ. ಕೋಡ್ ಮತ್ತು ಅಗತ್ಯ ಯೋಜನೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.',
+        'conflict': 'ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ ಅಥವಾ ನಿಮ್ಮ ಯೋಜನೆಯಲ್ಲಿ ಈಗಾಗಲೇ ರಿಯಾಯಿತಿ ಇದೆ.',
+        'rateLimited': 'ಹಲವಾರು ಪ್ರಯತ್ನಗಳು. ಸ್ವಲ್ಪ ಕಾದು ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'ಪ್ರೋಮೋ ಕೋಡ್';
 
   @override
@@ -13691,6 +13709,9 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'ಟಿಪ್ಪಣಿಗಳನ್ನು ಮತ್ತೆ ರಚಿಸಿ';
 
   @override
   String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';

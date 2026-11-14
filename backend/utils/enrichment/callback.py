@@ -25,7 +25,6 @@ from config.occasion_relevance import enabled as occasion_relevance_enabled
 from database import conversations as conversations_db
 from database._client import get_firestore_client
 from database.summary_processing import claim_from_snapshot
-from models.conversation_enums import ConversationSource
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
@@ -59,7 +58,7 @@ _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 
 
 @observe_sync_failures
-def enrich_conversation(uid: str, conversation_id: str, language: str):
+def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
@@ -219,9 +218,10 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
     # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
     # this function; that stored trigger is the already-processed signal.
-    already_sync_processed = (
-        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
-    )
+    already_sync_processed = isinstance(prior_decision, dict) and prior_decision.get('trigger') in {
+        ProcessingTrigger.SYNC_UPDATE.value,
+        ProcessingTrigger.BACKLOG_CHOICE.value,
+    }
     # Visible rows must not accept again. A prior discard is not a visible
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
@@ -231,7 +231,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             uid=uid,
             language_code=language or 'en',
             conversation=conversation,
-            trigger=ProcessingTrigger.SYNC_UPDATE,
+            trigger=ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE,
             defer_derived_effects=silent_redrive,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,
@@ -277,18 +277,13 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         record_client_journey_accepted('conversation_finalization', client_kind)
         record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
-    # Limitless uploads commonly begin as a short discarded fragment and only
-    # become a real conversation after later WAL segments are merged. The
-    # initial discarded pass is not a useful creation event, while the generic
-    # reprocess path deliberately suppresses webhooks. Emit exactly at the
-    # discarded -> visible transition so pendant conversations reach developer
-    # integrations without duplicating events on ordinary later reprocessing.
-    if (
-        not silent_redrive
-        and conversation.source == ConversationSource.limitless
-        and was_discarded
-        and not processed_conversation.discarded
-    ):
+    # Conversations (such as Limitless or Omi pendants with custom STT / WAL uploads)
+    # commonly begin as a short discarded fragment and only become a real conversation
+    # after later segments are merged. The initial discarded pass is not a useful creation
+    # event, while the generic reprocess path deliberately suppresses webhooks. Emit exactly
+    # at the discarded -> visible transition so conversations reach developer integrations
+    # without duplicating events on ordinary later reprocessing.
+    if not silent_redrive and was_discarded and not processed_conversation.discarded:
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     # Episodes: the WAL row joins the live episode covering it, so Home folds it under the

@@ -653,6 +653,12 @@ check_backend_unit_tests_if_needed() {
     for file in "${CHANGED_FILES[@]}"; do
       case "$file" in
         backend/tests/*.py|backend/tests/**/*.py)
+          # Helpers and conftest are dependencies, not standalone pytest files.
+          # Keep the cap; running a helper directly would collect nothing (exit 5).
+          case "${file##*/}" in
+            test_*.py|*_test.py) ;;
+            *) continue ;;
+          esac
           if [ -f "$file" ]; then
             printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
           fi

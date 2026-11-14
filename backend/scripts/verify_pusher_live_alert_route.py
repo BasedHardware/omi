@@ -75,7 +75,14 @@ DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-mon
 # These native Cloud Monitoring queries explicitly select the production
 # project and datasource. The automatic development import must not install
 # production pages there or assume an equivalent native datasource exists.
-PRODUCTION_ONLY_IMPORT_UIDS = ("omi-enrichment-queue-depth-page", "omi-incluster-guard-unsafe-page")
+# omi-firestore-unattributed-reads reads the gmp-cloud-run shadow datasource,
+# which only the production overlay creates; development has no equivalent.
+PRODUCTION_ONLY_IMPORT_UIDS = (
+    "omi-enrichment-queue-depth-page",
+    "omi-incluster-guard-unsafe-page",
+    "omi-firestore-unattributed-reads",
+    "omi-firestore-unattributed-reads-blind",
+)
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
@@ -576,6 +583,10 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
             continue
         if live.get(key) != expected.get(key):
             keys.append(key)
+    # Only an explicit source pause authorizes a live pause. Compare booleans
+    # strictly so missing/malformed live state cannot satisfy either contract.
+    if live.get("isPaused") is not (expected.get("isPaused") is True):
+        keys.append("isPaused")
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
@@ -585,8 +596,6 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
 def rule_definition_errors(uid: str, live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     keys = mismatched_definition_keys(live, expected)
     errors = [f"live alert rule {uid} {key} does not match the committed rule" for key in keys if key != "receiver"]
-    if live.get("isPaused") is not False:
-        errors.append(f"live alert rule {uid} must be unpaused")
     if "receiver" in keys:
         errors.append(f"live alert rule {uid} receiver does not match the committed route")
     return errors
@@ -610,7 +619,7 @@ def classify_fleet_coverage(
             present_but_paused.append(uid)
         if keys:
             present_but_divergent.append(f"{uid} ({','.join(keys)})")
-        if not paused and not keys:
+        if not keys:
             live_and_matching.append(uid)
     live_but_uncommitted = tuple(sorted(uid for uid in live_by_uid if uid not in committed))
     return FleetCoverage(
@@ -665,10 +674,9 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
     if fail_on == "none":
         return []
     absent = set(coverage.committed_but_absent)
-    paused = set(coverage.present_but_paused)
     divergent = {_divergent_uid(entry): entry for entry in coverage.present_but_divergent}
     uncommitted = set(coverage.live_but_uncommitted)
-    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | paused | set(divergent) | uncommitted))
+    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | set(divergent) | uncommitted))
     failures: list[str] = []
     for uid in uids:
         if uid in uncommitted:
@@ -676,8 +684,6 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
             continue
         if uid in absent:
             failures.append(f"live alert rule {uid} is absent from Grafana")
-        if uid in paused:
-            failures.append(f"live alert rule {uid} must be unpaused")
         if uid in divergent:
             failures.append(f"live alert rule {divergent[uid]} does not match the committed rule")
     return failures

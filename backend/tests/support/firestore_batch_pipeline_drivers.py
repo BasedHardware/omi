@@ -1,6 +1,7 @@
 """Executable query coverage for the dormant batch pipeline's stage namespaces."""
 
 from datetime import datetime, timezone
+from itertools import cycle
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,9 +14,56 @@ def _projection_debt_on(client):
     return patch.object(record_projection_rebuild, 'durable_debt_enabled', lambda: True)
 
 
+def _repair_age_orders(client):
+    from config import refactor_modes
+
+    return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
+
+
+def _poll_skip_modes(client):
+    from database import batch_pipeline_store
+
+    return patch.object(batch_pipeline_store, 'held_poll_skip_enabled', side_effect=cycle((False, True)))
+
+
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'database.batch_pipeline_fresh_guard.fresh_committed_counts',
+            domains={'namespace': namespaces},
+            neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_coalescing.due',
+            domains={
+                'namespace': namespaces,
+                'producer_enabled': [False, True],
+                'after': [None, {'scan_at': 1.0, 'id': 'synthetic-cursor'}],
+            },
+            neutrals={'now': (3000000.0, 'immutable release/lease deadline operand only')},
+        ),
+        CoveredByEntry(
+            'database.record_custody_receipts.prune',
+            covered_by=('database.record_custody_receipts.expired_page',),
+            reason='bounded cleanup delegates its only query to expired_page; deletes use document batches',
+            expect_observed=False,
+            body_digest='a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+        ),
+        DriverEntry(
+            'database.record_custody_receipts.expired_page',
+            neutrals={
+                'now': (2000000000.0, 'expiry cutoff only'),
+                'budget': (
+                    SimpleNamespace(check=lambda: None, timeout=lambda maximum=10: maximum),
+                    'RPC deadline only',
+                ),
+            },
+        ),
+        DriverEntry(
+            'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
+            domains={'namespace': namespaces},
+        ),
         DriverEntry(
             'utils.record_projection_rebuild.run',
             domains={'mode': ['apply', 'plan']},
@@ -51,20 +99,31 @@ def entries():
         ),
         DriverEntry(
             'utils.batch_pipeline.record_seal_cluster_repair.discover_jobs',
+            trials=2,
+            patchers=(_repair_age_orders,),
             domains={
+                'urgent': [False, True],
                 'after': [
                     None,
                     {
                         'path': 'batch_pipeline_prod_jobs/old',
                         'finished_at': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
-                ]
+                    {
+                        'path': 'batch_pipeline_prod_jobs/old',
+                        'enqueued_at': 1.0,
+                        'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
+                    },
+                ],
             },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
+                'progress': (lambda _: None, 'content-free fallback diagnostic only'),
+                'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
             },
         ),
         DriverEntry(
@@ -221,16 +280,31 @@ def entries():
             neutrals={'limit': (32, 'bounded page size')},
         ),
         DriverEntry(
+            'database.batch_pipeline_quarantine_recovery.input_expiring_candidates',
+            domains={
+                'namespace': namespaces,
+                'after': [
+                    None,
+                    {
+                        'enqueued_at': {'at': 1.0, 'id': 'held-09'},
+                        'audio_staged_at': {'at': 1.0, 'id': 'held-10'},
+                    },
+                ],
+            },
+            neutrals={'now': (3000000.0, 'expiry cutoff operand only')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.projection_page',
             domains={
                 'namespace': namespaces,
-                'after': [None, (2.0, 'result-100')],
+                'after': [None, (2.0, 'result-100'), (2.0, 3.0, 'result-100')],
                 'states': [
                     ('pending', 'persisted', 'ready'),
                     ('pending',),
                     ('persisted', 'ready'),
                     ('pending', 'persisted', 'ready', 'quarantine_held'),
                 ],
+                'due_before': [None, 3000000.0],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),
@@ -256,9 +330,12 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit, keyset cursor and drain states unchanged',
+            reason='store adapter forwards namespace, limit, keyset cursor, drain states and the optional finish clock unchanged',
             expect_observed=False,
-            body_digest='bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
+            # Re-reviewed 2026-11-11: the adapter gained the optional `due_before` finish clock and
+            # forwards it unchanged; the cursor is now typed `tuple | None`. No query, read or bound
+            # changed, and the forwarded shape is still the recorded `projection_page` driver.
+            body_digest='93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
@@ -344,7 +421,10 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.timeliness_sample',
-            domains={'namespace': namespaces, 'terminal_empty_processed': [False, True]},
+            domains={
+                'namespace': namespaces,
+                'terminal_empty_processed': [False, True],
+            },
             neutrals={
                 'epoch': (1.0, 'cohort boundary operand only'),
                 'now': (10000.0, 'SLA cutoff operand only; due > epoch drives the new-breach counts'),
@@ -352,9 +432,15 @@ def entries():
             },
         ),
         DriverEntry(
-            'database.batch_pipeline_store.first_pending',
-            base={'owner_key': 'owner-hash'},
+            'database.batch_pipeline_store.timeliness_all_time_counts',
             domains={'namespace': namespaces},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.first_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
@@ -390,7 +476,29 @@ def entries():
             body_digest='d9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
         ),
         DriverEntry(
+            'database.batch_pipeline_store.fresh_first_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'ready': [False, True]},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
@@ -407,11 +515,18 @@ def entries():
             domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
             neutrals={'limit': (50, 'bounded page size')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.promote_record_recoveries',
+            covered_by=('database.batch_pipeline_store.due',),
+            reason='bounded promotion delegates its waiting-state query to due; promotion uses document transactions',
+            expect_observed=False,
+            body_digest='ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={
                 'namespace': namespaces,
-                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},
@@ -441,9 +556,19 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
+            reason='thin 2-tuple wrapper over release_page_settled; no queries of its own',
+            expect_observed=False,
+            body_digest='15ce4bf78a33ea401c5eeb56e895c088a75ffc45471d268784f7f174e6474f30',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
             reason='bounded release scan delegates queries to both page builders; resets are document transactions',
             expect_observed=False,
-            body_digest='342df86ce628f1bd9d2f79d1e14fe4b153e65f71aea294197cffb134b930d49b',
+            body_digest='d863e83874910f88595eb18925f58f8129e1665d7b14dbde81179c443a75c632',
         ),
         CoveredByEntry(
             'database.batch_pipeline_projection_release.release_scan_pass',
@@ -451,8 +576,18 @@ def entries():
                 'database.batch_pipeline_projection_release.held_page_ids',
                 'database.batch_pipeline_projection_release.assignment_held_page_ids',
             ),
-            reason='two durable cursors share release_page; cursor reads and writes are document operations',
+            reason='thin 2-tuple wrapper over release_scan_pass_settled; no queries of its own',
             expect_observed=False,
-            body_digest='6e181f539bf5a7833c601e1915537c6e2cdf5bf0b16367b792c0a83cf76d4b56',
+            body_digest='92308c42482933a9adde1ca3fc20dff803d3c7c3be88d134d608e532061a1d22',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_scan_pass_settled',
+            covered_by=(
+                'database.batch_pipeline_projection_release.held_page_ids',
+                'database.batch_pipeline_projection_release.assignment_held_page_ids',
+            ),
+            reason='two durable cursors share release_page_settled; cursor reads and writes are document operations',
+            expect_observed=False,
+            body_digest='0b064975a7115e66ee082bdf546b2b9bcfc75cbdf14bf08e67ccb595027c4de2',
         ),
     )

@@ -81,12 +81,16 @@ def test_off_returns_original_adapter_and_no_idle_series(monkeypatch, value, war
         live_metrics.soniox_idle_metrics()
 
     # Prior enabled tests may have registered idle collectors already. Compare
-    # the actual global registry, including their values, without replacing it.
+    # their actual registry values without replacing the registry. Provider
+    # constructors can also emit unrelated allowance/executor telemetry; its
+    # lazy series are outside this idle-off contract (and a whole-registry
+    # assertion can spend minutes formatting thousands of unrelated samples).
     def snapshot():
         return {
             (sample.name, tuple(sorted(sample.labels.items()))): sample.value
             for family in REGISTRY.collect()
             for sample in family.samples
+            if sample.name.startswith('omi_soniox_idle')
         }
 
     before = snapshot()
@@ -112,10 +116,7 @@ def test_off_returns_original_adapter_and_no_idle_series(monkeypatch, value, war
 
     asyncio.run(run())
     after = snapshot()
-    assert after.keys() == before.keys()
-    assert {key: value for key, value in after.items() if key[0].startswith('omi_soniox_idle')} == {
-        key: value for key, value in before.items() if key[0].startswith('omi_soniox_idle')
-    }
+    assert after == before
 
 
 @pytest.mark.parametrize('recovery', ['false', 'true'])

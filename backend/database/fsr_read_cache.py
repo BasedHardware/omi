@@ -278,6 +278,7 @@ def cached_read(
     cacheable=lambda value: True,
     validate=lambda value: True,
     shadow=False,
+    on_hit=None,
 ):
     """CAS publication prevents a read started before a write from repopulating."""
     if _bypass.get() or family in _fresh_families.get() or (not shadow and not lever_enabled(family, uid)):
@@ -297,6 +298,11 @@ def cached_read(
                 and validate(envelope['payload'])
             ):
                 _event(family, 'hit')
+                if on_hit is not None:
+                    try:
+                        on_hit(envelope['payload'])
+                    except Exception:
+                        pass  # Observation cannot turn a hit into a durable read.
                 return copy.deepcopy(envelope['payload'])
     except Exception:
         _failure(family, 'read')

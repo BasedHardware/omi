@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -15,6 +17,10 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +31,20 @@ import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
+const _baseline = bool.fromEnvironment('HOME_OVERLAP_BASELINE');
+
+class _LiveCapture extends CaptureProvider {
+  _LiveCapture()
+      : super(
+            externalActions: const NoopCaptureExternalActions(),
+            inProgressConversationLoader: () async {},
+            localSegmentStore: LocalSegmentStore.disabled());
+  @override
+  String? get liveCaptureSource => 'omi';
+  @override
+  bool get pendantCaptureVerified => true;
+}
+
 const _phone = Size(393, 852);
 const _tall = Size(393, 3200);
 const _processingKey = Key('home_processing_row');
@@ -111,7 +131,10 @@ EpisodeProvider _episodes() => EpisodeProvider(
 
 /// Pumps the real Home (ConversationsPage) with [items] on a tall view so every row is
 /// built for assertions. Returns the boundary key used by [_capture].
-Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items) async {
+Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
+    {EpisodeProvider? episodeProvider,
+    CaptureProvider? capture,
+    List<ServerConversation> processing = const []}) async {
   debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = _tall;
@@ -120,18 +143,26 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items)
   addTearDown(() => OmiColors.active = OmiPalette.light);
   SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
   await SharedPreferencesUtil.init();
-  final conversations = _conversationsFor(items);
-  final episodes = _episodes();
+  final conversations = _conversationsFor(items)..processingConversations = processing;
+  final episodes = episodeProvider ?? _episodes();
   addTearDown(() {
     conversations.dispose();
     episodes.dispose();
   });
+  final store = PendingWorkStore(
+      loadPending: () async => const ApiSuccess(
+          PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+  await store.refresh();
+  addTearDown(store.dispose);
   final boundary = GlobalKey();
   await tester.pumpWidget(RepaintBoundary(
     key: boundary,
     child: await buildTypedConversationScreen(
       conversations,
+      pendingWork: store,
       episodes: episodes,
+      captureProvider: capture,
       initializePreferences: false,
       theme: buildOmiTheme(brightness: Brightness.light),
     ),
@@ -179,6 +210,40 @@ void main() {
     await _fonts();
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+
+  testWidgets('live episode owns its three closed processing recordings', (tester) async {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(minutes: 24));
+    final members = [
+      for (var i = 0; i < 3; i++) _conv('closed-$i', start.add(Duration(minutes: i * 5)), homeStep: 'transcribing')
+    ];
+    // Live and Home requests race: the live snapshot knows only the current
+    // recording; the Home snapshot already includes the earlier closed members.
+    final full = Episode(
+        id: 'live',
+        live: true,
+        startedAt: start,
+        lastActivityAt: now,
+        conversationIds: members.map((m) => m.id).toList(),
+        members: members);
+    final latest = full.copyWith(conversationIds: ['current'], members: []);
+    final episodes = EpisodeProvider(
+      fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: latest)),
+      fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [full])),
+    );
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    await episodes.refreshLive();
+    episodes.debugSetHomeEpisodes([full]);
+    final boundary = await _pumpHome(tester, members, episodeProvider: episodes, capture: capture, processing: members);
+    expect(find.byType(LiveEpisodeRow), findsOneWidget);
+    expect(find.byKey(_processingKey), _baseline ? findsWidgets : findsNothing);
+    await _capture(
+        tester, boundary, _baseline ? '001-mobile-ios-home-overlap-before' : '002-mobile-ios-home-overlap-after');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('001-davids-home-today', (tester) async {
     final now = DateTime.now();
@@ -228,12 +293,11 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     // Today: one run of three unfinished rows, then the two finished rows.
-    expect(find.byKey(_processingKey), findsNWidgets(3));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.textContaining('$_transcribing · 3 recordings'), findsOneWidget);
-    // Yesterday: the five-row run, then two finished rows, then a single-recording run.
-    expect(find.textContaining('$_transcribing · 5 recordings'), findsOneWidget);
-    // A lone unfinished recording shows no count (the row says a count only above one).
-    expect(find.textContaining(_transcribing), findsNWidgets(3));
+    // Yesterday keeps its finished rows; the older processing runs live in Activity.
+    expect(find.textContaining('$_transcribing · 5 recordings'), findsNothing);
+    expect(find.textContaining(_transcribing), findsOneWidget);
     expect(find.text('Building Company Brains With AI'), findsOneWidget);
     expect(find.text('Check-In and Timer Search'), findsOneWidget);
     expect(find.text('Family Tensions and AI Consulting'), findsOneWidget);

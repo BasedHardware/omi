@@ -22,7 +22,6 @@ PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     return state
 
@@ -42,7 +41,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
     result = _enqueue(600.0, policy_id='p1')
     row = state_rows[KEY]
     assert result.row_id == KEY and not result.coalesced and result.wake_token == row['task_token']
-    assert row['due_at'] == 600.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
+    assert row['due_at'] == 120.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
     assert tasks[-1]['task_token'] == row['task_token']  # non-transactional enqueue wakes itself
     # The same row is claimable by today's run(): row compatibility (invariant 7).
     assert reprocess.run(KEY, row['task_token'], lambda *_: None, now=601) == 'processed'
@@ -52,6 +51,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
 def test_enqueue_coalesces_with_min_and_max_rules(rows):
     state_rows, _tasks = rows
     _enqueue(600.0)
+    state_rows[KEY]['summary_seen'] = True
     assert _enqueue(900.0, coalesce='max').coalesced
     assert state_rows[KEY]['due_at'] == 900.0 and state_rows[KEY]['version'] == 2
     assert _enqueue(300.0, coalesce='min').coalesced

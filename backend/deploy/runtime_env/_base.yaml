@@ -20,15 +20,18 @@ environment_shared:
       - memory.canonical.mutate
       env:
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+        SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         FIRESTORE_READ_LEVERS:
           value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
           category: rollout
@@ -69,14 +72,34 @@ environment_shared:
         BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
         BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+        BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_TOKEN_LEASE_MODE:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE
+          category: rollout
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+          category: rollout
+        RECORD_TOKEN_LEASE_SECONDS:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_SECONDS
+          category: rollout
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_DEPLOYED_AT
+          category: rollout
         BATCH_PIPELINE_SERVING_ENABLED:
           value: 'false'
           category: rollout
@@ -114,9 +137,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_COALESCE_ENABLED:
-          value: 'true'
-          category: rollout
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
           value: 'false'
           category: rollout
@@ -124,22 +144,13 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-          category: rollout
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
         AUDIO_MERGE_WORKER_URL:
           value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_RETENTION:
-          value: 'false'
-          category: rollout
-        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
           value: 'false'
@@ -160,6 +171,9 @@ environment_shared:
           category: ops_kill
         SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
           value: 'true'
+          category: ops_kill
+        SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+          value: 'off'
           category: ops_kill
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
@@ -224,10 +238,12 @@ environment_shared:
           secret:
             name: '{env}-omi-backend-secrets'
             key: ELEVENLABS_API_KEY
-        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          value: 'true'
+          category: rollout
         X_OAUTH_REDIRECT_URI:
           config_map:
             name: '{env}-omi-backend-config'
@@ -292,9 +308,6 @@ environment_shared:
         STT_NO_TEXT_SECONDS:
           value: '30'
           category: rollout
-        STT_MULTI_LANGUAGE_HINTS:
-          value: 'true'
-          category: rollout
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'true'
           category: rollout
@@ -309,9 +322,6 @@ environment_shared:
           value: '8'
           category: rollout
         PARAKEET_WINDOW_DIARIZATION:
-          value: 'false'
-          category: rollout
-        PARAKEET_WINDOW_DEADLINE_CUT_ENABLED:
           value: 'false'
           category: rollout
         PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
@@ -541,8 +551,29 @@ environment_shared:
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
         PUSHER_STORAGE_PCM_BUDGET_MB: {value: '0', category: ops_kill}
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         HOSTED_LID_API_URL: {value: '', category: service_discovery}
         RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_TOKEN_LEASE_MODE:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE
+          category: rollout
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+          category: rollout
+        RECORD_TOKEN_LEASE_SECONDS:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_SECONDS
+          category: rollout
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: RECORD_TOKEN_LEASE_DEPLOYED_AT
+          category: rollout
         LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -550,12 +581,11 @@ environment_shared:
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-        REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+        SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
         FIRESTORE_READ_LEVERS:
           value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}'
           category: rollout
@@ -607,9 +637,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_COALESCE_ENABLED:
-          value: 'true'
-          category: rollout
         AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
           value: 'false'
           category: rollout
@@ -617,22 +644,13 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           category: rollout
-          category: rollout
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-          category: rollout
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
           category: rollout
         AUDIO_MERGE_WORKER_URL:
           value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_RETENTION:
-          value: 'false'
-          category: rollout
-        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
           value: 'false'
@@ -713,6 +731,18 @@ environment_shared:
     config_map:
       name: '{env}-omi-backend-config'
       entries:
+        RECORD_TOKEN_LEASE_MODE:
+          source: environment
+          default: 'off'
+        RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+          source: environment
+          default: '0'
+        RECORD_TOKEN_LEASE_SECONDS:
+          source: environment
+          default: '3600'
+        RECORD_TOKEN_LEASE_DEPLOYED_AT:
+          source: environment
+          default: '0'
         LADDER_V1_PLUS_MONTH_PRICE_ID:
           source: environment
           default: ''
@@ -751,10 +781,12 @@ environment_shared:
           source: environment
         REDIS_DB_HOST:
           source: environment
-        SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {source: literal, value: 'false'}
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         STT_SERVICE_MODELS:
           source: literal
         TYPESENSE_HOST:
@@ -934,9 +966,12 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           LADDER_V1_PLUS_MONTH_PRICE_ID:
             env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
             provisional: true
@@ -956,8 +991,8 @@ environment_shared:
             env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
             provisional: true
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
           OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT: {value: '100', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -967,14 +1002,30 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1014,16 +1065,12 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
-            category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
@@ -1079,12 +1126,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
@@ -1111,6 +1152,9 @@ environment_shared:
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
@@ -1182,10 +1226,12 @@ environment_shared:
             category: service_auth
           USE_VERTEX_AI:
             value: 'true'
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE:
             env_var: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
             provisional: true
@@ -1286,9 +1332,6 @@ environment_shared:
             category: storage_retention
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
-          CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED:
             value: 'false'
             category: rollout
@@ -1351,12 +1394,15 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
@@ -1364,14 +1410,30 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1410,16 +1472,12 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
-            category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
@@ -1484,12 +1542,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
@@ -1517,6 +1569,9 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
+            category: ops_kill
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
             category: rollout
@@ -1537,10 +1592,6 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
             value: 'off'
@@ -1552,10 +1603,12 @@ environment_shared:
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -1722,15 +1775,18 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED: {value: 'on', category: ops_kill}
           SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
           SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
@@ -1738,14 +1794,30 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1786,16 +1858,12 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
-            category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
@@ -1854,12 +1922,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
@@ -1887,6 +1949,9 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
+            category: ops_kill
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
             category: rollout
@@ -1907,10 +1972,6 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            provisional: true
-            value: 'false'
-            category: rollout
           SYNC_BACKFILL_UID_SEQUENCER:
             provisional: true
             value: 'off'
@@ -1922,10 +1983,12 @@ environment_shared:
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -2075,26 +2138,45 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
-          REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_RECORD_COVERAGE_WAIT_MEMO: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           RECORD_SEAL_OVERLAP_TRIM_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_TOKEN_LEASE_MODE:
+            env_var: RECORD_TOKEN_LEASE_MODE
+            default: 'off'
+            category: rollout
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+            env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+            default: '0'
+            category: rollout
+          RECORD_TOKEN_LEASE_SECONDS:
+            env_var: RECORD_TOKEN_LEASE_SECONDS
+            default: '3600'
+            category: rollout
+          RECORD_TOKEN_LEASE_DEPLOYED_AT:
+            env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+            default: '0'
+            category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:
@@ -2134,16 +2216,12 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_COALESCE_ENABLED:
-            value: 'true'
-            category: rollout
           AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            category: rollout
             category: rollout
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
@@ -2202,12 +2280,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          LIVE_CAPTURE_WINDOW_RETENTION:
-            value: 'false'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
             value: 'false'
             category: rollout
@@ -2234,6 +2306,9 @@ environment_shared:
             category: rollout
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
@@ -2273,10 +2348,12 @@ environment_shared:
           DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
+          PRERECORDED_SONIOX_FAILOVER_ENABLED:
+            value: 'true'
+            category: rollout
           HOSTED_LID_API_URL: {value: '', category: service_discovery}
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -2653,3 +2730,196 @@ environment_shared:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
   compute_project: '{compute_project}'
+
+# Offline read-lever evidence only: no rollout value authority.
+firestore_read_lever_policy:
+  lever_expiry:
+    base/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    base/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    overlay/prod/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/dev/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/dev/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/gke/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/gke/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/desktop_backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-sync:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-sync-backfill:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/services/backend-integration:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/notifications-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/x-connector-sync-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/frame-request-retention-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    runtime/prod/cloud_run/jobs/day3-reengagement-email-job:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/dev/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/prod/backend-listen:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/dev/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/prod/pusher:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+    chart/prod/batch-pipeline-worker:
+      lifecycle_record_pending_head:
+        value: 5
+        expires: '2026-11-17'
+      privacy_checks_shadow:
+        value: 10
+        expires: '2026-11-17'

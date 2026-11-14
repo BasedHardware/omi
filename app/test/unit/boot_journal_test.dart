@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/startup/boot_journal.dart';
 
+import '../support/temp_dir_cleanup.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -13,7 +15,7 @@ void main() {
     directory = await Directory.systemTemp.createTemp('boot-journal-');
     journal = BootJournal(documents: () async => directory);
   });
-  tearDown(() async => directory.delete(recursive: true));
+  tearDown(() => deleteTempDirQuietly(directory));
 
   test('serializes concurrent writes, caps history, and atomically replaces the file', () async {
     await Future.wait(List.generate(40, (index) => journal.record('stage_$index', 'completed')));

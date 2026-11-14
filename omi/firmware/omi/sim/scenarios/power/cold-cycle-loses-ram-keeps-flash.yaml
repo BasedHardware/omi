@@ -1,0 +1,13 @@
+id: power/cold-cycle-loses-ram-keeps-flash
+summary: >
+  Power model sanity: a cold cycle loses RAM while NVS survives. Both 70 s
+  boots pass the 60 s trial (count back to 0); GOOD is written only once.
+tags: [guard]
+timeline:
+  - {t: 70000, power: cycle}
+end: 140000
+expect:
+  boot_count: 2
+  boots:
+    - {reset: power-on, warm: false, boot_count: 0, bootstate: 2, log: ["omi/bootstate=GOOD"]}
+    - {reset: power-on, warm: false, boot_count: 0, bootstate: 2, log: ["BOOTSTATE: active=0 count=1"], not_log: ["omi/bootstate=GOOD"]}

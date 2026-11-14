@@ -55,7 +55,7 @@ async def stream(websocket: WebSocket) -> None:
                             'speaker': 'SPEAKER_00',
                             'start': 0.0,
                             'end': 0.1,
-                            'text': 'stack transcript',
+                            'text': 'We planned the release and agreed to verify the complete recording lifecycle with durable memory extraction, listener restart recovery, retryable finalization, and exactly once integration delivery before shipping the next application build.',
                             'is_user': False,
                             'person_id': None,
                         }

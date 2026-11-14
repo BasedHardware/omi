@@ -40,6 +40,7 @@ import 'package:omi/widgets/extensions/string.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
+  if (conversation.homeStep == 'failed') return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
@@ -140,6 +141,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.structured.emoji,
         conversation.structured.category,
         conversation.status,
+        conversation.homeStep,
         conversation.discarded,
         conversation.starred,
         conversation.folderId,
@@ -626,9 +628,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
+                      if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
+                        const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if (widget.conversation.showsSummaryRetry) ...[
+                      if (widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
                       ],

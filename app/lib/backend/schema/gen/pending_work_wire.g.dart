@@ -5,8 +5,10 @@
 class GeneratedPendingWorkItem {
   final List<String> conversationIds;
   final double durationSeconds;
+  final String? homeStep;
   final String id;
   final String kind;
+  final int recordingCount;
   final DateTime? startedAt;
   final String state;
   final DateTime? updatedAt;
@@ -14,8 +16,10 @@ class GeneratedPendingWorkItem {
   const GeneratedPendingWorkItem({
     required this.conversationIds,
     required this.durationSeconds,
+    this.homeStep,
     required this.id,
     required this.kind,
+    this.recordingCount = 1,
     required this.startedAt,
     required this.state,
     required this.updatedAt,
@@ -25,8 +29,10 @@ class GeneratedPendingWorkItem {
     return GeneratedPendingWorkItem(
       conversationIds: _required(_readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: true, nullable: false), "conversation_ids"),
       durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      recordingCount: _required(_readFieldValue<int>(_readField(json, const ["recording_count"]), "recording_count", _readInt, requiredField: false, nullable: false, defaultValue: 1), "recording_count"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
       state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: true),
@@ -37,8 +43,10 @@ class GeneratedPendingWorkItem {
     return {
       'conversation_ids': conversationIds,
       'duration_seconds': durationSeconds,
+      'home_step': homeStep,
       'id': id,
       'kind': kind,
+      'recording_count': recordingCount,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'state': state,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
@@ -49,11 +57,13 @@ class GeneratedPendingWorkItem {
 class GeneratedPendingWorkSnapshot {
   final int attentionUnseenCount;
   final bool enabled;
+  final bool homeProcessingToday;
   final List<GeneratedPendingWorkItem> items;
 
   const GeneratedPendingWorkSnapshot({
     required this.attentionUnseenCount,
     required this.enabled,
+    this.homeProcessingToday = false,
     required this.items,
   });
 
@@ -61,6 +71,7 @@ class GeneratedPendingWorkSnapshot {
     return GeneratedPendingWorkSnapshot(
       attentionUnseenCount: _required(_readFieldValue<int>(_readField(json, const ["attention_unseen_count"]), "attention_unseen_count", _readInt, requiredField: true, nullable: false), "attention_unseen_count"),
       enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      homeProcessingToday: _required(_readFieldValue<bool>(_readField(json, const ["home_processing_today"]), "home_processing_today", _readBool, requiredField: false, nullable: false, defaultValue: false), "home_processing_today"),
       items: _required(_readFieldValue<List<GeneratedPendingWorkItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedPendingWorkItem.fromJson), requiredField: true, nullable: false), "items"),
     );
   }
@@ -69,6 +80,7 @@ class GeneratedPendingWorkSnapshot {
     return {
       'attention_unseen_count': attentionUnseenCount,
       'enabled': enabled,
+      'home_processing_today': homeProcessingToday,
       'items': items.map((value) => value.toJson()).toList(),
     };
   }

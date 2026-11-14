@@ -10,6 +10,7 @@ It proves ownership/field coverage, not execution or bounded liveness (WP-B2).
 
 from dataclasses import dataclass
 import math
+from typing import cast
 
 from tests.support.lifecycle_ast import EntryPath, builders
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
@@ -34,6 +35,27 @@ class Exit:
 class Alert:
     uid: str | None
     tier: str | None = None
+
+
+# Reviewed observability debt, independent of live rule state or failed assertions.
+# Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938 explicitly pauses known
+# backlog pages until #24731/#24893 drain work ships and clean24h criteria hold.
+# These rows do NOT have active dwell-alert protection while paused. The strict
+# invariant still fails; strict xfail removal is required when an owner unpauses.
+# Criteria: backend/charts/monitoring/batch-projection/pipeline-alerts.md.
+IMPORT_PAUSED_DWELL_ROWS = {
+    'batch:record_pending': 'omi-record-pending-dwell',
+    'batch:ready': 'omi-batch-unit-unpublished-2h',
+    'batch:leased': 'omi-batch-unit-unpublished-2h',
+    'batch:retry': 'omi-batch-unit-unpublished-2h',
+    'batch:result_ready': 'omi-batch-unit-unpublished-2h',
+    'batch:vendor_held': 'omi-batch-unit-unpublished-2h',
+    'batch:quarantined': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:pending': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:persisted': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:ready': 'omi-batch-unit-unpublished-2h',
+    'batch_projection:quarantine_held': 'omi-pipeline-held-row-age',
+}
 
 
 @dataclass(frozen=True)
@@ -90,6 +112,29 @@ def writers(machine, *fields):
     )
 
 
+# Durably refused transitions must retire the summary due index in the same
+# payload. These write owners are exercised by test_summary_refusal_writers;
+# they do not create a new lifecycle state or retire transient pending debt.
+SUMMARY_REFUSAL_WRITERS = (
+    Writer('utils/sync/assignment.py', '_donor_redirect_patch'),
+    Writer('database/conversations.py', 'update_conversation_title'),
+    Writer('database/conversation_mutations.py', '_apply_operation'),
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+    Writer('utils/retrieval/tools/edit_tools.py', 'update_conversation'),
+    Writer('utils/conversations/summary_delivery.py', 'merge_result'),
+)
+
+# The inverse manual-field writes recover only an owed, unindexed obligation,
+# from its original acceptance and deadline, inside the same transaction.
+SUMMARY_MANUAL_CLEAR_WRITERS = (
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+)
+
+SUMMARY_DISCARD_RESTORE_WRITERS = (Writer('database/conversations.py', 'restore_conversation_from_discarded._restore'),)
+
+
 FINALIZATION_MODULE = 'database/conversation_finalization_jobs.py'
 FAIR_USE_MODULE = 'utils/fair_use.py'
 
@@ -117,7 +162,7 @@ PATCH_CONTRACTS = {
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'conversation_span'),
-                'd04053702f344798afcdaf665c967d325084a1bf8dd4009b0a0576898350c993',
+                'fc65ea6d28331e9fdb075178b84bca85d3d47a28aecf4155d0d11f314e6cab92',
             ),
             (
                 Writer('models/recorded_span.py', 'RecordedSpan'),
@@ -211,6 +256,13 @@ DEADLINE_ENTRIES = {
         entry(
             'database/conversation_finalization_jobs.py',
             '_complete_server_batch_capture_txn',
+            'home_transcription_pending_at',
+        ),
+        # The reviewed orphan owner stamps the same bounded Home hold in its
+        # canonical registration transaction, without finalization fanout.
+        entry(
+            'utils/conversations/lifecycle.py',
+            'complete_orphan_batch_capture',
             'home_transcription_pending_at',
         ),
     ),
@@ -372,9 +424,59 @@ STATES = (
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
-            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'the existing process/pod-death repair proof remains its exit. Off-mode frame tokens never expire by age; '
+            'serve-created custody tokens retain their own lease exit after rollback. The leased per-token view is separate. '
             'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
             'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_token',
+            'capturing',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                Writer('database/record_custody_append.py', 'begin.commit'),
+            ),
+            exit=Exit('lease', 'utils/batch_pipeline/record_producer_proof.py:producer_tokens_dead'),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
+            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
+            'custody lease covers the configured sync request timeout plus a named margin. '
+            'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
+        ),
+        row(
+            'record_token',
+            'lease_lapsed',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+            ),
+            exit=Exit(
+                'sweeper',
+                'utils/batch_pipeline/record_seal_repair.py:apply_seals',
+                (
+                    Writer('utils/batch_pipeline/record_seal_repair.py', 'apply_seals.commit'),
+                    Writer('database/record_partial.py', 'finish_partial.commit'),
+                    Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                ),
+            ),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Computed from nested lease clocks; never persisted as expiry state',
+            note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
+            'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
+            'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
+            'only after durable acceptance in finish, including after rollback. A lost accepted fence recovers via '
+            'record_custody_append.recover_committed with an exact-request durable receipt and partial continuation. '
+            'Separate recovery is parked as record_recovery_waiting until record_recovery_gate.promote '
+            'transactionally observes the original publication complete; promotion runs off/shadow/serve. '
+            'Recovery is independent of '
+            'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),
         row(
             'record_audio',
@@ -462,8 +564,9 @@ STATES = (
             ('finalization_status', 'status'),
             exit=FINALIZER,
             metric='omi_finalization_byok_new_oldest_age_seconds',
-            alert=Alert('omi-finalization-byok-dwell-page', 'page'),
-            note='Recent-cohort dwell/page from #24595; historical age is separate. '
+            alert=Alert('omi-finalization-byok-dwell-page', 'agent'),
+            note='Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938: active muted BYOK warning; '
+            '259200s/1h threshold unchanged. Recent-cohort dwell from #24595; historical age is separate. '
             '14-day abandonment is computed from activity, not a deadline stamped at entry',
         ),
         row(
@@ -584,8 +687,16 @@ STATES = (
                     else BATCH
                 )
             ),
-            deadline='lease_until' if name == 'leased' else 'held_deadline_at' if name == 'quarantined' else None,
-            stamped=name in {'leased', 'quarantined'},
+            deadline=(
+                'lease_until'
+                if name == 'leased'
+                else (
+                    'held_deadline_at'
+                    if name == 'quarantined'
+                    else 'record_dead_letter_deadline_at' if name == 'record_pending' else None
+                )
+            ),
+            stamped=name in {'leased', 'quarantined', 'record_pending'},
             metric=(
                 'omi_batch_record_pending_new_oldest_age_seconds'
                 if name == 'record_pending'
@@ -612,7 +723,7 @@ STATES = (
                 else None
             ),
             note=(
-                '#24587 adds a per-attempt admission lease; total pending-dwell deadline is still unstamped. '
+                'Barrier refusals stamp record_dead_letter_deadline_at with a full 14-day window; aged rows become dead/record_barrier_aged under BATCH_HELD_DEAD_LETTER_ENABLED. Private OIDC requeue-record retains the privacy fence and custody. '
                 '#24595 supplies recent-cohort age/page'
                 if name == 'record_pending'
                 else (
@@ -647,7 +758,7 @@ STATES = (
             metric='omi_batch_held_expired_units',
             alert=Alert('omi-batch-held-expired-volume', 'agent'),
             alert_required=True,
-            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue.',
+            note='Reason held_expired is retained stock, never TTL/deletion; nightly UTC and private OIDC requeue. Reason input_expiring is retained at audio_staged_at (else legacy enqueued_at) + 29d for staging GPU/assignment holds under BATCH_INPUT_EXPIRING_ENABLED (default on); no nightly/poll exit. Only checked operator GPU requeue, target-restorable assignment release, or exact-bundle GPU re-upload exits it; the preterminal staged_input age warning fires above 21d. Record reason record_barrier_aged retains merge_pending=false, record_dead_letter_deadline_at and record_dead_letter_at; omi_batch_record_dead_letter_units and omi-batch-record-dead-letter-volume (agent); private OIDC requeue-record only.',
         ),
     )
     + tuple(
@@ -682,7 +793,7 @@ STATES = (
                 )
             ),
             note=(
-                'Assignment holds retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded. Legacy ready-receipt ghosts have a ready-hint exit plus an inert ghost_settled_cohort marker in the same transaction: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED default OFF, 24h committed age floor, max 16 per pass; off classifies existing reads only.'
+                'Committed assignment holds, including real-held gate failures without privacy refusal or open operator intent, retain quarantine_held with held_deadline_at, held_expired_at and held_expired_reason; nightly re-drive; omi_batch_held_expired_units and omi-batch-held-expired-volume (agent). Privacy holds are excluded. Legacy ready-receipt ghosts have a ready-hint exit plus an inert ghost_settled_cohort marker in the same transaction: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED default OFF, 24h committed age floor, max 16 per pass; off classifies existing reads only.'
                 if name == 'quarantine_held'
                 else 'Result projection receipt state, distinct from batch job state'
             ),
@@ -743,7 +854,7 @@ def durable_titling_rearm(before, after):
         and isinstance(row.get('task_token'), str)
         and row['task_token']
         and type(due) in (int, float)
-        and math.isfinite(due)
+        and math.isfinite(cast(float, due))
     )
 
 

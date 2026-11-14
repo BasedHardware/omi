@@ -429,6 +429,9 @@ class ServerConversation {
   /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
   final String? homeStep;
 
+  /// Authoritative episode membership, including before the episode list arrives.
+  final String? episodeId;
+
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
 
@@ -482,6 +485,7 @@ class ServerConversation {
     this.captureCoverage,
     this.excludedSpeakers,
     this.homeStep,
+    this.episodeId,
   });
 
   /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
@@ -495,7 +499,12 @@ class ServerConversation {
   }
 
   /// This conversation with [segments] as its transcript; every other field is carried over.
-  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => _copy(transcriptSegments: segments);
+
+  /// Carry Home's list-only presentation through a detail refresh without losing its content.
+  ServerConversation withHomeStep(String step) => _copy(homeStep: step)..transcriptCarried = transcriptCarried;
+
+  ServerConversation _copy({List<TranscriptSegment>? transcriptSegments, String? homeStep}) => ServerConversation(
         id: id,
         createdAt: createdAt,
         onDeviceProvenance: onDeviceProvenance,
@@ -503,7 +512,7 @@ class ServerConversation {
         structured: structured,
         startedAt: startedAt,
         finishedAt: finishedAt,
-        transcriptSegments: segments,
+        transcriptSegments: transcriptSegments ?? this.transcriptSegments,
         appResults: appResults,
         suggestedSummarizationApps: suggestedSummarizationApps,
         geolocation: geolocation,
@@ -530,7 +539,8 @@ class ServerConversation {
         summaryRetryable: summaryRetryable,
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
-        homeStep: homeStep,
+        homeStep: homeStep ?? this.homeStep,
+        episodeId: episodeId,
       )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -640,6 +650,7 @@ class ServerConversation {
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
       homeStep: homeStep,
+      episodeId: generated.episodeId,
     );
   }
 
@@ -679,7 +690,8 @@ class ServerConversation {
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
       if (processingDeferred) 'processing_deferred': true,
-      if (homeStep != null) 'home_step': homeStep,
+      // home_step belongs to the fetch that produced it; never persist a stale projection.
+      if (episodeId != null) 'episode_id': episodeId,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
       if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
     };
@@ -687,6 +699,7 @@ class ServerConversation {
 
   wire.GeneratedConversation toGenerated() {
     return wire.GeneratedConversation(
+      episodeId: episodeId,
       id: id,
       createdAt: createdAt,
       startedAt: startedAt,

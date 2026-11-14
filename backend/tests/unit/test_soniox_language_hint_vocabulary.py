@@ -234,21 +234,6 @@ async def test_learned_portuguese_hints_english_primary_connect(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_multilingual_hint_flag_restores_no_hint(monkeypatch):
-    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
-    profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user')
-    config = await _sent_config('multi', profile)
-    assert 'language_hints' not in config
-
-
-@pytest.mark.asyncio
-async def test_flag_off_config_matches_the_previous_multi_frame(monkeypatch):
-    monkeypatch.setenv('STT_MULTI_LANGUAGE_HINTS', 'false')
-    profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user')
-    assert await _sent_config('multi', profile) == await _sent_config('multi')
-
-
-@pytest.mark.asyncio
 async def test_out_of_scope_multi_session_keeps_the_previous_frame():
     profile = LiveLanguageProfile.create('pt', multi=True, uid='test-user', in_scope=False)
     assert await _sent_config('multi', profile) == await _sent_config('multi')

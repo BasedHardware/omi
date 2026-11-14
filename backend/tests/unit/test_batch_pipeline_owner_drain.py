@@ -8,6 +8,7 @@ assignment transaction does, even when a walk skips the pre-check.
 
 import asyncio
 import itertools
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from unittest.mock import Mock
@@ -30,6 +31,7 @@ from utils.batch_pipeline.serving import Serving
 from utils.sync.assignment import assign_in_transaction
 
 SWITCHES = (
+    'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED',
     'BATCH_PIPELINE_PROJECTION_PREFETCH',
@@ -110,7 +112,7 @@ async def settle(projector):
     """Wait until the process drain has nothing running or queued."""
     for _ in range(1000):
         drains = projector.drains
-        if drains is None or (not drains.tasks and not drains.queue):
+        if drains is None or (not drains.tasks and not drains.queue and not drains.backlog):
             return
         await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
         await asyncio.sleep(0)
@@ -122,13 +124,34 @@ def owner_rows(log, owner):
     return [sid for sid in log.persist_order if log.results[sid]['owner_key'] == key]
 
 
+@pytest.fixture
+def serial_owner_steps(monkeypatch):
+    """Deterministic cross-owner persist order for the fairness assertions.
+
+    Owner turns persist their steps through the 16-worker sync executor, so
+    which of two concurrent turns' steps reaches ``persist_order`` first is
+    thread timing, not scheduler order: on a loaded hosted runner a backlog
+    continuation's step overtook the newly admitted owner's (SCA-2182,
+    completion index 9 vs the asserted 7 — the scheduler had admitted the new
+    owner first). Fairness tests below pin the order the scheduler actually
+    controls by serializing steps (one FIFO executor worker) and skipping the
+    executor claim hop only a first turn pays; claim-aware admission itself
+    has its own tests below.
+    """
+    monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', 'off')
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(projection_drain, 'sync_executor', executor)
+        yield
+
+
 # --- fairness and scheduling -------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
+async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims, serial_owner_steps):
     """One slot, one two-row step per turn: owners take FIFO turns, in chain order."""
     monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)  # The single FIFO queue.
     monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
     # Each read jumps past any turn deadline, so every turn is exactly one step.
     ticks = itertools.count(0.0, 10_000.0)
@@ -148,6 +171,89 @@ async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
     # second turn, after 8 heavy rows instead of all 24.
     assert log.persist_order.index(light[-1]) == 10
     assert claims.overlaps == 0 and not projector.draining
+
+
+@pytest.mark.asyncio
+async def test_backlog_owners_do_not_hold_a_new_owner_behind_them(monkeypatch, claims, serial_owner_steps):
+    """2026-11-13: a few hundred backlog owners held every slot for two minutes a turn and
+    owners with a few fresh rows waited behind them. A new owner now goes before queued
+    backlog owners; every chain still projects whole and in order."""
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
+    ticks = itertools.count(0.0, 10_000.0)
+    monkeypatch.setattr(projection_drain, 'time', Mock(monotonic=lambda: next(ticks)))
+    log = ResultLog()
+    heavy = {name: chain(log, name, name, 12) for name in ('h1', 'h2', 'h3')}
+    light = chain(log, 'light', 'l', 2)
+    projector = projector_for(log)
+    projector.drain_requests = dict.fromkeys(['h1', 'h2', 'h3', 'light'])
+    projector.start_drains()
+    await settle(projector)
+    for name, rows in heavy.items():
+        assert owner_rows(log, name) == rows
+    assert owner_rows(log, 'light') == light
+    # The light owner is done after one first turn of each heavy owner ahead of it in the
+    # queue (6 rows), before any heavy owner gets a second turn.
+    assert log.persist_order.index(light[-1]) == 7
+    assert claims.overlaps == 0 and not projector.draining
+
+
+def test_new_owners_launch_first_and_the_backlog_still_advances(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection_drain, 'BACKLOG_OWED_TURNS', 1)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.backlog.extend(['b1', 'b2'])
+    drains.queue.extend(['n1', 'n2', 'n3'])
+    assert [drains.next_owner(), drains.next_owner()] == ['n1', 'n2']
+    # One round of new owners with no backlog owner running: the backlog is owed a turn.
+    assert drains.next_owner() == 'b1' and drains.backlog_running == {'b1'}
+    assert drains.next_owner() == 'n3'
+    # No new owner waiting: backlog owners may use any free slot.
+    assert drains.next_owner() == 'b2'
+    assert drains.next_owner() is None
+
+
+def test_a_backlog_turn_yields_only_for_a_new_owner_without_a_slot(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 3)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.tasks = dict.fromkeys(['b1', 'b2', 'b3'])
+    drains.backlog_running = {'b1', 'b2', 'b3'}
+    assert drains.should_yield('b1') is False  # Nobody is waiting.
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is True
+    assert drains.should_yield('b2') is False  # One waiting owner takes one slot.
+    drains.queue.append('n2')
+    assert drains.should_yield('b2') is True
+    drains.queue.append('n3')
+    assert drains.should_yield('b3') is False  # Never the last backlog turn running.
+    # A free slot serves the waiting owner without ending anyone's turn.
+    drains.yielding.clear()
+    drains.tasks.pop('b3')
+    drains.backlog_running.discard('b3')
+    drains.queue.clear()
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is False
+    # A new owner's own first turn is never ended early.
+    drains.queue.extend(['n2', 'n3'])
+    assert drains.should_yield('n9') is False
+
+
+def test_first_turn_zero_keeps_the_single_fifo_queue(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    assert drains.classes() is False
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 15.0)
+    assert drains.classes() is True
+
+
+def test_first_turn_seconds_setting(monkeypatch):
+    from config.batch_pipeline import owner_drain_first_turn_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raising=False)
+    assert owner_drain_first_turn_seconds() == 15
+    for raw, want in (('0', 0), ('30', 30), ('999', 120), ('-5', 0), ('junk', 15)):
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raw)
+        assert owner_drain_first_turn_seconds() == want
 
 
 @pytest.mark.asyncio
@@ -341,6 +447,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
     legacy, _ = catch_up_log()
     projector = projector_for(legacy)
+    projector.clock = lambda: 1000.0
     for _ in range(10):
         projector.sweep()
     assert legacy.persisted(BURST) and legacy.persisted('other')
@@ -348,6 +455,7 @@ async def test_drained_catch_up_final_state_equals_the_sweep_walk(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
     drained, _ = catch_up_log()
     projector = projector_for(drained)
+    projector.clock = lambda: 1000.0
     service = Serving(MemoryStore(), projector=projector)
     for _ in range(3):
         await service.reconcile_async(periodic=True)
@@ -947,6 +1055,7 @@ PRIVACY_STOPS = [
 @pytest.mark.parametrize('again', [False, True])
 async def test_zero_progress_privacy_turn_defers_and_retries(monkeypatch, drain_timers, stop, reason, again):
     from utils.batch_pipeline.metrics import PROJECTION_DRAIN_PRIVACY_STOPS, PROJECTION_DRAIN_PRIVACY_BACKOFFS
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS
 
     monkeypatch.delenv('PROJECTION_DRAIN_PRIVACY_BACKOFF', raising=False)
     monkeypatch.setenv('PROJECTION_DRAIN_PRIVACY_BACKOFF_SECONDS', '180')
@@ -959,6 +1068,7 @@ async def test_zero_progress_privacy_turn_defers_and_retries(monkeypatch, drain_
     projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, stop) if blocked else real(*a, **kw)
     before_stops = PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=reason)._value.get()
     before_backoffs = PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get()
+    before_live = PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get()
     drains.request([BURST])
     if again:
         drains.request([BURST])
@@ -966,6 +1076,8 @@ async def test_zero_progress_privacy_turn_defers_and_retries(monkeypatch, drain_
     assert BURST in drains.delayed and not drains.queue and not drains.again and not drains.stops
     assert PROJECTION_DRAIN_PRIVACY_STOPS.labels(reason=reason)._value.get() == before_stops + 1
     assert PROJECTION_DRAIN_PRIVACY_BACKOFFS._value.get() == before_backoffs + 1
+    assert PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get() == before_live
+    assert not drains.live_target_attempts
     drains.request([BURST] * 10)
     assert len(drain_timers) == 1
     delay, retry, _ = drain_timers.pop()
@@ -1266,3 +1378,293 @@ async def test_ttl_during_unchanged_early_check_cannot_lose_the_retry(monkeypatc
     assert read.call_count == 1
     assert step.call_count == 2
     assert not drains.delayed and not drains.privacy_heads
+
+
+# --- awaiting-live-target backoff ------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def serving_sweep_runs(monkeypatch):
+    # Default for this module: a serving runtime with its sweep is alive, so
+    # live-target holds are passive. Tests that need otherwise override it.
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', 'serving')
+
+
+def live_target_drain():
+    projector = projector_for(ResultLog())
+    projector.chain_prefetch = lambda owner: None
+    projector.drain_step = Mock(return_value=projection.Walk([], [], False, 'head_awaiting_live_target'))
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    return projector, drains
+
+
+@pytest.mark.asyncio
+async def test_live_target_backoff_grows_caps_and_blocks_sweep_requests(drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS
+
+    projector, drains = live_target_drain()
+    before = PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get()
+    drains.request([BURST])
+    drains.request([BURST])  # active-turn re-request must also respect backoff
+    await settle(projector)
+    for turn, expected in enumerate([30, 60, 120, 240, 300, 300, 300], 1):
+        assert len(drain_timers) == 1
+        delay, retry, _ = drain_timers.pop()
+        assert delay == expected
+        assert projector.drain_step.call_count == turn
+        assert PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get() == before + turn
+        drains.request([BURST] * 20)
+        await settle(projector)
+        assert projector.drain_step.call_count == turn
+        retry()  # expiry only re-admits; it never starts a turn on its own
+        await settle(projector)
+        assert projector.drain_step.call_count == turn and not drains.delayed
+        drains.request([BURST] * 20)  # the next sweep request runs exactly one turn
+        await settle(projector)
+    drains.close()
+    assert not drains.live_target_attempts and not drains.delayed
+
+
+@pytest.mark.asyncio
+async def test_live_target_retries_never_exceed_the_sweep_cadence(drain_timers):
+    # 2026-11-09 readback: an expiry wake retried blocked owners every 30-300 s
+    # and doubled owner-chain conflicts. Without sweep requests, expired holds
+    # must start no turns at all; each sweep request starts at most one.
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    turns = 1
+    for _sweep in range(10):
+        assert projector.drain_step.call_count == turns
+        _delay, retry, _handle = drain_timers.pop()
+        retry()
+        await settle(projector)
+        # Expiry alone starts nothing and asks the serving loop for nothing.
+        assert projector.drain_step.call_count == turns
+        assert not drain_timers and not drains.delayed and not drains.queue
+        assert not list(projector.drain_requests)
+        drains.request([BURST])
+        await settle(projector)
+        turns += 1
+    assert projector.drain_step.call_count == turns
+    drains.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode,sweep_switch', [(None, 'on'), ('serving', 'off')])
+async def test_live_target_hold_keeps_its_wake_without_a_recurring_sweep(monkeypatch, drain_timers, mode, sweep_switch):
+    # Luna B1 (both rounds): with no recurring sweep in this process (serving
+    # runtime not running, e.g. a one-off reconcile request, or its sweep switch
+    # off), nothing re-requests a held owner, so the hold keeps its wakes.
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', mode)
+    monkeypatch.setattr(projection_drain, 'serving_projection_sweep_enabled', lambda: sweep_switch == 'on')
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    assert projector.drain_step.call_count == 1
+    drains.request(['overflow'])
+    await settle(projector)
+    assert list(projector.drain_requests) == ['overflow']
+    _delay, retry, _handle = drain_timers.pop(0)
+    retry()
+    await settle(projector)
+    assert projector.drain_step.call_count == 3  # expiry woke BURST without a sweep request
+    drains.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['serving', 'pump'])
+async def test_live_target_hold_is_passive_while_a_recurring_sweep_runs(monkeypatch, drain_timers, mode):
+    monkeypatch.setattr(projection_drain, '_recurring_sweep', mode)
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    drain_timers.pop()[1]()
+    await settle(projector)
+    assert projector.drain_step.call_count == 1 and not list(projector.drain_requests)
+    drains.close()
+
+
+def test_serving_runtime_marks_its_recurring_sweep_only_while_running():
+    projection_drain.set_recurring_sweep(None)
+    assert not projection_drain.recurring_sweep_active()
+    projection_drain.set_recurring_sweep('pump')
+    assert projection_drain.recurring_sweep_active()
+    projection_drain.set_recurring_sweep(None)
+    assert not projection_drain.recurring_sweep_active()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stop,advanced', [('head_awaiting_live_target', ['row']), ('head_error', []), ('end', [])])
+async def test_live_target_attempts_reset_after_progress_or_other_stop(drain_timers, stop, advanced):
+    projector, drains = live_target_drain()
+    drains.request([BURST])
+    await settle(projector)
+    assert drains.live_target_attempts[BURST] == 1
+    projector.drain_step.return_value = projection.Walk([], advanced, False, stop)
+    drain_timers.pop()[1]()
+    drains.request([BURST])
+    await settle(projector)
+    assert not drains.live_target_attempts and not drains.delayed
+    projector.drain_step.return_value = projection.Walk([], [], False, 'head_awaiting_live_target')
+    drains.request([BURST])
+    await settle(projector)
+    assert drain_timers.pop()[0] == 30
+    drains.close()
+
+
+@pytest.mark.asyncio
+async def test_live_target_attempt_state_and_delays_are_bounded(monkeypatch, drain_timers):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS
+
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    projector, drains = live_target_drain()
+    drains.request(['first'])
+    await settle(projector)
+    before = PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get()
+    drains.request(['overflow'])
+    await settle(projector)
+    assert list(drains.delayed) == list(drains.live_target_attempts) == ['first']
+    # A passive hold that cannot be taken keeps today's behavior: no extra wake.
+    assert not list(projector.drain_requests)
+    assert PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get() == before
+    # Expire a timer without running its owner yet, then admit another owner.
+    monkeypatch.setattr(drains, 'launch', lambda: None)
+    _, retry, _ = drain_timers.pop()
+    retry()
+    assert drains.defer_live_target('second')
+    assert list(drains.live_target_attempts) == ['second']
+    second_handle = drain_timers.pop()[2]
+    drains.close()
+    second_handle.cancel.assert_called_once()
+    retry()
+    assert not drains.live_target_attempts and not drains.delayed and not drains.queue
+    assert drains.defer_live_target('closed') is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stop,switch', [('head_error', 'on'), ('head_awaiting_live_target', 'off')])
+async def test_other_head_errors_or_disabled_backoff_keep_existing_retry_behavior(
+    monkeypatch, drain_timers, stop, switch
+):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS
+
+    monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', switch)
+    projector, drains = live_target_drain()
+    projector.drain_step.side_effect = [projection.Walk([], [], False, stop), projection.Walk([], [], False, 'end')]
+    before = PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get()
+    drains.request([BURST])
+    drains.request([BURST])
+    await settle(projector)
+    assert projector.drain_step.call_count == 2
+    assert not drain_timers and not drains.delayed and not drains.live_target_attempts
+    assert PROJECTION_DRAIN_LIVE_TARGET_BACKOFFS._value.get() == before
+
+
+@pytest.mark.parametrize('value', [None, '', 'true', 'false', '0', 'unknown', 'off', 'OFF', ' off '])
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+def test_live_target_switch_is_default_on_and_off_only(monkeypatch, value, mode):
+    from config.batch_pipeline import projection_drain_live_target_backoff_enabled
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    if value is None:
+        monkeypatch.delenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', raising=False)
+    else:
+        monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', value)
+    assert projection_drain_live_target_backoff_enabled() is (value is None or value.strip().lower() != 'off')
+
+
+@pytest.mark.parametrize(
+    'subtype,switch,expected',
+    [
+        ('live_target_not_persisted', 'on', 'head_awaiting_live_target'),
+        ('live_target_not_persisted', 'off', 'head_error'),
+        ('record_target_missing', 'on', 'head_error'),
+        ('record_finalize_pending', 'on', 'head_error'),
+        ('other', 'on', 'head_error'),
+    ],
+)
+def test_walk_maps_only_waiting_live_target_conflict(monkeypatch, subtype, switch, expected):
+    from utils.batch_pipeline.projection_walk_stop import WALK_STOPS
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', switch)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    projector = projector_for(log)
+    projector.clock = lambda: 10.0
+    projector._persist_read = Mock(side_effect=SyncAssignmentConflict('synthetic writer wait', subtype=subtype))
+    walk = projector.drain_step(BURST, 30.0)
+    assert walk.stop == expected and walk.stop in WALK_STOPS
+    assert not walk.advanced and not walk.more
+    assert log.results[ids[0]]['projection_blocked_since'] == 10.0
+    assert log.projection_watermark(owner_key(BURST)) is None
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+
+
+@pytest.mark.parametrize('switch', ['on', 'off'])
+def test_live_target_backoff_does_not_change_24_hour_hold(monkeypatch, switch):
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    monkeypatch.setenv('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF', switch)
+    log = ResultLog()
+    ids = chain(log, BURST, 'a', 2)
+    # Unknown capture age still gets the existing durable 24-hour bound.
+    for job in log.jobs.values():
+        job.pop('capture_at')
+    log.results[ids[0]]['projection_blocked_since'] = 1.0
+    projector = projector_for(log)
+    projector.clock = lambda: projection.PROJECTION_HEAD_RETRY_SECONDS + 2
+    real = projector._persist_read
+
+    def persist(sid, *a, **kw):
+        if sid == ids[0]:
+            raise SyncAssignmentConflict('synthetic writer wait', subtype='live_target_not_persisted')
+        return real(sid, *a, **kw)
+
+    projector._persist_read = persist
+    walk = projector.drain_step(BURST, 30.0)
+    assert walk.stop == 'end' and walk.advanced == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+@pytest.mark.asyncio
+async def test_live_target_attempts_belong_to_each_owner(drain_timers):
+    projector, drains = live_target_drain()
+    drains.request(['first'])
+    await settle(projector)
+    delay, retry, _ = drain_timers.pop()
+    assert delay == 30
+    retry()
+    drains.request(['first'])
+    await settle(projector)
+    assert drain_timers.pop()[0] == 60
+    drains.request(['second'])
+    await settle(projector)
+    assert drain_timers.pop()[0] == 30
+    assert drains.live_target_attempts == {'first': 2, 'second': 1}
+    drains.close()
+
+
+@pytest.mark.asyncio
+async def test_live_target_defer_refusal_preserves_active_rerequest(monkeypatch, drain_timers):
+    monkeypatch.setattr(projection_drain, 'MAX_DELAYED_OWNERS', 1)
+    projector, drains = live_target_drain()
+    drains.defer('already-delayed')
+    projector.drain_step.side_effect = [
+        projection.Walk([], [], False, 'head_awaiting_live_target'),
+        projection.Walk([], [], False, 'end'),
+    ]
+    drains.request([BURST])
+    drains.request([BURST])
+    await settle(projector)
+    assert projector.drain_step.call_count == 2
+    assert list(drains.delayed) == ['already-delayed']
+    assert not drains.live_target_attempts and len(drain_timers) == 1
+    # The refused passive hold adds no serving-loop wake; the active
+    # re-request alone produced the second turn.
+    assert not list(projector.drain_requests)
+    drains.close()
