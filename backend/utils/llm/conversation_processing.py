@@ -516,6 +516,15 @@ def _get_shaped_conversation_notes(
         }
     ]
     legacy_packet = json.loads(evidence[0]['content'])
+    # Length varies with this transcript; append after the cacheable task instructions.
+    from config.notes_detail import notes_scaled_detail_enabled
+    from utils.llm.conversation_notes_prompts import conversation_note_density
+    from utils.llm.notes_lengths import length_guide
+
+    if notes_scaled_detail_enabled():
+        legacy_packet.update(density=conversation_note_density(words, rich_mode), LENGTH=length_guide(words))
+        evidence[0]['content'] = json.dumps(legacy_packet, ensure_ascii=False)
+
     packet = select_notes_packet(
         legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
     )
