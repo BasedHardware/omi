@@ -6,8 +6,10 @@ Cloud Run metadata GETs, three route aggregate GETs (pages/failures included),
 one request-count idle discriminator, two descriptor GETs, two normal PUTs and
 one rollback PUT. Calls have a 30s deadline and bounded response size; no retry.
 The 15-minute window starts on the next minute boundary after observed 90/10,
-then waits another 120s for metric ingestion. Reconciliation adds a 10min poll budget
-per transition (plus the final bounded read). These waits are additional to deployment/headroom admission.
+then waits another 120s for metric ingestion. Reconciliation allows at most 16
+polls, 30s apart (450s sleep), per transition. Even late success of both normal
+transitions leaves 18 reads for guarded rollback: worst case 59 of the 60 reads.
+Call latency and these waits are additional to deployment/headroom admission.
 Only a proven regression permits local rollback; all unknowns fail to the
 workflow's guarded rollback command. An existing evidence journal is terminal
 for this invocation: operators must inspect it, never blindly resend a PUT.
@@ -43,6 +45,7 @@ SETTLE = 120
 ALIGN = 60
 MAX_ROUTES = 256
 MAX_BODY = 4 * 1024 * 1024
+MAX_TRANSITION_POLLS = 16
 ROUTE = re.compile(r'(?:/v[0-9]+)?(?:/[a-z][a-z_-]*){1,3}')
 REVISION = re.compile(r'[a-z][a-z0-9-]{0,62}')
 EXTRACTORS = {
@@ -504,7 +507,7 @@ class Canary:
 
     def wait_traffic(self, service, target, previous):
         deadline = self.clock.monotonic() + 600
-        while True:
+        for poll in range(MAX_TRANSITION_POLLS):
             document = self.provider.service(service)
             spec, actual = inspect(document, service, self.candidates[service], self.states[service]['intent'])
             if spec != target or actual not in (target, previous):
@@ -512,7 +515,7 @@ class Canary:
             if actual == target and reconciled(document):
                 self.journal.record('actual_traffic_reconciled', service=service, traffic=actual)
                 return document
-            if self.clock.monotonic() >= deadline:
+            if self.clock.monotonic() >= deadline or poll == MAX_TRANSITION_POLLS - 1:
                 raise Refusal('traffic_reconcile_timeout')
             self.clock.sleep(30)
 

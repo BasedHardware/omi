@@ -1483,7 +1483,9 @@ runs:
         (steps.shift-cloud-run-traffic.outcome == 'failure' ||
         steps.verify-serving-release-vector.outcome == 'failure' ||
         steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
-        steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
+        steps.smoke-what-matters-now-datastore-query.outcome == 'failure' ||
+        (cancelled() && (steps.shift-cloud-run-traffic.outcome == 'cancelled' ||
+        steps.shift-cloud-run-traffic.outcome == 'success'))) }}
       shell: bash
       env:
         COMPLETIONS_CANARY: ${{ inputs.completions_canary }}

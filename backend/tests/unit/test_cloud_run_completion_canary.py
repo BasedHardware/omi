@@ -676,3 +676,75 @@ def test_wall_clock_jump_cannot_shorten_observation(tmp_path):
     with pytest.raises(gate.Refusal, match='clock_drift'):
         canary.run()
     assert len(provider.writes) == 4
+
+
+@pytest.mark.parametrize('promotion_timeout', [False, True])
+def test_latest_normal_transitions_leave_full_guarded_rollback_read_allowance(tmp_path, promotion_timeout):
+    canary, provider, journal = fixture(tmp_path)
+    provider.delay = gate.MAX_TRANSITION_POLLS
+    allowance = object.__new__(gate.GoogleProvider)
+    allowance.budgets = gate.defaultdict(int)
+    allowance.journal = journal
+    for method in ('service', 'revision'):
+        original = getattr(provider, method)
+
+        def charged(service, *args, original=original):
+            allowance.charge(service, 'metadata', 60)
+            return original(service, *args)
+
+        setattr(provider, method, charged)
+    original_replace = provider.replace
+
+    def replace(service, body, *, rollback=False):
+        original_replace(service, body, rollback=rollback)
+        if (
+            promotion_timeout
+            and not rollback
+            and body['spec']['traffic'] == [{'revisionName': provider.candidates[service], 'percent': 100}]
+        ):
+            provider.pending[service] = gate.MAX_TRANSITION_POLLS + 1
+
+    provider.replace = replace
+    if promotion_timeout:
+        with pytest.raises(gate.Refusal, match='traffic_reconcile_timeout'):
+            canary.run()
+    else:
+        canary.run()
+    # Includes a fresh read that reconciles the timed-out promotion, an old
+    # revision Ready read, and the latest possible rollback reconciliation.
+    gate.rollback_recorded(provider, provider.clock, journal, provider.candidates)
+    assert max(allowance.budgets.values()) == (57 if promotion_timeout else 59)
+    assert all(
+        document['status']['traffic'] == [{'revisionName': service + '-old', 'percent': 100}]
+        for service, document in provider.documents.items()
+    )
+
+
+@pytest.mark.parametrize(
+    'shift,cancelled,failed,expected',
+    [
+        ('cancelled', True, False, True),
+        ('success', True, False, True),
+        ('skipped', True, False, False),
+        ('failure', False, True, True),
+        ('success', False, False, False),
+    ],
+)
+def test_manual_restore_condition_covers_cancellation_during_and_after_canary(shift, cancelled, failed, expected):
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    restore = next(
+        step
+        for step in action['runs']['steps']
+        if step['name'] == 'Restore Cloud Run traffic snapshot after failed promotion'
+        and "inputs.deploy_profile == 'manual'" in step['if']
+    )
+    expression = restore['if'].removeprefix('${{').removesuffix('}}').strip()
+    expression = expression.replace('inputs.deploy_profile', repr('manual'))
+    outcomes = {'cloud-run-traffic-snapshot': 'success', 'shift-cloud-run-traffic': shift}
+    expression = gate.re.sub(
+        r'steps\.([a-z0-9-]+)\.outcome', lambda match: repr(outcomes.get(match[1], 'skipped')), expression
+    )
+    expression = expression.replace('cancelled()', repr(cancelled)).replace('failure()', repr(failed))
+    expression = expression.replace('&&', ' and ').replace('||', ' or ')
+    assert eval(expression, {'__builtins__': {}}, {}) is expected
+    assert 'cloud_run_completion_canary.py" --rollback' in restore['run']
