@@ -417,9 +417,10 @@ COMPOSER_DETAIL_MIN_WORDS = 100
 COMPOSER_DETAIL_MAX_WORDS = 3500
 COMPOSER_DETAIL_WORD_RATIO = 0.10
 COMPOSER_DETAIL_WORDS_PER_MINUTE = 125
-# At most 4500 background tokens total; no extra model/embedding request.
+# At most 4500 background tokens total; one bounded semantic-memory search per compose.
 COMPOSER_MEMORY_TOKENS = 3500
 COMPOSER_PROFILE_TOKENS = 1000
+COMPOSER_MEMORY_QUERY_TOKENS = 1000
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.

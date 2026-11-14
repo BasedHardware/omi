@@ -76,6 +76,7 @@ def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
         fact('invalidated', invalid_at=datetime.now(timezone.utc)),
     ]
     monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: ('Synthetic', [], [], rows))
+    monkeypatch.setattr(context, '_search_memories', lambda *_args: [])
     monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_args, **_kw: [])
     background = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
@@ -87,6 +88,55 @@ def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
     assert all(row.id not in prompt for row in rows[1:])
     assert 'eligible-self' in chat_memory._render_ledger_prompt_context('Synthetic', rows)
     assert all(row.id not in chat_memory._render_ledger_prompt_context('Synthetic', rows) for row in rows[1:])
+
+
+def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
+    row = member(words=20)
+    row['structured'] = {'title': 'Atlas release with Priya', 'overview': 'Atlas delivery and launch checklist.'}
+    row['transcript_segments'] = [
+        {'text': 'Priya owns the Atlas delivery checklist.'},
+        {'text': 'The Atlas launch needs Priya to review the checklist.'},
+        {'text': 'I saw a violin outside.'},
+    ]
+    query = context.retrieval_query([row])
+    assert 'priya' in query and 'atlas' in query and 'checklist' in query
+    assert tokens(query) <= config.COMPOSER_MEMORY_QUERY_TOKENS
+    block = context.relevant_memories(
+        [row],
+        [
+            {'content': 'I enjoy playing violin.'},
+            {'content': 'Priya is my colleague on Atlas.'},
+            {'content': 'Atlas is my current release project.'},
+        ],
+    )
+    assert 'Priya is my colleague' in block and 'current release project' in block
+    assert 'violin' not in block
+
+
+def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(monkeypatch):
+    from types import SimpleNamespace
+    from database import goals, users
+    from utils.llms import memory as chat_memory
+    from utils.memory.memory_service import MemoryService
+
+    seen = []
+
+    def search(_self, uid, query, **kwargs):
+        seen.append((uid, query, kwargs))
+        # Even a buggy adapter returning an unvetted row must not leak it.
+        return [
+            SimpleNamespace(memory={'content': 'Irrigation rain sensor.'}),
+            SimpleNamespace(memory={'content': 'Irrigation locked content.', 'is_locked': True}),
+        ]
+
+    monkeypatch.setattr(MemoryService, 'search', search)
+    monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: (_ for _ in ()).throw(AssertionError('fallback')))
+    monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
+    monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
+    _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
+    assert len(seen) == 1 and 'irrigation' in seen[0][1]
+    assert seen[0][2] == {'limit': 20, 'candidate_limit': 60, 'result_filter': chat_memory.is_prompt_memory_eligible}
+    assert 'rain sensor' in block and 'locked' not in block
 
 
 def test_background_is_token_bounded_for_multilingual_long_facts():
