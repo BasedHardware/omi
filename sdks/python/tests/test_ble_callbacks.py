@@ -190,6 +190,10 @@ def test_listen_payload_awaits_futures_and_custom_awaitables():
 
 @pytest.mark.parametrize("listen_fn", [listen, listen_payload])
 def test_callback_exceptions_propagate(listen_fn):
+    # Bleak dispatches an async notification callback as a detached asyncio.create_task
+    # (see bleak.BleakClient.start_notify), so the handler itself must never raise at the
+    # notification call site -- that call is not awaited by anything in production. The
+    # error has to surface by making listen()/listen_payload() itself raise instead.
     async def _test():
         client_instance = MockBleakClient("fake-device")
         loop = asyncio.get_running_loop()
@@ -222,22 +226,30 @@ def test_callback_exceptions_propagate(listen_fn):
             ("custom", custom_handler, "custom error"),
         ]
 
-        with patch("omi.ble.BleakClient", return_value=client_instance):
-            for _name, handler, message in handlers:
-                if listen_fn is listen_payload:
-                    packet = b"\x00" * PACKET_HEADER_BYTES + b"\x03\x04"
-                else:
-                    packet = b"\x00\x01\x02\x03\x04"
+        real_sleep = asyncio.sleep
 
-                async def fake_sleep(_sec, expected_message=message, current_handler=handler):
-                    with pytest.raises(ValueError, match=expected_message):
-                        await client_instance.notify_handler("sender", bytearray(packet))
-                    raise asyncio.CancelledError()
+        async def fast_sleep(_sec):
+            await real_sleep(0)
 
-                with patch("asyncio.sleep", side_effect=fake_sleep):
-                    try:
-                        await listen_fn("fake-device", handler)
-                    except asyncio.CancelledError:
-                        pass
+        for _name, handler, message in handlers:
+            client_instance = MockBleakClient("fake-device")
+            if listen_fn is listen_payload:
+                packet = b"\x00" * PACKET_HEADER_BYTES + b"\x03\x04"
+            else:
+                packet = b"\x00\x01\x02\x03\x04"
+
+            with (
+                patch("omi.ble.BleakClient", return_value=client_instance),
+                patch("asyncio.sleep", side_effect=fast_sleep),
+            ):
+                task = asyncio.ensure_future(listen_fn("fake-device", handler))
+                await real_sleep(0)  # let start_notify register the handler
+
+                # The notification call itself must not raise even though the
+                # callback fails -- nothing in production awaits it directly.
+                await client_instance.notify_handler("sender", bytearray(packet))
+
+                with pytest.raises(ValueError, match=message):
+                    await asyncio.wait_for(task, timeout=2)
 
     asyncio.run(_test())
