@@ -35,6 +35,7 @@ stackdriver:
       # Shared timeliness leader: batch-timeliness, held-backlog and drain alerts,
       # plus over-SLA counts and staged-input clock diagnostics.
       - 'prometheus.googleapis.com/omi_batch_timeliness_'
+      - 'prometheus.googleapis.com/omi_batch_allowance_held_units/'
       - 'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/'

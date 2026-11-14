@@ -46,7 +46,9 @@ Changed query membership:
   the live index, preserving it as `allowance_retry_started_at` for restoration.
 - Timeliness active/uncommitted state lists exclude `allowance_held`. Its
   separate `omi_batch_allowance_held_units` gauge uses an hourly leader-only
-  COUNT, never per-row or per-scrape queries. The census registry declares this
+  COUNT, never per-row or per-scrape queries. Cloud Run GMP and both dev/prod
+  Prometheus bridge allowlists export the gauge; the release must carry that
+  monitoring wiring as well as the application image. The census registry declares this
   as held stock without a late-work alarm.
 - Privacy revocation accepts parked jobs if release encounters a fence. Account
   erasure includes the new owner index and the Postgres shadow copy.

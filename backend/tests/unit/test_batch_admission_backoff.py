@@ -66,12 +66,13 @@ def test_policy_delay_preserved_and_invalid_delay_never_grants_compute(delay, ex
     assert registry.get_sample_value('omi_batch_pipeline_events_total', {'event': 'admission_policy_deferred'}) == 1
 
 
-def test_allowance_hold_window_survives_the_escalation_ladder():
+def test_allowance_hold_window_survives_the_escalation_ladder(monkeypatch):
     """The exhausted-allowance hold keeps its 1800 s window at every refusal streak.
 
     The ladder is a floor, not a cap: only a delay below it escalates. A held
     unit must not drift back toward the 300 s steady state.
     """
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     store, queue, _ = setup()
     lease = queue.pull(0)[0]
     now = 0

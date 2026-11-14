@@ -302,7 +302,7 @@ async def test_flight_admission_hold_defers_with_the_receipt_reason(monkeypatch)
     store, _, pump = setup(Worker(), authorize_compute=authorize)
     assert await pump.run_once() == 0
     job = store.rows['jobs', 'first']
-    assert job['state'] == 'retry' and job['attempt'] == 0
+    assert job['state'] == 'allowance_held' and job['attempt'] == 0
     assert job['compute_decision'] == {
         'reason': 'allowance_exhausted',
         'outcome': 'held',

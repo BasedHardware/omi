@@ -100,7 +100,12 @@ def test_off_has_no_new_series_and_on_exports_fake_store_counts(monkeypatch, val
 
 
 def _companion_count(query):
-    return query._limit is None and not any(field in {'enqueued_at', 'committed_at'} for field, _, _ in query.filters)
+    # The hourly policy-held gauge is independent of this default-off companion family.
+    return (
+        ('state', '==', 'allowance_held') not in query.filters
+        and query._limit is None
+        and not any(field in {'enqueued_at', 'committed_at'} for field, _, _ in query.filters)
+    )
 
 
 def _epoch_series(registry):
