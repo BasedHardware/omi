@@ -77,7 +77,7 @@ def backfill_table(dual: DualStore, client: Any, table: str, *, apply: bool, pag
                 key = snapshot.id
                 seen.add(key)
                 report.firestore += 1
-                outcome = compare(snapshot.to_dict() or {}, shadow.read_doc(conn, table, key))
+                outcome = compare(snapshot.to_dict() or {}, shadow.read_doc(conn, table, key), table)
                 if outcome is ShadowParityOutcome.MATCH:
                     report.match += 1
                     continue

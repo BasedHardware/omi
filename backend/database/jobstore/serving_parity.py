@@ -125,7 +125,13 @@ def compare_serving_query(
     try:
 
         def read(store):
-            return codec.canonical(query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s))
+            value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
+            if query == 'get':
+                # The copy never holds a table's Firestore-only fields; compare what it is meant to hold.
+                from database.jobstore.dual_store import mirrored
+
+                value = mirrored(value, args[0] if args else kwargs.get('table'))
+            return codec.canonical(value)
 
         deadline = time.monotonic() + budget_s
         with rpc_deadline.rpc_deadline(deadline):

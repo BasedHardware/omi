@@ -132,6 +132,31 @@ def test_shared_gpu_reservation_is_followed_through_the_owners_job(stores):
     assert _postgres(shadow, 'gpus', 'gpu-a') == {'token': '', 'lease_until': 0.0, 'released_token': 't1'}
 
 
+@pytest.mark.parametrize('released', [False, True])
+def test_the_copy_never_holds_a_gpu_reservations_segment(stores, released):
+    """Purge leaves the reservation in the primary, and both the lease and its release keep the segment id."""
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-gpu-id'
+    customer.add_user(uid)
+    rows = _owner_rows(uid, 'gp2')
+    rows[0][2]['shared_gpu_key'] = 'gpu-b'
+    lease = {'token': 't2', 'segment_id': 'gp2', 'lease_until': 99.0}
+    _write(dual, [*rows, ('gpus', 'gpu-b', lease)])
+    assert _postgres(shadow, 'gpus', 'gpu-b') == {'token': 't2', 'lease_until': 99.0}  # the ordinary mirror path
+    for table, name, _ in rows:
+        primary.delete(table, name)
+    if released:  # the release commits in the primary and its mirror copy is dropped
+        primary.apply(('gpus', 'gpu-b'), {**lease, 'token': '', 'lease_until': 0.0, 'released_token': 't2'})
+
+    dual.purge_owner_now(uid)
+    copy = _postgres(shadow, 'gpus', 'gpu-b')
+    assert copy and 'segment_id' not in copy
+    assert primary.run(lambda tx: tx.get('gpus', 'gpu-b'))['segment_id'] == 'gp2'  # the primary keeps it, by design
+    from database.jobstore.dual_store import compare
+
+    assert compare(primary.run(lambda tx: tx.get('gpus', 'gpu-b')), copy, 'gpus').value == 'match'
+
+
 def test_purge_waits_for_a_mirror_copy_that_read_the_pre_purge_primary(stores):
     """A copy that read the primary before the purge but has not committed must not survive the purge."""
     import threading
@@ -230,9 +255,6 @@ def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monke
     _write(dual, rows)
     for table, name, _ in rows:
         primary.delete(table, name)
-    # Purge keeps a physical GPU reservation in the primary; it names the erased segment until release.
-    _write(dual, [('gpus', 'gpu-cold', {'token': 't1', 'segment_id': 'cold', 'lease_until': 99.0})])
-    rows.append(('gpus', 'gpu-cold', {}))
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
     monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
     monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)

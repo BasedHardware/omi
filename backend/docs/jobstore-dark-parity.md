@@ -46,9 +46,9 @@ allowance_holds, pull_claims and merge_holds. Successful Firestore claim CAS ope
 refresh the cold copy; PG never acquires a shadow claim. Erasure reconciles owner-keyed
 merge holds and allowance holds by key, whether or not the document names its owner, and
 the owner's shared pull-claim/control shard as well as linked rows. Purge leaves a physical
-GPU reservation in Firestore until release; a copy with mirror writes stopped would never
-see that release, so erasure deletes GPU reservation rows from such a copy instead of
-re-copying them. The projection-finish backfill commits outside `Store.run` and refreshes
+GPU reservation in Firestore, and the lease and its release both keep the leased segment's
+id. The mirror is best effort, so the copy never holds that field (`UNMIRRORED_TABLE_FIELDS`):
+there is nothing for erasure to miss, whatever the mirror dropped. The projection-finish backfill commits outside `Store.run` and refreshes
 the mirror for its marker and the rows of each page.
 
 `serving_parity.compare_serving_query` executes the actual PostgresStore read

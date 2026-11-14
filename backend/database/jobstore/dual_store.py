@@ -85,6 +85,11 @@ MIRRORED_TABLES = frozenset(
 # Firestore-only: the mirror does not follow the intake receipt TTL (Luna #24366 r3), and a repair that
 # finds no record holds rather than guessing.
 UNMIRRORED_FIELDS = frozenset({'repair_lineage'})
+# A GPU reservation names the leased segment, and purge deliberately leaves the reservation in the primary: the
+# lease and its release both keep ``segment_id``. The mirror is best effort, so a copy could keep the id of an
+# erased segment for as long as the row is not rewritten. The copy therefore never holds it; nothing reads a
+# reservation's segment from Postgres while Firestore is the authority.
+UNMIRRORED_TABLE_FIELDS = {'gpus': frozenset({'segment_id'})}
 _OFF = {'0', 'false', 'off', 'no'}
 _QUERY_CANCELED = '57014'
 
@@ -160,15 +165,16 @@ def shadow_writes_enabled() -> bool:
     return os.getenv('JOBSTORE_SHADOW_WRITES', '').strip().lower() not in _OFF
 
 
-def mirrored(doc: dict) -> dict:
-    """``doc`` without the fields that stay Firestore-only (``UNMIRRORED_FIELDS``)."""
-    return {name: value for name, value in doc.items() if name not in UNMIRRORED_FIELDS} if doc else doc
+def mirrored(doc: dict, table: str | None = None) -> dict:
+    """``doc`` without the fields that stay Firestore-only (``UNMIRRORED_FIELDS``, plus its table's own)."""
+    dropped = UNMIRRORED_FIELDS | UNMIRRORED_TABLE_FIELDS.get(table or '', frozenset())
+    return {name: value for name, value in doc.items() if name not in dropped} if doc else doc
 
 
-def compare(primary_doc: dict, shadow_doc: dict) -> ShadowParityOutcome:
+def compare(primary_doc: dict, shadow_doc: dict, table: str | None = None) -> ShadowParityOutcome:
     # Only the primary side: a shadow copy that still holds an unmirrored field must read as stale, so backfill
     # recopies it without the field (Luna #24366 r4).
-    primary_doc = mirrored(primary_doc)
+    primary_doc = mirrored(primary_doc, table)
     if not primary_doc and not shadow_doc:
         return ShadowParityOutcome.MATCH
     if not shadow_doc:
@@ -252,18 +258,6 @@ def read_current(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, s
     return {address: found.get(ref.path, {}) for address, ref in zip(keys, refs)}
 
 
-def read_current_without_reservations(primary: Any, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
-    """``read_current`` for a copy nothing refreshes: GPU reservation rows read as absent, so they are deleted.
-
-    Purge deliberately leaves a physical GPU reservation in the primary, and it names the leased segment until
-    release. A live mirror copies the release. A copy with mirror writes stopped never would, so the
-    reservation of an erased segment would stay in Postgres. No process reads GPU rows from such a copy.
-    """
-    docs = read_current(primary, [address for address in keys if address[0] != 'gpus'])
-    docs.update({address: {} for address in keys if address[0] == 'gpus'})
-    return docs
-
-
 def _is_timeout(exc: BaseException) -> bool:
     return isinstance(exc, TimeoutError) or getattr(exc, 'sqlstate', None) == _QUERY_CANCELED
 
@@ -304,7 +298,6 @@ class DualStore:
         self.shadow = shadow
         self.budget_s = budget_s
         self.inline = inline  # single-threaded harnesses mirror in the caller, deterministically
-        self.cold = False  # a retained copy opened only to erase; no mirror keeps it current
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._query_queue: queue.Queue = queue.Queue(maxsize=queue_limit)
         self._query_worker: threading.Thread | None = None
@@ -489,7 +482,7 @@ class DualStore:
         phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
             if doc:
-                self.shadow.write_doc(conn, table, key, mirrored(doc))
+                self.shadow.write_doc(conn, table, key, mirrored(doc, table))
             else:
                 self.shadow.delete_doc(conn, table, key)
 
@@ -539,12 +532,11 @@ class DualStore:
                 # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
                 conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
                 rows = self.owner_rows(conn, owner_id)
-        reader = read_current_without_reservations if self.cold or not shadow_writes_enabled() else None
         for start in range(0, len(rows), PURGE_CHUNK):
             with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
-                    self.copy_current(conn, rows[start : start + PURGE_CHUNK], reader=reader)
+                    self.copy_current(conn, rows[start : start + PURGE_CHUNK])
         return rows
 
     def purge_owner_now(self, owner_id: str) -> int:
@@ -600,7 +592,7 @@ class DualStore:
                     phase[0] = 'postgres_read'
                     for (table, key), primary_doc in reads.items():
                         shadow_doc = self.shadow.read_doc(conn, table, key)
-                        outcome = compare(primary_doc, shadow_doc)
+                        outcome = compare(primary_doc, shadow_doc, table)
                         _count(table, 'read', outcome)
                         if outcome is not ShadowParityOutcome.MATCH:
                             differing.append((table, key, outcome, primary_doc, shadow_doc))
@@ -693,7 +685,7 @@ class DualStore:
             elapsed = time.monotonic() - started
             in_window = elapsed <= self.convergence_delays[-1] + self.budget_s
             stable = compare(shadow_before, shadow_after) is ShadowParityOutcome.MATCH
-            if in_window and stable and compare(primary_doc, shadow_after) is ShadowParityOutcome.MATCH:
+            if in_window and stable and compare(primary_doc, shadow_after, table) is ShadowParityOutcome.MATCH:
                 _converge_count(table, ShadowConvergenceOutcome.CONVERGED)
                 SHADOW_CONVERGENCE_SECONDS.labels(table=_table_label(table)).observe(elapsed)
                 return
@@ -761,7 +753,7 @@ class DualStore:
             for table, key, outcome, primary_doc, shadow_doc in allowed:
                 if now is None:
                     current = 'unread'
-                elif compare(now.get((table, key), {}), shadow_doc) is ShadowParityOutcome.MATCH:
+                elif compare(now.get((table, key), {}), shadow_doc, table) is ShadowParityOutcome.MATCH:
                     current = 'shadow_current'
                 else:
                     current = 'shadow_differs'
@@ -881,7 +873,6 @@ def purge_owner(namespace: str, owner_id: str) -> int:
     store = _configured_copy(primary)
     if store is None:
         return 0
-    store.cold = True
     try:
         return store.purge_owner_now(owner_id)
     finally:

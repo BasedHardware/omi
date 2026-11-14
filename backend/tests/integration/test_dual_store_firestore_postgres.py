@@ -127,6 +127,7 @@ READ_CASES = [
 TX_READ_CASES = [
     ('get', ('queues', 'q'), {}),
     ('get', ('jobs', 'absent'), {}),
+    ('get', ('gpus', 'g'), {}),
     ('first_pending', ('owner',), {}),
     ('first_ready_pending', ('owner',), {}),
     ('fresh_first_pending', ('owner',), {}),
@@ -165,6 +166,8 @@ def _seed_queries(store):
         }
     rows['queues', 'q'] = {'head': 'a', 'tail': 'r', 'nullable': None}
     rows['merge_holds', 'owner'] = {'held': True}
+    # The copy holds a reservation without its segment id; parity compares what the copy is meant to hold.
+    rows['gpus', 'g'] = {'token': 't', 'segment_id': 'a', 'lease_until': 9.0}
     # An allowance-parked row and its owner hold (#25281), so those reads compare non-empty results.
     rows['jobs', 'h'] = {**rows['jobs', 'a'], 'segment_id': 'h', 'state': 'allowance_held', 'merge_pending': False}
     rows['jobs', 'h'].pop('fresh_capture')
