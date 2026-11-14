@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
-from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
+from google.cloud.firestore_v1 import FieldFilter, transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import _client as _client_mod
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -19,6 +19,14 @@ from database.legal_holds import (
     current_destructive_operation_token,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import (
+    PRIVACY_REFERENCE_QUERY_CHUNK_SIZE,
+    PRIVACY_REFERENCE_TOKENS,
+    privacy_history_payload,
+    privacy_reference_index_enabled,
+    privacy_reference_tokens,
+    with_privacy_reference_tokens,
+)
 from models.memories import confidence_fields_for_evidence
 from models.memory_state_head import (
     trusted_memory_state_head_fields_from_control,
@@ -327,6 +335,26 @@ def _iter_collection_documents(collection: Any) -> Any:
         cursor = page[-1]
 
 
+def _iter_privacy_history_candidates(collection: Any, uid: str, target_ids: set[str]) -> Any:
+    if not privacy_reference_index_enabled():
+        yield from _iter_collection_documents(collection)
+        return
+    tokens = privacy_reference_tokens(uid, target_ids)
+    seen: set[str] = set()
+    for offset in range(0, len(tokens), PRIVACY_REFERENCE_QUERY_CHUNK_SIZE):
+        query = collection.where(
+            filter=FieldFilter(
+                PRIVACY_REFERENCE_TOKENS,
+                'array_contains_any',
+                tokens[offset : offset + PRIVACY_REFERENCE_QUERY_CHUNK_SIZE],
+            )
+        )
+        for document in _iter_collection_documents(query):
+            if str(document.id) not in seen:
+                seen.add(str(document.id))
+                yield document
+
+
 def purge_canonical_privacy_history_for_memories(
     uid: str,
     memory_ids: List[str],
@@ -354,11 +382,11 @@ def purge_canonical_privacy_history_for_memories(
     removed: Dict[str, List[str]] = {}
     deleted_operation_ids: set[str] = set()
 
-    for document in _iter_collection_documents(user_ref.collection('memory_operations')):
+    for document in _iter_privacy_history_candidates(user_ref.collection('memory_operations'), uid, target_ids):
         payload = document.to_dict()
         if not isinstance(payload, dict):
             continue
-        if _value_references_memory_id(payload, target_ids):
+        if _value_references_memory_id(privacy_history_payload(payload), target_ids):
             if revalidate_gate:
                 assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
@@ -367,11 +395,15 @@ def purge_canonical_privacy_history_for_memories(
         removed['memory_operations'] = sorted(deleted_operation_ids)
 
     removed_commits: List[str] = []
-    for document in _iter_collection_documents(user_ref.collection(memory_commits_collection)):
+    for document in _iter_privacy_history_candidates(
+        user_ref.collection(memory_commits_collection), uid, target_ids | deleted_operation_ids
+    ):
         payload = document.to_dict()
         if not isinstance(payload, dict):
             continue
-        if payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids):
+        if payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(
+            privacy_history_payload(payload), target_ids
+        ):
             if revalidate_gate:
                 assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
@@ -380,10 +412,13 @@ def purge_canonical_privacy_history_for_memories(
         removed['memory_commits'] = sorted(removed_commits)
 
     removed_outbox: List[str] = []
-    for document in _iter_collection_documents(user_ref.collection('memory_outbox')):
+    for document in _iter_privacy_history_candidates(
+        user_ref.collection('memory_outbox'), uid, target_ids | deleted_operation_ids
+    ):
         payload = document.to_dict()
         if isinstance(payload, dict) and (
-            payload.get('operation_id') in deleted_operation_ids or _value_references_memory_id(payload, target_ids)
+            payload.get('operation_id') in deleted_operation_ids
+            or _value_references_memory_id(privacy_history_payload(payload), target_ids)
         ):
             if revalidate_gate:
                 assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
@@ -394,9 +429,9 @@ def purge_canonical_privacy_history_for_memories(
 
     for collection_name in ('memory_ledger_reopens', 'jit_trigger_feedback', 'jit_proactivity_events'):
         removed_ids: List[str] = []
-        for document in _iter_collection_documents(user_ref.collection(collection_name)):
+        for document in _iter_privacy_history_candidates(user_ref.collection(collection_name), uid, target_ids):
             payload = document.to_dict()
-            if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+            if isinstance(payload, dict) and _value_references_memory_id(privacy_history_payload(payload), target_ids):
                 if revalidate_gate:
                     assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
                 document.reference.delete()
@@ -404,7 +439,9 @@ def purge_canonical_privacy_history_for_memories(
         if removed_ids:
             removed[collection_name] = sorted(removed_ids)
 
-    for document in _iter_collection_documents(user_ref.collection('jit_proactivity_daily_budgets')):
+    for document in _iter_privacy_history_candidates(
+        user_ref.collection('jit_proactivity_daily_budgets'), uid, target_ids
+    ):
         payload = document.to_dict()
         if not isinstance(payload, dict):
             continue
@@ -413,8 +450,10 @@ def purge_canonical_privacy_history_for_memories(
             continue
         if revalidate_gate:
             assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
+        remaining = {key: value for key, value in planned.items() if key not in target_ids}
+        updated = with_privacy_reference_tokens(uid, {**payload, 'planned_by_trigger': remaining}, budget=True)
         document.reference.update(
-            {'planned_by_trigger': {key: value for key, value in planned.items() if key not in target_ids}}
+            {'planned_by_trigger': remaining, PRIVACY_REFERENCE_TOKENS: updated[PRIVACY_REFERENCE_TOKENS]}
         )
 
     if not preserve_source_replacement_receipts:
@@ -444,9 +483,9 @@ def purge_source_replacement_receipts_for_memories(
     database: Any = firestore_client or db
     collection = database.collection(users_collection).document(uid).collection('memory_source_replacements')
     removed: List[str] = []
-    for document in _iter_collection_documents(collection):
+    for document in _iter_privacy_history_candidates(collection, uid, target_ids):
         payload = document.to_dict()
-        if isinstance(payload, dict) and _value_references_memory_id(payload, target_ids):
+        if isinstance(payload, dict) and _value_references_memory_id(privacy_history_payload(payload), target_ids):
             if revalidate_gate:
                 assert_destructive_gate_still_ours(uid, gate_kind, firestore_client=database)
             document.reference.delete()
@@ -758,7 +797,7 @@ def _append_commit_transaction(
     commit_snapshot = commit_ref.get(transaction=transaction)
 
     if commit_snapshot.exists:
-        return {'commit': _typed_doc(commit_snapshot), 'applied': False}
+        return {'commit': privacy_history_payload(_typed_doc(commit_snapshot)), 'applied': False}
 
     if current_head != expected_parent:
         raise HeadConflict(expected_parent, current_head)
@@ -784,7 +823,7 @@ def _append_commit_transaction(
     if projection_writer:
         projection_writer(transaction)
 
-    transaction.set(commit_ref, commit)
+    transaction.set(commit_ref, with_privacy_reference_tokens(uid, commit))
     transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
@@ -824,7 +863,7 @@ def _append_commit_with_builder_transaction(
     commit_snapshot = commit_ref.get(transaction=transaction)
 
     if commit_snapshot.exists:
-        return {'commit': _typed_doc(commit_snapshot), 'applied': False}
+        return {'commit': privacy_history_payload(_typed_doc(commit_snapshot)), 'applied': False}
 
     # Build the state-head payload (including any apply_control fallback read)
     # before staging any writes: Firestore forbids a transactional read after a
@@ -840,7 +879,7 @@ def _append_commit_with_builder_transaction(
     if projection_writer:
         projection_writer(transaction)
 
-    transaction.set(commit_ref, commit)
+    transaction.set(commit_ref, with_privacy_reference_tokens(uid, commit))
     transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 

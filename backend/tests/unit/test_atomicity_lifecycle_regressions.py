@@ -482,6 +482,7 @@ def review_queue_module():
         "database.memories": AutoMockModule("database.memories"),
         "database.memory_ledger": AutoMockModule("database.memory_ledger"),
         "database.short_term_memories": AutoMockModule("database.short_term_memories"),
+        "google.cloud.firestore": AutoMockModule("google.cloud.firestore"),
         "google.cloud.firestore_v1": AutoMockModule("google.cloud.firestore_v1"),
     }
     with stub_modules(fakes):

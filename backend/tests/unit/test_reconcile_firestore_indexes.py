@@ -1138,7 +1138,7 @@ def test_provision_missing_applies_union_field_patch():
         }
 
     def request(method, url, payload):
-        if 'operations/' in url:
+        if re.search(r'/operations/[^/?]+$', url.split('?', 1)[0]):
             return {'done': True}
         match = re.search(r'collectionGroups/([^/]+)/fields/([^/?]+)', url)
         assert match, url

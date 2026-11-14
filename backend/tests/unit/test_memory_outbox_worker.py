@@ -7,7 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
+from database import memory_outbox_worker as worker
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import privacy_reference_tokens
+from tests.unit.fixtures.memory_privacy_reference_fakes import apply_reference_patch
 from database.memory_outbox_worker import (
     CanonicalMemoryOutboxSideEffects,
     CanonicalMemoryOutboxWorkerConfig,
@@ -148,7 +151,7 @@ class _FakeTransaction:
                 self._db.docs[path] = payload
             else:
                 assert payload is not None
-                self._db.docs[path].update(payload)
+                apply_reference_patch(self._db.docs[path], payload)
 
     def _rollback(self):
         self._writes = []
@@ -1191,3 +1194,20 @@ def test_delivered_ack_write_failure_leaves_processing_lease_for_safe_replay():
     stored = db.docs[_event_path("ack-failure")]
     assert stored["status"] == MemoryOutboxStatus.processing.value
     assert stored["lease_expires_at"] == NOW + timedelta(seconds=60)
+
+
+def test_lease_and_ack_index_new_string_leaves_atomically(monkeypatch):
+    monkeypatch.setenv('MEMORY_PRIVACY_REFERENCE_INDEX', 'on')
+    db = _db(_event())
+    leases = lease_canonical_memory_outbox_events(uid=UID, worker_id='new-worker', db_client=db, now=NOW)
+    assert len(leases) == 1
+    path = _event_path('evt-1')
+    lease_tokens = set(db.docs[path]['privacy_reference_tokens'])
+    assert set(privacy_reference_tokens(UID, {'new-worker', 'processing'})) <= lease_tokens
+    assert worker._ack_leased_event(
+        db_client=db, lease=leases[0], patch={'last_error_code': 'new-error', 'status': 'retryable_failure'}
+    )
+    assert lease_tokens <= set(db.docs[path]['privacy_reference_tokens'])
+    assert set(privacy_reference_tokens(UID, {'new-error', 'retryable_failure'})) <= set(
+        db.docs[path]['privacy_reference_tokens']
+    )

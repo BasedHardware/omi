@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database.read_boundary import MalformedDocError
+from database.memory_privacy_reference_index import with_privacy_reference_tokens
 from testing.import_isolation import load_module_fresh, stub_modules
 
 from models.feedback import FeedbackEvent
@@ -764,6 +765,8 @@ def test_firestore_privacy_tombstone_advances_ledger_and_journals_delete_events(
     assert all(event["commit_id"] == result.control_state.head_commit_id for event in events)
     assert all(event["parent_commit_id"] == result.control_state.head_commit_id for event in events)
     assert all(event["commit_sequence"] == 5 for event in events)
+    for row in [operation, commit, *events]:
+        assert row == with_privacy_reference_tokens('u1', row)
     assert "users/u1/memory_graph_assertions/mem1" not in db.transaction_obj.deletes
 
 
@@ -1067,6 +1070,7 @@ def test_firestore_conversation_replacement_commits_old_and_new_generation_atomi
     receipt = db.docs[f"users/u1/memory_source_replacements/{replacement_id}"]
     assert receipt["operation_id"] == replacement_operation.operation_id
     assert receipt["control_state"]["source_generation"] == 3
+    assert receipt == with_privacy_reference_tokens('u1', receipt)
     replacement_outbox = [
         raw
         for path, raw in db.docs.items()
@@ -1906,6 +1910,8 @@ def test_firestore_standalone_reopen_receipt_blocks_duplicate_current_tail(store
     )
     assert first.status == ApplyStatus.committed, first.reason
     assert db.docs["users/u1/memory_ledger_reopens/source"]["replacement_memory_id"] == "replacement"
+    reopen = db.docs["users/u1/memory_ledger_reopens/source"]
+    assert reopen == with_privacy_reference_tokens('u1', reopen)
 
     replay = store.apply_direct_user_long_term_patch_firestore(
         uid="u1",

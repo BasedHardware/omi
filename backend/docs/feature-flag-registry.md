@@ -769,6 +769,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_EFFORT` | Episode writer thinking effort: default, high or xhigh; baseline unchanged | backend | env | closed | — | — | — | — | pending | keep | — | auditfix |
 | `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active | backend | env | closed | — | — | — | — | pending | keep | — | auditfix |
 | `MEMORY_IMPORT_BODY_STORAGE_MODE` | Select memory import body storage mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `MEMORY_PRIVACY_REFERENCE_INDEX` | Default off; when explicitly on, privacy-history purges use owner-local privacy_reference_tokens array_contains_any candidate lookup instead of scanning eight complete history collections | backend | env | closed | — | — | — | — | keep | keep | — | memory-ledger |
 | `MEMORY_RELEASED_WRITERS_COVERED` | Initially absent; v2:<unique-epoch> attests every released-memory writer atomically advances a retry-safe server generation | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | keep | — | auditfix |
@@ -1276,6 +1277,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_L1_PROMPT_SCHEMA_TRIM_ENABLED` — Default on; omit five server-derived fields from the generation-only L1 schema. Original parsing and deterministic policy/id derivation remain unchanged; false restores the complete legacy schema. (fail: open)
 - `MEMORY_OBSERVATION_INTAKE_ENABLED` — Default on; route ordinary captured observations inline and in maintenance independently of Dream (fail: open)
+- `MEMORY_PRIVACY_REFERENCE_INDEX` — Default off; when explicitly on, privacy-history purges use owner-local privacy_reference_tokens array_contains_any candidate lookup instead of scanning eight complete history collections (fail: closed)
 - `MEMORY_RELEASED_PROJECTION` — Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage (fail: open)
 - `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v2:<unique-epoch> attests every released-memory writer atomically advances a retry-safe server generation (fail: closed)
 - `MEMORY_REQUIRED_INTAKE_ENABLED` — Default on; one bounded Flex normalization after required capture commits, with retries owned by the existing Dream sweep (fail: open)

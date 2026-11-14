@@ -32,6 +32,7 @@ from database.firestore_index_registry import (
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.memory_privacy_reference_index import privacy_reference_patch
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.memory_apply import (
     MemoryControlState,
@@ -383,14 +384,17 @@ def _claim_event_transaction(
     lease_epoch = _safe_nonnegative_int(raw.get("lease_epoch")) + 1
     transaction.update(
         ref,
-        {
-            "status": MemoryOutboxStatus.processing.value,
-            "lease_owner": worker_id,
-            "lease_epoch": lease_epoch,
-            "leased_at": now,
-            "lease_expires_at": lease_expires_at,
-            "updated_at": now,
-        },
+        privacy_reference_patch(
+            path.split('/')[1],
+            {
+                "status": MemoryOutboxStatus.processing.value,
+                "lease_owner": worker_id,
+                "lease_epoch": lease_epoch,
+                "leased_at": now,
+                "lease_expires_at": lease_expires_at,
+                "updated_at": now,
+            },
+        ),
     )
     return LeasedMemoryOutboxEvent(
         path=path,
@@ -780,7 +784,7 @@ def _ack_event_transaction(
         or _safe_nonnegative_int(raw.get("lease_epoch")) != lease_epoch
     ):
         return False
-    transaction.update(ref, dict(patch))
+    transaction.update(ref, privacy_reference_patch(path.split('/')[1], patch))
     return True
 
 

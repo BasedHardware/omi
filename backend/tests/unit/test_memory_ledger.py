@@ -17,9 +17,11 @@ from types import ModuleType
 from unittest.mock import MagicMock
 
 from google.api_core.exceptions import Aborted
+from google.cloud.firestore_v1 import FieldFilter
 import pytest
 
 from database import firestore_transaction_retry
+from database.memory_privacy_reference_index import with_privacy_reference_tokens
 from testing.import_isolation import load_module_fresh, stub_modules
 from tests.unit.fake_firestore import FakeFirestore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -56,6 +58,7 @@ def _load_modules():
     google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
     firestore_v1_stub = ModuleType("google.cloud.firestore_v1")
     firestore_v1_stub.transactional = lambda func: func
+    firestore_v1_stub.FieldFilter = FieldFilter
 
     fakes = {
         "database._client": client_stub,
@@ -369,6 +372,9 @@ def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply
         False,
     )
 
+    stored_commit = next(payload for path, payload in transaction.sets if 'memory_commits' in path)
+    assert stored_commit == with_privacy_reference_tokens(uid, stored_commit)
+    assert 'privacy_reference_tokens' not in result['commit']
     state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
@@ -423,6 +429,9 @@ def test_ledger_append_reads_apply_control_before_any_write():
         False,
     )
 
+    stored_commit = next(payload for path, payload in transaction.sets if 'memory_commits' in path)
+    assert stored_commit == with_privacy_reference_tokens(uid, stored_commit)
+    assert 'privacy_reference_tokens' not in result['commit']
     state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
@@ -446,6 +455,9 @@ def test_ledger_builder_append_reads_apply_control_before_any_write():
         False,
     )
 
+    stored_commit = next(payload for path, payload in transaction.sets if 'memory_commits' in path)
+    assert stored_commit == with_privacy_reference_tokens(uid, stored_commit)
+    assert 'privacy_reference_tokens' not in result['commit']
     state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
@@ -481,6 +493,9 @@ def test_ledger_builder_append_preserves_existing_trusted_state_head_without_con
         False,
     )
 
+    stored_commit = next(payload for path, payload in transaction.sets if 'memory_commits' in path)
+    assert stored_commit == with_privacy_reference_tokens(uid, stored_commit)
+    assert 'privacy_reference_tokens' not in result['commit']
     state_head = _ledger_state_write(transaction)
     assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
     assert state_head["head_commit_id"] == "canonical-head"
@@ -840,6 +855,29 @@ def test_legacy_commit_override_only_tombstone_is_fenced():
         )
 
     assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
+
+
+@pytest.mark.parametrize('use_builder', [False, True])
+def test_reference_tokens_stay_out_of_legacy_commit_retry_response(use_builder):
+    uid = 'u1'
+    database = _LedgerDb({})
+    transaction = _LedgerTransaction()
+    mutations = [memory_ledger.add_fact(_fact('m1', 'Lives in NYC'))]
+    now = datetime(2026, 7, 14, tzinfo=timezone.utc)
+
+    def append(txn):
+        if use_builder:
+            return memory_ledger._append_commit_with_builder_transaction(
+                txn, database, uid, None, lambda _: {'mutations': mutations}, None, now, False
+            )
+        return memory_ledger._append_commit_transaction(txn, database, uid, None, mutations, None, now, None, False)
+
+    first = append(transaction)
+    commit_path, stored = next((path, value) for path, value in transaction.sets if 'memory_commits' in path)
+    assert stored == with_privacy_reference_tokens(uid, first['commit'])
+    database.docs[commit_path] = stored
+    retry = append(_LedgerTransaction())
+    assert retry == {'commit': first['commit'], 'applied': False}
 
 
 def test_fold_commits_orders_mixed_naive_aware_iso_and_epoch_commit_times():
