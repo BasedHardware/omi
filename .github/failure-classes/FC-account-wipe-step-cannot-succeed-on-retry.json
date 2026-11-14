@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-account-wipe-step-cannot-succeed-on-retry",
+  "violated_contract": "A required account-wipe step must be able to succeed on a later retry. A provider request that always exceeds a provider limit, or a completion fence that only an operator can clear, makes the queue retry the wipe forever while the deleted account's data stays in place.",
+  "canonical_prevention": "Bound provider requests at the shared owner adapter (database.pinecone_partition_index) by the provider's measured limit, and make purge verification wait only for outstanding work that could still write owner data. Unrelated fences such as migration reconciliation must not gate erasure.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/pinecone_partition_index.py",
+    "backend/database/pinecone_partition_state.py",
+    "backend/services/users/account_deletion.py"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_pinecone_partition_index.py"
+  ],
+  "status": "open"
+}

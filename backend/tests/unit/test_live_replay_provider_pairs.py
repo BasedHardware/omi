@@ -585,6 +585,16 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     captured = []
 
     async def ingest():
+        # Synthetic capture starts only once the successor's paced prefix has
+        # actually begun. Before the first replay packet is enqueued nothing on
+        # the replay leg pins the virtual clock, so a runner-slowed failover
+        # dial parked off-clock while this free-running loop advanced audio time
+        # past it; the rebased prefix then serialized after the full 21 s of
+        # capture and landed past the 20 s wall the budget asserts below
+        # (SCA-2182: replay_wall 39.974 vs the 21.537 bound on shard 2/8).
+        async with asyncio.timeout(10):
+            while not (raws and raws[-1]._send_queue.enqueued_audio):
+                await asyncio.sleep(0)
         for n in range(70):  # 21s of real-time capture; continues past adoption.
             await virtual_clock.sleep(0.3)
             data = (6000 + n).to_bytes(2, 'little') * 4800

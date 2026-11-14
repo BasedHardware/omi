@@ -60,6 +60,7 @@ class ProjectionSession:
         self.policy = policy or store.policy(segment_id)
         self.client = store.client
         self.result_ref = store.ref('results', segment_id)
+        self.job_ref = store.ref('jobs', segment_id)
         self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
         self.ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
         self.entry: dict[str, Any] = {}

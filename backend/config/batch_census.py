@@ -270,6 +270,7 @@ JOB_ENTRIES = (
     ),
     _job('leased', clock='lease_until', ceiling=50_000, alarm=_UNPUBLISHED_ALARM),
     _job('retry', ceiling=100_000, alarm=_UNPUBLISHED_ALARM),
+    _job('allowance_held', note='Policy parked; no expiry or late-work alarm; entitlement-generation release.'),
     _job(
         'result_ready',
         custody=_RESULT_CUSTODY,
@@ -427,6 +428,7 @@ JOB_STATES = tuple(entry.state for entry in JOB_ENTRIES)
 # state) payload sites that do not target a job document. A mutated job literal
 # is a new, unexcluded value and still fails the census guard.
 JOB_STATE_MODULES = (
+    'database/batch_pipeline_allowance_hold.py',
     'utils/batch_pipeline/scheduler.py',
     'utils/batch_pipeline/live.py',
     'utils/batch_pipeline/retry_policy.py',

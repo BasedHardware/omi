@@ -8,6 +8,7 @@ assignment transaction does, even when a walk skips the pre-check.
 
 import asyncio
 import itertools
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from unittest.mock import Mock
@@ -123,11 +124,31 @@ def owner_rows(log, owner):
     return [sid for sid in log.persist_order if log.results[sid]['owner_key'] == key]
 
 
+@pytest.fixture
+def serial_owner_steps(monkeypatch):
+    """Deterministic cross-owner persist order for the fairness assertions.
+
+    Owner turns persist their steps through the 16-worker sync executor, so
+    which of two concurrent turns' steps reaches ``persist_order`` first is
+    thread timing, not scheduler order: on a loaded hosted runner a backlog
+    continuation's step overtook the newly admitted owner's (SCA-2182,
+    completion index 9 vs the asserted 7 — the scheduler had admitted the new
+    owner first). Fairness tests below pin the order the scheduler actually
+    controls by serializing steps (one FIFO executor worker) and skipping the
+    executor claim hop only a first turn pays; claim-aware admission itself
+    has its own tests below.
+    """
+    monkeypatch.setenv('PROJECTION_DRAIN_CLAIM_AWARE', 'off')
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        monkeypatch.setattr(projection_drain, 'sync_executor', executor)
+        yield
+
+
 # --- fairness and scheduling -------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
+async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims, serial_owner_steps):
     """One slot, one two-row step per turn: owners take FIFO turns, in chain order."""
     monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
     monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)  # The single FIFO queue.
@@ -153,7 +174,7 @@ async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
 
 
 @pytest.mark.asyncio
-async def test_backlog_owners_do_not_hold_a_new_owner_behind_them(monkeypatch, claims):
+async def test_backlog_owners_do_not_hold_a_new_owner_behind_them(monkeypatch, claims, serial_owner_steps):
     """2026-11-13: a few hundred backlog owners held every slot for two minutes a turn and
     owners with a few fresh rows waited behind them. A new owner now goes before queued
     backlog owners; every chain still projects whole and in order."""

@@ -24392,6 +24392,27 @@
         "title": "MobileFeedbackRequest",
         "type": "object"
       },
+      "MonthlySwitchRequest": {
+        "properties": {
+          "expected_amount": {
+            "minimum": 1.0,
+            "title": "Expected Amount",
+            "type": "integer"
+          },
+          "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Price Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "price_id",
+          "expected_amount"
+        ],
+        "title": "MonthlySwitchRequest",
+        "type": "object"
+      },
       "MoveConversationRequest": {
         "description": "Request model for moving a conversation to a folder.",
         "properties": {
@@ -25445,6 +25466,16 @@
       "PaymentIssue": {
         "description": "A paid plan whose renewal charge failed and can still be paid.\n\nSet only while the stored Stripe subscription is past_due or unpaid with an\nopen invoice. The fix is a Stripe-hosted page the client opens through\nPOST /v1/payments/customer-portal; this response carries no payment URL.",
         "properties": {
+          "monthly_switch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssueMonthlySwitch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanType"
           },
@@ -25462,6 +25493,35 @@
           "plan"
         ],
         "title": "PaymentIssue",
+        "type": "object"
+      },
+      "PaymentIssueMonthlySwitch": {
+        "description": "The plan's catalog monthly price, charged today by POST /v1/payments/payment-issue/monthly-switch.\n\nAmounts are minor units of ``currency``. ``yearly_amount`` is the unpaid yearly charge the switch voids.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "price_id": {
+            "title": "Price Id",
+            "type": "string"
+          },
+          "yearly_amount": {
+            "title": "Yearly Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "price_id",
+          "amount",
+          "currency",
+          "yearly_amount"
+        ],
+        "title": "PaymentIssueMonthlySwitch",
         "type": "object"
       },
       "PaymentMethodStatusResponse": {
@@ -68862,6 +68922,91 @@
           }
         ],
         "summary": "Get Overage Info Endpoint"
+      }
+    },
+    "/v1/payments/payment-issue/monthly-switch": {
+      "post": {
+        "description": "Move a declined yearly renewal to the same plan's monthly price (utils/monthly_switch.py).\n\nCharges the monthly price now, then voids the unpaid yearly invoice. 402: declined, nothing\nchanged. 409: not offered for this subscription, or a switch is already running. 503: billing\nunreachable; a repeat replays the finished switch or refuses, it never charges twice.",
+        "operationId": "payment_issue_monthly_switch_endpoint_v1_payments_payment_issue_monthly_switch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonthlySwitchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentStatusMessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Payment Issue Monthly Switch Endpoint"
       }
     },
     "/v1/payments/portal-return": {

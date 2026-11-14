@@ -22,7 +22,7 @@ def quarantine_fenced(client: Any, namespace: str, segment_id: str, now: float) 
     @firestore.transactional
     def revoke(transaction):
         job = reference.get(transaction=transaction).to_dict() or {}
-        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+        if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
             return False
         try:
             assert_batch_write_allowed(

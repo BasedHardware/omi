@@ -318,6 +318,7 @@ def test_walk_is_bounded_by_rows_and_time(monkeypatch):
     projector.project_owner(BURST, limit=2)
     assert log.persist_order == ids[:2]
     ticks = itertools.chain([0.0, 0.0], itertools.repeat(2.0))
+    # Keep other threads and libraries from consuming this walk's clock ticks.
     monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: next(ticks)))
     projector.project_owner(BURST, budget_seconds=1.0)
     assert log.persist_order == ids[:3]

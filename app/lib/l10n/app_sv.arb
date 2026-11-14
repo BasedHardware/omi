@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "När 3 vänner till köper",
     "referralClaimShort": "Hämta",
     "paymentDeclinedTitle": "Ditt kort nekades",
+    "paymentDeclinedMonthlyMessage": "Uppdatera kortet, eller få tillbaka {plan} för {price} i månaden",
     "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}",
     "hasLinkedTasksLabel": "Har länkade uppgifter",
     "hasTasksFilter": "Med uppgifter",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Byt till månadsvis",
+    "monthlySwitchPlanValue": "{plan}, {price} i månaden",
+    "monthlySwitchNote": "Ersätter den obetalda årsavgiften på {yearly}. Förnyas varje månad. Avsluta när du vill.",
+    "monthlySwitchDeclined": "Betalningen nekades. Ditt abonnemang har inte ändrats.",
+    "monthlySwitchUnavailable": "Bytet är inte tillgängligt just nu. Uppdatera kortet i stället.",
+    "monthlySwitchDoneTitle": "Du betalar nu månadsvis",
+    "monthlySwitchDoneBody": "{price} betalt i dag. Förnyas varje månad."
 }

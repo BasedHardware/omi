@@ -632,6 +632,11 @@ def recovered_merge_release_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
 
 
+def provider_backlog_release_closed() -> bool:
+    """Live close-only override for the metered gate; unset never opens a gate."""
+    return os.getenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', '').strip().lower() == 'false'
+
+
 def provider_backlog_release_enabled() -> bool:
     """Opt-in: the ordered merge may commit provider-route catch-up rows.
 
@@ -732,6 +737,18 @@ def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
         return max(minimum, min(int(raw), maximum))
     except ValueError:
         return default
+
+
+def ready_discovery_cursor_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', log=False)
+
+
+def ready_discovery_owners_per_tick(default: int = 20) -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', str(default)), 20, 100)
+
+
+def ready_discovery_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '10'), 10, 60)
 
 
 def serving_sweep_page_rows() -> int:

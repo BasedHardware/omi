@@ -110,6 +110,18 @@ def ceiling_findings(contract: dict[str, Any], bucket: str, metadata: dict[str, 
         and not any(r['action'].get('type') == 'Delete' and _noncurrent_only(r.get('condition') or {}) for r in rules)
     ):
         out.append('ceiling_noncurrent_unbounded' + suffix)
+    # A retention ceiling must not invent an expiry for live voice of an active
+    # account. A lifecycle rule cannot distinguish active from deleted accounts;
+    # explicit user/account erasure is handled by the reviewed deletion path.
+    retained = ceiling.get('retain_until_user_deletes') or []
+    if retained and any(
+        r['action'].get('type') == 'Delete'
+        and not _noncurrent_only(r.get('condition') or {})
+        and _reaches((r.get('condition') or {}).get('matchesPrefix') or [], retained)
+        for r in rules
+    ):
+        # This ratified rule is independent of older pending ceilings on the bucket.
+        out.append('ceiling_user_content_expiry')
     for prefix, max_age in (ceiling.get('max_age_days') or {}).items():
         covered = any(
             r['action'].get('type') == 'Delete'

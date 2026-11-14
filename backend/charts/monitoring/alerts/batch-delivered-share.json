@@ -1,0 +1,165 @@
+[
+  {
+    "uid": "omi-batch-delivered-share-language",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Batch delivery",
+    "title": "Batch transcripts - one language delivered well below its own baseline",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 604800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(max by (route, language) (omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}) < 0.7 * max by (route, language) (max_over_time(omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}[7d]))) and on (route, language) (max by (route, language) (omi_batch_pipeline_delivered_share_admitted_units{language!=\"other\",language!=\"unknown\"}) >= 20)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              }
+            }
+          ],
+          "reducer": "last"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "updated": "2026-11-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "One batch route and language delivered transcripts well below its own trailing baseline.",
+      "user_impact": "Owners speaking that language are missing transcripts while the fleet-wide delivery number stays near normal. The 2026-11-13 Japanese provider-STT miss went unseen for about a week for exactly this reason.",
+      "scope": "Per route and language: the share of units admitted 20 to 5 minutes earlier that were published within the 5-minute target, compared with the same cell's 7-day peak, guarded by at least 20 admitted units in the 15-minute cohort.",
+      "verification": "Read omi_batch_pipeline_delivered_share_ratio and omi_batch_pipeline_delivered_share_admitted_units for the route and language, then follow that language's units with the batch census (counts only, ro-prod). Compare the same window with scripts/batch_pipeline_delivered_share_report.py.",
+      "safe_next_action": "Read the route and language from the firing labels; check that language's provider health, vendor_held reason and release state before redriving. Never set BATCH_PIPELINE_DELIVERED_SHARE_ENABLED=off to silence a real breach; the flag only stops the sample.",
+      "threshold": "Share < 70% of the cell's 7-day peak, with at least 20 admitted units in the cohort, for 30m. Folded other/unknown cells cannot fire.",
+      "incident": "2026-11-13 Japanese provider-STT miss: transcripts did not reach users for about a week with no per-language signal. See backend/docs/runbooks/batch-language-delivery.md.",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "runbook": "backend/docs/runbooks/batch-language-delivery.md"
+    },
+    "labels": {
+      "alert_identity": "omi-batch-delivered-share-language",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]

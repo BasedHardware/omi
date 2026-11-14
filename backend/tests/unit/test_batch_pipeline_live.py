@@ -93,6 +93,8 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
     monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
+    # Paging/shuffle test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for segment in ('first', 'second', 'third'):
         store.rows['jobs', segment] = {
@@ -229,6 +231,8 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    # Page-size test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for i in range(count):
         store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
@@ -1072,6 +1076,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(
         outbox.wake.assert_called_once()
         assert not any(key[0] in {'queues', 'control'} for key in store.rows)
         vendor = Vendor()
+        # A 1 s unit cannot carry the 2 s speech minimum; this test is about admission, not the skip.
+        monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
         provider = provider_stage(
             store,
             Artifacts(),
