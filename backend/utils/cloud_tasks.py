@@ -80,6 +80,7 @@ SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
     {
         'capture_evidence_claims',
         'capture_received_at',
+        'capture_clock_policy',
         'budget_deferrals',
         'redrive_mode',
         'raw_capture_paths',

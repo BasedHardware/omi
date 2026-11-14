@@ -361,8 +361,10 @@ async def test_stale_claim_is_rechecked_after_redis_acquisition(execution, monke
     assert not sync_jobs.sync_job_run_lock_present('job')
 
 
-@pytest.mark.parametrize('capture_received_at', [None, 1800000000.0])
-async def test_worker_runs_fenced_pipeline_without_request_budget(execution, monkeypatch, capture_received_at):
+@pytest.mark.parametrize(
+    'capture_received_at,policy', [(None, None), (1800000000.0, None), (1800000000.0, 'device_offset_v1')]
+)
+async def test_worker_runs_fenced_pipeline_without_request_budget(execution, monkeypatch, capture_received_at, policy):
     redis, pipeline, cleanup = execution
 
     async def process(*args, **kwargs):
@@ -371,6 +373,7 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
         assert kwargs['ledger_fence_active'] is True
         assert kwargs.get('inline_run_lock_token') is None
         assert kwargs['capture_received_at'] == capture_received_at
+        assert kwargs['capture_clock_policy'] == policy
         token = kwargs['run_lock_token']
         assert sync_jobs.renew_job_run_lock('job', token)
         assert sync_jobs.try_acquire_sync_job_run_lock('job') is None
@@ -379,7 +382,10 @@ async def test_worker_runs_fenced_pipeline_without_request_budget(execution, mon
         redis.set('sync_job:job', json.dumps(row))
 
     monkeypatch.setattr(pipeline, 'run_full_pipeline_background_async', process)
-    lease = {**LEASE, 'payload': {**LEASE['payload'], 'capture_received_at': capture_received_at}}
+    lease = {
+        **LEASE,
+        'payload': {**LEASE['payload'], 'capture_received_at': capture_received_at, 'capture_clock_policy': policy},
+    }
     assert await worker_job.execute(lease, Client())
     cleanup.assert_awaited_once()
     assert not sync_jobs.sync_job_run_lock_present('job')

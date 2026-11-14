@@ -224,7 +224,10 @@ from utils.sync.capture_clock import (
     SyncCaptureTimeRejected,
     capture_clock_offset,
     is_receipt_clock_capture_time,
+    is_implausible_future_capture_time,
+    future_capture_clamp_enabled,
 )
+from utils.sync.receipt_clock import POLICY as RECEIPT_CLOCK_POLICY
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -875,6 +878,21 @@ async def sync_local_files_v2(
             )
             else None
         )
+        capture_clock_policy = None
+        if early_capture_received_at is not None:
+            if not client_device_context.client_device_id and any(
+                is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at)
+                for path in paths
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        'code': 'capture_clock_identity_required',
+                        'detail': 'Retain local audio; device identity is required for clock recovery',
+                    },
+                )
+            if client_device_context.client_device_id and future_capture_clamp_enabled():
+                capture_clock_policy = RECEIPT_CLOCK_POLICY
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
@@ -1016,6 +1034,7 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
                         {'capture_received_at': early_capture_received_at}
                         if early_capture_received_at is not None
@@ -1316,6 +1335,7 @@ async def sync_local_files_v2(
                 'client_platform': client_device_context.platform,
                 'enqueued_at': time.time(),
                 **({'capture_received_at': early_capture_received_at} if early_capture_received_at is not None else {}),
+                **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                 'lane': lane_decision.lane.value,
                 'capture_time_trust': lane_decision.trust.value,
                 'recording_age_seconds': lane_decision.maximum_age_seconds,
@@ -1568,6 +1588,7 @@ async def sync_local_files_v2(
                             audio_start_seconds=audio_start_seconds,
                             audio_end_seconds=audio_end_seconds,
                             capture_received_at=early_capture_received_at,
+                            capture_clock_policy=capture_clock_policy,
                         ),
                         name=f'sync_pipeline:{job_id}',
                     )
@@ -3213,6 +3234,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     audio_start_seconds=audio_start_seconds,
                     audio_end_seconds=audio_end_seconds,
                     capture_received_at=payload.get('capture_received_at'),
+                    capture_clock_policy=payload.get('capture_clock_policy'),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
         except BackfillStoragePressure:

@@ -234,6 +234,9 @@ def apply_wal_audio_coverage(
                 }
                 clock_origin = (frame_map or {}).get('capture_clock_at', float(base_timestamp))
                 frame_maps[derivative_path]['capture_clock_at'] = clock_origin
+                frame_maps[derivative_path]['capture_clock_source'] = (frame_map or {}).get(
+                    'capture_clock_source', wav_path
+                )
                 wav_paths.append(derivative_path)
     except Exception as e:
         _remove_generated(generated)
@@ -468,6 +471,7 @@ def build_sync_source_frame_maps(
                 clock_origin = None
             if clock_origin is not None:
                 mapping['capture_clock_at'] = clock_origin
+                mapping['capture_clock_source'] = wav_path
             source_frame_maps[wav_path] = mapping
     return source_frame_maps
 

@@ -88,6 +88,7 @@ def test_future_batch_admission_freezes_receipt_and_discards_session_clock_bound
     start = datetime.now(timezone.utc).timestamp()
     response = client.post(
         '/v2/sync-local-files',
+        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
         params={
             'recording_session_id': 'future-recording',
             'audio_start_seconds': FUTURE,
@@ -101,6 +102,40 @@ def test_future_batch_admission_freezes_receipt_and_discards_session_clock_bound
     assert start <= context['capture_received_at'] <= datetime.now(timezone.utc).timestamp()
     assert context['audio_start_seconds'] is context['audio_end_seconds'] is None
     assert context['filenames'] == [NAME]
+    assert context['capture_clock_policy'] == 'device_offset_v1'
+
+
+def test_future_recovery_without_device_identity_keeps_phone_custody(client):
+    response = _post_sync(client, NAME)
+    assert response.status_code == 503
+    assert response.json()['code'] == 'capture_clock_identity_required'
+
+
+@pytest.mark.parametrize('ahead,untrusted', [(170, False), (5 * 365 * 86400, True)])
+def test_combined_suffix_and_future_route_preserves_original_names(client, monkeypatch, ahead, untrusted):
+    captured = {}
+
+    async def batch_route(**kwargs):
+        return router.RecordUploadRoute.BATCH
+
+    async def accept(**kwargs):
+        captured.update(kwargs)
+        return JSONResponse(status_code=202, content={'job_id': 'combined', 'status': 'queued'})
+
+    monkeypatch.setattr(router, 'registered_record_response', batch_route)
+    monkeypatch.setattr(router, 'accept_batch_upload', accept)
+    raw = int(datetime.now(timezone.utc).timestamp()) + ahead
+    filename = f'audio_omi_pcm16_16000_{raw}_u0.bin'
+    response = client.post(
+        '/v2/sync-local-files',
+        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
+        files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
+    )
+    assert response.status_code == 202, response.text
+    assert captured['intake_context']['filenames'] == [filename]
+    assert pipeline.get_timestamp_from_path(captured['paths'][0]) == raw
+    assert ('capture_clock_policy' in captured['intake_context']) is untrusted
+    assert captured['lane'] == ('backfill' if untrusted else 'fresh')
 
 
 @pytest.mark.parametrize('off', [False, True])

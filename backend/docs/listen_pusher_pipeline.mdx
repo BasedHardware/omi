@@ -6776,16 +6776,30 @@ jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
 
 V2 also recovers capture stamps strictly more than 24 hours ahead of server
-receive time under `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` (default on; `false`,
-`0`, `off`, or `no` stops new admissions). This reuses the reset-clock packing
-and frozen receive anchor above; it does not increase the 600-second skew
-allowance. Future stamps between that allowance and 24 hours remain refused.
-Recovered batch units and conversation rows retain `capture_time_trust=untrusted`:
+receive time under `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` (code default on;
+`false`, `0`, `off`, or `no` stops new admissions). Dev/prod overlays and listener
+charts explicitly bind false for the first roll; enable only after every
+processing, projection and recovery reader is proven compatible. This does not
+increase the 600-second skew allowance; stamps between it and 24 hours remain
+refused. Shared filename parsing accepts collision suffixes on the same path.
+
+New identified early/future-clock admissions use durable context
+`capture_clock_policy=device_offset_v1`. One owner/device/clock-run offset maps
+original decoded ends to the first receive anchor, then preserves source
+clock differences/gaps across requests in any arrival order. Derived spans
+inherit that original scope. A future mapped end waits instead of moving the
+anchor. Future clocks missing stable device identity return retryable 503;
+already admitted contexts without this policy and unidentified early clocks
+retain the request packing described above. The same switch gates selecting
+the new policy for early clocks during the staged rollout.
+
+Recovered WorkItems and conversation rows retain `capture_time_trust=untrusted`:
 receipt placement cannot bind distinct conversations or cover other audio by
 time. Explicit identity and committed source-frame proofs retain their checks.
-Already admitted tasks and holds retain the receipt policy when admission is
-off or the worker clock later catches up. Deploy processing roles before
-admission services. See [future-clock recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
+Already admitted tasks and holds retain their frozen policy when admission is
+off or the worker clock later catches up. The phased rollout, exact config
+flip and required serving-reader readbacks are in
+[future-clock recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final fresh-gate decision. Reasons include `recent_legacy_capture`,

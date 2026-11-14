@@ -1039,14 +1039,16 @@ class TestVerifyCloudTasksOidc:
         )
 
     @pytest.mark.parametrize('sequenced', [False, True])
-    def test_enqueue_admits_frozen_early_capture_receipt_without_requiring_it_for_old_jobs(self, sequenced):
+    @pytest.mark.parametrize('policy', [None, 'device_offset_v1'])
+    def test_enqueue_admits_frozen_early_capture_receipt_without_requiring_it_for_old_jobs(self, sequenced, policy):
         cloud_tasks = _load_cloud_tasks()
         extra = {'sequencer_epoch': 3} if sequenced else {}
-        payload = _valid_sync_task_payload(capture_received_at=1800000000.0, **extra)
+        payload = _valid_sync_task_payload(capture_received_at=1800000000.0, capture_clock_policy=policy, **extra)
         env = {'SYNC_TASKS_QUEUE': 'sync-jobs', 'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/run'}
         with patch.dict(os.environ, env), patch.object(cloud_tasks, 'enqueue_named_task') as enqueue:
             cloud_tasks.enqueue_sync_job(payload)
         assert enqueue.call_args.args[3]['capture_received_at'] == 1800000000.0
+        assert enqueue.call_args.args[3]['capture_clock_policy'] == policy
         assert cloud_tasks.sync_job_payload_keys_valid(_valid_sync_task_payload(**extra))
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):

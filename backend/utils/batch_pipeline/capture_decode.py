@@ -10,6 +10,7 @@ from collections.abc import Generator
 from utils.batch_pipeline.audio import RATE, AudioUnit, audio_unit
 from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path
 from utils.sync.capture_clock import is_receipt_clock_capture_time
+from utils.sync import receipt_clock
 
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
@@ -57,6 +58,7 @@ def decode_units(
     max_seconds: float = 3600,
     coverage_context: dict | None = None,
     received_at: float | None = None,
+    clock_context: dict | None = None,
 ) -> Generator[AudioUnit, None, None]:
     unit_frames = min(UNIT_FRAMES, int(max_seconds * RATE))
     if unit_frames < 1 or max_seconds > 7200:
@@ -71,6 +73,20 @@ def decode_units(
             raise ValueError('sync decode did not preserve every uploaded frame')
         from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 
+        scope_offsets = {}
+        if clock_context is not None and received_at is not None:
+            spans = [
+                (path, get_timestamp_from_path(path), len(_canonical(path)) / (2 * RATE))
+                for path in wavs
+                if is_receipt_clock_capture_time(get_timestamp_from_path(path), now=received_at)
+            ]
+            offsets = receipt_clock.receipt_clock_offsets(
+                spans, uid=clock_context['uid'], device_id=clock_context['device_id'], received_at=received_at
+            )
+            scope_offsets = {
+                receipt_clock.clock_scope(path, start, clock_context['device_id']): offsets[path]
+                for path, start, _ in spans
+            }
         wavs, source_maps, generated = prepare((coverage_context or {}).get('uid'), wavs, frames, coverage_context)
         early_paths = {
             path
@@ -84,12 +100,18 @@ def decode_units(
         # gaps cannot place siblings years before receipt or overlap them.
         early_frames = sum(len(_canonical(path)) // 2 for path in wavs if path in early_paths)
         early_committed_frames = 0
+        pending_scope = None
 
         def packed_unit(start, pcm, runs, early):
             nonlocal early_committed_frames
             unit = provenance_unit(audio_unit(start, pcm), runs)
             if early and received_at is not None:
-                unit = replace(unit, stored_capture_at=received_at - (early_frames - early_committed_frames) / RATE)
+                stored = (
+                    start - scope_offsets[pending_scope]
+                    if clock_context is not None
+                    else received_at - (early_frames - early_committed_frames) / RATE
+                )
+                unit = replace(unit, stored_capture_at=stored)
                 early_committed_frames += len(pcm) // 2
             return unit
 
@@ -112,10 +134,22 @@ def decode_units(
             end = start + len(pending) / (2 * RATE)
             gap = round((capture - end) * RATE)
             early = path in early_paths
-            if early and pending_early:
+            mapping = source_maps.get(path) or {}
+            scope = (
+                receipt_clock.clock_scope(
+                    mapping.get('capture_clock_source', path),
+                    mapping.get('capture_clock_at', capture),
+                    clock_context['device_id'],
+                )
+                if early and clock_context is not None
+                else None
+            )
+            if early and pending_early and clock_context is None:
                 gap = 0  # Invalid wall-clock gaps are not silence or timing proof.
             if pending and (
                 early != pending_early
+                or scope != pending_scope
+                or (early and clock_context is not None and gap != 0)
                 or gap < 0
                 or gap > MAX_JOIN_GAP_FRAMES
                 or len(pending) + gap * 2 >= unit_frames * 2
@@ -126,6 +160,7 @@ def decode_units(
             if not pending:
                 start = capture
                 pending_early = early
+                pending_scope = scope
             elif gap > 0:
                 pending.extend(b'\0' * (gap * 2))
             offset = 0
