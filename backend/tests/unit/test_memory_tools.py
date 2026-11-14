@@ -161,10 +161,7 @@ class TestMemoryTools(unittest.TestCase):
         self.assertEqual(kwargs.get("offset"), 0)
 
     def test_search_memories_handles_top_level_uid(self):
-        res = memory_mod.search_memories_tool.func(
-            query="coffee preference",
-            config={"user_id": "top_uid"}
-        )
+        res = memory_mod.search_memories_tool.func(query="coffee preference", config={"user_id": "top_uid"})
         self.assertIn("No memories found matching 'coffee preference'", res)
 
     def test_search_memories_guards_empty_query(self):
@@ -175,11 +172,7 @@ class TestMemoryTools(unittest.TestCase):
         self.assertEqual(res_none, "Error: Query is required to search memories.")
 
     def test_search_memories_coerces_string_limit(self):
-        res = memory_mod.search_memories_tool.func(
-            query="travel goals",
-            limit="10",
-            config=self.config
-        )
+        res = memory_mod.search_memories_tool.func(query="travel goals", limit="10", config=self.config)
         self.assertIn("No memories found matching 'travel goals'", res)
         # Verify coerced integer limit reaches the service search call
         mock_service_inst.search.assert_called_once_with("test_uid", "travel goals", limit=10)

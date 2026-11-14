@@ -3,7 +3,7 @@ Tools for accessing user memories and facts.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 import contextvars
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -44,8 +44,6 @@ def _memory_truncation_suffix(shown: int) -> str:
         how_to_get_more="request another page or narrow the topic or date range",
         cut=True,
     )
-
-
 
 
 def _extract_user_context(cfg: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Dict[str, Any]]:
