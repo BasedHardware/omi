@@ -158,6 +158,20 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "(max by (route, language) (omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}) < 0.7 * max by (route, language) (max_over_time(omi_batch_pipeline_delivered_share_ratio{language!=\"other\",language!=\"unknown\"}[7d]))) and on (route, language) (max by (route, language) (omi_batch_pipeline_delivered_share_admitted_units{language!=\"other\",language!=\"unknown\"}) >= 20)",
+      "file": "alerts/batch-delivered-share.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_admitted_units",
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Batch transcripts - one language delivered well below its own baseline",
+      "owner_uid": "omi-batch-delivered-share-language",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
       "file": "alerts/batch-held-dead-letter.json",
       "issues": [],
@@ -2434,6 +2448,24 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 2,
+        "title": "Finalization job succeeded"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__interval])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__interval]))) >= 0",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2448,24 +2480,6 @@
       "panel": {
         "id": 80,
         "title": ""
-      },
-      "pointer": "/panels/2/targets/0/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "100 * (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=\"success\"}[$__range])) or 0 * sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range]))) / (sum(rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\",outcome=~\"success|failure\"}[$__range])) > 0)",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 2,
-        "title": "Finalization job succeeded"
       },
       "pointer": "/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -2485,7 +2499,7 @@
         "id": 82,
         "title": ""
       },
-      "pointer": "/panels/6/targets/0/expr",
+      "pointer": "/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2507,24 +2521,6 @@
       "scope": "explicit-bridge"
     },
     {
-      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 84,
-        "title": ""
-      },
-      "pointer": "/panels/10/targets/0/expr",
-      "scope": "explicit-bridge"
-    },
-    {
       "expression": "100 * (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__range]))) / (sum(rate(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__range])) > 0)",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -2539,7 +2535,7 @@
         "id": 36,
         "title": "Cloud PTT transport"
       },
-      "pointer": "/panels/13/targets/0/expr",
+      "pointer": "/panels/11/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2557,25 +2553,7 @@
         "id": 36,
         "title": "Cloud PTT transport"
       },
-      "pointer": "/panels/13/targets/1/expr",
-      "scope": "explicit-bridge"
-    },
-    {
-      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
-      "file": "dashboards/general/omi-core-features.json",
-      "issues": [
-        "dashboard variables/macros require explicit expansion before shadow"
-      ],
-      "metrics": [
-        "omi_client_journey_terminal_total"
-      ],
-      "owner_title": "Omi Core Features",
-      "owner_uid": "omi-core-features",
-      "panel": {
-        "id": 86,
-        "title": ""
-      },
-      "pointer": "/panels/14/targets/0/expr",
+      "pointer": "/panels/11/targets/1/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2593,8 +2571,44 @@
         "id": 70,
         "title": "Index write succeeded"
       },
-      "pointer": "/panels/15/targets/0/expr",
+      "pointer": "/panels/12/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(100 * (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) / sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 84,
+        "title": ""
+      },
+      "pointer": "/panels/13/targets/0/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "(100 * (sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=\"success\"}[$__interval]))) / sum(increase(omi_client_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"realtime_voice\",outcome=~\"success|failure\"}[$__interval]))) >= 0",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 86,
+        "title": ""
+      },
+      "pointer": "/panels/15/targets/0/expr",
+      "scope": "explicit-bridge"
     },
     {
       "expression": "(100 * (sum(increase(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__interval])) or 0 * sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) / sum(increase(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__interval]))) >= 0",
@@ -2756,6 +2770,55 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "100 * sum(omi_batch_pipeline_delivered_share_units) / clamp_min(sum(omi_batch_pipeline_delivered_share_admitted_units), 1)",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_admitted_units",
+        "omi_batch_pipeline_delivered_share_units"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 96,
+        "title": "Delivered within 5 min"
+      },
+      "pointer": "/panels/32/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * omi_batch_pipeline_delivered_share_ratio{language!=\"other\"}",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 97,
+        "title": "Delivered share by language"
+      },
+      "pointer": "/panels/33/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * omi_batch_pipeline_delivered_share_ratio",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_delivered_share_ratio"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 98,
+        "title": "Delivered share by route and language"
+      },
+      "pointer": "/panels/34/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum by (journey,outcome) ((rate(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"pusher_session\"}[5m]) or rate(omi_journey_terminal_total{job=\"pusher-metrics\",journey=\"capture_finalization\"}[5m])))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [],
@@ -2768,7 +2831,7 @@
         "id": 6,
         "title": "Terminal outcomes by journey"
       },
-      "pointer": "/panels/31/panels/0/targets/0/expr",
+      "pointer": "/panels/35/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2784,7 +2847,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/31/panels/1/targets/0/expr",
+      "pointer": "/panels/35/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2800,7 +2863,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/31/panels/1/targets/1/expr",
+      "pointer": "/panels/35/panels/1/targets/1/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2816,7 +2879,7 @@
         "id": 8,
         "title": "Stale terminal events by journey"
       },
-      "pointer": "/panels/31/panels/2/targets/0/expr",
+      "pointer": "/panels/35/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2832,7 +2895,7 @@
         "id": 9,
         "title": "Journey latency p95"
       },
-      "pointer": "/panels/31/panels/3/targets/0/expr",
+      "pointer": "/panels/35/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2848,7 +2911,7 @@
         "id": 33,
         "title": "Retries, dead letters, reconciliations"
       },
-      "pointer": "/panels/32/panels/2/targets/2/expr",
+      "pointer": "/panels/36/panels/2/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2866,7 +2929,7 @@
         "id": 90,
         "title": "Capture failures by reason"
       },
-      "pointer": "/panels/32/panels/4/targets/0/expr",
+      "pointer": "/panels/36/panels/4/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2884,7 +2947,7 @@
         "id": 62,
         "title": "Pendant sessions accepted"
       },
-      "pointer": "/panels/33/panels/0/targets/0/expr",
+      "pointer": "/panels/37/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2900,7 +2963,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/33/panels/1/targets/0/expr",
+      "pointer": "/panels/37/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2916,7 +2979,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/33/panels/1/targets/1/expr",
+      "pointer": "/panels/37/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2932,7 +2995,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/0/expr",
+      "pointer": "/panels/38/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2948,7 +3011,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/1/expr",
+      "pointer": "/panels/38/panels/0/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2964,7 +3027,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/34/panels/0/targets/2/expr",
+      "pointer": "/panels/38/panels/0/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2981,7 +3044,7 @@
         "id": 47,
         "title": "Short conversations (< 2 min) by source"
       },
-      "pointer": "/panels/34/panels/1/targets/0/expr",
+      "pointer": "/panels/38/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2999,7 +3062,7 @@
         "id": 49,
         "title": "Conversations per day (completed, by source)"
       },
-      "pointer": "/panels/34/panels/3/targets/0/expr",
+      "pointer": "/panels/38/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3015,7 +3078,7 @@
         "id": 77,
         "title": "Rolling 1h discard share by service / trigger"
       },
-      "pointer": "/panels/34/panels/4/targets/0/expr",
+      "pointer": "/panels/38/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3031,7 +3094,7 @@
         "id": 68,
         "title": "Resumed cohort age"
       },
-      "pointer": "/panels/35/panels/5/targets/0/expr",
+      "pointer": "/panels/39/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3047,7 +3110,7 @@
         "id": 69,
         "title": "Cohort age now"
       },
-      "pointer": "/panels/35/panels/6/targets/0/expr",
+      "pointer": "/panels/39/panels/6/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3065,7 +3128,7 @@
         "id": 37,
         "title": "PTT attempts"
       },
-      "pointer": "/panels/37/panels/0/targets/0/expr",
+      "pointer": "/panels/41/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3083,7 +3146,7 @@
         "id": 38,
         "title": "PTT duration p95 (success)"
       },
-      "pointer": "/panels/37/panels/1/targets/0/expr",
+      "pointer": "/panels/41/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3101,7 +3164,7 @@
         "id": 39,
         "title": "PTT issues"
       },
-      "pointer": "/panels/37/panels/2/targets/0/expr",
+      "pointer": "/panels/41/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3117,7 +3180,7 @@
         "id": 40,
         "title": "PTT terminal outcomes"
       },
-      "pointer": "/panels/37/panels/3/targets/0/expr",
+      "pointer": "/panels/41/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3133,7 +3196,7 @@
         "id": 41,
         "title": "PTT issues by class"
       },
-      "pointer": "/panels/37/panels/4/targets/0/expr",
+      "pointer": "/panels/41/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3149,7 +3212,7 @@
         "id": 42,
         "title": "PTT attempts by client kind"
       },
-      "pointer": "/panels/37/panels/5/targets/0/expr",
+      "pointer": "/panels/41/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3167,7 +3230,7 @@
         "id": 51,
         "title": "Live transcription transport success"
       },
-      "pointer": "/panels/38/panels/0/targets/0/expr",
+      "pointer": "/panels/42/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3185,7 +3248,7 @@
         "id": 52,
         "title": "Conversation finalization settle success"
       },
-      "pointer": "/panels/38/panels/1/targets/0/expr",
+      "pointer": "/panels/42/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3203,7 +3266,7 @@
         "id": 53,
         "title": "Mobile chat transport success"
       },
-      "pointer": "/panels/38/panels/2/targets/0/expr",
+      "pointer": "/panels/42/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3221,7 +3284,7 @@
         "id": 54,
         "title": "Desktop chat transport success"
       },
-      "pointer": "/panels/38/panels/3/targets/0/expr",
+      "pointer": "/panels/42/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3239,7 +3302,7 @@
         "id": 55,
         "title": "Desktop proactivity success (success + failure)"
       },
-      "pointer": "/panels/38/panels/4/targets/0/expr",
+      "pointer": "/panels/42/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3257,7 +3320,7 @@
         "id": 56,
         "title": "Desktop proactivity degraded share"
       },
-      "pointer": "/panels/38/panels/5/targets/0/expr",
+      "pointer": "/panels/42/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3275,7 +3338,7 @@
         "id": 57,
         "title": "Conversation finalization accepted"
       },
-      "pointer": "/panels/38/panels/6/targets/0/expr",
+      "pointer": "/panels/42/panels/6/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3293,7 +3356,7 @@
         "id": 58,
         "title": "Client journeys reporting (of 8)"
       },
-      "pointer": "/panels/38/panels/7/targets/0/expr",
+      "pointer": "/panels/42/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3311,7 +3374,7 @@
         "id": 59,
         "title": "Capture unknown-kind share"
       },
-      "pointer": "/panels/38/panels/8/targets/0/expr",
+      "pointer": "/panels/42/panels/8/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3327,7 +3390,7 @@
         "id": 60,
         "title": "Memory retrieval \u2014 tool-gated volume"
       },
-      "pointer": "/panels/38/panels/9/targets/0/expr",
+      "pointer": "/panels/42/panels/9/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3343,7 +3406,7 @@
         "id": 79,
         "title": "Client journey issues by reason and outcome"
       },
-      "pointer": "/panels/38/panels/10/targets/0/expr",
+      "pointer": "/panels/42/panels/10/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3359,7 +3422,7 @@
         "id": 71,
         "title": "Chat search paths and outcomes"
       },
-      "pointer": "/panels/39/panels/0/targets/0/expr",
+      "pointer": "/panels/43/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3375,7 +3438,7 @@
         "id": 16,
         "title": "Lifecycle events over time"
       },
-      "pointer": "/panels/40/panels/1/targets/0/expr",
+      "pointer": "/panels/44/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3391,7 +3454,7 @@
         "id": 17,
         "title": "Cancellations by reason (voluntary vs involuntary)"
       },
-      "pointer": "/panels/40/panels/2/targets/0/expr",
+      "pointer": "/panels/44/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -3407,7 +3470,7 @@
         "id": 18,
         "title": "Cancellation requests by plan"
       },
-      "pointer": "/panels/40/panels/3/targets/0/expr",
+      "pointer": "/panels/44/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -4221,7 +4284,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 284
+    "query_consumers": 288
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -206,6 +206,7 @@ class Serving:
             self._maintain(recover_quarantine=recover_quarantine)
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
+            self.metrics.delivered_share.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -300,8 +301,10 @@ class Serving:
             # Explicit reconcile bypasses the periodic lease; the guard never does.
             if self._leads(True):
                 self.metrics.fresh_guard.refresh(self.store)
+                self.metrics.delivered_share.refresh(self.store)
             else:
                 self.metrics.fresh_guard.deactivate()
+                self.metrics.delivered_share.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:
