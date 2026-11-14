@@ -38,6 +38,11 @@ class HeadWaitUnavailable(Exception):
     """The head-wait query has no serving index; the merge keeps strict order."""
 
 
+class _FreshGateReadError(Exception):
+    def __init__(self, error: GoogleAPICallError):
+        self.error = error
+
+
 def _wait_bucket(seconds: float) -> str:
     return next((f'lt{bound}' for bound in _WAIT_BUCKETS if seconds < bound), f'ge{_WAIT_BUCKETS[-1]}')
 
@@ -70,7 +75,7 @@ def _backlog_held(job: dict) -> bool:
 
 def _ready_since(row: dict) -> float | None:
     """When the row became ready. A provider row settled before provider settle stamped
-    ``ready_at`` carries the same instant on its intent."""
+    ``ready_at`` carries a settle instant on its intent."""
     if row.get('ready_at') is not None:
         return row['ready_at']
     if (row.get('stt_route') or {}).get('stt_route') == 'provider' and provider_merge_membership_enabled():
@@ -87,9 +92,9 @@ def _fresh_pick(rows: list[dict], now: float, wait: float) -> tuple[dict | None,
     if rows[0].get('state') == 'result_ready':
         return rows[0], None
     ready = [row for row in rows if row.get('state') == 'result_ready']
-    # A provider row settled while the ready_at stamp was off (or had it removed) carries the
-    # same instant on its intent. Reading only ready_at left such rows behind an unready
-    # earlier fresh row for good (2026-11-13: 15 owners, 7,784 ready fresh units).
+    # A provider row settled while the ready_at stamp was off (or had it removed) carries a
+    # settle instant on its intent. Reading only ready_at left such rows behind an unready
+    # earlier fresh row until ready_at was restored.
     waited = max((now - since for row in ready if (since := _ready_since(row)) is not None), default=None)
     if wait > 0 and waited is not None and waited >= wait:
         earlier = [row['segment_id'] for row in rows[: rows.index(ready[0])]]
@@ -232,6 +237,7 @@ class OrderedMerge:
         released: dict = {}
         held: dict = {}
         head: dict = {}
+        gate = {'determined': True}
 
         def commit(
             tx,
@@ -247,6 +253,7 @@ class OrderedMerge:
             released.clear()
             held.clear()
             head.clear()
+            gate['determined'] = True  # Reset on every transaction retry.
             owner = tx.get('owners', key)
             # Terminal quarantine atomically removes merge_pending; it never
             # enters this success log or the projection predecessor chain.
@@ -260,13 +267,21 @@ class OrderedMerge:
             if tx_fresh:
                 if not candidate or not (_catch_up(candidate) or _backlog_held(candidate)):
                     return None
-                first = tx.fresh_first_pending(key)
-                fresh = tx.fresh_first_ready_pending(key)
+                try:
+                    first = tx.fresh_first_pending(key)
+                    fresh = tx.fresh_first_ready_pending(key)
+                except GoogleAPICallError as error:
+                    # Only query errors get probe-style handling; commit writes still raise.
+                    raise _FreshGateReadError(error) from error
                 if fresh is None:
                     return None
                 if first is None or first['segment_id'] != fresh['segment_id']:
                     since = _ready_since(fresh)
-                    if since is None or now - since < wait:
+                    if since is None:
+                        # The probe can measure a later ready row's wait and pick this row.
+                        gate['determined'] = False
+                        return None
+                    if now - since < wait:
                         return None
                     skipped = {'segment_ids': [], 'state': first.get('state') if first else None, 'waited': now - since}
             if exact is not None:
@@ -438,20 +453,28 @@ class OrderedMerge:
         ):
             try:
                 entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
-                probe = False
-            except FailedPrecondition:
-                self._fresh_tx_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
-                logger.warning(
-                    'event=batch_merge outcome=fresh_tx_gate_unavailable source=%s count=1', self.commit_source
-                )
-                record_fallback(
-                    component='firestore_read',
-                    from_mode='fresh_tx_gate',
-                    to_mode='fresh_first',
-                    reason='unavailable',
-                    outcome='degraded',
-                    log=logger,
-                )
+                probe = not gate['determined']
+            except _FreshGateReadError as failure:
+                if isinstance(failure.error, FailedPrecondition):
+                    self._fresh_tx_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                    logger.warning(
+                        'event=batch_merge outcome=fresh_tx_gate_unavailable source=%s count=1', self.commit_source
+                    )
+                    record_fallback(
+                        component='firestore_read',
+                        from_mode='fresh_tx_gate',
+                        to_mode='fresh_first',
+                        reason='unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                else:
+                    logger.warning(
+                        'event=batch_merge outcome=fresh_tx_gate_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(failure.error).__name__,
+                    )
+                    probe = False
             except BatchPrivacyBlocked:
                 probe = False
                 fresh_first.clear()

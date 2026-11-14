@@ -4,7 +4,7 @@ import logging
 from unittest.mock import Mock
 
 import pytest
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 
 from tests.unit.test_batch_pipeline_merge_fresh_first import (
     CATCH_UP,
@@ -21,22 +21,127 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 
 
 @pytest.mark.parametrize('state', ['leased', 'dead'])
-def test_stale_probe_cannot_pass_a_row_that_settles_before_transaction(state):
+def test_stale_probe_cannot_pass_a_row_that_settles_before_transaction(state, monkeypatch):
     store, queue, leases = admitted({'c': (1000, CATCH_UP), 'f1': (90000, FRESH), 'f2': (90010, FRESH)})
     complete(queue, leases, 'f2')
     store.rows['jobs', 'f1']['state'] = state
     stale = [store.rows['jobs', 'f2'].copy()]
     store.fresh_pending = Mock(return_value=stale)
-    # The row omitted by the old probe settles/redrives before the commit snapshot.
-    (
-        complete(queue, leases, 'f1')
-        if state == 'leased'
-        else store.rows['jobs', 'f1'].update(
-            state='result_ready', ready_at=NOW, result=store.rows['jobs', 'f2']['result']
-        )
-    )
+    run, calls = store.run, []
+
+    def interleave(body):
+        calls.append(body)
+        result = run(body)
+        if len(calls) == 1:
+            assert result is None and store.rows['jobs', 'f1']['state'] == state
+            # Strict transaction has returned; the fresh gate has not started.
+            if state == 'leased':
+                complete(queue, leases, 'f1')
+            else:
+                run(
+                    lambda tx: tx.put(
+                        'jobs',
+                        'f1',
+                        {
+                            **tx.get('jobs', 'f1'),
+                            'state': 'result_ready',
+                            'ready_at': NOW,
+                            'result': store.rows['jobs', 'f2']['result'],
+                        },
+                    )
+                )
+        return result
+
+    monkeypatch.setattr(store, 'run', interleave)
     assert merge_for(store, wait=60).commit_next('heavy', NOW)['segment_id'] == 'f1'
     store.fresh_pending.assert_not_called()
+
+
+def test_ready_without_clock_uses_probe_wait_of_later_ready_row(monkeypatch):
+    store, queue, leases = admitted(
+        {
+            'c': (1000, CATCH_UP),
+            'f0': (90000, FRESH),
+            'f1': (90010, FRESH),
+            'f2': (90020, FRESH),
+        }
+    )
+    complete(queue, leases, 'c')
+    store.rows['jobs', 'c']['stt_route'] = {'stt_route': 'provider'}
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    complete(queue, leases, 'f1')
+    complete(queue, leases, 'f2')
+    store.rows['jobs', 'f1'].pop('ready_at')
+    store.fresh_pending = Mock(wraps=store.fresh_pending)
+    assert merge_for(store, wait=60).commit_next('heavy', NOW + 60)['segment_id'] == 'f1'
+    store.fresh_pending.assert_called_once()
+
+
+@pytest.mark.parametrize('sim', [False, True])
+def test_gate_query_and_result_write_share_transaction(sim, monkeypatch):
+    store = large_owner(1, sim)
+    tx_type = store.run(type)
+    query, put = tx_type.fresh_first_ready_pending, tx_type.put
+    reads, writes = [], []
+
+    def read(tx, key):
+        reads.append(tx)
+        return query(tx, key)
+
+    def write(tx, table, key, value):
+        if table == 'results':
+            writes.append(tx)
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
+    monkeypatch.setattr(tx_type, 'put', write)
+    probe = Mock(side_effect=AssertionError('outside probe used'))
+    monkeypatch.setattr(store, 'fresh_pending', probe)
+    assert merge_for(store, wait=60).commit_next('heavy', NOW + 60)['segment_id'] == 'f1'
+    assert len(reads) == len(writes) == 1 and reads[0] is writes[0]
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize('method', ['fresh_first_pending', 'fresh_first_ready_pending'])
+def test_transient_gate_query_keeps_strict_result_and_retries_without_backoff(method, monkeypatch, caplog):
+    store, queue, leases = admitted({'c': (1000, CATCH_UP), 'f': (90000, FRESH)})
+    complete(queue, leases, 'f')
+    original = getattr(MemoryTransaction, method)
+    calls = []
+
+    def query(tx, key):
+        calls.append(tx)
+        if len(calls) == 1:
+            raise ServiceUnavailable('transient')
+        return original(tx, key)
+
+    monkeypatch.setattr(MemoryTransaction, method, query)
+    store.fresh_pending = Mock(side_effect=AssertionError('outside probe used'))
+    merge = merge_for(store, wait=60)
+    with caplog.at_level(logging.WARNING):
+        assert merge.commit_next('heavy', NOW) is None
+    assert not any(table == 'results' for table, _ in store.rows)
+    assert merge._fresh_tx_retry_at == 0
+    assert caplog.text.count('outcome=fresh_tx_gate_retry') == 1
+    assert 'exception_type=ServiceUnavailable count=1' in caplog.text
+    assert merge.commit_next('heavy', NOW)['segment_id'] == 'f'
+    store.fresh_pending.assert_not_called()
+
+
+@pytest.mark.parametrize('error_type', [FailedPrecondition, ServiceUnavailable])
+def test_gate_commit_write_errors_still_propagate(error_type, monkeypatch, caplog):
+    store = large_owner(1)
+    put = MemoryTransaction.put
+
+    def fail_result(tx, table, key, value):
+        if table == 'results':
+            raise error_type('write failed')
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(MemoryTransaction, 'put', fail_result)
+    with pytest.raises(error_type, match='write failed'):
+        merge_for(store, wait=60).commit_next('heavy', NOW + 60)
+    assert 'outcome=fresh_tx_gate_' not in caplog.text
 
 
 def large_owner(count, sim=False):

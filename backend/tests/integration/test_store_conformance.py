@@ -1201,6 +1201,8 @@ def test_transactional_fresh_first_sees_ready_past_40_unready_rows_and_terminal_
 
 @pytest.mark.parametrize('initial_state', ['leased', 'dead'])
 def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch, initial_state):
+    from unittest.mock import Mock
+
     from utils.batch_pipeline.merge import OrderedMerge
 
     uid = h.uid('o')
@@ -1223,7 +1225,35 @@ def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch,
     rows[2]['state'] = 'result_ready'
     put_all(h, [('jobs', row['segment_id'], row) for row in rows])
     stale = [rows[2].copy()]
-    monkeypatch.setattr(h.store, 'fresh_pending', lambda *args: stale)
-    put_all(h, [('jobs', 'early', {**rows[1], 'state': 'result_ready'})])
+    probe = Mock(return_value=stale)
+    monkeypatch.setattr(h.store, 'fresh_pending', probe)
+    tx_type = h.store.run(type)
+    query, put = tx_type.fresh_first_ready_pending, tx_type.put
+    reads, writes = [], []
+
+    def read(tx, key):
+        reads.append(tx)
+        return query(tx, key)
+
+    def write(tx, table, key, value):
+        if table == 'results':
+            writes.append(tx)
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
+    monkeypatch.setattr(tx_type, 'put', write)
+    run, calls = h.store.run, []
+
+    def interleave(body):
+        calls.append(body)
+        result = run(body)
+        if len(calls) == 1:
+            assert result is None
+            run(lambda tx: tx.put('jobs', 'early', {**rows[1], 'state': 'result_ready'}))
+        return result
+
+    monkeypatch.setattr(h.store, 'run', interleave)
     entry = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=4).commit_next(uid, 100.0)
     assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
+    assert reads and writes and reads[-1] is writes[-1]
+    probe.assert_not_called()
