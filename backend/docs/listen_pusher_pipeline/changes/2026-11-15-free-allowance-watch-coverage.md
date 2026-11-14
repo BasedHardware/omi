@@ -27,6 +27,10 @@ read aggregates only. It showed the watch could not judge most free spend:
    - `FIRESTORE_READ_LEVERS` keeps `usage_month_cache` and `usage_month_total` at 0 on GKE, so no legacy reader
      starts trusting monthly totals.
    - Dev, the jobs and desktop-backend stay on `v1`.
+   - A document that is ready under a different valid epoch now raises `UsageBaselineNotReady` instead of a plain
+     `ValueError`. The watch then re-proves the month with the existing fenced source scan under its own epoch, so
+     `v1` documents written by listen before this change do not stay `usage_unavailable`. Corrupt totals and an
+     invalid configured epoch still raise `ValueError`.
 2. **New `unbound` decision.** Previously `observe_unbound` emitted `would_refuse` whenever no account could be
    resolved. The callers were speaker-sample verification, the recovery recognizers and the transcription shadow,
    so these calls were counted as allowance refusals.
