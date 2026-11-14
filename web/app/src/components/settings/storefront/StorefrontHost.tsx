@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -85,9 +87,9 @@ async function purchase(
 ): Promise<string | null> {
   const decision = storefrontCheckoutDecision(data, tier, price, livePlanId);
   if (decision === 'refuse' || price.id === null) return null;
-  trackUpgradePlanSelected(tier.planId, price.interval, source);
   const paid = data.current?.priceId != null;
   if (decision === 'checkout' && paid) {
+    trackUpgradePlanSelected(tier.planId, price.interval, source);
     const result = await upgradeSubscription(price.id);
     if (result?.status === 'success' || result?.scheduled_start) {
       trackUpgradeSucceeded(tier.planId, price.interval);
@@ -98,7 +100,14 @@ async function purchase(
   }
   const result = await createCheckoutSession(price.id);
   if (result?.url) {
-    window.open(result.url, '_blank');
+    if (
+      !openCheckoutWindow(result.url, {
+        plan: tier.planId,
+        billingInterval: price.interval,
+        source,
+      })
+    )
+      return CHECKOUT_POPUP_BLOCKED;
     const handleFocus = () => {
       onSubscriptionUpdate();
       window.removeEventListener('focus', handleFocus);
@@ -107,6 +116,7 @@ async function purchase(
     return null;
   }
   if (result?.status === 'reactivated') {
+    trackUpgradePlanSelected(tier.planId, price.interval, source);
     trackUpgradeSucceeded(tier.planId, price.interval);
     onSubscriptionUpdate();
     return null;
@@ -152,15 +162,24 @@ export function StorefrontPanel({
     if (!data || busyPriceId !== null) return;
     setBusyPriceId(price.id);
     setError(null);
+    let checkoutBlocked = false;
     try {
-      setError(
-        await purchase(data, tier, price, source, livePlanId, onSubscriptionUpdate),
+      const purchaseError = await purchase(
+        data,
+        tier,
+        price,
+        source,
+        livePlanId,
+        onSubscriptionUpdate,
       );
+      setError(purchaseError);
+      checkoutBlocked = purchaseError === CHECKOUT_POPUP_BLOCKED;
     } catch {
       setError('Something went wrong. Try again.');
     } finally {
       setBusyPriceId(null);
-      void reload();
+      // Reloading unmounts the interval picker and would reset a blocked offer.
+      if (!checkoutBlocked) void reload();
     }
   };
 

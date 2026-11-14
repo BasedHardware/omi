@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
@@ -979,9 +981,9 @@ export function UsageSectionContent({
 
       const tier = selectedOption?.plan_id ?? 'unknown';
       const interval = selectedOption?.interval ?? selectedOption?.title ?? 'unknown';
-      trackUpgradePlanSelected(tier, interval, 'usage_page');
       if (isPaid && !isCancelingSubscription && !isCurrentPlan) {
         purchaseRoute = 'upgrade';
+        trackUpgradePlanSelected(tier, interval, 'usage_page');
         const result = await upgradeSubscription(selectedPriceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -993,13 +995,23 @@ export function UsageSectionContent({
         purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          window.open(result.url, '_blank');
+          if (
+            !openCheckoutWindow(result.url, {
+              plan: tier,
+              billingInterval: interval,
+              source: 'usage_page',
+            })
+          ) {
+            setError(CHECKOUT_POPUP_BLOCKED);
+            return;
+          }
           const handleFocus = () => {
             onSubscriptionUpdate();
             window.removeEventListener('focus', handleFocus);
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          trackUpgradePlanSelected(tier, interval, 'usage_page');
           const seconds = renewalDateSeconds(
             result.next_billing_date,
             subscription?.current_period_end,
