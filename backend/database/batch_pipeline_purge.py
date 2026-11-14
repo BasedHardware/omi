@@ -216,7 +216,9 @@ def purge_batch_owner(
         if not tombstone.get().exists:
             raise RuntimeError('conversation deletion intent required before batch purge')
     if retained_copies is not None:
-        retained_copies.before_legacy(uid, conversation_id, destructive_authority)
+        retained_copies.before_legacy(
+            uid, conversation_id, destructive_authority, fs_generation=generation if conversation_id is None else None
+        )
     default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object

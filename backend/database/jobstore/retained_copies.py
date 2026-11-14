@@ -118,7 +118,7 @@ class RetainedCopies:
                 selected.append((identity, manifest))
             return selected
 
-    def retire_private(self, uid, identity, manifest, authority, *, conversation=None):
+    def retire_private(self, uid, identity, manifest, authority, *, conversation=None, fs_generation=None):
         """One bounded real FS COMMIT; missing copies are an idempotent replay.
 
         P/PC is terminal and cannot reopen. Actual FS queue epoch, account hold,
@@ -152,7 +152,11 @@ class RetainedCopies:
             else:
                 ref = self.handoff.client.collection('batch_pipeline_privacy').document(owner)
                 value = ref.get(transaction=transaction).to_dict() or {}
-                if not value.get('purging'):
+                if (
+                    type(fs_generation) is not int
+                    or not value.get('purging')
+                    or value.get('generation') != fs_generation
+                ):
                     raise AuthorityRefused('original account privacy purge must still be active')
             # Read all before writes. Hash-derived private references belong to
             # the original recording; changed/foreign cursor contents refuse.
@@ -173,12 +177,19 @@ class RetainedCopies:
                 (ns, identity),
             )
 
-    def before_legacy(self, uid, conversation, authority):
+    def before_legacy(self, uid, conversation, authority, *, fs_generation=None):
         """Explicit binding for the actual account/conversation erasure entrypoints.
 
         Never let the old shadow-only pass erase originals or declare completion
         while the new durable census still has unresolved remote copy families.
         """
         for identity, manifest in self.inventory(uid, conversation):
-            self.retire_private(uid, identity, manifest, authority, conversation=conversation)
+            self.retire_private(
+                uid, identity, manifest, authority, conversation=conversation, fs_generation=fs_generation
+            )
+            from database.jobstore.original_copies import OriginalCopies
+
+            OriginalCopies(self).retire(
+                uid, identity, authority, conversation=conversation, fs_generation=fs_generation
+            )
         raise RetainedCopiesPending('private copies retired; original/object/journal/cold-copy certification remains')

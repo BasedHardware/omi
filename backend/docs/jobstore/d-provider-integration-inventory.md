@@ -106,3 +106,23 @@ Migration 0015 requires the existing exclusive owner lock before census
 changes and original custodian deletion. A real concurrent first-census/delete
 test proves serialization and post-lock refusal; triggers never acquire or
 upgrade a guard. Unregistered legacy outboxes retain their existing path.
+
+## Original object and metadata source continuation
+
+Migration 0016 retains immutable per-record destructive-operation barriers.
+Actual account/conversation purge binding now uses the production retention
+helper for original generation-pinned audio/results, then the real FS
+intent/completion/receipt deletion transaction. Original intake repair context,
+whose unique references are excluded from PG intent, stays retained. The PG custodian
+and journal remain protected. Real PG lost-COMMIT and subprocess-exit tests
+exercise prepared/committed/cancelled recovery and actual conversation gate
+takeover. Unknown/missing outcomes never return False as a settled operation.
+Account metadata also checks the exact original F and P purge generations.
+
+GCS transport is synthetic, not real terminal-session/C4 qualification. See
+`d-retained-copy-lifetimes.md` for the new retained operation census, exact
+original lifetime obligations and remaining late/cold/journal proof. Final
+per-record retirement, real reverse sink/certificates, runtime account recovery,
+scheduling/paging and full matrix/fleet/budget qualification remain missing.
+The first P1 stays open, readiness stays false, and no new review round, merge,
+activation or savings are requested.

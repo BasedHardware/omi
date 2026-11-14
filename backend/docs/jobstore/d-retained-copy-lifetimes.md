@@ -91,3 +91,47 @@ L_x, blocks a destructive transaction until census COMMIT, then verifies that
 the committed census refuses its deletion. Unregistered legacy outboxes retain
 their old path. Sorted multi-owner destructive units and final proofs remain
 requirements; this serialization does not grant an erasure certificate.
+
+## Original object and metadata continuation
+
+Migration 0016 and `original_copies.OriginalCopies` extend the explicit actual
+account/conversation entrypoint binding. The complete immutable ordinary
+terminal seal supplies original audio/result URIs. Every URI must already have
+an original positive GCS generation; encrypted or unpinned references refuse
+before any object delete. The production retention helper validates configured
+owner storage and deletes precisely that generation, outside SQL slots/guards.
+Its transport is synthetic in local qualification. Real upload/session C4,
+late objects, staging references and cold-copy absence are still unproved.
+
+Only after all original object progress records commit may the original
+intent/completion/receipt transaction delete its three exact paths. The original
+intake repair context is deliberately excluded from the PG intent, so that
+unique FS custodian remains until its full reference adapter is qualified.
+This phase neither copies repair context into PG nor discards its references.
+That COMMIT reads the actual hold/unit token, queue epoch and deletion intent.
+Account erasure also checks the exact F generation returned by the actual
+generation advance. Every PG progress operation binds the original terminal
+hash and per-record census; account progress also binds P's purge generation.
+These are source phase receipts, never a final all-copy certificate.
+
+The new operation table is itself retained per-record custody: immutable
+operation ID, recording, owner hash, unit token, original references and payload,
+with monotonic prepared-to-committed/cancelled state. It has no TTL and cannot
+be deleted or rearmed. Execution and recovery acquire the existing L_x before
+the same row lock. Recovery either observes COMMIT or durably cancels a prepared
+operation; a paused old executor then refuses. Absence, foreign targets, lock
+timeouts and PG transport/COMMIT errors never prove rollback. Psycopg errors
+are normalized to unknown transport outcomes for the real legal-hold gate.
+The actual conversation progress resolver routes the durable operation target
+before acquiring the next unit. Account orchestration/recovery injection remains
+a runtime gate.
+
+Successful phase records let bounded redelivery skip completed original
+versions. A replacement generation is never selected by lookup. No successful
+phase removes the last PG custodian, attempt/effect metadata, journal or census.
+Journal committed prefixes cannot acquire gaps, identities cannot be silently
+scrubbed, and no reverse certificate exists without a real conditional sink and
+cold-copy proof. Final per-record retirement, original lifetime scheduling,
+owner paging, terminal-session and residue scheduling remain unfinished.
+Readiness remains false and the first-review P1 remains open; no new review,
+activation or savings are requested.

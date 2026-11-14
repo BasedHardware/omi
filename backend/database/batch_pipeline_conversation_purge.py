@@ -172,6 +172,16 @@ def purge_conversation(
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
     if retained_copies is not None:
+        from database.jobstore.erasure_operations import ErasureOperations, PREFIX
+
+        def resolve_original(target: str) -> bool:
+            if target.startswith(PREFIX):
+                return ErasureOperations(retained_copies).resolve(uid, target)
+            from utils.batch_pipeline.retention import delete_batch_object
+
+            return settles_unknown_erasure(lambda: delete_batch_object(uid, target))
+
+        progress.settle_stuck(resolve_original)
         _ensure_budget(progress)
         with progress.unit() as authority:
             retained_copies.before_legacy(uid, conversation_id, authority)

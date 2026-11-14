@@ -12,7 +12,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def lane(context, monkeypatch):
+def lane(context, monkeypatch, request):
     from config.policy import BatchUnitPolicy
     from database import _client, conversations, llm_usage
     from database.batch_pipeline_intake import admit
@@ -66,7 +66,11 @@ def lane(context, monkeypatch):
             sid,
             uid,
             1000 + i * 30,
-            f'encrypted://audio/{sid}',
+            (
+                f'gs://synthetic/syncing/{uid}/audio/{sid}#1'
+                if getattr(request, 'param', False)
+                else f'encrypted://audio/{sid}'
+            ),
             30,
             Priority.DEEP,
             conversation_id=chunk_identity(uid, 'omi', None, False, 1000 + i * 30),
@@ -103,7 +107,14 @@ def lane(context, monkeypatch):
             unit['unit_id'],
             unit['attempt_token'],
             'result_ready',
-            WorkResult(unit['unit_id'], f'encrypted://result/{unit["unit_id"]}').to_dict(),
+            WorkResult(
+                unit['unit_id'],
+                (
+                    f'gs://synthetic/syncing/{uid}/result/{unit["unit_id"]}#2'
+                    if getattr(request, 'param', False)
+                    else f'encrypted://result/{unit["unit_id"]}'
+                ),
+            ).to_dict(),
             now=202,
             partial_wait=30,
         )

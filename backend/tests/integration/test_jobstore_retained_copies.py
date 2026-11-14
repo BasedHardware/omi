@@ -55,7 +55,7 @@ def test_actual_conversation_purge_retires_private_views_and_keeps_originals(ret
 
     r = retained
     assert private_left(r) == 5
-    progress = SimpleNamespace(position={}, expired=lambda: False, unit=lambda: unit(r))
+    progress = SimpleNamespace(position={}, expired=lambda: False, unit=lambda: unit(r), settle_stuck=lambda _: None)
     with pytest.raises(RetainedCopiesPending, match='certification remains'):
         purge_conversation(r.uid, r.conversation, progress, firestore_client=r.handoff.client, retained_copies=r.purge)
     assert private_left(r) == 0
@@ -439,7 +439,7 @@ def test_real_redirect_admission_target_is_in_conversation_erasure_census(contex
         ) as authority:
             yield authority
 
-    progress = SimpleNamespace(position={}, expired=lambda: False, unit=destructive_unit)
+    progress = SimpleNamespace(position={}, expired=lambda: False, unit=destructive_unit, settle_stuck=lambda _: None)
     with pytest.raises(RetainedCopiesPending):
         purge_conversation(uid, target, progress, firestore_client=handoff.client, retained_copies=copies)
     assert not any(handoff.client.document(path).get().exists for path in manifest['private_paths'])
