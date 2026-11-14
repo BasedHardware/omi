@@ -78,7 +78,9 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
         )
         + ")"
     )
-    assert historical == expected
+    union = expected[len("quantile(0.5, ") : -1]
+    assert historical == "(" + expected + ") and (count(" + union + ") == 7)"
+    assert RULES[STEP]["noDataState"] == "Alerting"
     assert "[7d:1d]" not in historical
     assert "increase(" not in hourly
 
@@ -99,3 +101,11 @@ def test_rules_are_enabled_production_only_tickets_with_owner_and_rollback(uid):
     assert uid in verifier["load_live_stt_import_rules"](production=True)
     assert uid not in verifier["load_live_stt_import_rules"](production=False)
     assert verifier["mismatched_definition_keys"](dict(rule, isPaused=True), rule) == ["isPaused"]
+
+
+def test_shared_checksum_pinned_promtool_hook_runs_the_cost_fixtures():
+    script = REPO / "backend/scripts/check_record_token_lease_promql.py"
+    source = script.read_text()
+    assert "firestore_cost_budget.py" in source
+    assert "hashlib.sha256" in source
+    assert str(script.relative_to(REPO)) in (REPO / ".github/checks-manifest.yaml").read_text()

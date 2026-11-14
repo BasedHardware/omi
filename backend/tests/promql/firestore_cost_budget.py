@@ -85,6 +85,21 @@ def main():
         step_case("diurnal same hour stays quiet", False, False),
         step_case("full hour step sustained", True, True),
     ]
+    median = rules[-1]["data"][1]["model"]["expr"]
+    for name, values in (
+        ("one missing baseline day", " ".join(["100x1439"] * 3 + ["_x1439"] + ["100x1439"] * 4)),
+        ("all baseline days missing", "_x10079 100x1439"),
+    ):
+        tests.append(
+            {
+                "name": name,
+                "interval": "1m",
+                "input_series": [
+                    {"series": 'firestore_googleapis_com:document_read_count{type="QUERY"}', "values": values}
+                ],
+                "promql_expr_test": [{"expr": median, "eval_time": "7d16h30m", "exp_samples": []}],
+            }
+        )
     with tempfile.TemporaryDirectory(prefix="firestore-cost-promql-") as directory:
         root = Path(directory)
         (root / "rules.yml").write_text(

@@ -170,15 +170,13 @@ Which code produced the QUERY reads:
 topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_total{kind="query"}[30m])))
 ```
 
-## Unattributed-reads alert
-
-### Batch unit-budget and billed-step tickets (SCA-2189)
+## Batch unit-budget and billed-step tickets (SCA-2189)
 
 `FirestoreBatchReadsPerAudioHourHigh` (`omi-firestore-batch-reads-audio-hour`)
 means batch reads no longer follow completed work: the rolling hourly ratio exceeds
 60,000 reads/audio-hour for 2h, versus a 45,000 budget, with at least 50 audio-hours
 completed in that hour. First query: compare
-`sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total[1h]))`
+`sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total{caller=~"(database|utils)\\\\.batch.*"}[1h]))`
 with the same expression using `[1h] offset 1d`, then inspect
 `sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600`.
 Owner: Firestore cost owner, SCA-2173. A firing ticket on introduction is expected;
@@ -197,15 +195,18 @@ reads does not fire. Owner: Firestore cost owner, SCA-2173.
 billed reads in the last full UTC hour exceed 1.25x the median of the matching hour
 on the previous seven days for 2h. First query: compare the caller query above
 against `[1h] offset 1d`, then break native reads down by `type`. Owner: Firestore
-cost owner, SCA-2173. The native metric is a per-minute DELTA exposed as a gauge,
+cost owner, SCA-2173. Remove the batch caller filter for this fleet-wide step.
+The native metric is a per-minute DELTA exposed as a gauge,
 not a counter: the rule uses an hourly mean times 60, never `increase()` on it.
 An hourly-aligned subquery and `last_over_time` select the last full hour; seven
 explicit daily offsets with distinct `day` labels feed `quantile(0.5, ...)`.
 This avoids a `[7d:1d]` subquery, whose daily alignment samples UTC midnight rather
 than the current hour. Only the two-hour pending duration is continuous; the
-step input changes on UTC hour boundaries. The existing unattributed-reads blind
-rule covers missing/stale native data; a missing historical median is NoData,
-not evidence of health. Inspect historical coverage before interpreting the ratio.
+step input changes on UTC hour boundaries. The median requires all seven daily
+samples (`count(...) == 7`); partial history is never accepted as a baseline.
+Missing history makes the median NoData, which this rule maps to Alerting after
+its pending duration, routed as the same agent-tier ticket. The existing
+unattributed-reads blind rule additionally covers missing/stale native data.
 
 All three rules use the production-only `gmp-cloud-run` datasource, the existing
 agent Telegram receiver, warning labels and ticket annotations, and are selected
@@ -213,6 +214,11 @@ by `live-alert-gate.json`. `isPaused=true` plus re-import disables an individual
 rule. Rollback: revert the merge commit. No runtime flags or production writes
 are required by the source change; release still requires independent review and
 live GMP expression values, not just offline fixtures.
+
+The existing checksum-pinned `check_record_token_lease_promql.py` local/CI hook
+also runs `tests/promql/firestore_cost_budget.py`; no workflow change is needed.
+
+## Unattributed-reads alert
 
 `omi-firestore-unattributed-reads` in
 `backend/charts/monitoring/alerts/firestore.json` fires when the same-window
