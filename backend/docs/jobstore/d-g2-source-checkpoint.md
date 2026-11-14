@@ -652,3 +652,15 @@ resolve lost replies without a paid resend. First P1 and readiness remain
 false; no activation, new review or savings claimed. Final evidence records
 exact-head results, including existing outbox/staging failures and every
 intermediate fixture/transport failure, without widening deadlines/assertions.
+
+
+The normal c13e510 main merge retains new main0007_ready_owners.sql and moves
+all eighteen unapplied dark SQL bodies byte-for-byte from0007-0024 to0008-0025.
+No live/applied migration is rewritten; the issue packet includes checksum map.
+Main's parameterized provider-merge races and our no-legacy-probe/actual SDK
+transaction-identity assertions both remain. Current main also adds cursor-first
+ReadyDiscovery; global result_ready page100 is now fallback, with the existing
+5s recovery/held floor unchanged. No production flag is changed by this source.
+The new customer reader preserves the original caller ArtifactReadBudget across
+SQL, FS authority and SDK object reads; three red cases exposed its missing
+keyword before forwarding was added. Original deadline/byte/object limits remain.

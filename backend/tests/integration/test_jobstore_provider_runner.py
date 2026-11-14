@@ -386,3 +386,32 @@ def test_customer_restart_reader_cannot_adopt_foreign_or_revoked_result(runtime,
         r.x.handoff.authority.ref.update({'epoch': 4})
     with pytest.raises((AuthorityRefused, FenceRefused)):
         reader.load_result(item, uri)
+
+
+@pytest.mark.parametrize('limit', ['deadline', 'bytes', 'objects'])
+def test_customer_restart_reader_preserves_caller_artifact_budget(runtime, limit):
+    import time
+    from database.jobstore.provider_result_reader import ProviderResultReader
+    from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
+    from utils.batch_pipeline.contracts import WorkItem
+
+    r = runtime
+    claim = claims(r)[0]
+    s = stage(r, claim)
+    assert asyncio.run(s.run_async(claim['unit_id'], run_sync)).outcome == 'done'
+    with r.x.handoff.pool.connection() as conn:
+        uri = r.x.adapter.units._unit(conn, claim['unit_id'])['result']['result_uri']
+    item = WorkItem(**{k: claim['source'][k] for k in WorkItem.__dataclass_fields__ if k in claim['source']})
+    reader = ProviderResultReader(r.x.handoff, r.x.storage, 'synthetic', b'x' * 32, lease_seconds=60)
+    budget = ArtifactReadBudget(time.monotonic() + 10, 65536, 1)
+    assert reader.load_result(item, uri, read_budget=budget)['words_provider'] == 'modulate'
+    assert budget.objects == 1 and 0 < budget.received_bytes == budget.downloaded_bytes < 65536
+    budget = ArtifactReadBudget(
+        time.monotonic() + (10 if limit != 'deadline' else -1),
+        1 if limit == 'bytes' else 65536,
+        0 if limit == 'objects' else 1,
+    )
+    with pytest.raises(ArtifactReadLimit):
+        reader.load_result(item, uri, read_budget=budget)
+    assert budget.received_bytes == 0
+    assert budget.objects == (1 if limit == 'bytes' else 0)

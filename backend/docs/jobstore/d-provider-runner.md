@@ -78,3 +78,18 @@ and accepted SCA-1690 fleet qualification remain gates. Historical staging
 deadline failure and three required outbox failures are not waived by this
 driver. Final exact-head receipts state current results and retain failures.
 No savings are booked and source readiness remains false.
+
+The normal c13e510 main merge preserves its new ready-owner index migration0007.
+The eighteen unmerged dark migrations move byte-for-byte to0008-0025; the
+published checksum map records every rename. No live/applied SQL is rewritten.
+Both main's parameterized merge races and this branch's stricter no-legacy-probe
+and actual transaction-identity assertions remain. Main's ReadyDiscovery now
+tries the owner cursor before its global ready-page fallback; the 5s recovery
+and held maintenance floor remains. This is inherited source, not a production
+flag change or savings claimed by this issue.
+
+The restartable result reader forwards the original ArtifactReadBudget through
+SQL source discovery, fresh FS authority and actual SDK object IO. An expired
+budget refuses before pool acquisition; bytes/objects keep their existing
+limits. SQL waits consume the same caller budget. The red fixture exposed the
+missing keyword contract before this fix; no deadline policy was widened.

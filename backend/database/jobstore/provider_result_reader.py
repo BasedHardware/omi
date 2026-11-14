@@ -21,9 +21,16 @@ class ProviderResultReader:
         # register effects, start sessions or consume this lease.
         self.lease_seconds = lease_seconds
 
-    def load_result(self, item, uri):
+    def load_result(self, item, uri, *, read_budget=None):
         units, handoff = self.adapter.units, self.adapter.handoff
-        with units.pool.connection() as conn, conn.transaction():
+        timeout = read_budget.timeout(2) if read_budget is not None else 2
+        with units.pool.connection(timeout=timeout) as conn, conn.transaction():
+            if read_budget is not None:
+                # The extra original-source SQL snapshot is part of this same
+                # caller budget, including waits for the owner/row guard.
+                milliseconds = str(max(1, int(read_budget.timeout(2) * 1000)))
+                conn.execute("SELECT set_config('statement_timeout',%s,true)", (milliseconds,))
+                conn.execute("SELECT set_config('lock_timeout',%s,true)", (milliseconds,))
             job = units.terminal_provider_source(conn, item.segment_id)
             if job['result']['result_uri'] != uri:
                 raise AuthorityRefused('original terminal result reference required')
@@ -61,4 +68,4 @@ class ProviderResultReader:
         artifacts = ProviderUpload(ticket, self.storage, lease_seconds=self.lease_seconds).artifacts(
             self.bucket, self.secret
         )
-        return artifacts.load_result(item, uri)
+        return artifacts.load_result(item, uri, read_budget=read_budget)
