@@ -26,7 +26,8 @@ from utils.batch_pipeline.contracts import WorkItem, Priority
 from utils.sync import capture_clock, lanes, pipeline
 from utils.sync.live_overlap import compatible_capture
 from utils.observability.reasons import SyncCaptureTimeReason
-from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.files import get_timestamp_from_path
+from utils.sync.content_id import compute_sync_content_id
 from routers import sync as router
 
 FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
@@ -48,7 +49,7 @@ def test_future_staging_keeps_filename_bytes_identity_and_closed_metric(tmp_path
     original = upload.file.getvalue()
     [path] = pipeline._retrieve_file_paths_v2([upload], 'synthetic', 'job')
     assert Path(path).name == NAME and Path(path).read_bytes() == original
-    assert parse_sync_filename_timestamp(NAME) == FUTURE
+    assert get_timestamp_from_path(NAME) == FUTURE
     assert _capture_time_counter('accepted_future_clamped') == before + 1
 
 
@@ -112,7 +113,9 @@ def test_future_recovery_without_device_identity_keeps_phone_custody(client):
 
 
 @pytest.mark.parametrize('ahead,untrusted', [(170, False), (5 * 365 * 86400, True)])
-def test_combined_suffix_and_future_route_preserves_original_names(client, monkeypatch, ahead, untrusted):
+def test_combined_suffix_and_future_route_uses_main_normalizer_and_content_identity(
+    client, monkeypatch, tmp_path, ahead, untrusted
+):
     captured = {}
 
     async def batch_route(**kwargs):
@@ -125,14 +128,21 @@ def test_combined_suffix_and_future_route_preserves_original_names(client, monke
     monkeypatch.setattr(router, 'registered_record_response', batch_route)
     monkeypatch.setattr(router, 'accept_batch_upload', accept)
     raw = int(datetime.now(timezone.utc).timestamp()) + ahead
-    filename = f'audio_omi_pcm16_16000_{raw}_u0.bin'
+    filename = f'audio_omi_pcm16_16000_clkeone_{raw}_u0.bin'
+    canonical = f'audio_omi_pcm16_16000_u0_clkeone_{raw}.bin'
+    expected = tmp_path / canonical
+    expected.write_bytes(b'\x00' * 32)
+    expected_content_id = compute_sync_content_id('synthetic-uid', [str(expected)])
+    monkeypatch.setattr(router, 'compute_sync_content_id', compute_sync_content_id)
     response = client.post(
         '/v2/sync-local-files',
         headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
         files=[('files', (filename, b'\x00' * 32, 'application/octet-stream'))],
     )
     assert response.status_code == 202, response.text
-    assert captured['intake_context']['filenames'] == [filename]
+    assert captured['intake_context']['filenames'] == [canonical]
+    assert captured['content_id'] == expected_content_id
+    assert Path(captured['paths'][0]).name == canonical
     assert pipeline.get_timestamp_from_path(captured['paths'][0]) == raw
     assert ('capture_clock_policy' in captured['intake_context']) is untrusted
     assert captured['lane'] == ('backfill' if untrusted else 'fresh')

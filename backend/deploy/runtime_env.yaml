@@ -380,9 +380,6 @@ environments:
             value: 'true'
             category: ops_kill
           SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-          SYNC_COLLISION_SUFFIX_ENABLED:
-            value: 'true'
-            category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
             value: '86400'
             category: config
@@ -1180,9 +1177,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1522,9 +1516,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1849,9 +1840,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -2139,9 +2127,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -2840,9 +2825,6 @@ environments:
             value: 'true'
             category: ops_kill
           SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-          SYNC_COLLISION_SUFFIX_ENABLED:
-            value: 'true'
-            category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
             value: '86400'
             category: config
@@ -3773,9 +3755,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4252,9 +4231,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4723,9 +4699,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -5140,9 +5113,6 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
-            SYNC_COLLISION_SUFFIX_ENABLED:
-              value: 'true'
-              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config

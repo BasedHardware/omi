@@ -23,11 +23,18 @@ def clock_scope(path: str, origin: float, device_id: str) -> str:
     return hashlib.sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()
 
 
-def inherited_offsets(spans, *, scope_offsets, device_id, source_starts=None, source_paths=None):
+def inherited_offsets(
+    spans: list[tuple[str, float, float]],
+    *,
+    scope_offsets: dict[str, float],
+    device_id: str | None,
+    source_starts: dict[str, float] | None = None,
+    source_paths: dict[str, str] | None = None,
+) -> dict[str, float]:
     """Derived/VAD spans inherit the original decoded file's immutable offset."""
     return {
         key: scope_offsets[
-            clock_scope((source_paths or {}).get(key, key), (source_starts or {}).get(key, start), device_id)
+            clock_scope((source_paths or {}).get(key, key), (source_starts or {}).get(key, start), device_id or '')
         ]
         for key, start, _ in spans
     }

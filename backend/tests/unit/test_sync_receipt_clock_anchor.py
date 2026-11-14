@@ -44,7 +44,7 @@ def units(directory, starts, *, received=RECEIVED, device='ios_abcd1234', owner=
     paths = []
     for stamp in starts:
         source = Path(pcm(directory, int(stamp), 16000))
-        name = f'audio_omi_pcm16_16000_{"clke" + run + "_" if run else ""}{int(stamp)}_u0.bin'
+        name = f'audio_omi_pcm16_16000_u0_{"clke" + run + "_" if run else ""}{int(stamp)}.bin'
         target = source.with_name(name)
         source.rename(target)
         paths.append(str(target))
@@ -101,7 +101,7 @@ def test_newer_clock_jump_waits_instead_of_moving_or_clamping_an_anchor(anchors,
 
 
 def test_derived_source_preserves_the_original_run_scope(anchors):
-    path = 'audio_omi_pcm16_16000_clkeabc_2147472000_u0.wav'
+    path = 'audio_omi_pcm16_16000_u0_clkeabc_2147472000.wav'
     offsets = receipt_clock.receipt_clock_offsets(
         [(path, FUTURE, 10)], uid='synthetic', device_id='phone', received_at=RECEIVED
     )
@@ -130,7 +130,7 @@ def test_trimmed_collision_upload_keeps_original_run_and_full_decode_anchor(anch
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SERVE_PERCENT', '100')
     monkeypatch.setenv('SYNC_CLOCK_RUN_PARTITION_ENABLED', 'false')
     source = Path(pcm(tmp_path, int(FUTURE), 16000))
-    target = source.with_name(f'audio_omi_pcm16_16000_clkeone_{int(FUTURE)}_u0.bin')
+    target = source.with_name(f'audio_omi_pcm16_16000_u0_clkeone_{int(FUTURE)}.bin')
     target.write_bytes(source.read_bytes() * 2)  # Two one-second source frames.
     source.unlink()
     claim = {

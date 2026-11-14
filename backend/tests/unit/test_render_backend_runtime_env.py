@@ -1451,7 +1451,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize(
     'chart,key',
-    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'), ('backend-listen', 'SYNC_COLLISION_SUFFIX_ENABLED')],
+    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED')],
 )
 def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart, key):
     chart_dir = _SCRIPT.parents[1] / 'charts' / chart

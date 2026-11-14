@@ -5,8 +5,10 @@ server receive clock with `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` on in code.
 Dev and prod explicitly bind it **false** for the first roll. This margin is
 144 times the normal 600-second skew allowance. That allowance is unchanged;
 stamps between it and 24 hours still return HTTP 400 `invalid_capture_time`.
-V1 keeps rejecting future clocks. Collision names (`_<timestamp>_uN.bin`)
-use the same shared filename parser, including decoded and derived paths.
+V1 keeps rejecting future clocks. The existing unconditional upload normalizer moves collision suffixes
+(`_<timestamp>_uN.bin`) ahead of the timestamp before admission and hashing.
+Future recovery preserves main's canonical name and ledger/content identity;
+no new collision parser or switch is needed.
 
 ## Chronology and retained identity
 

@@ -106,11 +106,12 @@ def decode_units(
             nonlocal early_committed_frames
             unit = provenance_unit(audio_unit(start, pcm), runs)
             if early and received_at is not None:
-                stored = (
-                    start - scope_offsets[pending_scope]
-                    if clock_context is not None
-                    else received_at - (early_frames - early_committed_frames) / RATE
-                )
+                if clock_context is not None:
+                    if pending_scope is None:
+                        raise ValueError('missing frozen capture-clock scope')
+                    stored = start - scope_offsets[pending_scope]
+                else:
+                    stored = received_at - (early_frames - early_committed_frames) / RATE
                 unit = replace(unit, stored_capture_at=stored)
                 early_committed_frames += len(pcm) // 2
             return unit

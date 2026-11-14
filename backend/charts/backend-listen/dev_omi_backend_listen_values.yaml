@@ -133,8 +133,6 @@ env:
     value: "true"
   - name: SYNC_FUTURE_CAPTURE_CLAMP_ENABLED
     value: 'false'
-  - name: SYNC_COLLISION_SUFFIX_ENABLED
-    value: "true"
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS

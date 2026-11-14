@@ -25,7 +25,6 @@ from config.sync_audio_coverage import sync_wal_audio_coverage_active_for
 from utils.capture_evidence import decoded_frame_map
 from utils.executors import submit_with_context
 from utils.observability.fallback import record_fallback
-from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import recording_lineage
 from utils.sync.wal_audio_coverage_metrics import bounded_reason, record_coverage_outcome
 from utils.sync.audio_coverage import (

@@ -157,7 +157,7 @@ def capture_clock_offset(max_file_end: float, *, now: Optional[float] = None) ->
 
 
 class CaptureTimeWindowError(ValueError):
-    """``parse_sync_filename_timestamp`` window violation, carrying the closed reason."""
+    """Filename capture-window violation, carrying the closed reason."""
 
     def __init__(self, reason: SyncCaptureTimeReason):
         super().__init__('invalid timestamp')
