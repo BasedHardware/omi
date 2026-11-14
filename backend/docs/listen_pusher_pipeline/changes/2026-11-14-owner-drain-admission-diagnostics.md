@@ -7,6 +7,8 @@ distinguishes why turns start; it does not repair scheduling or authorize activa
 The [flag contract](../../listen_pusher_pipeline.mdx#batch-projection-drain-admission)
 defaults on; `BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS=0` disables it.
 Reviewed revert is the source rollback. Release remains SCA-2072/SCA-2026.
+The environment-surface entry is owned by SCA-1960, with review due 2026-11-28;
+the existing seeded flag budget is unchanged.
 
 No new storage reads/writes, claims, timers, waits or product state. New state is
 local to the projector/owner drain in its serving process. Request origins are
