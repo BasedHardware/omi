@@ -17,6 +17,7 @@ class StorefrontPlansContent extends StatefulWidget {
     this.busy = false,
     this.livePlan,
     this.cancelScheduled = false,
+    this.yearlyDefault = true,
     required this.onRetry,
     required this.onSelect,
     required this.onManage,
@@ -28,6 +29,10 @@ class StorefrontPlansContent extends StatefulWidget {
   final bool busy;
   final PlanType? livePlan;
   final bool cancelScheduled;
+
+  /// Opens on the yearly chip when the backend offers the interval choice.
+  /// The host passes the kill switch (`mobile-plan-storefront-yearly-default-off`).
+  final bool yearlyDefault;
   final Future<void> Function() onRetry;
   final Future<void> Function(StorefrontTier tier, StorefrontPrice price) onSelect;
   final Future<void> Function() onManage;
@@ -37,22 +42,32 @@ class StorefrontPlansContent extends StatefulWidget {
 }
 
 class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
-  // Monthly is the default. Yearly is an explicit choice, except when the
-  // current tier only publishes a yearly price — otherwise that card has no price.
-  String _interval = 'month';
+  // Yearly is the default whenever the backend offers the interval choice, so
+  // the picker matches the mobile paywalls. The kill switch or a storefront
+  // with no yearly price anywhere falls back to monthly.
+  String _interval = 'year';
   bool _appliedInitialInterval = false;
   bool _allPlansExpanded = false;
 
   void _applyInitialInterval(PlanStorefront data) {
     if (_appliedInitialInterval) return;
     _appliedInitialInterval = true;
-    if (data.current?.interval != 'year') return;
-    for (final tier in data.tiers) {
-      if (tier.isCurrent && tier.priceFor('month') == null && tier.priceFor('year') != null) {
-        _interval = 'year';
-        return;
+    if (widget.yearlyDefault &&
+        data.yearlyToggleLabel != null &&
+        data.tiers.any((tier) => tier.priceFor('year') != null)) {
+      return;
+    }
+    // Monthly, except when the current card publishes only a yearly price: that
+    // subscriber keeps the yearly chip so the picker matches their own plan.
+    if (data.current?.interval == 'year') {
+      for (final tier in data.tiers) {
+        if (tier.isCurrent && tier.priceFor('month') == null && tier.priceFor('year') != null) {
+          _interval = 'year';
+          return;
+        }
       }
     }
+    _interval = 'month';
   }
 
   bool _cancelScheduled(PlanStorefront? data) => widget.cancelScheduled || data?.current?.cancelAtPeriodEnd == true;

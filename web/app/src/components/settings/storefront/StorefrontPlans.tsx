@@ -31,6 +31,8 @@ export interface StorefrontPlansProps {
   busyPriceId?: string | null;
   error?: string | null;
   livePlanId?: string | null;
+  /** Opens on the yearly chip; the host passes the kill switch. */
+  yearlyDefault?: boolean;
   onRetry: () => void;
   onSelect: (tier: PlanStorefrontTier, price: PlanStorefrontPrice) => void;
   onManage: () => void;
@@ -43,6 +45,7 @@ export function StorefrontPlans({
   busyPriceId = null,
   error = null,
   livePlanId,
+  yearlyDefault = true,
   onRetry,
   onSelect,
   onManage,
@@ -104,6 +107,7 @@ export function StorefrontPlans({
           data={data}
           busyPriceId={busyPriceId}
           livePlanId={livePlanId}
+          yearlyDefault={yearlyDefault}
           onSelect={onSelect}
         />
       )}
@@ -133,18 +137,24 @@ function TierList({
   data,
   busyPriceId,
   livePlanId,
+  yearlyDefault,
   onSelect,
 }: {
   data: PlanStorefront;
   busyPriceId: string | null;
   livePlanId?: string | null;
+  yearlyDefault: boolean;
   onSelect: StorefrontPlansProps['onSelect'];
 }) {
-  const [chosen, setChosen] = useState<StorefrontInterval>(() => initialInterval(data));
+  // Null until the user picks a chip, so the kill switch still applies when it
+  // resolves after this list mounted (the host reads it asynchronously).
+  const [chosen, setChosen] = useState<StorefrontInterval | null>(null);
   const [expanded, setExpanded] = useState(false);
   const cancelScheduled = isCancelScheduled(data);
   // While a cancellation is scheduled the sheet shows the current interval only.
-  const selected = cancelScheduled ? data.current?.interval ?? 'month' : chosen;
+  const selected = cancelScheduled
+    ? data.current?.interval ?? 'month'
+    : chosen ?? initialInterval(data, yearlyDefault);
   const { primary, rest } = partitionTiers(data);
   const showToggle = !cancelScheduled && data.yearlyToggleLabel !== null;
 
@@ -168,11 +178,11 @@ function TierList({
             <button
               key={value}
               role="radio"
-              aria-checked={chosen === value}
+              aria-checked={selected === value}
               onClick={() => setChosen(value)}
               className={cn(
                 'rounded-lg px-4 py-2 text-sm font-medium transition-all',
-                chosen === value
+                selected === value
                   ? 'bg-text-primary text-bg-primary shadow-md'
                   : 'text-text-secondary hover:bg-bg-quaternary hover:text-text-primary',
               )}

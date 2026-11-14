@@ -18,6 +18,13 @@ vi.mock('@/lib/analytics/subscriptionFunnel', () => ({
   trackUpgradeSucceeded: vi.fn(),
 }));
 
+const flags = vi.hoisted(() => ({ omiFlagEnabled: vi.fn() }));
+vi.mock('@/lib/omiFlags', () => ({
+  omiFlagEnabled: flags.omiFlagEnabled,
+  loadOmiFlags: vi.fn(),
+  resetOmiFlags: vi.fn(),
+}));
+
 import { StorefrontPlans } from '@/components/settings/storefront/StorefrontPlans';
 import {
   BudgetUpsellBanner,
@@ -26,6 +33,8 @@ import {
 
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn.mockReset());
+  flags.omiFlagEnabled.mockReset();
+  flags.omiFlagEnabled.mockResolvedValue(false);
   vi.stubGlobal('open', vi.fn());
   window.localStorage.clear();
 });
@@ -65,13 +74,41 @@ describe('StorefrontPlans', () => {
     expect(screen.getByRole('button', { name: 'Get Architect' })).toBeTruthy();
   });
 
-  it('yearly chip swaps to the yearly headline and price id', () => {
+  it('monthly chip swaps to the monthly headline and price id', () => {
     const onSelect = renderPlans(golden('free_settings'));
-    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+    const plus = screen.getByTestId('storefront-tier-plus');
+    expect(within(plus).getByText('US$19.99/month')).toBeTruthy();
+    fireEvent.click(within(plus).getByRole('button', { name: 'Get Plus' }));
+    expect(onSelect.mock.calls[0][1].id).toBe('price_plus_month');
+  });
+
+  it('opens on the yearly chip by default', () => {
+    renderPlans(golden('free_settings'));
     const plus = screen.getByTestId('storefront-tier-plus');
     expect(within(plus).getByText('US$16.66/month')).toBeTruthy();
-    fireEvent.click(within(plus).getByRole('button', { name: 'Get Plus' }));
-    expect(onSelect.mock.calls[0][1].id).toBe('price_plus_year');
+    expect(screen.getByRole('radio', { name: 'Yearly · 2 months free' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  it('the yearly default kill switch opens the panel on monthly', () => {
+    render(
+      <StorefrontPlans
+        data={golden('free_settings')}
+        yearlyDefault={false}
+        onRetry={vi.fn()}
+        onSelect={vi.fn()}
+        onManage={vi.fn()}
+      />,
+    );
+    const plus = screen.getByTestId('storefront-tier-plus');
+    expect(within(plus).getByText('US$19.99/month')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('Pro at 100% leads with a recommended Architect checkout', () => {
@@ -81,7 +118,7 @@ describe('StorefrontPlans', () => {
     fireEvent.click(
       within(architect).getByRole('button', { name: 'Upgrade to Architect' }),
     );
-    expect(onSelect.mock.calls[0][1].id).toBe('price_architect_month');
+    expect(onSelect.mock.calls[0][1].id).toBe('price_architect_year');
     expect(screen.getByTestId('storefront-usage-meter').textContent).toContain(
       '100% used',
     );
@@ -116,6 +153,33 @@ describe('StorefrontPlans', () => {
 });
 
 describe('StorefrontPanel purchase routing', () => {
+  it('the yearly default kill switch applies when it resolves after the panel mounted', async () => {
+    let resolveFlag: (value: boolean) => void = () => {};
+    flags.omiFlagEnabled.mockImplementation((key: string) =>
+      key === 'web-plan-storefront-yearly-default-off'
+        ? new Promise<boolean>((resolve) => {
+            resolveFlag = resolve;
+          })
+        : Promise.resolve(false),
+    );
+    api.getStorefront.mockResolvedValue(golden('free_settings'));
+    render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    const plus = await screen.findByTestId('storefront-tier-plus');
+    // The payload arrived before the flag, so the panel is still on yearly.
+    expect(screen.getByRole('radio', { name: 'Yearly · 2 months free' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    resolveFlag(true);
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Monthly' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    );
+    expect(within(plus).getByText('US$19.99/month')).toBeTruthy();
+  });
+
   it('same-tier annual requires backend confirmation before any billing call', async () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });
@@ -142,7 +206,7 @@ describe('StorefrontPanel purchase routing', () => {
     render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Get Plus' }));
     await waitFor(() =>
-      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_plus_month'),
+      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_plus_year'),
     );
     expect(api.upgradeSubscription).not.toHaveBeenCalled();
     expect(window.open).toHaveBeenCalledWith('https://checkout.stripe.test/s', '_blank');
@@ -164,7 +228,7 @@ describe('StorefrontPanel purchase routing', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Upgrade to Architect' }));
     await waitFor(() =>
-      expect(api.upgradeSubscription).toHaveBeenCalledWith('price_architect_month'),
+      expect(api.upgradeSubscription).toHaveBeenCalledWith('price_architect_year'),
     );
     expect(api.createCheckoutSession).not.toHaveBeenCalled();
     expect(onUpdate).toHaveBeenCalled();
@@ -244,17 +308,17 @@ describe('BudgetUpsellBanner', () => {
     const card = screen.getByTestId('storefront-tier-unlimited_v2');
     fireEvent.click(within(card).getByRole('button', { name: 'Get Unlimited' }));
     await waitFor(() =>
-      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_month'),
+      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_year'),
     );
     expect(window.open).toHaveBeenCalledWith(
       'https://checkout.stripe.test/pro',
       '_blank',
     );
-    // The yearly chip offers the annual Omi Pro price too.
-    fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 3 months free' }));
+    // The monthly chip still offers the monthly Omi Pro price.
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
     fireEvent.click(within(card).getByRole('button', { name: 'Get Unlimited' }));
     await waitFor(() =>
-      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_year'),
+      expect(api.createCheckoutSession).toHaveBeenCalledWith('price_omi_pro_month'),
     );
   });
 });

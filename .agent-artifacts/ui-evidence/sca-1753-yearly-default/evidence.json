@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-plans-monthly-before.png",
+      "platform": "mobile-ios",
+      "description": "Mobile settings plan picker before: Monthly chip selected, Pro at US$49.99/month",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-plans-yearly-after.png",
+      "platform": "mobile-ios",
+      "description": "Mobile settings plan picker after: Yearly chip selected, Pro at US$499.90/year",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-desktop-macos-plans-monthly-before.png",
+      "platform": "desktop-macos",
+      "description": "macOS plan storefront before: Monthly chip selected, Pro at US$49.99/month",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-desktop-macos-plans-yearly-after.png",
+      "platform": "desktop-macos",
+      "description": "macOS plan storefront after: Yearly chip selected, Pro at US$41.66/month billed yearly",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-web-plans-monthly-before.png",
+      "platform": "web",
+      "description": "Web plan storefront before: Monthly chip selected, Pro at US$49.99/month",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-web-plans-yearly-after.png",
+      "platform": "web",
+      "description": "Web plan storefront after: Yearly chip selected, Pro at US$41.66/month billed yearly",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

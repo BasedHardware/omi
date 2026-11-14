@@ -222,11 +222,19 @@ struct PlanStorefront: Equatable {
     tier.price(for: interval) ?? (tier.prices.count == 1 ? tier.prices.first : nil)
   }
 
-  /// Monthly by default; yearly only when the current card publishes nothing else.
-  var initialInterval: Interval {
+  /// Yearly is the default whenever the backend offers the interval choice, so the
+  /// panel matches the mobile and external paywalls. A storefront with no yearly
+  /// price, or the kill switch, keeps monthly so every card keeps a price.
+  func initialInterval(yearlyDefault: Bool = true) -> Interval {
+    if yearlyDefault, yearlyToggleLabel != nil, tiers.contains(where: { $0.price(for: .year) != nil }) {
+      return .year
+    }
     guard current?.interval == .year, let tier = tiers.first(where: { $0.isCurrent }) else { return .month }
     return tier.price(for: .month) == nil && tier.price(for: .year) != nil ? .year : .month
   }
+
+  /// Default interval for callers that do not pass the kill switch (tests, snapshots).
+  var initialInterval: Interval { initialInterval() }
 
   /// Cards before "See all plans". Cancel-scheduled: current first, then every tier (each
   /// other card carries the backend's blocked line). Otherwise recommended and current.

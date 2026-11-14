@@ -357,11 +357,15 @@ void main() {
                 selected = price;
               },
               onManage: () async {}));
+      // Yearly is the default offer, and the billed total is the yearly amount.
+      expect(find.textContaining(r'US$269.91'), findsWidgets);
+      await _capture(tester, '${tag}_v2_plans_year');
+      // Monthly stays available after an explicit selection.
+      await _tap(tester, find.byKey(const Key('storefront_month')));
       expect(find.textContaining(r'US$29.99'), findsOneWidget);
       await _capture(tester, '${tag}_v2_plans_month');
       await _tap(tester, find.byKey(const Key('storefront_year')));
       expect(find.textContaining(r'US$269.91'), findsWidgets);
-      await _capture(tester, '${tag}_v2_plans_year');
       await _tap(tester, find.byKey(const Key('storefront_buy_unlimited_v2')));
       expect(selected?.amountMinor, 26991);
       expect(selected?.currency, 'usd');

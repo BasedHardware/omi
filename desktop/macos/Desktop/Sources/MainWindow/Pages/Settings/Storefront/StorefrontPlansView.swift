@@ -21,6 +21,13 @@ struct StorefrontPlansView: View {
   @State private var chosen: PlanStorefront.Interval?
   @State private var expanded: Bool?
 
+  /// Kill switch for the yearly-first picker (ops_kill, owner dazheng): true returns
+  /// the panel to monthly-first without a release.
+  private static let yearlyDefaultOffFlag = "desktop-plan-storefront-yearly-default-off"
+  private var yearlyDefault: Bool {
+    !PostHogManager.shared.isFeatureEnabled(Self.yearlyDefaultOffFlag)
+  }
+
   var body: some View {
     if let data, !data.showSubscriptionUi {
       EmptyView()
@@ -113,7 +120,9 @@ struct StorefrontPlansView: View {
   @ViewBuilder
   private func tierList(_ data: PlanStorefront) -> some View {
     let selected: PlanStorefront.Interval =
-      data.cancelScheduled ? (data.current?.interval ?? .month) : (chosen ?? data.initialInterval)
+      data.cancelScheduled
+      ? (data.current?.interval ?? .month)
+      : (chosen ?? data.initialInterval(yearlyDefault: yearlyDefault))
     let parts = data.partitionedTiers
     let isExpanded = expanded ?? startExpanded
 
