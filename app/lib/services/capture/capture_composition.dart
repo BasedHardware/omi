@@ -256,14 +256,18 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       now: DateTime.now,
     );
     final reporter = CaptureEndReporter(
-      post: (signal, {required pendingWals, required sentAt}) => postSyncCaptureEnd(
+      post: (signal, {required pendingWals, required sentAt}) async => switch (await postSyncCaptureEnd(
         recordingSessionId: signal.recordingSessionId,
         endType: signal.type.wire,
         lastSpeechAt: signal.lastSpeechAt,
         endDecidedAt: signal.decidedAt,
         sentAt: sentAt,
         pendingWals: pendingWals,
-      ),
+      )) {
+        ApiSuccess(:final data) => data,
+        // Kept by the reporter and retried on the next accepted file.
+        ApiFailure() => false,
+      },
       pendingWals: (id) => phone is LocalWalSyncImpl ? phone.pendingWalsForRecording(id) : 0,
       disabled: CaptureEndMarkerPolicy.disabled,
     );

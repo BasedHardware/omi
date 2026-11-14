@@ -1,25 +1,29 @@
 import 'dart:convert';
 
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 
 /// Tells the server a recording ended. Times are this phone's clock in epoch
-/// seconds. Returns whether the server accepted it; false covers "no upload of
-/// this recording is bound yet", an old server and any transport failure, all
-/// of which leave the server's ordinary wait in place.
-Future<bool> postSyncCaptureEnd({
+/// seconds. Success carries whether the server accepted the marker; it answers
+/// false while no upload of the recording is bound yet. A failure (an old
+/// server, no network, a refused request) is returned as such: the caller
+/// keeps the end and the server's ordinary wait stays in place.
+Future<ApiResult<bool>> postSyncCaptureEnd({
   required String recordingSessionId,
   required String endType,
   required DateTime lastSpeechAt,
   required DateTime endDecidedAt,
   required DateTime sentAt,
   required int pendingWals,
-}) async {
+  ApiSend? send,
+}) {
   double seconds(DateTime value) => value.millisecondsSinceEpoch / 1000.0;
-  try {
-    final response = await makeApiCall(
-      url: '${Env.apiBaseUrl}v2/sync-capture-end',
-      headers: const {},
+  final base = (Env.apiBaseUrl ?? '').replaceFirst(RegExp(r'/$'), '');
+  return executeApi(
+    request: ApiRequest(
+      url: '$base/v2/sync-capture-end',
+      method: 'POST',
+      headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({
         'recording_session_id': recordingSessionId,
         'end_type': endType,
@@ -28,12 +32,12 @@ Future<bool> postSyncCaptureEnd({
         'sent_at': seconds(sentAt),
         'pending_wals': pendingWals,
       }),
-      method: 'POST',
-    );
-    if (response?.statusCode != 200) return false;
-    final body = jsonDecode(response!.body);
-    return body is Map<String, dynamic> && body['accepted'] == true;
-  } catch (_) {
-    return false;
-  }
+    ),
+    send: send,
+    decode: (body) {
+      final data = jsonDecode(body);
+      if (data is! Map<String, dynamic>) throw const FormatException('capture end response is not an object');
+      return data['accepted'] == true;
+    },
+  );
 }
