@@ -1419,7 +1419,10 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name
-        epoch = 'c2fs_20261026_r1' if enabled else 'v1'
+        # SCA-1750: prod listen/pusher read the same monthly doc as the Cloud Run billing
+        # gate (allowance watch), so they share its epoch while their levers stay 0.
+        epoch_aligned = enabled or (environment == 'prod' and name in {'gke/backend-listen', 'gke/pusher'})
+        epoch = 'c2fs_20261026_r1' if epoch_aligned else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
         if name.startswith('cloud_run/'):
             rendered = {
@@ -1438,4 +1441,4 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
-        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')

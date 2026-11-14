@@ -36,6 +36,7 @@ LEASE_DECISIONS = Counter(
 SETTLED_SECONDS = Counter(
     'omi_free_allowance_settled_seconds', 'Confirmed billing seconds joined to a shadow operation', ['path']
 )
+COLLECTORS = (DECISIONS, SECONDS, LEASE_DECISIONS, SETTLED_SECONDS)
 
 
 def enabled() -> bool:
@@ -164,10 +165,12 @@ def observe_unbound(uid: str | None, path: str, provider: Any, seconds: float = 
         return
     reason = 'billing_scope_unavailable' if limit is not None else decision
     LEASE_DECISIONS.labels(path, reason).inc()
+    # No uid means the call cannot be attributed to any account (speaker samples, recovery
+    # recognizers): report it as unbound, not as an allowance refusal (SCA-1750 coverage).
     emit(
         path,
         provider,
-        'would_refuse',
+        'unbound' if reason == 'identity_unavailable' else 'would_refuse',
         seconds if type(seconds) in (int, float) and math.isfinite(seconds) and seconds > 0 else 0,
     )
 
