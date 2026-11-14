@@ -1999,6 +1999,11 @@ checks:
     triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "PubMed chat tools must sanitize network errors and unhandled exceptions to prevent internal host/token leakage into tool responses"
+  - id: pubmed-app-robustness-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_robustness_and_coercion.py"]
+    triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PubMed app must guard non-dict JSON bodies, support integer PMIDs, and handle boolean limit bounds without exceptions"
   - id: speaker-label-interpolation
     command: ["python3", ".github/scripts/check_speaker_label_interpolation.py"]
     triggers: ["backend/**/*.py", ".github/scripts/check_speaker_label_interpolation.py", ".github/checks-manifest.yaml"]
