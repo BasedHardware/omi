@@ -20,9 +20,8 @@ dependency on that field for provider rows.
 - `_fresh_pick` measures the wait with `_ready_since`: `ready_at`, or for a provider row while
   provider merge membership is on, `provider_intent.settled_at`.
 - The merge logs `event=batch_merge outcome=fresh_probe_full_no_ready` when the fresh probe returns
-  a full page (32 rows) with no ready row: one line per commit attempt. An owner drain makes up to
-  100 attempts and repeats the line only after another of the owner's rows commits in between. See
-  the limit below.
+  a full page (32 rows) with no ready row: one line per commit attempt that finds it, not
+  throttled. See the limit below.
 - The newest-commits read in projection discovery records a fallback
   (`recent_discovery` to `main_cursor`) when its query fails, instead of failing silently.
 
@@ -30,7 +29,7 @@ dependency on that field for provider rows.
   owner when a merge call commits nothing while ready fresh rows sit on the probe page, or when a
   drain spends its 100-commit budget with such rows left. Maintenance already re-offers marked
   owners; `release_hold` now keeps the marker while the owner's last drain in that process left
-  ready fresh rows, and clears it after a drain that finds none. Each marker written for this
+  ready fresh rows, and clears a re-offer marker after a drain that finds none. Each marker written for this
   reason logs `event=batch_merge outcome=fresh_reoffer_marked`.
   Kill switch `BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED` (unset = on).
 
@@ -45,18 +44,23 @@ Production, 2026-11-13 22:07Z (counts only): 23 owners, about 3,400 ready fresh 
 none of the owners had a held marker. Those owners were released with an operator script that
 writes the same marker.
 
-Bounds on the re-offer:
+Bounds on the re-offer. The marker written for this reason carries `reoffer: fresh`; maintenance
+clears it on any visit after which the process has no ready fresh row waiting for the owner,
+whatever the projection depth. A depth-hold marker has no such field and keeps its rule; an owner
+holding a re-offer marker that reaches the depth cap gets a depth-hold marker instead.
 
-- A row inside its head wait: the marker lasts until the wait ends and the row commits.
+- A row inside its head wait: kept until the wait ends and the row commits.
 - An owner with more ready rows than one drain commits: every visit commits rows, so it ends.
 - An owner whose probe page is 32 unready rows with ready rows behind: the page shows no ready
-  row, so no marker is written or kept. That owner is not re-offered (and still does not drain;
-  see below).
-- A fenced owner is not marked.
-- Anything else that leaves a ready fresh row on the page without a commit: the process stops
-  keeping the marker after 30 minutes without a commit for that owner
+  row, so no marker is written for this reason and one already held is cleared on the next visit.
+  (That owner still does not drain; see below.)
+- An owner whose strict transaction was fenced is not marked. A row-level privacy refusal does not
+  stop the marker.
+- Anything that leaves a ready fresh row on the page without a commit: the process stops keeping
+  the marker once the owner has gone the head wait plus 30 minutes without a commit
   (`event=batch_merge outcome=fresh_reoffer_gave_up`); a later commit, or 10 minutes without
   seeing the owner, starts the clock again. The clock is per process.
+- A failed marker write is logged (`fresh_reoffer_mark_retry`) and never stops the drain.
 - Cost of a visit: the marker listing reads the owner's first pending row, then one drain (a strict
   transaction, the probe query, and a second transaction when a row commits). Maintenance visits
   at most 50 markers a pass.
@@ -83,8 +87,7 @@ Bounds on the re-offer:
 ## Off switch
 
 `BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED=false` stops new marker writes for this reason;
-markers already written are cleared by maintenance the way any hold marker is (below the depth
-cap, or depth hold off). The marker is written only on the fresh-probe path, that is when the
+re-offer markers already written are cleared on their owner's next maintenance visit. The marker is written only on the fresh-probe path, that is when the
 owner's head is catch-up or held backlog. The settle-instant pick has no switch
 of its own: `BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED=false` removes it together with the
 rest of provider merge membership.

@@ -29,9 +29,12 @@ FRESH_PROBE_ROWS = 32
 # How long this process trusts that it already wrote an owner's re-offer marker.
 FRESH_REOFFER_MARK_SECONDS = 30.0
 FRESH_REOFFER_MARK_PRUNE = 4096
-# An owner marked this long without one commit is no longer re-offered by this process.
+# An owner left waiting this long past the head wait without one commit is no longer
+# re-offered by this process.
 FRESH_REOFFER_MAX_SECONDS = 1800.0
 FRESH_REOFFER_GAP_SECONDS = 600.0
+# Value of a marker's ``reoffer`` field when it was written only for the fresh re-offer.
+FRESH_REOFFER = 'fresh'
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -167,7 +170,14 @@ class OrderedMerge:
 
         def clear(tx):
             mark = tx.get('merge_holds', key)
-            if mark.get('held') and (force or not depth or _awaiting_projection(tx, tx.get('owners', key)) < depth):
+            # A marker written only for the fresh re-offer is not a depth hold: with no
+            # ready fresh row left it goes whatever the projection depth.
+            if mark.get('held') and (
+                force
+                or not depth
+                or mark.get('reoffer') == FRESH_REOFFER
+                or _awaiting_projection(tx, tx.get('owners', key)) < depth
+            ):
                 tx.put('merge_holds', key, {**mark, 'held': False})
 
         self.store.run(clear)
@@ -206,13 +216,15 @@ class OrderedMerge:
         if marked is not None and time.monotonic() - marked < FRESH_REOFFER_MARK_SECONDS:
             return
         if len(self._fresh_marked) > FRESH_REOFFER_MARK_PRUNE:
-            self._fresh_marked.clear()
+            # Entries past the throttle window carry no information.
+            cutoff = time.monotonic() - FRESH_REOFFER_MARK_SECONDS
+            self._fresh_marked = {k: at for k, at in list(self._fresh_marked.items()) if at >= cutoff}
         wrote: list[bool] = []
 
         def mark(tx):
             wrote.clear()  # Firestore may retry this callback.
             if not tx.get('merge_holds', key).get('held'):
-                tx.put('merge_holds', key, {'held': True, 'held_at': now})
+                tx.put('merge_holds', key, {'held': True, 'held_at': now, 'reoffer': FRESH_REOFFER})
                 wrote.append(True)
 
         try:
@@ -220,30 +232,40 @@ class OrderedMerge:
             self._fresh_marked[key] = time.monotonic()
             if wrote:
                 logger.info('event=batch_merge outcome=fresh_reoffer_marked source=%s count=1', self.commit_source)
-        except GoogleAPICallError as error:
-            # The marker is a wake hint; the commit that precedes it stands.
+        except Exception as error:  # noqa: BLE001
+            # The marker is a wake hint. Whatever the store raises (contention exhausted, a
+            # driver error), the drain that called this must go on.
             logger.warning(
                 'event=batch_merge outcome=fresh_reoffer_mark_retry source=%s exception_type=%s count=1',
                 self.commit_source,
                 type(error).__name__,
             )
 
-    def _fresh_left_waiting(self, key: str, now: float, committed: bool) -> bool:
+    def _fresh_left_waiting(self, key: str, now: float, committed: bool, wait: float) -> bool:
         """Record that a call left ready fresh rows on the probe page; False once the owner has
-        stayed that way ``FRESH_REOFFER_MAX_SECONDS`` without a commit in this process.
+        stayed that way for the head wait plus ``FRESH_REOFFER_MAX_SECONDS`` without a commit
+        in this process.
 
         The bound stops a row that never commits (for a reason this code does not foresee) from
-        keeping its owner on every maintenance pass for good. A commit, or a gap of
+        keeping its owner on every maintenance pass for good. It is longer than any head wait,
+        so a row inside its wait is never dropped. A commit, or a gap of
         ``FRESH_REOFFER_GAP_SECONDS`` between sightings, starts the clock again."""
         if not fresh_reoffer_marker_enabled():
             return False
-        if len(self._fresh_stalled) > FRESH_REOFFER_MARK_PRUNE and key not in self._fresh_stalled:
-            self._fresh_stalled.clear()
-        since, seen = self._fresh_stalled.get(key, (now, now))
+        stalled = self._fresh_stalled
+        if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
+            # Drop owners not seen for a gap (their clock would restart anyway); if that is
+            # not enough, the one seen longest ago. Other owners keep their clocks.
+            for other, (_, seen) in list(stalled.items()):
+                if now - seen > FRESH_REOFFER_GAP_SECONDS:
+                    stalled.pop(other, None)
+            if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
+                stalled.pop(min(list(stalled.items()), key=lambda item: item[1][1])[0], None)
+        since, seen = stalled.get(key, (now, now))
         if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
             since = now
-        self._fresh_stalled[key] = (since, now)
-        if now - since >= FRESH_REOFFER_MAX_SECONDS:
+        stalled[key] = (since, now)
+        if now - since >= max(0.0, wait) + FRESH_REOFFER_MAX_SECONDS:
             logger.warning('event=batch_merge outcome=fresh_reoffer_gave_up source=%s count=1', self.commit_source)
             return False
         self._fresh_waiting.add(key)
@@ -368,7 +390,9 @@ class OrderedMerge:
                 # maintenance re-offers this owner, and the durable marker
                 # (owner key only) survives a restart.
                 held['over_cap'] = True
-                if not tx.get('merge_holds', key).get('held'):
+                mark = tx.get('merge_holds', key)
+                if not mark.get('held') or mark.get('reoffer'):
+                    # A marker held only for the fresh re-offer becomes a depth hold.
                     tx.put('merge_holds', key, {'held': True, 'held_at': now})
             if fresh is not None:
                 # Fresh-first (David's fresh bar, 2026-10-20): the probed fresh
@@ -539,7 +563,6 @@ class OrderedMerge:
                 logger.warning(
                     'event=batch_merge outcome=fresh_probe_full_no_ready source=%s count=1', self.commit_source
                 )
-            refused = False
             if fresh is not None:
                 try:
                     entry = self.store.run(lambda tx: commit(tx, fresh=fresh, skipped=skipped))
@@ -547,16 +570,17 @@ class OrderedMerge:
                     # A fence on that fresh row refuses only it; the head wait
                     # below still releases the owner's other ready rows.
                     entry = None
-                    refused = True
                     fresh_first.clear()
                     bypass.clear()
             ready_left = sum(row.get('state') == 'result_ready' for row in pending) - (1 if entry is not None else 0)
-            if ready_left > 0 and not refused and fenced is None:
+            if ready_left > 0 and fenced is None:
                 # Ready fresh rows remain on the page. If this call commits nothing they are
-                # inside their wait, and without a marker nothing drains this owner again
-                # until one of its own units settles. (A drain that stops at its budget
-                # marks through drain_budget_spent.) A fenced owner is left to its fence.
-                if self._fresh_left_waiting(key, now, entry is not None) and entry is None:
+                # inside their wait (or the picked row was refused while others may be fine),
+                # and without a marker nothing drains this owner again until one of its own
+                # units settles. (A drain that stops at its budget marks through
+                # drain_budget_spent.) An owner whose strict transaction was fenced is left
+                # to its fence.
+                if self._fresh_left_waiting(key, now, entry is not None, wait) and entry is None:
                     self._reoffer_fresh(key, now)
         if entry is None and fenced is not None:
             raise fenced

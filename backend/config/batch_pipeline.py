@@ -671,9 +671,9 @@ def fresh_reoffer_marker_enabled() -> bool:
     depth-hold marker for a held-backlog head, and maintenance's ready page (the 100 oldest
     ``result_ready`` rows) is full of held backlog rows. 2026-11-13: 23 owners with about 3,400
     ready fresh rows committed nothing once their own units stopped settling. On, the merge
-    writes the existing ``merge_holds`` marker and maintenance re-offers the owner until a drain
-    finds no ready fresh row. ``false`` stops new marker writes for this reason; markers already
-    written are cleared by maintenance like any hold marker.
+    writes the existing ``merge_holds`` marker (with ``reoffer: fresh``) and maintenance re-offers
+    the owner until a drain finds no ready fresh row. ``false`` stops new marker writes for this
+    reason; re-offer markers already written are cleared on their owner's next maintenance visit.
     """
     from config.policy import kill_switch
 
