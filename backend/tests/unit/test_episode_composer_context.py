@@ -89,6 +89,8 @@ def test_prompt_contains_guarded_background_and_scales_output(monkeypatch):
         [row], owner='Synthetic', tz=ZoneInfo('UTC'), language='English', context=('A gardener', 'A rain sensor')
     )
     assert '2550-3450' in messages[0][1] and 'do not establish attendance' in messages[0][1]
+    assert 'do not turn a possible suggestion into an assigned task' in messages[0][1]
+    assert 'Do not infer whole-day coverage' in messages[0][1]
     assert 'About the owner' in messages[1][1] and 'Relevant memories' in messages[1][1]
     assert messages[1][1].index('Transcript:') < messages[1][1].index('About the owner')
     before = composer.fingerprint([row])

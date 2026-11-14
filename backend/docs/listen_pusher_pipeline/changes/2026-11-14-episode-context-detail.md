@@ -64,3 +64,7 @@ plus bounded people/profile/goals reads; the shared thirty-second cache reduces
 repeated reads but does not promise a hit per episode. At 27000 cold composes
 that is an upper bound of 27 million candidate records/day, not a measurement
 of actual Firestore billable reads. No fleet scan is introduced.
+
+Context-on prompts also require grounded ledes and follow-ups: no whole-day or
+day-ended narrative beyond captured clocks, no speaker attribution guessed from
+background, and no tentative suggestion promoted into an assigned task.

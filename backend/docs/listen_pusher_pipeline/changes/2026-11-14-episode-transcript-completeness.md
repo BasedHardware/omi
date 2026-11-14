@@ -24,3 +24,8 @@ completed-status-only gate; independently set
 `EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED=false` to remove the projection signal.
 No composer version or fingerprint input changes; deployment alone does not
 request regeneration of old episodes. Runtime/deployment is not qualified here.
+
+The legacy `episode_transcription_pending_at` receipt also holds an empty member
+when no Home stamp exists. The projection signal respects the global
+`EPISODES_ENABLED` switch before looking up an episode. Owner-context rendering
+accepts stored non-string metadata without losing composition.

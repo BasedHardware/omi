@@ -93,7 +93,7 @@ def owner_block(
             if not p.get('is_dismissed')
         ],
     }
-    return bounded_text(json.dumps(data, ensure_ascii=False), COMPOSER_PROFILE_TOKENS)
+    return bounded_text(json.dumps(data, ensure_ascii=False, default=str), COMPOSER_PROFILE_TOKENS)
 
 
 def gather(

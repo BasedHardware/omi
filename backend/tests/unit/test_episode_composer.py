@@ -1774,3 +1774,16 @@ def test_projected_transcript_rearms_already_composed_old_episode_before_enrichm
 def test_transcript_wait_config_is_bounded(monkeypatch, raw, expected):
     monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raw)
     assert config.episode_compose_transcript_wait_seconds() == expected
+
+
+def test_legacy_episode_pending_stamp_waits_when_home_stamp_is_absent(store):
+    store.rows['c2'].update(transcript_segments=[], episode_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+
+
+def test_projection_signal_respects_global_episode_switch(store, monkeypatch):
+    seen = []
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'false')
+    monkeypatch.setattr(composer, 'schedule_for_conversation', lambda *a, **kw: seen.append(1))
+    composer.transcript_projected(UID, store.rows['c1'])
+    assert seen == []

@@ -46,6 +46,7 @@ from utils.conversations import phase_shadow
 from config.episodes import (
     COMPOSER_FEATURE,
     episode_composer_context_enabled,
+    episodes_enabled_for,
     episode_composer_detail_enabled,
     episode_compose_transcript_wait_enabled,
     episode_compose_transcript_wait_seconds,
@@ -332,7 +333,12 @@ def build_messages(
             'people, ongoing projects, references and preferences that the transcript actually discusses. '
             'They do not establish attendance, speaker identity or that an event occurred in this episode. '
             'Never import past events, commitments or unsupported facts into this summary. '
-            'The transcript wins over conflicting or stale background; preserve uncertainty.'
+            'The transcript wins over conflicting or stale background; preserve uncertainty. '
+            'Ground every lede, point and follow-up in speech or its clock metadata. Do not infer '
+            'whole-day coverage, the end of a day, or a narrative sequence beyond the captured evidence. '
+            'Keep tentative ideas tentative. A follow-up requires an explicit commitment or direct request; '
+            'do not turn a possible suggestion into an assigned task. When speaker attribution is uncertain, '
+            'describe the discussion without naming a speaker rather than resolving it from background.'
         )
         profile, memories = context
         blocks.append(f'About the owner (background only):\n{profile or "(unavailable)"}')
@@ -763,7 +769,7 @@ def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
 
 
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
-    pending = _utc(row.get('home_transcription_pending_at'))
+    pending = _utc(row.get('home_transcription_pending_at')) or _utc(row.get('episode_transcription_pending_at'))
     if episode_compose_transcript_wait_enabled() and pending and not _segments(row):
         return pending + timedelta(seconds=episode_compose_transcript_wait_seconds())
     return None
@@ -1757,7 +1763,11 @@ def schedule_for_conversation(
 
 def transcript_projected(uid: str, row: Mapping[str, Any], *, firestore_client: Any = None) -> None:
     """Post-commit signal, before playback/enrichment can stall. No model call on this thread."""
-    if not episode_compose_transcript_ready_enabled() or not episode_composer_enabled():
+    if (
+        not episodes_enabled_for(uid)
+        or not episode_compose_transcript_ready_enabled()
+        or not episode_composer_enabled()
+    ):
         return
     from utils.episodes.service import Collaborators
 
