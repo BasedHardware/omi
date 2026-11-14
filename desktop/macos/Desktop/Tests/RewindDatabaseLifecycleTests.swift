@@ -268,9 +268,23 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
       domain: "GRDB.DatabaseError",
       code: 1,
       userInfo: [NSLocalizedDescriptionKey: "SQLite error 10: disk I/O error"])
-    for _ in 0..<5 {
+    for _ in 0..<4 {
       await RewindDatabase.shared.reportQueryError(ioError)
     }
+
+    // Exercise the real health read, not the counter reset API directly.
+    // AgentSync previously supplied the only successful-query signal.
+    _ = try await TranscriptionStorage.shared.getStats()
+    for _ in 0..<4 {
+      await RewindDatabase.shared.reportQueryError(ioError)
+    }
+    let isInitializedAfterHealthyRead = await RewindDatabase.shared.isInitialized
+    XCTAssertTrue(
+      isInitializedAfterHealthyRead,
+      "a successful health read must prevent sporadic errors accumulating across the session"
+    )
+
+    await RewindDatabase.shared.reportQueryError(ioError)
 
     let isInitializedAfterFailures = await RewindDatabase.shared.isInitialized
     XCTAssertFalse(
@@ -283,6 +297,7 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
     XCTAssertTrue(isInitializedAfterRecovery)
 
     await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
     RewindDatabase.currentUserId = nil
   }
 
