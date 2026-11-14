@@ -35,6 +35,21 @@ def enabled() -> bool:
     return os.getenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
+def silence_seconds() -> int | None:
+    """Phone-side silence timer, or ``None`` to tell phones not to send silence ends.
+
+    ``SYNC_CAPTURE_END_SILENCE_SECONDS``: default 120, clamped to 60..1800;
+    ``0``, a malformed value or the kill switch withdraws it.
+    """
+    if not enabled():
+        return None
+    try:
+        value = int(os.getenv('SYNC_CAPTURE_END_SILENCE_SECONDS', '120'))
+    except (TypeError, ValueError):
+        return None
+    return None if value <= 0 else max(60, min(1800, value))
+
+
 def _collector(kind: Any, name: str, doc: str, labels: list[str], **kwargs: Any) -> Any:
     try:
         return kind(name, doc, labels, **kwargs)

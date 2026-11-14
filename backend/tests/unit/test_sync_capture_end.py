@@ -256,3 +256,25 @@ def test_callback_reads_the_marker_only_for_a_row_with_a_recording_session(monke
     load.reset_mock()
     assert callback._end_proven('u', conversation) is False
     load.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'raw, expected', [(None, 120), ('90', 90), ('5', 60), ('99999', 1800), ('0', None), ('-3', None), ('soon', None)]
+)
+def test_phone_silence_timer_is_bounded_and_can_be_withdrawn(monkeypatch, raw, expected):
+    monkeypatch.delenv('SYNC_UPLOAD_WATERMARK_ENABLED', raising=False)
+    if raw is None:
+        monkeypatch.delenv('SYNC_CAPTURE_END_SILENCE_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('SYNC_CAPTURE_END_SILENCE_SECONDS', raw)
+    assert capture_end.silence_seconds() == expected
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    assert capture_end.silence_seconds() is None
+
+
+def test_status_event_carries_the_silence_timer_only_when_set():
+    from models.message_event import MessageServiceStatusEvent
+
+    assert 'end_silence_seconds' not in MessageServiceStatusEvent(status='mobile_batch_admission').to_json()
+    sent = MessageServiceStatusEvent(status='mobile_batch_admission', end_silence_seconds=120).to_json()
+    assert sent['end_silence_seconds'] == 120
