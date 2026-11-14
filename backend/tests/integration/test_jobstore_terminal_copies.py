@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from psycopg import OperationalError  # pyright: ignore[reportMissingImports]
 
 from database import legal_holds
 from database.batch_pipeline_conversation_purge import purge_conversation
@@ -262,3 +263,21 @@ def test_raw_sql_fenced_retirement_cannot_skip_terminal_receipt(result):
         assert effect(result) is None
         with adapter.units.pool.connection() as conn:
             assert require_terminal(conn, row(result))
+
+
+@pytest.mark.parametrize('terminal', ['cancelled', 'collision'], indirect=True)
+def test_receipt_transport_error_pins_actual_destructive_gate(terminal, monkeypatch):
+    r = terminal
+    original = row(r.result)
+    assert original['generation'] is None and receipt(r)
+
+    def disconnected(*args, **kwargs):
+        raise OperationalError('synthetic PG transport lost')
+
+    with pytest.raises(ConnectionError, match='lookup unresolved'):
+        with r.unit() as authority:
+            monkeypatch.setattr(r.handoff.pool, 'connection', disconnected)
+            authority.remote(lambda: r.copies._absent(r.uid, original), target=payload(original)['uri'])
+    gate = r.handoff.client.collection(legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION).document(r.uid).get().to_dict()
+    assert gate['remote_inflight'] and gate['remote_target'] == payload(original)['uri']
+    assert r.copies._reference(original).get().exists

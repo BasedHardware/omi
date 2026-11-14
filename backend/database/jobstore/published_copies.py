@@ -9,6 +9,7 @@ from typing import Any
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
+from psycopg import Error as PostgresError  # pyright: ignore[reportMissingImports]
 
 from database import rpc_deadline
 from database.jobstore.authority import AuthorityRefused, fingerprint
@@ -141,8 +142,11 @@ class PublishedCopies:
         if row['generation'] is None:
             # Only a durable original terminal receipt can authorize this:
             # sticky 499/412 creates no owned generation to delete or adopt.
-            with self.handoff.pool.connection(timeout=2) as conn:
-                require_terminal(conn, row)
+            try:
+                with self.handoff.pool.connection(timeout=2) as conn:
+                    require_terminal(conn, row)
+            except PostgresError as error:
+                raise ConnectionError('original terminal receipt lookup unresolved') from error
             return
         if self.storage is None:
             from utils.other.local_storage import create_storage_client

@@ -271,3 +271,13 @@ terminal evidence. No session capability survives registry retirement. Older
 receipt-less fenced rows, prepared reservations, late audio/intake and remaining
 cohorts remain unresolved. Production runner/scheduling and real remote C4 are
 still gates; tests seed account terminal P rather than qualifying orchestration.
+
+R14 runtime audit: `batch_pipeline_intake.admit(provider_plan=...)` and
+`ProviderHandoff.deliver/fence_ticket` are explicit seams, not a selected serving
+path. `provider_stt.transcribe_async(..., fence_ticket=...)` has the actual paid
+START boundary, but `provider_stt.from_env`, `serving_for_stage` and
+`diarizer.batch_pipeline_runtime` still construct the FS/shadow stores.
+`QueueConsumer/run_push_async` still use the existing outbox entrypoints.
+The next runner integration must join these real callers, preserve their
+recorded funding/failover policy, and route unsupported cohorts explicitly;
+selecting a generic PostgresStore mirror is not typed provider serving.
