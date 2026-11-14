@@ -1208,16 +1208,16 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_receipt = None
     delivery_outcome = None
     summary_changed = False
-    noted = False
+    ledger_stages: tuple[str, ...] = ()
     source_revision = 0
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed, delivery_outcome, noted, source_revision
+        nonlocal summary_receipt, summary_changed, delivery_outcome, ledger_stages, source_revision
         summary_receipt = None
         delivery_outcome = None
         summary_changed = False
-        noted = False
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
@@ -1287,12 +1287,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             _offload_processing_transcript(uid, write_data, existing)
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
-            if (
-                summary_receipt is not None
-                and summary_receipt.get('present')
-                and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
-            ):
-                noted = True
+            ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1306,12 +1301,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
-        if (
-            summary_receipt is not None
-            and summary_receipt.get('present')
-            and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
-        ):
-            noted = True
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
@@ -1319,24 +1309,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
     run_preloaded_transactional(db, _write_processing_result)
-    if noted:
-        pipeline_ledger.advance(
+    if ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
             uid,
             conversation_data['id'],
-            pipeline_ledger.NOTED,
-            revision=max(1, source_revision),
-            reopen=True,
-            source_ref=conversation_ref,
-            owner_ref=user_ref,
-            firestore_client=db,
-        )
-        # The first durable summary is the Home-ready point. Record the terminal
-        # so a noted row cannot sit past its deadline and page forever. No
-        # explicit revision: the ledger advances from the row's own revision.
-        pipeline_ledger.advance(
-            uid,
-            conversation_data['id'],
-            pipeline_ledger.DONE,
+            ledger_stages,
+            revision=source_revision,
             source_ref=conversation_ref,
             owner_ref=user_ref,
             firestore_client=db,
@@ -1392,13 +1371,13 @@ def persist_processing_result_with_lifecycle(
     summary_changed = False
     notes_refresh_state_write = None
     terminal_refusal = None
-    noted = False
+    ledger_stages: tuple[str, ...] = ()
     source_revision = 0
     family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, noted, source_revision
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1406,7 +1385,7 @@ def persist_processing_result_with_lifecycle(
         stale_sync_revision = False
         first_completed = False
         notes_refresh_state_write = None
-        noted = False
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
@@ -1616,12 +1595,7 @@ def persist_processing_result_with_lifecycle(
 
         _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
-        if (
-            summary_receipt is not None
-            and summary_receipt.get('present')
-            and summary_receipt.get('reason') in {'summary', 'accept_unknown'}
-        ):
-            noted = True
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1645,24 +1619,13 @@ def persist_processing_result_with_lifecycle(
         persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
-    if persisted and noted:
-        pipeline_ledger.advance(
+    if persisted and ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
             uid,
             conversation_data['id'],
-            pipeline_ledger.NOTED,
-            revision=max(1, source_revision),
-            reopen=True,
-            source_ref=conversation_ref,
-            owner_ref=user_ref,
-            firestore_client=db,
-        )
-        # The first durable summary is the Home-ready point. Record the terminal
-        # so a noted row cannot sit past its deadline and page forever. No
-        # explicit revision: the ledger advances from the row's own revision.
-        pipeline_ledger.advance(
-            uid,
-            conversation_data['id'],
-            pipeline_ledger.DONE,
+            ledger_stages,
+            revision=source_revision,
             source_ref=conversation_ref,
             owner_ref=user_ref,
             firestore_client=db,

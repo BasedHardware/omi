@@ -343,6 +343,97 @@ def test_advance_duplicate_does_not_double_count(monkeypatch):
     assert len(doc['transitions']) == 1
 
 
+def test_then_stages_ride_one_write_and_keep_both_transitions(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    ledger.advance('uid', 'capture', ledger.TRANSCRIBED, now=100, firestore_client=client)
+    assert ledger.advance(
+        'uid', 'capture', ledger.NOTED, then=(ledger.DONE,), now=200, revision=7, reopen=True, firestore_client=client
+    )
+    doc = client.store['users/uid/pipeline_ledger/capture']
+    assert doc['stage'] == ledger.DONE and doc['terminal'] is True
+    assert doc['home_ready_at'] == 200 and doc['episode_done_at'] == 200
+    assert [entry['stage'] for entry in doc['transitions']] == [ledger.TRANSCRIBED, ledger.NOTED, ledger.DONE]
+    assert doc['revision'] == 8
+
+
+def test_then_stage_still_lands_when_the_first_stage_is_a_duplicate(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    ledger.advance('uid', 'capture', ledger.NOTED, now=100, revision=7, firestore_client=client)
+    assert ledger.advance(
+        'uid', 'capture', ledger.NOTED, then=(ledger.DONE,), now=200, revision=7, reopen=True, firestore_client=client
+    )
+    doc = client.store['users/uid/pipeline_ledger/capture']
+    assert doc['stage'] == ledger.DONE and doc['home_ready_at'] == 100
+
+
+def test_then_stage_never_reopens_a_terminal(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    ledger.advance('uid', 'capture', ledger.NOISE, now=100, revision=9, firestore_client=client)
+    assert not ledger.advance(
+        'uid', 'capture', ledger.NOTED, then=(ledger.DONE,), now=200, revision=5, reopen=True, firestore_client=client
+    )
+    assert client.store['users/uid/pipeline_ledger/capture']['stage'] == ledger.NOISE
+
+
+def test_summary_receipt_maps_to_ledger_stages():
+    assert ledger.summary_stages(None) == ()
+    assert ledger.summary_stages({'present': True, 'reason': 'summary'}) == (ledger.NOTED, ledger.DONE)
+    assert ledger.summary_stages({'present': True, 'reason': 'accept_unknown'}) == (ledger.NOTED, ledger.DONE)
+    assert ledger.summary_stages({'present': False, 'reason': 'discarded'}) == (ledger.NOISE,)
+    assert ledger.summary_stages({'present': False, 'reason': 'local_only'}) == ()
+    assert ledger.summary_stages({'present': False, 'reason': 'summary'}) == ()
+
+
+def test_discarded_summary_is_the_noise_terminal_and_a_later_summary_reopens_it(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    client.store['users/uid'] = {'id': 'uid'}
+    client.store['users/uid/conversations/capture'] = {'id': 'capture'}
+    owner = client.collection('users').document('uid')
+    source = owner.collection('conversations').document('capture')
+    ledger.advance('uid', 'capture', ledger.TRANSCRIBED, now=100, firestore_client=client)
+    assert ledger.record_summary(
+        'uid', 'capture', (ledger.NOISE,), revision=5, source_ref=source, owner_ref=owner, firestore_client=client
+    )
+    doc = client.store['users/uid/pipeline_ledger/capture']
+    assert doc['stage'] == ledger.NOISE and doc['terminal_reason'] == ledger.NOISE and doc['reason'] == 'noise'
+    assert ledger.record_summary(
+        'uid',
+        'capture',
+        (ledger.NOTED, ledger.DONE),
+        revision=6,
+        source_ref=source,
+        owner_ref=owner,
+        firestore_client=client,
+    )
+    assert client.store['users/uid/pipeline_ledger/capture']['stage'] == ledger.DONE
+
+
+def test_record_summary_writes_nothing_for_a_deleted_source(monkeypatch):
+    monkeypatch.setenv('PIPELINE_LEDGER', 'on')
+    client = _FakeClient()
+    client.store['users/uid'] = {'id': 'uid'}
+    client.store['users/uid/conversations/capture'] = {'id': 'capture', 'deleted': True}
+    owner = client.collection('users').document('uid')
+    source = owner.collection('conversations').document('capture')
+    assert not ledger.record_summary(
+        'uid',
+        'capture',
+        (ledger.NOTED, ledger.DONE),
+        revision=5,
+        source_ref=source,
+        owner_ref=owner,
+        firestore_client=client,
+    )
+    assert 'users/uid/pipeline_ledger/capture' not in client.store
+    assert not ledger.record_summary(
+        'uid', 'capture', (), revision=5, source_ref=source, owner_ref=owner, firestore_client=client
+    )
+
+
 def test_metrics_are_content_free(monkeypatch):
     monkeypatch.setenv('PIPELINE_LEDGER', 'on')
     ledger.advance('uid-secret', 'capture-secret', ledger.SEALED, now=100, firestore_client=_FakeClient())

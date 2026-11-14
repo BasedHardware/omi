@@ -164,7 +164,7 @@ def test_delivery_counter_only_after_committed_result_not_transaction_attempts(m
         assert not calls and not client.commits
     else:
         assert conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
-        # One expired real transaction, one retry, and the ledger's own noted
-        # and done transactions.
-        assert len(client.transactions) == 4 and len(client.commits) == 1
+        # One expired real transaction, one retry, and one ledger transaction
+        # that writes noted and done together.
+        assert len(client.transactions) == 3 and len(client.commits) == 1
         assert calls == [('summary', 'delivered')]

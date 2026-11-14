@@ -358,57 +358,112 @@ def _commit(
     *,
     source_ref: Any = None,
     owner_ref: Any = None,
+    then: tuple[str, ...] = (),
     **kwargs: Any,
 ) -> str:
-    observed: dict[str, Any] = {}
+    hops: list[dict[str, Any]] = []
 
     @firestore.transactional
     def commit(transaction: Any) -> str:
+        hops.clear()  # A transactional retry re-runs this body.
         # Fence a delayed post-commit write against source deletion and account
         # erasure inside the same transaction that would create the row.
         if owner_ref is not None:
             owner = owner_ref.get(transaction=transaction)
             if not getattr(owner, 'exists', False):
-                observed['outcome'] = 'deleted'
                 return 'deleted'
         if source_ref is not None:
             source = source_ref.get(transaction=transaction)
             if not getattr(source, 'exists', False) or (source.to_dict() or {}).get('deleted'):
-                observed['outcome'] = 'deleted'
                 return 'deleted'
         snapshot = ref.get(transaction=transaction)
-        existing = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
-        plan = plan_advance(existing, stage, **kwargs)
-        if plan.doc is None:
-            observed['outcome'] = plan.outcome
-            return plan.outcome
-        plan.doc['owner_key'] = owner_key(uid)
-        transaction.set(ref, plan.doc)
-        observed.update(
-            outcome='written',
-            previous=(existing or {}).get('stage'),
-            entered_at=(existing or {}).get('entered_at'),
-            terminal=plan.doc['terminal'],
-            end_type=plan.doc['end_type'],
-        )
+        current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        first = plan_advance(current, stage, **kwargs)
+        if first.doc is None and (not then or first.outcome not in {'duplicate', 'stale'}):
+            return first.outcome
+        # ``then`` stages ride the same transaction: one read set and one write
+        # for a capture that passes several stages at one real commit. They
+        # advance from the row's own revision and never re-open a terminal.
+        steps = [(stage, first)] + [(follow, None) for follow in then]
+        doc = current
+        for name, plan in steps:
+            if plan is None:
+                plan = plan_advance(doc, name, now=kwargs.get('now'))
+            if plan.doc is None:
+                continue
+            hops.append({'from': (doc or {}).get('stage'), 'to': name, 'entered_at': (doc or {}).get('entered_at')})
+            doc = plan.doc
+        if not hops or doc is None:
+            return first.outcome
+        doc['owner_key'] = owner_key(uid)
+        transaction.set(ref, doc)
+        hops[-1].update(terminal=doc['terminal'], end_type=doc['end_type'])
         return 'written'
 
     outcome = run_transactional(client, commit, transient=True)
-    if observed.get('outcome') == 'written':
-        previous = observed.get('previous')
+    if outcome == 'written':
         try:
-            _TRANSITION.labels(**{'from': stage_label(previous or 'none'), 'to': stage_label(stage)}).inc()
-            if previous:
-                _ROWS.labels(stage=stage_label(previous)).dec()
-            _ROWS.labels(stage=stage_label(stage)).inc()
-            entered_at = observed.get('entered_at')
-            if isinstance(entered_at, (int, float)):
-                _STAGE_SECONDS.labels(stage=stage_label(previous or '')).observe(time.time() - entered_at)
-            if observed.get('terminal') and observed.get('end_type') == 'unknown':
+            for hop in hops:
+                previous = hop['from']
+                _TRANSITION.labels(**{'from': stage_label(previous or 'none'), 'to': stage_label(hop['to'])}).inc()
+                if previous:
+                    _ROWS.labels(stage=stage_label(previous)).dec()
+                _ROWS.labels(stage=stage_label(hop['to'])).inc()
+                entered_at = hop['entered_at']
+                if isinstance(entered_at, (int, float)):
+                    _STAGE_SECONDS.labels(stage=stage_label(previous or '')).observe(time.time() - entered_at)
+            if hops and hops[-1].get('terminal') and hops[-1].get('end_type') == 'unknown':
                 _UNKNOWN_END.inc()
         except Exception:  # Metrics must never break a transition.
             pass
     return outcome
+
+
+SUMMARY_RECEIPT_REASONS = frozenset({'summary', 'accept_unknown'})
+
+
+def summary_stages(receipt: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """Ledger stages a committed summary receipt proves, in order.
+
+    A present first durable summary is the Home-ready point: ``noted`` then
+    ``done`` in one write, so a noted row cannot sit past its deadline. A
+    receipted relevance discard is the ``noise`` terminal. Anything else (a
+    deferred, locked or local-only result) proves nothing and writes nothing.
+    """
+    if receipt is None:
+        return ()
+    if receipt.get('present') and receipt.get('reason') in SUMMARY_RECEIPT_REASONS:
+        return (NOTED, DONE)
+    if receipt.get('reason') == 'discarded' and not receipt.get('present'):
+        return (NOISE,)
+    return ()
+
+
+def record_summary(
+    uid: str,
+    capture_id: str,
+    stages: tuple[str, ...],
+    *,
+    revision: int,
+    source_ref: Any,
+    owner_ref: Any,
+    firestore_client: Any = None,
+) -> bool:
+    """One fenced ledger write for the stages :func:`summary_stages` returned."""
+    if not stages:
+        return False
+    return advance(
+        uid,
+        capture_id,
+        stages[0],
+        then=stages[1:],
+        reason='noise' if stages[0] == NOISE else None,
+        revision=max(1, revision),
+        reopen=True,
+        source_ref=source_ref,
+        owner_ref=owner_ref,
+        firestore_client=firestore_client,
+    )
 
 
 def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = None, **fields: Any) -> bool:
@@ -419,7 +474,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
     ``revision``, ``reopen``, ``speech_seconds``, ``has_speech``,
     ``speech_basis``, ``home_ready_at``, ``episode_done_at``). ``source_ref``
     and ``owner_ref`` fence the write against a deleted source or erased
-    account. Returns ``True`` only when a new document was committed. Every
+    account. ``then`` names stages that follow ``stage`` in the same write. Returns ``True`` only when a new document was committed. Every
     error is swallowed: the real transition already committed and stays
     authoritative.
     """
@@ -430,6 +485,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
         client = firestore_client if firestore_client is not None else get_firestore_client()
         source_ref = fields.pop('source_ref', None)
         owner_ref = fields.pop('owner_ref', None)
+        then = tuple(fields.pop('then', ()) or ())
         outcome = _commit(
             client,
             ledger_ref(client, uid, capture_id),
@@ -437,6 +493,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
             stage,
             source_ref=source_ref,
             owner_ref=owner_ref,
+            then=then,
             **fields,
         )
         _observe_write('ok' if outcome == 'written' else outcome)
