@@ -107,7 +107,8 @@ def test_provider_custody_merges_once_and_replay_never_calls_vendor(store_backen
         artifacts,
         stt=stt,
         allowed=lambda *_: True,
-        inspect=lambda *_: (b'\0\0' * 80000, 5.0, [{'start': 0.5, 'end': 1.5}]),
+        # 2.5 s of speech: above the short-speech skip threshold, so the vendor is called.
+        inspect=lambda *_: (b'\0\0' * 80000, 5.0, [{'start': 0.5, 'end': 3.0}]),
         clock=lambda: 200.0,
     )
     assert runner.run(work.segment_id).outcome == 'done'

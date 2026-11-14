@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 282,
+  "count": 284,
   "names": {
+    "BATCH_PIPELINE_DELIVERED_SHARE_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-13", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED": {"owner": "provider-stt-drain", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS": {"owner": "provider-stt-drain", "review_by": "2026-12-14"},
@@ -95,6 +96,7 @@
     "BATCH_VENDOR_HELD_REDRIVE_ENABLED": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_REDRIVE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_HELD_STALE_GRACE_SECONDS": {"owner": "vroute-d / two-lane lead", "review_by": "2026-11-29"},
+    "BATCH_VENDOR_MIN_SPEECH_SECONDS": {"owner": "blindspot-audit / two-lane lead", "review_by": "2026-12-13"},
     "BATCH_VENDOR_OVERFLOW_ENABLED": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_OVERFLOW_ENTER_SECONDS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
     "BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS": {"owner": "overflow / two-lane lead", "review_by": "2026-11-29"},
