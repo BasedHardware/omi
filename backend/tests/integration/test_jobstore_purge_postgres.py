@@ -210,3 +210,48 @@ def test_a_failed_reconcile_raises_so_the_deletion_retries(stores, monkeypatch):
     monkeypatch.setattr(dual, 'copy_current', fail)
     with pytest.raises(RuntimeError):
         dual.purge_owner_now(uid)
+
+
+@pytest.mark.parametrize('cached', [False, True])
+def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monkeypatch, cached):
+    from database import batch_pipeline_shadow_hook as hook
+    from database.jobstore import dual_store
+
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-cold'
+    customer.add_user(uid)
+    key = privacy_owner_key(uid)
+    rows = _owner_rows(uid, 'cold') + [
+        ('merge_holds', key, {'held': True}),
+        ('pull_claims', scheduler_control_key(key), {'token': 'old', 'expires_at': 20}),
+    ]
+    _write(dual, rows)
+    for table, name, _ in rows:
+        primary.delete(table, name)
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+    monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
+    monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)
+    monkeypatch.setattr(dual_store, '_SHADOWED', {dual.namespace: dual} if cached else {})
+    if not cached:
+        monkeypatch.setenv('JOBSTORE_PG_HOST', 'synthetic-target-not-dialed')
+        # Restart path: only the configured cold-copy target remains; no active mirror.
+        from database.jobstore.connection import Pool
+        from database.jobstore.postgres_store import PostgresStore
+
+        cold_pool = Pool('', connect=postgres_connect())
+        cold = PostgresStore(dual.namespace, pool=cold_pool, customer_client=None)
+        monkeypatch.setattr(dual_store, '_configured_copy', lambda _primary: dual_store.DualStore(primary, cold))
+    assert hook.purge_owner(dual.namespace, uid) >= len(rows)
+    if cached:
+        assert not any(_postgres(shadow, table, name) for table, name, _ in rows)
+    else:
+        # The one-shot erasure handle closes its pool, so inspect with a fresh handle.
+        from database.jobstore.connection import Pool
+        from database.jobstore.postgres_store import PostgresStore
+
+        pool = Pool('', connect=postgres_connect())
+        try:
+            copy = PostgresStore(dual.namespace, pool=pool, customer_client=None)
+            assert not any(_postgres(copy, table, name) for table, name, _ in rows)
+        finally:
+            pool.close()
