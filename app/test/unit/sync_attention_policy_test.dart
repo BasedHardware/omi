@@ -1,5 +1,6 @@
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/sync_upload_refusal.dart';
+import 'package:omi/backend/http/api/conversations.dart' show SyncInvalidCaptureTimeException;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 
@@ -142,7 +143,7 @@ void main() {
           geolocation}) async {
         calls++;
         if (serverRecoveryEnabled) return UploadFilesResult.queued('recovered-after-rollout');
-        throw const SyncUploadHttpException(400, 'not yet accepted', reasonCode: 'invalid_capture_time');
+        throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
       },
     );
     final bytes = [1, 0, 0, 0, 42];

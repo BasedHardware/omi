@@ -761,7 +761,9 @@ class Wal {
   bool refusalRetryDue(int nowSeconds) {
     if (status != WalStatus.uploadRejected ||
         uploadRejectionReason == WalUploadRejection.tooLarge ||
-        uploadRejectionReason == WalUploadRejection.tooManyParts) return false;
+        uploadRejectionReason == WalUploadRejection.tooManyParts) {
+      return false;
+    }
     final pastFirstWeek = uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
     final recoverClock =
         !invalidCaptureTimeRecoveryOff && uploadRejectionReason == WalUploadRejection.invalidCaptureTime;
