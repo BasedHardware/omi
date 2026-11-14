@@ -578,6 +578,27 @@ class AppLocalizationsPt extends AppLocalizations {
   String get doubleTapAction => 'Ação de toque duplo';
 
   @override
+  String get singlePress => 'Toque único';
+
+  @override
+  String get triplePress => 'Toque triplo';
+
+  @override
+  String get longPress => 'Toque longo';
+
+  @override
+  String get singlePressAction => 'Ação de toque único';
+
+  @override
+  String get triplePressAction => 'Ação de toque triplo';
+
+  @override
+  String get turnOnOff => 'Ligar / Desligar';
+
+  @override
+  String get triplePressSubtitle => 'Requer firmware atualizado';
+
+  @override
   String get endAndProcess => 'Terminar e processar';
 
   @override

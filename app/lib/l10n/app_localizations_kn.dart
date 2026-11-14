@@ -579,6 +579,27 @@ class AppLocalizationsKn extends AppLocalizations {
   String get doubleTapAction => 'ಗುಣ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'ಆನ್ ಮಾಡಿ / ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'ಸಂವಾದ ಆತೊಡೆತು ಮತ್ತು ಪ್ರಕ್ರಿಯೆ';
 
   @override

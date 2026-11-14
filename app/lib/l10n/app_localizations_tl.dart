@@ -582,6 +582,27 @@ class AppLocalizationsTl extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Buksan / Patayin';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Tapusin & Proseso ang Pag-uusap';
 
   @override

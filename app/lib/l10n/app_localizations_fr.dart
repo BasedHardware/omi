@@ -584,6 +584,27 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTapAction => 'Action double appui';
 
   @override
+  String get singlePress => 'Un appui';
+
+  @override
+  String get triplePress => 'Triple appui';
+
+  @override
+  String get longPress => 'Appui long';
+
+  @override
+  String get singlePressAction => 'Action pour un appui';
+
+  @override
+  String get triplePressAction => 'Action pour triple appui';
+
+  @override
+  String get turnOnOff => 'Allumer / Éteindre';
+
+  @override
+  String get triplePressSubtitle => 'Firmware récent requis';
+
+  @override
   String get endAndProcess => 'Terminer et traiter la conversation';
 
   @override
