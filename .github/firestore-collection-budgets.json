@@ -178,5 +178,10 @@
       "reviewed": "2026-11-14"
     }
   ],
-  "exempt": []
+  "exempt": [
+    {
+      "collection": "agent_vm_reconciler_leases",
+      "reason": "Retired Cloud Agent VM reconciler lease state. PR #11795 removed the reconciler that wrote and polled it, so no runtime path schedules, claims, retries or reads it; the only remaining reference is the one-shot operator sweep backend/scripts/sweep_agent_vm_firestore.py, which deletes the collection and then reports matched=0 on every later run. It has no recurring read volume to budget. Remove this exemption together with the collection."
+    }
+  ]
 }
