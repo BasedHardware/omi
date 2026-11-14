@@ -34,6 +34,28 @@ describe("spendDailyQuery", () => {
     );
   });
 
+  it("counts one alternative per exclusive pair, gated on the margin basis", () => {
+    const sql = spendDailyQuery("2026-11-04", 7);
+    // The producer writes Modulate cash + modelled, and Stripe actual fees +
+    // the subscription estimate, as separate variable rows on the same day.
+    // Only in_margin_basis says which one counts; summing basis_class alone
+    // double counts both pairs.
+    expect(sql).toContain(
+      "SUM(IF(basis_class = 'variable' AND in_margin_basis, usd, NULL)) AS variable_usd"
+    );
+    expect(sql).toContain(
+      "SUM(IF(basis_class = 'variable' AND in_margin_basis AND STARTS_WITH(line, 'stt_'), usd, NULL)) AS listen_usd"
+    );
+    // The all-in total keeps its own flag.
+    expect(sql).toContain("SUM(IF(in_all_in, usd, NULL)) AS all_in_usd");
+  });
+
+  it("drops provisional rows like the producer's parity gate", () => {
+    expect(spendDailyQuery("2026-11-04", 7)).toContain(
+      "WHERE inputs_settled AND status != 'provisional'"
+    );
+  });
+
   it("rejects dates that are not real calendar days", () => {
     expect(isCalendarDate("2026-02-31")).toBe(false);
     expect(isCalendarDate("2026-02-29")).toBe(false);
