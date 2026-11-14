@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.575",
+      "date": "2026-11-14",
+      "changes": [
+        "The Floating Bar no longer steals keyboard focus or stays visible while snoozed when you work in another app",
+        "Fixed Screen Capture turning itself back on after you switch it off"
+      ]
+    },
+    {
       "version": "0.12.574",
       "date": "2026-11-11",
       "changes": [
