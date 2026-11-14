@@ -14,6 +14,7 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Mapping
+from datetime import datetime
 from functools import cache
 from typing import Any
 
@@ -115,7 +116,7 @@ def normalize(
     speech, decided, sent = _number(last_speech_at), _number(end_decided_at), _number(sent_at)
     if kind is None or speech is None or decided is None or sent is None:
         raise ValueError('invalid capture end')
-    if isinstance(pending_wals, bool) or not isinstance(pending_wals, int) or pending_wals < 0:
+    if type(pending_wals) is not int or pending_wals < 0:
         raise ValueError('invalid capture end')
     if speech > decided + TOLERANCE_SECONDS or decided > sent + TOLERANCE_SECONDS:
         raise ValueError('capture end clocks are out of order')
@@ -132,8 +133,9 @@ def normalize(
 
 
 def _seconds(value: Any) -> float:
-    stamp = getattr(value, 'timestamp', None)
-    return float(stamp()) if callable(stamp) else float(value or 0)
+    if isinstance(value, datetime):
+        return value.timestamp()
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
 
 
 def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
