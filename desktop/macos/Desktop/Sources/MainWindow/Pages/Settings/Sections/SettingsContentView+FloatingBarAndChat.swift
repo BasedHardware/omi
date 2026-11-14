@@ -78,21 +78,41 @@ extension SettingsContentView {
       // }
       // }
 
-      // settingsCard(settingId: "floatingbar.draggable") {
-      // HStack(spacing: OmiSpacing.lg) {
-      // VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-      // Text("Draggable Floating Bar")
-      // .scaledFont(size: OmiType.subheading, weight: .semibold)
-      // .foregroundColor(Ink.primary)
-      // Text("Allow repositioning the floating bar by dragging it.")
-      // .scaledFont(size: OmiType.body)
-      // .foregroundColor(Ink.secondary)
-      // }
-      // Spacer()
-      // Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-      // .toggleStyle(OmiToggleStyle())
-      // }
-      // }
+      settingsCard(settingId: "floatingbar.draggable") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Draggable Floating Bar")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+              Text("Allow repositioning the floating bar by dragging it.")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+            }
+            Spacer()
+            Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
+              .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
+          }
+
+          if shortcutSettings.draggableBarEnabled {
+            GlassSeparator()
+
+            HStack {
+              Text("Return the floating bar to the default top-center position.")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+
+              Spacer()
+
+              Button("Reset Position") {
+                FloatingControlBarManager.shared.resetPosition()
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          }
+        }
+      }
 
       settingsCard(settingId: "floatingbar.typedvoiceanswers") {
         HStack(spacing: OmiSpacing.lg) {
