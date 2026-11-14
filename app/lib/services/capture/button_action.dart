@@ -19,8 +19,6 @@ ButtonAction resolveSingleTapAction(int code) {
 }
 
 /// Double/triple stored codes: 0 end, 1 mute, 2 star, 3 off.
-/// Callers that want issue #2825's mute default for an *unset* preference should
-/// pass 1 when SharedPreferences has no key (see [SharedPreferencesUtil.doubleTapAction]).
 ButtonAction resolveDoubleTapAction(int code) {
   switch (code) {
     case 1:

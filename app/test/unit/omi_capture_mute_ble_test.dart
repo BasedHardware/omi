@@ -2,13 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 
 class _MuteTransport extends DeviceTransport {
-  _MuteTransport({this.features = OmiFeatures.captureMute, this.muteValue = const [1]});
+  _MuteTransport({this.features = OmiFeatures.captureMute, this.muteValue = const [1], this.hasTaps = false});
 
   final int features;
+  final bool hasTaps;
+  int streamRequests = 0;
   List<int> muteValue;
   Object? writeError;
   Object? featureReadError;
@@ -32,7 +35,14 @@ class _MuteTransport extends DeviceTransport {
   Future<bool> ping() async => true;
 
   @override
-  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) => const Stream.empty();
+  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) {
+    streamRequests++;
+    return const Stream.empty();
+  }
+
+  @override
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
+      hasTaps && serviceUuid == buttonServiceUuid && characteristicUuid == buttonTapsCharacteristicUuid;
 
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
@@ -77,6 +87,21 @@ void main() {
   test('progressive taps use bit 12, distinct from device name, mute and power', () {
     expect(OmiFeatures.buttonTaps, 1 << 12);
     expect(OmiFeatures.buttonTaps & ((1 << 9) | OmiFeatures.captureMute | (1 << 11)), 0);
+  });
+
+  test('legacy firmware without taps does not create a phantom subscription', () async {
+    final transport = _MuteTransport(features: 1 << 9);
+    final subscription = await _connection(transport).getBleButtonTapsListener(onTapsReceived: (_) {});
+    expect(subscription, isNull);
+    expect(transport.streamRequests, 0);
+  });
+
+  test('DevKit taps discovery works without a features characteristic', () async {
+    final transport = _MuteTransport(features: 0, hasTaps: true);
+    final subscription = await _connection(transport).getBleButtonTapsListener(onTapsReceived: (_) {});
+    expect(subscription, isNotNull);
+    expect(transport.streamRequests, 1);
+    await subscription?.cancel();
   });
 
   test('capture mute owns 19B10015 / feature bit 10, not the device-name slot', () {

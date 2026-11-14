@@ -285,8 +285,11 @@ int play_boot_sound(void)
     if (rx_buffer == NULL)
         return -EIO;
     const int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
+    atomic_set(&playing, 1);
     generate_gentle_chime((int16_t *) rx_buffer, samples_per_block);
-    return play_pcm_block(MAX_BLOCK_SIZE);
+    int result = play_pcm_block(MAX_BLOCK_SIZE);
+    atomic_clear(&playing);
+    return result;
 }
 
 int init_haptic_pin()
