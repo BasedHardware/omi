@@ -83,7 +83,10 @@ class ColdSink:
             if family == 'outbox' and identity['generation'] != original['admission']['admission_id']:
                 raise AuthorityRefused('cold outbox does not belong to original admission')
             manifest = original_manifest(self.handoff, original)
-            paths = manifest['cold_paths'] + cold_paths(conn, self.handoff.ticket.namespace, recording)
+            paths = manifest['cold_paths']
+            if not isinstance(paths, list):
+                raise AuthorityRefused('original cold path census must be a list')
+            paths = paths + cold_paths(conn, self.handoff.ticket.namespace, recording)
             if self.ref(family, identity).path not in paths:
                 raise AuthorityRefused('cold key outside original retained-copy census')
             digest = fingerprint(dict(intent=original['intent'], admission=original['admission']))
