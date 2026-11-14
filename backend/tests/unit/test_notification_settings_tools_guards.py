@@ -87,10 +87,18 @@ class TestNotificationSettingsToolsGuards:
 
     def test_set_time_out_of_bounds_and_invalid(self):
         cfg = {"configurable": {"user_id": "u1"}}
-        assert "Error: Please specify the hour (0-23)" in self.mod.manage_daily_summary_tool.func("set_time", hour=None, config=cfg)
-        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func("set_time", hour=-1, config=cfg)
-        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func("set_time", hour=24, config=cfg)
-        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func("set_time", hour="invalid", config=cfg)
+        assert "Error: Please specify the hour (0-23)" in self.mod.manage_daily_summary_tool.func(
+            "set_time", hour=None, config=cfg
+        )
+        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func(
+            "set_time", hour=-1, config=cfg
+        )
+        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func(
+            "set_time", hour=24, config=cfg
+        )
+        assert "Error: Hour must be between 0 and 23" in self.mod.manage_daily_summary_tool.func(
+            "set_time", hour="invalid", config=cfg
+        )
 
     def test_set_time_enables_if_disabled(self):
         cfg = {"configurable": {"user_id": "u1"}}
@@ -114,7 +122,11 @@ class TestNotificationSettingsToolsGuards:
     def test_database_error_handled_gracefully(self):
         cfg = {"configurable": {"user_id": "u1"}}
         with (
-            patch.object(self.mod.notification_db, "set_daily_summary_enabled", side_effect=RuntimeError("Firestore connection refused")),
+            patch.object(
+                self.mod.notification_db,
+                "set_daily_summary_enabled",
+                side_effect=RuntimeError("Firestore connection refused"),
+            ),
             patch.object(self.mod.logger, "error") as mock_log,
         ):
             res = self.mod.manage_daily_summary_tool.func("enable", config=cfg)
