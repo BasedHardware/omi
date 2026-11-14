@@ -23,12 +23,15 @@ from database.batch_pipeline_store import (
     PROJECTION_OBLIGATION_STATES,
     timeliness_all_time_counts,
     timeliness_sample,
+    allowance_held_count,
 )
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
+from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
+from utils.batch_pipeline.delivered_share import DeliveredShare
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -92,6 +95,9 @@ def record_privacy_stop(stop: str) -> None:
     ).inc()
 
 
+# Per tick: eight count aggregations (one read per 1,000 index entries, minimum one each) and three head reads.
+VENDOR_HELD_REFRESH_SECONDS = 300.0
+
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
 PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
@@ -135,6 +141,7 @@ class QueueMetrics:
     ):
         self.timeliness_leader = timeliness_leader
         self.fresh_guard = FreshGuard(registry)
+        self.delivered_share = DeliveredShare(registry)
         self._timeliness_lock = threading.Lock()
         self._timeliness_all_time_visible = False
         self._timeliness_visible = False
@@ -143,6 +150,8 @@ class QueueMetrics:
         self.oldest_leader = oldest_leader
         self.oldest_min_refresh_seconds = oldest_min_refresh_seconds
         self._oldest_due = 0.0
+        self._held_due = 0.0
+        self._provider_observed = None
         self._oldest_lock = threading.Lock()
         self._oldest_observed = None
         self._capacity_observed = None
@@ -232,6 +241,13 @@ class QueueMetrics:
             registry=registry,
             fresh=self._timeliness_sample_visible,
         )
+        self._allowance_due = self._allowance_expires = 0.0
+        self.allowance_held = _FreshQueueGauge(
+            'omi_batch_allowance_held_units',
+            'Policy parked stock, separate from lateness; hourly leader-only aggregate, no job reads',
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible() and time.monotonic() < self._allowance_expires,
+        )
         self.timeliness_all_time = _FreshQueueGauge(
             'omi_batch_timeliness_all_time_units',
             'Unpublished stock across all epochs and ages; exact aggregate counts by projection hold leg',
@@ -303,6 +319,20 @@ class QueueMetrics:
             ['worker_release', 'namespace'],
             registry=registry,
             fresh=lambda: self._sample_fresh(self._oldest_observed),
+        )
+        self.provider_stage_units = _FreshQueueGauge(
+            'omi_batch_pipeline_provider_stage_units',
+            'Provider-STT stage stock by state (provider_pending, provider_running); capped at 1e6',
+            ['state', 'worker_release', 'namespace'],
+            registry=registry,
+            fresh=lambda: self._provider_fresh(),
+        )
+        self.provider_stage_oldest_age = _FreshQueueGauge(
+            'omi_batch_pipeline_provider_stage_oldest_age_seconds',
+            'Oldest provider-STT stage row age by state, all epochs; no paging rule reads it',
+            ['state', 'worker_release', 'namespace'],
+            registry=registry,
+            fresh=lambda: self._provider_fresh(),
         )
         self.ready_units = _FreshQueueGauge(
             'omi_batch_pipeline_admissible_ready_units',
@@ -420,6 +450,12 @@ class QueueMetrics:
             self.capacity_refreshed_at,
         ):
             gauge.clear()
+        # The held gauges live in the vendor-route module: a former leader must not keep exporting
+        # its last stock. Zero is a floor under max(), never a fleet claim.
+        vendor_metrics.HELD_UNITS.clear()
+        vendor_metrics.HELD_OLDEST_AGE.set(0)
+        self._held_due = 0.0
+        self._provider_observed = None
         self._oldest_observed = self._capacity_observed = None
 
     def _refresh(self, store: Store, now: float) -> None:
@@ -483,6 +519,49 @@ class QueueMetrics:
                 self.ready_units.labels(LABELS[priority], *self.scope).set(count)
             self.capacity_refreshed_at.labels(*self.scope).set(now)
             self._capacity_observed = observed
+        self._refresh_vendor_held(store, now)
+
+    def _refresh_vendor_held(self, store: Store, now: float) -> None:
+        """Feed ``vendor_route_metrics.held_units``, which had no producer: the gauges read 0 over a real stock.
+
+        Runs on the queue sampler's (leader-elected) path, at most every VENDOR_HELD_REFRESH_SECONDS.
+        A failed read keeps the last values; it never publishes a synthetic zero.
+        """
+        if not isinstance(store, FirestoreStore) or now < self._held_due:
+            return
+        self._held_due = now + VENDOR_HELD_REFRESH_SECONDS
+        from database.lifecycle_metrics_queries import vendor_held
+
+        try:
+            counts, age, truncated = vendor_held(store.client, store.namespace, now)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_vendor_held_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+        else:
+            vendor_metrics.held_units(counts, age)
+            if truncated:
+                # Counts at the cap are lower bounds; the frozen held collectors carry no truncation label.
+                logging.getLogger(__name__).warning('event=batch_vendor_held_sample outcome=truncated')
+        # Independent of the held sample: provider_pending has no other stock signal.
+        from database.lifecycle_metrics_queries import provider_stage
+
+        try:
+            stage = provider_stage(store.client, store.namespace, now)
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                'event=batch_provider_stage_sample outcome=unavailable exception_type=%s', type(error).__name__
+            )
+            return
+        for state, (count, oldest_age) in stage.items():
+            self.provider_stage_units.labels(state, *self.scope).set(count)
+            self.provider_stage_oldest_age.labels(state, *self.scope).set(oldest_age)
+        self._provider_observed = time.monotonic()
+
+    def _provider_fresh(self) -> bool:
+        # Two missed ticks expire the sample; a follower that lost the lease stops exporting it.
+        observed = self._provider_observed
+        return observed is not None and time.monotonic() - observed < 2 * VENDOR_HELD_REFRESH_SECONDS + 60
 
     def _timeliness_sample_visible(self) -> bool:
         # A stalled replica must not combine its old breach with another
@@ -555,6 +634,17 @@ class QueueMetrics:
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        if elected and now >= self._allowance_due:
+            self._allowance_due = now + 3600
+            try:
+                self.allowance_held.set(allowance_held_count(store.client, store.namespace))
+                self._allowance_expires = time.monotonic() + 3600 + interval
+            except Exception as error:
+                self._allowance_expires = 0.0
+                self._allowance_due = now + 300
+                logging.getLogger(__name__).warning(
+                    'event=batch_allowance_count outcome=unavailable exception_type=%s', type(error).__name__
+                )
         # Companion counts run only after the epoch gauges above are published,
         # so a slow or failed COUNT can never delay or stale the epoch series.
         if all_time_counts:
@@ -603,6 +693,7 @@ class QueueMetrics:
             'completed',
             'retry',
             'requeued',
+            'allowance_parked',
             'lease_expired',
             'dead',
             'committed',

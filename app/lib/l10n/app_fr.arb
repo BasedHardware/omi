@@ -4674,11 +4674,19 @@
     "referralRewardSecondDetail": "Quand 3 amis de plus achètent",
     "referralClaimShort": "Réclamer",
     "paymentDeclinedTitle": "Votre carte a été refusée",
+    "paymentDeclinedMonthlyMessage": "Mettez-la à jour ou retrouvez {plan} pour {price} par mois",
     "paymentDeclinedMessage": "Mettez-la à jour pour retrouver {plan}",
     "hasLinkedTasksLabel": "Contient des tâches liées",
     "hasTasksFilter": "Avec des tâches",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Passer au mensuel",
+    "monthlySwitchPlanValue": "{plan}, {price} par mois",
+    "monthlySwitchNote": "Remplace le paiement annuel impayé de {yearly}. Renouvellement mensuel. Résiliable à tout moment.",
+    "monthlySwitchDeclined": "Paiement refusé. Votre forfait n'a pas changé.",
+    "monthlySwitchUnavailable": "Le changement n'est pas disponible pour le moment. Mettez plutôt votre carte à jour.",
+    "monthlySwitchDoneTitle": "Vous êtes passé au mensuel",
+    "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel."
 }

@@ -15436,6 +15436,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Uw kaart is geweigerd';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Werk je kaart bij of krijg $plan terug voor $price per maand';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Werk je kaart bij om $plan terug te krijgen';
   }
@@ -15460,4 +15465,31 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Overstappen naar maandelijks';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per maand';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Vervangt de onbetaalde jaarlijkse betaling van $yearly. Verlengt maandelijks. Altijd opzegbaar.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betaling geweigerd. Je abonnement is niet gewijzigd.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Overstappen kan nu niet. Werk in plaats daarvan je kaart bij.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Je betaalt nu maandelijks';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price vandaag betaald. Verlengt maandelijks.';
+  }
 }

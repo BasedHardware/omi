@@ -15460,6 +15460,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'కార్డును అప్‌డేట్ చేయండి, లేదా $planను నెలకు $priceతో తిరిగి పొందండి';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
@@ -15484,4 +15489,31 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'నెలవారీకి మారండి';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, నెలకు $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'చెల్లించని $yearly వార్షిక ఛార్జీకి బదులుగా. ప్రతి నెలా పునరుద్ధరించబడుతుంది. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'చెల్లింపు తిరస్కరించబడింది. మీ ప్లాన్ మారలేదు.';
+
+  @override
+  String get monthlySwitchUnavailable => 'ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ఈరోజు $price చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.';
+  }
 }

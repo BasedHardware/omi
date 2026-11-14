@@ -14,6 +14,63 @@ def _desc(field):
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_allowance_owners',
+            f'batch_pipeline_{stage}_allowance_holds',
+            'COLLECTION',
+            (_asc('active'), _asc('check_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_allowance_{"owner" if owner else "all"}',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'),)
+            + ((_asc('owner_key'),) if owner else ())
+            + (_asc('capture_at'), _asc('segment_id'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+        for owner in (False, True)
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_allowance_migration',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('compute_decision.outcome'), _asc('compute_decision.reason'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_delivered_share_cohort',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('enqueued_at')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_owners',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            tuple(_asc(field) for field in ('state', 'merge_pending', 'owner_key', '__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_ready_owners_ceiling',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('merge_pending'), _desc('owner_key'), _desc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_fresh_guard_{"pending" if pending else "total"}',
             f'batch_pipeline_{stage}_results',
             'COLLECTION',

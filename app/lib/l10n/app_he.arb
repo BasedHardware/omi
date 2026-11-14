@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
     "referralClaimShort": "קבלה",
     "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMonthlyMessage": "עדכנו את הכרטיס או קבלו שוב את {plan} ב-{price} לחודש",
     "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}",
     "hasLinkedTasksLabel": "כולל משימות מקושרות",
     "hasTasksFilter": "עם משימות",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "מעבר לתשלום חודשי",
+    "monthlySwitchPlanValue": "{plan}, {price} לחודש",
+    "monthlySwitchNote": "מחליף את החיוב השנתי שלא שולם בסך {yearly}. מתחדש מדי חודש. אפשר לבטל בכל עת.",
+    "monthlySwitchDeclined": "התשלום נדחה. התוכנית שלך לא השתנתה.",
+    "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
+    "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
+    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש."
 }

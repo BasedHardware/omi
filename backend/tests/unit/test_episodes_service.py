@@ -2337,7 +2337,7 @@ def test_intake_attach_to_a_composed_closed_episode_respects_the_kill_switch(mon
         firestore_client=store,
     )
     _attach(store, 'c-new', minutes=45)
-    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
+    monkeypatch.setenv(config.EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV, 'off')
     scheduled = []
     monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
     c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)

@@ -14,6 +14,7 @@ from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from database.batch_pipeline_policy import load_stage_policy
+from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
@@ -328,12 +329,19 @@ class ProjectionStore:
             session.prepare(transaction, replay=False)
             if session.ledger.get('status') != 'completed':
                 raise ProjectionBlocked('client publication preceded durable completion')
+            delivered_at, delivered_in_target = delivery_stamp(session.job, now)
             transaction.update(
                 session.result_ref,
                 {
                     'projection_state': 'completed',
                     **projection_finish_state_fields('completed', now),
                 },
+            )
+            # The delivered-share sampler reads jobs, not results: a unit whose
+            # projection never completes still has an admission row there.
+            transaction.update(
+                session.job_ref,
+                {'delivered_at': delivered_at, 'delivered_in_target': delivered_in_target},
             )
 
         self.run(commit, policy=policy)
