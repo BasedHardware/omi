@@ -360,3 +360,9 @@ One artifact point read per actual verification/deletion transaction attempt is
 a planning bound; the uncontended two-phase path performs three such reads.
 Production remains unselected (0 expected/day, existing sentinel1/day). No new
 TTL, funding or fleet budget policy; retries/redeliveries count separately.
+
+Published-original selection also requires the deleted conversation to belong to
+the original intent/paid target census. Reference comparison uses the full
+original source-derived document, so an unexpected retained reference cannot be
+silently discarded. The absence probe refuses dispatch after the unit deadline
+and clamps its socket timeouts to the remaining deadline without SDK retries.

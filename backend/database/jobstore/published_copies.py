@@ -15,7 +15,7 @@ from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.erasure_operations import ErasureOperations
 from database.jobstore.postgres_store import jsonb
 from database.jobstore.result_upload_rows import uri
-from database.privacy_fence.protocol import owner_key, row_dict
+from database.privacy_fence.protocol import conversation_key, owner_key, row_dict
 from utils.batch_pipeline.retention import delete_batch_object
 from utils.batch_pipeline.upload_policy import UPLOAD_TIMEOUT
 
@@ -40,6 +40,13 @@ class PublishedCopies:
             self.retained._terminal(conn, owner_key(uid), conversation)
             source = self.handoff._required_row(conn, identity)
             manifest = self.retained._manifest(source)
+            if (
+                conversation is not None
+                and conversation not in source['intent']['conversation_ids']
+                and conversation_key(owner_key(uid), conversation)
+                not in {t['conversation_key'] for t in source['admission']['privacy_targets']}
+            ):
+                raise AuthorityRefused('published original outside deleted conversation')
             rows = conn.execute(
                 'SELECT unit_id FROM queue_provider_uploads WHERE namespace=%s AND recording_id=%s ORDER BY unit_id',
                 (self.handoff.ticket.namespace, identity),
@@ -73,6 +80,24 @@ class PublishedCopies:
 
     def _check(self, uid, row, authority, conversation, fs_generation, *, erase=False):
         ref = self._reference(row)
+        with self.handoff.pool.connection(timeout=2) as conn, conn.transaction():
+            self.retained._terminal(conn, owner_key(uid), conversation)
+            source = self.handoff._required_row(conn, row['recording_id'])['intent']['payload']['jobs'][row['unit_id']]
+        expected = dict(
+            owner_key=row['owner_key'],
+            owner_id=uid,
+            segment_id=row['unit_id'],
+            uri=f"gs://{row['bucket']}/{row['object_key']}",
+            kind='results',
+            privacy_generation=source['privacy_generation'],
+            capture_at=source['capture_at'],
+            duration_seconds=source['duration_seconds'],
+            provider_upload=dict(
+                admission_id=str(row['admission_id']),
+                attempt_token=row['attempt_token'],
+                original_deadline=row['original_deadline'],
+            ),
+        )
 
         @firestore.transactional
         def check(transaction):
@@ -102,18 +127,7 @@ class PublishedCopies:
                 ):
                     raise AuthorityRefused('published original account purge generation changed')
             value = ref.get(transaction=transaction).to_dict()
-            if value is not None and (
-                value.get('owner_key') != row['owner_key']
-                or value.get('owner_id') != uid
-                or value.get('segment_id') != row['unit_id']
-                or value.get('uri') != f"gs://{row['bucket']}/{row['object_key']}"
-                or value.get('provider_upload')
-                != dict(
-                    admission_id=str(row['admission_id']),
-                    attempt_token=row['attempt_token'],
-                    original_deadline=row['original_deadline'],
-                )
-            ):
+            if value is not None and value != expected:
                 raise AuthorityRefused('published original artifact reference changed')
             if erase:
                 transaction.delete(ref)

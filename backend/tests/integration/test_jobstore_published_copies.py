@@ -90,10 +90,11 @@ def test_reference_cannot_retire_before_object_proof(published):
     assert list(r.result[4].bucket('synthetic').list_blobs())
 
 
-def test_changed_reference_refuses_before_object_delete(published):
+@pytest.mark.parametrize('mutation', [{'owner_id': 'foreign'}, {'unexpected_reference': 'gs://late/original'}])
+def test_changed_reference_refuses_before_object_delete(published, mutation):
     r = published
     ref = r.copies._reference(row(r.result))
-    ref.update({'owner_id': 'foreign'})
+    ref.update(mutation)
     with r.unit() as authority:
         prepare(r, authority)
         with pytest.raises(AuthorityRefused, match='reference changed'):
@@ -337,3 +338,18 @@ def test_original_probe_refuses_dispatch_after_unit_deadline(published, monkeypa
         r.copies._absent(r.uid, row(r.result))
     monkeypatch.undo()  # restore the real clock before the assertion's FS RPC
     assert r.copies._reference(row(r.result)).get().exists
+
+
+def test_unrelated_deleted_conversation_cannot_erase_original(published):
+    from database.privacy_fence.protocol import conversation_key
+
+    r = published
+    r.handoff.fence.close(
+        r.result[2].owner, conversation=conversation_key(r.result[2].owner, 'unrelated'), state='deleted', local=True
+    )
+    r.handoff.client.document(f'users/{r.uid}/deleted_conversations/unrelated').set({'id': 'unrelated'})
+    with r.unit() as authority:
+        prepare(r, authority)
+        with pytest.raises(AuthorityRefused, match='outside deleted conversation'):
+            r.copies.retire(r.uid, r.identity, authority, conversation='unrelated')
+    assert list(r.result[4].bucket('synthetic').list_blobs())
