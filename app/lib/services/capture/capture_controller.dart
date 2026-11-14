@@ -2127,11 +2127,8 @@ class CaptureController extends ChangeNotifier
 
   void _handleButtonEvent(String deviceId, int buttonState) {
     unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
-    // A Custom live STT service gets every press, ahead of the tutorial and the "Omi button
-    // actions" gates: with Omi's actions turned off, the user's own service can act on the
-    // button instead (docs/doc/developer/custom-stt.mdx).
-    _socket?.sendProviderControl(
-        {'type': 'ButtonEvent', 'state': buttonState, 'timestamp': _now().millisecondsSinceEpoch});
+    // Custom live STT gets every press, ahead of the gates below (docs/doc/developer/custom-stt.mdx).
+    _socket?.sendButtonEvent(buttonState, _now());
     // Only an admitted capture transition may move the question UI. Raw
     // presses can be ignored (auto-submit grace / a reply already pending).
     final tutorial = deviceOnboardingProvider;

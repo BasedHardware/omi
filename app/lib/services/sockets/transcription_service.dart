@@ -97,6 +97,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return socket is CompositeTranscriptionSocket && socket.sendProviderControl(message);
   }
 
+  /// Tells a Custom live STT service the Omi device button was pressed (`state`: 1 single tap,
+  /// 2 double tap; 3 long press and 5 release on older firmware). See custom-stt.mdx.
+  bool sendButtonEvent(int state, DateTime at) =>
+      sendProviderControl({'type': 'ButtonEvent', 'state': state, 'timestamp': at.millisecondsSinceEpoch});
+
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 
