@@ -3,6 +3,22 @@ import Foundation
 import OmiWAL
 import os.log
 
+/// The subset of `DeviceConnection` an SD-card sync attempt drives.
+///
+/// Narrowing the dependency keeps the download/persistence state machine
+/// testable without a Bluetooth transport: a regression test can hand the
+/// service a stream it controls and interleave `stopSync()` with an in-flight
+/// WAL write.
+@MainActor
+protocol StorageSyncTransport: AnyObject {
+  /// Get list of storage files/lengths (total bytes, current offset).
+  func getStorageList() async -> [Int32]
+  /// Write command to storage.
+  func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool
+  /// Get a stream of storage data.
+  func getStorageStream() -> AsyncThrowingStream<Data, Error>
+}
+
 // MARK: - Storage Sync Service
 
 /// Service for syncing audio data from device SD card via BLE
@@ -13,6 +29,8 @@ final class StorageSyncService: ObservableObject {
   // MARK: - Singleton
 
   static let shared = StorageSyncService()
+
+  typealias TransportProvider = @MainActor () -> (any StorageSyncTransport)?
 
   // MARK: - Published Properties
 
@@ -39,8 +57,8 @@ final class StorageSyncService: ObservableObject {
   // MARK: - Properties
 
   private let logger = Logger(subsystem: "me.omi.desktop", category: "StorageSyncService")
-  private let walService = WALService.shared
-  private let deviceProvider = DeviceProvider.shared
+  private let walService: WALService
+  private let transportProvider: TransportProvider
 
   private var syncTask: Task<Void, Never>?
   private var currentWal: WALEntry?
@@ -58,15 +76,42 @@ final class StorageSyncService: ObservableObject {
   /// mutates shared state while its captured generation is still current.
   private var syncGeneration = 0
 
+  /// Finish and stop share one persistence claim per generation. Claim on the
+  /// main actor before awaiting the writer: a post-write generation check is
+  /// too late to prevent duplicate offset accounting inside WALService.
+  private var attemptPersistenceClaimed = false
+
   // MARK: - Initialization
 
-  private init() {}
+  /// - Parameters:
+  ///   - walService: WAL store that persists downloaded frames.
+  ///   - transportProvider: resolves the active device transport. Defaults to
+  ///     the live Bluetooth connection; tests inject a controlled transport.
+  init(
+    walService: WALService = .shared,
+    transportProvider: @escaping TransportProvider = { DeviceProvider.shared.activeConnection }
+  ) {
+    self.walService = walService
+    self.transportProvider = transportProvider
+  }
+
+  /// Claims persistence for the current attempt. Returns false when another
+  /// path already recorded this attempt's data.
+  private func claimPersistence() -> Bool {
+    guard !attemptPersistenceClaimed else { return false }
+    attemptPersistenceClaimed = true
+    return true
+  }
+
+  /// Test seam: exposes the in-flight attempt task so a regression test can
+  /// await completion of a sync whose stop/finish paths interleaved.
+  var syncTaskForTesting: Task<Void, Never>? { syncTask }
 
   // MARK: - Public Methods
 
   /// Check if device has data to sync
   func checkForStorageData() async -> (totalBytes: Int, currentOffset: Int)? {
-    guard let connection = deviceProvider.activeConnection else {
+    guard let connection = transportProvider() else {
       logger.warning("No device connected for storage check")
       return nil
     }
@@ -92,7 +137,7 @@ final class StorageSyncService: ObservableObject {
       return
     }
 
-    guard let connection = deviceProvider.activeConnection else {
+    guard let connection = transportProvider() else {
       throw StorageSyncError.deviceNotConnected
     }
 
@@ -113,6 +158,7 @@ final class StorageSyncService: ObservableObject {
     totalBytesDownloaded = 0
     lastProgressUpdate = Date()
     lastProgressBytes = 0
+    attemptPersistenceClaimed = false
 
     // Claim a fresh generation for this attempt. A stop or completion from an
     // earlier attempt that resumes after an await will see a stale generation
@@ -156,6 +202,14 @@ final class StorageSyncService: ObservableObject {
     let frames = downloadedFrames
     let bytes = totalBytesDownloaded
 
+    // Claim persistence for this attempt before awaiting. If `finishSync`
+    // already claimed it (it records the offset and then suspends on the write),
+    // persisting here again would add the same bytes to `storageOffset` twice
+    // and write the same frames twice. Capturing the decision locally also
+    // keeps it stable across the await below: a new sync may reset the claim
+    // while this write is still in flight.
+    let persistsPartialAttempt = wal != nil && !frames.isEmpty && claimPersistence()
+
     isSyncing = false
     currentWal = nil
     downloadedFrames = []
@@ -163,7 +217,7 @@ final class StorageSyncService: ObservableObject {
     lastProgressBytes = 0
 
     // Save partial progress
-    if let wal, !frames.isEmpty {
+    if let wal, persistsPartialAttempt {
       await walService.updateWalWithDownloadedData(
         walId: wal.id,
         downloadedBytes: bytes,
@@ -176,7 +230,7 @@ final class StorageSyncService: ObservableObject {
 
   /// Clear device storage after successful sync
   func clearDeviceStorage() async -> Bool {
-    guard let connection = deviceProvider.activeConnection else {
+    guard let connection = transportProvider() else {
       logger.warning("No device connected for storage clear")
       return false
     }
@@ -198,7 +252,7 @@ final class StorageSyncService: ObservableObject {
 
   // MARK: - Private Methods
 
-  private func performSync(connection: DeviceConnection, offset: Int, generation: Int) async {
+  private func performSync(connection: any StorageSyncTransport, offset: Int, generation: Int) async {
     // Send read command to start transfer
     let success = await connection.writeToStorage(
       fileNum: 1,
@@ -400,7 +454,8 @@ final class StorageSyncService: ObservableObject {
     let bytes = totalBytesDownloaded
     let frameCount = frames.count
 
-    // Save downloaded data
+    // Take exclusive persistence ownership before the writer can suspend.
+    guard claimPersistence() else { return }
     await walService.updateWalWithDownloadedData(
       walId: wal.id,
       downloadedBytes: bytes,
