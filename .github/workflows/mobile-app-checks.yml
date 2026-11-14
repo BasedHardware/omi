@@ -783,10 +783,12 @@ jobs:
 
       # Manifest flow coverage bootstraps the pinned Swift formatter only when
       # the checked diff contains desktop Swift sources (SCA-2046: the checker
-      # now resolves the formatter after the changed-file list, so a Swift-free
-      # nightly pays no bootstrap). Restore the desktop binary cache anyway so
-      # the runs that do need it cannot consume the iOS compiler's job budget
-      # with a cold source build (16 minutes on PR #21488).
+      # resolves the formatter lazily, after the changed-file list, so a diff
+      # with no desktop Swift source never touches it). PR runs reach that
+      # path; scoped nightly runs pass their file list positionally and never
+      # resolve it at all. Restore the desktop binary cache anyway so the runs
+      # that do need it cannot consume the iOS compiler's job budget with a
+      # cold source build (16 minutes on PR #21488).
       - name: Restore Swift formatter and linter tools
         id: ios-swift-tools-cache
         uses: actions/cache/restore@v6

@@ -189,11 +189,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The batch watchdog budget must not crowd out the bisect fallback.
 
         The scaled batch budget grows linearly with the batch size (per-suite
-        budget + per-extra-suite allowance). At CI's batch size the uncapped
-        budget approaches the job's 60-minute ceiling, so a wedged batch
-        would be killed by the job timeout before its isolation fallback
-        could run. CI must set an independent aggregate ceiling that keeps
-        the worst single-batch watchdog cost well under the job budget.
+        budget + per-extra-suite allowance): at CI's batch size it is 3270s.
+        A wedged batch must die well inside the job ceiling, because once it
+        does the bisect fallback still needs the other half of the job. CI
+        must set an independent aggregate ceiling that keeps the worst
+        single-batch watchdog cost well under the job budget.
         """
         job = self.jobs["desktop-swift-verify"]
         self.assertIn('OMI_SWIFT_TEST_SUITE_BATCH_SIZE: "100"', job)
@@ -214,12 +214,16 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # budget no longer reaches half the job, so the premise that first
         # motivated a separate cap — a wedged batch eating the entire ceiling —
         # is historical. The cap must still bite and leave the bisect fallback
-        # at least half the job, asserted below.
+        # at least half the job, asserted below. Keep the uncapped batch inside
+        # the ceiling *after* the measured 41m prelude and ~158s post-step
+        # (SCA-1981), so a future ceiling raise cannot silently crowd that
+        # worst case out.
         self.assertLess(
             scaled_budget,
-            timeout_seconds,
-            "the uncapped scaled budget now exceeds the whole job ceiling; "
-            "re-derive the batch and watchdog budgets before raising the ceiling",
+            timeout_seconds - 41 * 60 - 158,
+            "the uncapped scaled budget no longer fits the job ceiling after "
+            "the measured prelude; re-derive the batch and watchdog budgets "
+            "before raising the ceiling",
         )
         self.assertGreater(
             ceiling,
