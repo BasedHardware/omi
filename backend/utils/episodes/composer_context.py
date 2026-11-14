@@ -95,18 +95,38 @@ def retrieval_query(members: Sequence[Mapping[str, Any]]) -> str:
     return bounded_text(query, COMPOSER_MEMORY_QUERY_TOKENS) if topics or entities or frequent else ''
 
 
+def _memory_data(memory: Any) -> Mapping[str, Any]:
+    # Defaults such as subject_attribution=unknown are not explicit legacy evidence.
+    return memory if isinstance(memory, Mapping) else memory.model_dump(exclude_unset=True)
+
+
+def composer_memory_eligible(memory: Any) -> bool:
+    """Stricter than chat's legacy bridge; never widen the shared admission policy."""
+    data = _memory_data(memory)
+    row = SimpleNamespace(
+        **{'is_locked': False, 'user_review': None, 'invalid_at': None, 'ledger_schema_version': None, **data}
+    )
+    if not is_prompt_memory_eligible(row):
+        return False
+    for field, safe in (
+        ('kind', {'fact'}),
+        ('subject_scope', {'primary_user'}),
+        ('subject_attribution', {'user', 'legacy_assumed'}),
+    ):
+        value = data.get(field)
+        if value is not None and getattr(value, 'value', value) not in safe:
+            return False
+    return True
+
+
 def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any]) -> str:
     """IDF overlap over <=1000 vetted candidates; retain at most 20 relevant facts."""
     topics, entities, frequent = _episode_terms(members)
     query = topics | entities | frequent
     candidates = []
     for memory in list(memories)[:1000]:
-        data = memory if isinstance(memory, Mapping) else memory.model_dump()
-        # Use chat's policy, including canonical ledger subject/kind/intent/slot checks.
-        row = SimpleNamespace(
-            **{'is_locked': False, 'user_review': None, 'invalid_at': None, 'ledger_schema_version': None, **data}
-        )
-        if not is_prompt_memory_eligible(row):
+        data = _memory_data(memory)
+        if not composer_memory_eligible(memory):
             continue
         content = str(data.get('content') or '').strip()
         if content:
@@ -146,7 +166,7 @@ def _search_memories(uid: str, members: Sequence[Mapping[str, Any]]) -> list[Any
         query,
         limit=20,
         candidate_limit=60,
-        result_filter=is_prompt_memory_eligible,
+        result_filter=composer_memory_eligible,
     )
     return [match.memory for match in matches]
 

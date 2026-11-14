@@ -6,6 +6,7 @@ import sys
 from zoneinfo import ZoneInfo
 
 import tiktoken
+import pytest
 
 from config import episodes as config
 from utils.llms import memory as chat_memory
@@ -62,7 +63,8 @@ def test_relevance_and_visibility_filter_before_prompt_budget():
     assert all(word not in block for word in ('violin', 'locked', 'rejected', 'invalidated'))
 
 
-def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
+@pytest.mark.parametrize('source', ['list', 'vector'])
+def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, source):
     from database import goals, users
     from models.memories import MemoryDB
     from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
@@ -81,8 +83,12 @@ def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
             },
         )
 
-    rows = [
+    allowed = [
         fact('eligible-self'),
+        fact('eligible-legacy-unspecified', ledger_schema_version=None, kind=None, subject_scope=None),
+        fact('eligible-legacy-self', ledger_schema_version=None, subject_attribution='user'),
+    ]
+    denied = [
         fact('third-party', subject_scope='third_party'),
         fact('unknown-person', subject_scope='unknown'),
         fact('document', kind='document'),
@@ -93,9 +99,27 @@ def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
         fact('locked', is_locked=True),
         fact('rejected', user_review=False),
         fact('invalidated', invalid_at=datetime.now(timezone.utc)),
+        fact('legacy-third-party', ledger_schema_version=None, subject_scope='third_party'),
+        fact('legacy-unknown', ledger_schema_version=None, subject_scope='unknown'),
+        fact('legacy-attributed-third-party', ledger_schema_version=None, subject_attribution='third_party'),
+        fact('legacy-attributed-unknown', ledger_schema_version=None, subject_attribution='unknown'),
+        fact('legacy-document', ledger_schema_version=None, kind='document'),
+        fact('legacy-trigger', ledger_schema_version=None, kind='trigger'),
     ]
+    rows = allowed + denied
     monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: ('Synthetic', [], [], rows))
-    monkeypatch.setattr(context, '_search_memories', lambda *_args: [])
+    if source == 'list':
+        monkeypatch.setattr(context, '_search_memories', lambda *_args: [])
+    else:
+        from types import SimpleNamespace
+        from utils.memory.memory_service import MemoryService
+
+        def search(_self, _uid, _query, **kwargs):
+            assert kwargs['result_filter'] is context.composer_memory_eligible
+            # Recheck even when an adapter incorrectly returns unsafe hits.
+            return [SimpleNamespace(memory=row) for row in rows]
+
+        monkeypatch.setattr(MemoryService, 'search', search)
     monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_args, **_kw: [])
     background = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
@@ -103,10 +127,11 @@ def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
         [member()], owner='Synthetic', tz=ZoneInfo('UTC'), language='English', context=background
     )
     prompt = messages[1][1]
-    assert 'eligible-self' in prompt
-    assert all(row.id not in prompt for row in rows[1:])
-    assert 'eligible-self' in chat_memory._render_ledger_prompt_context('Synthetic', rows)
-    assert all(row.id not in chat_memory._render_ledger_prompt_context('Synthetic', rows) for row in rows[1:])
+    assert all(row.id in prompt for row in allowed)
+    assert all(row.id not in prompt for row in denied)
+    # Chat's legacy compatibility contract is intentionally unchanged tonight.
+    assert chat_memory.is_prompt_memory_eligible(denied[-1])
+    assert not context.composer_memory_eligible(denied[-1])
 
 
 def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
@@ -153,7 +178,7 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
     _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
     assert len(seen) == 1 and 'irrigation' in seen[0][1]
-    assert seen[0][2] == {'limit': 20, 'candidate_limit': 60, 'result_filter': chat_memory.is_prompt_memory_eligible}
+    assert seen[0][2] == {'limit': 20, 'candidate_limit': 60, 'result_filter': context.composer_memory_eligible}
     assert 'rain sensor' in block and 'locked' not in block
 
 
