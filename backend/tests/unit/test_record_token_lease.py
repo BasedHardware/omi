@@ -115,7 +115,17 @@ def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypat
     assert record_audio.set_record_upload_pending('synthetic', 'record', 's', False, firestore_client=client)
     assert client.transactions[-1].updates == [(PATH, {'record_upload_sessions': {}})]
     assert record_audio.seal_record_audio('synthetic', 'record', firestore_client=client) is None
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True})]
+    # The ledger writes in its own transaction after the seal commits, so find
+    # the seal transaction by payload rather than assuming it is the last one.
+    seal_updates = [
+        payload
+        for transaction in client.transactions
+        for _, payload in transaction.updates
+        if payload.get('record_audio_closed') is True
+    ]
+    assert len(seal_updates) == 1
+    assert seal_updates[0]['record_audio_closed'] is True
+    assert isinstance(seal_updates[0]['record_admitted_at'], float)
 
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])

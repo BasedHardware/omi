@@ -53,7 +53,7 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # everything the user has written (conversations, deleted_conversations, memories, action_items,
     # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
     # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
-    # messages, and any future additions).
+    # messages, pipeline_ledger, and any future additions).
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
         with fenced_action_item_commit(uid) if sub.id == 'action_items' else nullcontext():
