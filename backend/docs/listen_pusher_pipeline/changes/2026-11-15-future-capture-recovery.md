@@ -112,9 +112,28 @@ source-proven release receipt containing the new WorkItem field and recovery
 readers. A tag, chart release name (`BATCH_PIPELINE_WORKER_RELEASE`), or source
 label by itself is insufficient. Operator redrive tools must run from the same
 new checkout. Any unaccounted or older reader means **keep admissions false**.
-The GPU batch runtime also reads WorkItems; this task does not change its image
-under the standing brief. Thus phase two remains blocked until its compatible
-reader provenance is established or its separately authorized upgrade lands.
+The following is the source-declared reader/image matrix (`runtime_images.json`,
+Dockerfiles and chart values), **not a measurement of serving images**. In the
+current deployment declarations, dev uses project `based-hardware-dev` and prod
+uses `based-hardware`:
+
+| Process / deployment | Reads and trust-sensitive behavior | Current image repository; role-image alternative |
+| --- | --- | --- |
+| `uvicorn main:app` on Cloud Run `backend`, `backend-sync`, `backend-sync-backfill`, `backend-integration` | `Serving` projection pump, worker RPC, `Projector`, context/prefetch/follow-up, provider STT/quarantine/shadow recovery, restored-upload and speech-redrive readers; router mounting and switches determine active paths. `context.py` and `projection.py` explicitly inspect the marker before nearest/overlap conversation lookup and persist it. | `gcr.io/<project>/backend`; role split declares `backend-api` for `backend`, `backend-workers` for the other three. Read the actual traffic revision digest. |
+| `uvicorn main:app` on GKE `backend-listen` | Same startup/serving code and admission/inline sync pipeline where mounted/enabled. | `gcr.io/<project>/backend`; role alternative `backend-realtime`. |
+| Optional GKE `utils.sync.worker_runtime:app` children `python -m utils.sync.worker_job` | Persisted sync policy/trust payload into legacy pipeline, assignment/index/overlap/coverage. No `Projector` in this process. Pilot declaration is not evidence it is installed. | `backend-sync-backfill-worker`, digest supplied by the role-image train; actual repository comes from the installed chart. |
+| GPU `python -m diarizer.batch_pipeline_runtime` and its child processes | `Scheduler.pull` deserializes `WorkItem`; `Pump`/GPU compute consumes it. This runtime supplies neither a projector nor `project_pending`. It does not inspect `capture_time_trust` for a conversation decision. `Scheduler.complete` and `OrderedMerge` update the original full job map, preserving unknown fields; the CPU projector re-reads that job. An old dataclass can omit the marker in memory. | `gcr.io/<project>/batch-pipeline-worker`, `backend/diarizer/Dockerfile.batch-pipeline`. **Unchanged by this lane.** |
+| `scripts/record_seal_{sweep,repair_job,worker}.py` CronJobs/Deployment | Record repair/intake controllers share the GPU image, rather than a separate backend image; inventory their templates and any active Jobs too. They do not run the trust-sensitive projector. | Same `batch-pipeline-worker` repository and chart `image.digest`. |
+| Operator `batch_pipeline_{artifact_missing,held_disposition,terminal_empty,speech_redrive}.py` and `recover_dev_failed_sync_backfill.py` | Reconstruct WorkItems or replay trust/policy contexts. Database voice-evidence/final-pass and shadow readers also deserialize WorkItems inside their invoking CPU process. | Local approved checkout/interpreter, or the explicitly selected operator container digest. No fixed deployed image is implied. |
+
+The GPU scheduler is a reader, so it must be included in the release inventory.
+Its raw-job-preserving write path explains why its transient WorkItem is not the
+old-projector binding hazard. It does **not** prove compatibility of an unknown
+deployed GPU digest. The strict second-roll gate remains a verified new-reader
+image across the inventory; accepting an older GPU image requires a separate,
+exact-digest compatibility proof and lead ruling. This lane neither changes the
+GPU image nor grants that exception. If that gate requires a GPU upgrade, the
+standing brief requires separate authorization before enabling admissions.
 These live readbacks have not been executed by this implementation lane.
 
 Phase two is a separate config-only commit: change exactly those ten overlay
