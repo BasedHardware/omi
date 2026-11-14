@@ -71,6 +71,7 @@ dist/
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
 **/ios/Flutter/RayBanMetaCredentials.xcconfig
+**/ios/Flutter/LocalSigning.xcconfig
 **/ios/.generated/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
