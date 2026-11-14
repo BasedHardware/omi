@@ -135,7 +135,6 @@ def test_busy_encoder_keeps_pcm(monkeypatch):
 
 def test_real_subprocess_timeout_still_commits_original_custody(remote, monkeypatch):
     real_run = subprocess.run
-    monkeypatch.setattr(audio_pcm_storage, '_TIMEOUT_SECONDS', 0.05)
 
     def hung_encoder(*args, **kwargs):
         return real_run([sys.executable, '-c', 'import time; time.sleep(10)'], **kwargs)
