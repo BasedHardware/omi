@@ -358,6 +358,45 @@ def test_file_selector_accounts_for_the_provider_that_will_actually_run(monkeypa
     assert lid.resolve_file('multi', tmp_path / 'missing', selector=stt.get_prerecorded_service)[0] == 'modulate'
 
 
+def test_a_stored_language_the_batch_model_cannot_serve_never_probes(monkeypatch, tmp_path):
+    from utils.batch_pipeline.language_metrics import ROUTES
+
+    client = detector(monkeypatch, 'en')  # the short sample the vendor would confidently call English
+    path = tmp_path / 'synthetic.wav'
+    path.write_bytes(wav())
+    route = ROUTES.labels('prerecorded', 'unknown', 'multilingual')._value
+    before = route.get()
+    selected = lid.resolve_file('multi', path, selector=stt.get_prerecorded_service, declared_language='ja')
+    assert selected == ('modulate', 'multi', 'velma-2')
+    client.post.assert_not_called()
+    assert route.get() == before + 1
+    # Blank, multi and served languages leave the sample in charge, exactly as before.
+    for declared in (None, '', 'multi', 'auto', 'en', 'de-DE'):
+        assert (
+            lid.resolve_file('multi', path, selector=stt.get_prerecorded_service, declared_language=declared)[0]
+            == 'parakeet'
+        )
+    assert client.post.call_count == 6
+    # Single-language mode already names the language; it never probed and still does not.
+    assert lid.resolve_file('ja', path, selector=stt.get_prerecorded_service, declared_language='ja') == (
+        'modulate',
+        'ja',
+        'velma-2',
+    )
+    assert client.post.call_count == 6
+
+
+def test_the_batch_eligibility_kill_switch_restores_the_probe(monkeypatch, tmp_path):
+    client = detector(monkeypatch, 'en')
+    path = tmp_path / 'synthetic.wav'
+    path.write_bytes(wav())
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
+    assert (
+        lid.resolve_file('multi', path, selector=stt.get_prerecorded_service, declared_language='ja')[0] == 'parakeet'
+    )
+    client.post.assert_called_once()
+
+
 def test_route_metric_records_provider_ordering_after_supported_detection(monkeypatch, tmp_path):
     from utils.batch_pipeline.language_metrics import ROUTES
 

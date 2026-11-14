@@ -1604,6 +1604,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         backfill=backfill_cap_active(),
                     ),
                     cohort_key=uid,
+                    declared_language=user_language,
                 ),
             )
             if (
