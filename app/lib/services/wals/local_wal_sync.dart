@@ -633,12 +633,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return;
     }
 
-    try {
-      await _migrateInvalidCaptureTimeRecovery(generation);
-    } catch (e) {
-      Logger.warning('Capture-time recovery migration deferred: $e');
-    }
-
     await _evaluateRetentionPressure();
 
     // Expired synced-copy auto-remove runs before the ready gate, so the
@@ -2032,10 +2026,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // Start the pass before yielding to queued IO. A cancel during the flush
     // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
-    await _enqueueBuffer(() async {
-      await _flush(generation);
-      if (_isCurrent(generation) && !passCancelled()) await _migrateInvalidCaptureTimeRecovery(generation);
-    });
+    await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 

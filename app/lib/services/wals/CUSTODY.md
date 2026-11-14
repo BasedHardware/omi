@@ -140,22 +140,22 @@ the legacy coverage trim is deleted (plan C, C11).
 
 HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
 stores only a closed reason token, HTTP status, first refusal time and last
-attempt time. Daily attempts stop seven days after the first refusal; audio is
-retained and the aggregate counts it as reported. Restart and connectivity
-wakes respect the same persisted clock and do not reset it. Legacy refused rows
-start their window at the first recovery attempt. Each attempt uses one file so
-a request-level verdict never condemns siblings. Local-only custody stays closed;
-a held recording already submitted explicitly may recover automatically.
-
-The 2026-11-15 server capture-clock recovery rollout has one install migration,
-keyed `wal.invalid_capture_time_recovery.20261115.v1`: it reopens the seven-day
-window immediately only for disk WALs refused as `invalid_capture_time` that
-are neither held nor on-device-only. It persists the index before the install
-receipt, keeps the refusal status/reason and bytes, and preserves single-file
-attempts and the 25-refusal-per-drain cap. Valid audio keeps its ordinary
-priority; invalid clocks receive a separate bounded turn. Later restarts and
-ordinary app upgrades do not renew this migration. Kill switch:
-`OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF` (compile-time, default false).
+attempt time. Daily attempts stop seven days after the first refusal, except
+`invalid_capture_time`: that reason retries daily during the first week, then
+no more than once every seven days indefinitely until accepted. A weekly probe
+bounds recurring full-file traffic while allowing a later server rollout to
+recover retained audio: at most five full-file probes per rolling 30 days after
+the first week (roughly 4–5 times the file size, plus request overhead). Other
+reasons keep their existing expiry. Audio and both stored clocks stay intact; after seven days the aggregate still counts the row
+as reported. Restart and connectivity wakes respect the same persisted last
+attempt. Legacy refused rows start their window at the first recovery attempt.
+Each attempt uses one file, under the existing 25-refusal-per-drain cap. Valid
+audio keeps priority, with a bounded separate turn for unknown clocks.
+Local-only custody stays closed; a held recording already submitted explicitly may recover
+automatically. No install migration, clock reset, or receipt is needed: an old
+invalid-date refusal automatically becomes eligible on its next weekly due date.
+`OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF=true` restores the seven-day expiry for
+this reason without changing any stored state (compile-time, default false).
 
 A framed file of at most four bytes has no audio payload and completes as a
 no-op. Larger files, including tiny compressed speech, always retain normal

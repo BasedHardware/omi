@@ -44,6 +44,7 @@ const secondsPerFlashPage = 1.4;
 /// - [uploadRejected] — an upload request was refused (HTTP 400/413, or a
 ///                  historical 403). Retained without user attention; automatic
 ///                  uploads retry daily for seven days, then count as reported.
+///                  Invalid capture clocks continue weekly until accepted.
 enum WalStatus {
   inProgress,
   miss,
@@ -195,6 +196,9 @@ const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
 /// Build/patch rollback for clock-priority scheduling; never changes stored time.
 const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
+
+/// Roll back indefinite clock-refusal probes to the ordinary seven-day policy.
+const invalidCaptureTimeRecoveryOff = bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF');
 
 enum WalCaptureTimeClass { live, historical, unknown }
 
@@ -740,15 +744,21 @@ class Wal {
     _changed();
   }
 
-  /// Daily recovery is independent of the transient network retry budget.
-  /// Old indexes get a new seven-day window on their first recovery pass.
-  /// Refusals fixed by the bytes themselves (size, part count) never succeed on a resend.
-  bool refusalRetryDue(int nowSeconds) =>
-      status == WalStatus.uploadRejected &&
-      uploadRejectionReason != WalUploadRejection.tooLarge &&
-      uploadRejectionReason != WalUploadRejection.tooManyParts &&
-      (uploadRejectedAt == 0 || nowSeconds < uploadRejectedAt + 7 * 86400) &&
-      (uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + 86400);
+  /// Recovery is independent of the transient network retry budget. Capture
+  /// clocks can become admissible in a later server rollout: retry daily for
+  /// the first week, then weekly indefinitely, without changing either clock.
+  /// Other refusals keep the seven-day window; byte-determined refusals never resend.
+  bool refusalRetryDue(int nowSeconds) {
+    if (status != WalStatus.uploadRejected ||
+        uploadRejectionReason == WalUploadRejection.tooLarge ||
+        uploadRejectionReason == WalUploadRejection.tooManyParts) return false;
+    final pastFirstWeek = uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
+    final recoverClock =
+        !invalidCaptureTimeRecoveryOff && uploadRejectionReason == WalUploadRejection.invalidCaptureTime;
+    if (pastFirstWeek && !recoverClock) return false;
+    final intervalSeconds = pastFirstWeek ? 7 * 86400 : 86400;
+    return uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + intervalSeconds;
+  }
 
   bool refusalReported(int nowSeconds) =>
       status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
