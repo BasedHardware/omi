@@ -5,7 +5,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db, firestore_failure_reason, get_firestore_client, run_transactional
+from ._client import db, get_firestore_client, run_transactional
 
 logger = logging.getLogger(__name__)
 
@@ -154,24 +154,20 @@ def update_import_job_progress(
 
 
 def get_import_job(job_id: str, *, firestore_client: Optional[Any] = None) -> Optional[Dict[str, Any]]:
-    """Get a single import job by ID with error boundary and id backfill."""
+    """Get a single import job by ID with id backfill."""
     cleaned_id = _clean_optional_id(job_id)
     if not cleaned_id:
         return None
     client = _get_client(firestore_client)
-    try:
-        job_ref = client.collection('import_jobs').document(cleaned_id)
-        job_doc = job_ref.get()
-        if getattr(job_doc, "exists", False):
-            raw: object = job_doc.to_dict()
-            if isinstance(raw, dict):
-                if 'id' not in raw or not raw['id']:
-                    raw['id'] = str(getattr(job_doc, 'id', cleaned_id))
-                return cast(Dict[str, Any], raw)
-        return None
-    except Exception as exc:
-        logger.warning("Failed to get import job id=%s reason=%s", cleaned_id, firestore_failure_reason(exc))
-        return None
+    job_ref = client.collection('import_jobs').document(cleaned_id)
+    job_doc = job_ref.get()
+    if getattr(job_doc, "exists", False):
+        raw: object = job_doc.to_dict()
+        if isinstance(raw, dict):
+            if 'id' not in raw or not raw['id']:
+                raw['id'] = str(getattr(job_doc, 'id', cleaned_id))
+            return cast(Dict[str, Any], raw)
+    return None
 
 
 def get_import_jobs(uid: str, limit: int = 50, *, firestore_client: Optional[Any] = None) -> List[Dict[str, Any]]:
@@ -186,26 +182,18 @@ def get_import_jobs(uid: str, limit: int = 50, *, firestore_client: Optional[Any
 
     client = _get_client(firestore_client)
     jobs: List[Dict[str, Any]] = []
-    try:
-        query = (
-            client.collection('import_jobs')
-            .where(filter=FieldFilter('uid', '==', cleaned_uid))
-            .order_by('created_at', direction='DESCENDING')
-            .limit(clamped_limit)
-        )
-        for doc in query.stream():
-            try:
-                raw: object = doc.to_dict()
-                if isinstance(raw, dict):
-                    if 'id' not in raw or not raw['id']:
-                        raw['id'] = str(getattr(doc, 'id', ''))
-                    jobs.append(cast(Dict[str, Any], raw))
-            except Exception as doc_exc:
-                logger.warning("Failed to deserialize import job doc: %s", doc_exc)
-                continue
-    except Exception as exc:
-        logger.warning("Failed to get import jobs uid=%s reason=%s", cleaned_uid, firestore_failure_reason(exc))
-        return []
+    query = (
+        client.collection('import_jobs')
+        .where(filter=FieldFilter('uid', '==', cleaned_uid))
+        .order_by('created_at', direction='DESCENDING')
+        .limit(clamped_limit)
+    )
+    for doc in query.stream():
+        raw: object = doc.to_dict()
+        if isinstance(raw, dict):
+            if 'id' not in raw or not raw['id']:
+                raw['id'] = str(getattr(doc, 'id', ''))
+            jobs.append(cast(Dict[str, Any], raw))
     return jobs
 
 

@@ -265,11 +265,18 @@ def test_get_import_job_hydrates_missing_id():
     assert job["status"] == "completed"
 
 
-def test_get_import_job_error_boundary():
+def test_get_import_job_propagates_read_failure():
     client = MockFirestoreClient()
     doc_ref = client.collection("import_jobs").document("job-err")
     doc_ref.raise_on_get = True
-    assert get_import_job("job-err", firestore_client=client) is None
+    with pytest.raises(RuntimeError, match="Store read error"):
+        get_import_job("job-err", firestore_client=client)
+
+
+def test_get_import_job_invalid_id_returns_none():
+    client = MockFirestoreClient()
+    assert get_import_job("", firestore_client=client) is None
+    assert get_import_job("../bad", firestore_client=client) is None
 
 
 # 9. get_import_jobs tests
@@ -284,10 +291,17 @@ def test_get_import_jobs_limit_clamped():
     assert len(jobs_high) == 1
 
 
-def test_get_import_jobs_error_boundary():
+def test_get_import_jobs_propagates_read_failure():
     client = MockFirestoreClient()
     client.collection("import_jobs").raise_on_stream = True
-    assert get_import_jobs("u1", firestore_client=client) == []
+    with pytest.raises(RuntimeError, match="Stream broken"):
+        get_import_jobs("u1", firestore_client=client)
+
+
+def test_get_import_jobs_invalid_uid_returns_empty():
+    client = MockFirestoreClient()
+    assert get_import_jobs("", firestore_client=client) == []
+    assert get_import_jobs("../bad", firestore_client=client) == []
 
 
 # 10. delete_import_job tests
