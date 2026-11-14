@@ -101,8 +101,9 @@ rows with `admitted_at` in `[start, end)`. They are read-only, bounded by
 `limit`, and raise `LedgerWindowTruncated` instead of silently sampling. C2
 reads only through this helper.
 
-`users/{uid}/pipeline_ledger` is in the portability export inventory and is
-erased by the recursive account wipe. The document never stores titles,
+`users/{uid}/pipeline_ledger` is erased with the account by the recursive user-subtree purge and removed
+with its conversation. It is not part of the portability export: the rows are content-free operational
+state, and the only approved readers are the pipeline census routes. The document never stores titles,
 transcript or overview text, audio paths, secrets or raw content.
 
 Contract: [pipeline ledger](../../listen_pusher_pipeline.mdx). This change gives
