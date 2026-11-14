@@ -84,6 +84,8 @@ MODES = {
     },
 }
 FIXED_SWITCHES = {
+    # This benchmark models projection throughput, not async finish classification.
+    'BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED': 'false',
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED': 'true',
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': 'true',
     'BATCH_PIPELINE_PROJECTION_TIMING_ENABLED': 'false',
@@ -190,6 +192,10 @@ class ChainLog:
         item = WorkItem(segment, owner, capture_at, f'gs://sim/{segment}.wav', CAPTURE_SECONDS, Priority.DEEP)
         serialized_item = item.to_dict()
         self.jobs[segment] = {**serialized_item, 'requires_compute_admission': True, 'policy_parts': self.policy_parts}
+
+    def projection_finish_backfill_complete(self):
+        # This model has no finish-clock backfill or stamped result clocks.
+        return False
 
     # --- FirestoreStore facade ------------------------------------------------
     def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready')):

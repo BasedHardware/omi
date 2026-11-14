@@ -1107,13 +1107,13 @@ def projection_finish_async_skip_enabled() -> bool:
     return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')
 
 
-PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 4
+PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 16
 
 
 def projection_finish_classify_page_limit() -> int:
     """Bound legacy clock updates per page/process; zero pauses classification."""
     try:
-        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '4'))
+        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '16'))
     except ValueError:
         return PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT
     return value if 0 <= value <= 16 else PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT

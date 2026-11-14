@@ -44,9 +44,9 @@ follow-up execution.
 
 ## Bounded classification and progress
 
-`BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **4 attempts per page**;
+`BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT` defaults to **16 attempts per page**;
 0 pauses classification, 1-16 are accepted, and malformed/out-of-range values
-keep 4. Pages on different executor threads have separate caps but share a
+keep 16. Pages on different executor threads have separate caps but share a
 locked process budget. That budget refills only 20 seconds after its last
 attempt finishes; in-flight transactions prevent a refill. There is no sleep,
 new queue or delay imposed on transcript/follow-up delivery by the limiter.
@@ -54,13 +54,13 @@ Failures consume budget, increment a dedicated counter, and leave the row
 eligible without incrementing the sweep's generic error count or deferring it.
 A state/policy race returning false is neither a success nor a failure.
 
-At the reported approximately 42 processes, four per process permits at most
-**168 classification writes in a synchronized one-second burst**, and at most
-**8.4 writes/s averaged over the cooldown**. These are incremental
+At the reported approximately 42 processes, sixteen per process permits at most
+**672 classification writes in a synchronized one-second burst**, and at most
+**33.6 writes/s averaged over the cooldown**. These are incremental
 classification bounds, leaving headroom for ordinary writes under the 500
 writes/s index limit; they are not a fleet-wide cap on all result writers.
-The nominal 518k-row pass is at least **17.1 hours** at that maximum successful
-rate (18 hours at 40 processes). Overlap, failures, slower sweep cadence and
+The nominal 518k-row pass is at least **4.3 hours** at that maximum successful
+rate (4.5 hours at 40 processes). Overlap, failures, slower sweep cadence and
 other work make it longer; new async session writes avoid migration entirely.
 Expect gradual read reduction during that window rather than an immediate cut.
 Fleet growth or raising this setting requires recalculating `processes × limit`

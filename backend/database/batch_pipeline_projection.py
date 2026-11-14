@@ -22,6 +22,7 @@ from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_ASYNC_CLOCK,
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES,
     PROJECTION_FINISH_STEP_FIELD,
@@ -288,7 +289,6 @@ class ProjectionStore:
         The pinned job policy is authoritative. Re-read both documents before
         writing so a concurrent completion or policy pin cannot retire sync work.
         """
-        from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK
 
         @firestore.transactional
         def commit(transaction):
