@@ -139,6 +139,12 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # The unlimited_v2 backfill/import day cap is enforced by listen
+            # admission and the Cloud Run sync/batch hosts through the shared
+            # funded allowance; pusher never admits managed transcription
+            # against a user-day.
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED",
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -237,6 +243,12 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # The unlimited_v2 backfill/import day cap is enforced by listen
+            # admission and the Cloud Run sync/batch hosts through the shared
+            # funded allowance; pusher never admits managed transcription
+            # against a user-day.
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED",
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS",
             # Only listen's runtime reads these to advertise mobile control-channel
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",

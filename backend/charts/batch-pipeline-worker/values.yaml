@@ -85,6 +85,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
+  # Default-off unlimited_v2 backfill/import daily transcribed-hours cap (see
+  # utils/backfill_hours_cap.py). false restores current behavior exactly.
+  unlimitedV2BackfillHoursCapEnabled: false
+  unlimitedV2BackfillHoursCapHours: "24"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
