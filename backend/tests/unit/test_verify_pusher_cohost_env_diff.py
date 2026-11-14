@@ -379,7 +379,7 @@ def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkey
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize(
     'chart,key',
-    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'), ('backend-listen', 'SYNC_COLLISION_SUFFIX_ENABLED')],
+    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED')],
 )
 def test_quality_switch_binding_cannot_disappear_from_its_owning_cohost(gate, chart_fixture, environment, chart, key):
     values = chart_fixture / 'backend/charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'

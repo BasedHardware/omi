@@ -2,13 +2,11 @@
 
 import os
 import logging
-import re
 from typing import BinaryIO, Iterable
 
 from fastapi import UploadFile
 
 from utils.sync.upload_names import canonical_sync_upload_filenames
-from utils.sync.capture_clock import SyncCaptureTimeRejected
 
 
 def empty_framed_clip(stream: BinaryIO) -> bool:
@@ -34,9 +32,7 @@ def prepare_sync_uploads(files: list[UploadFile], uid: str) -> list[UploadFile]:
         )
     if not nonempty:
         raise EmptySyncUpload()
-    # This unconditional legacy normalization is part of content identity,
-    # including with SYNC_COLLISION_SUFFIX_ENABLED off. Released apps put a
-    # same-second collision sequence after the capture
+    # Released apps put a same-second collision sequence after the capture
     # time; every later read (admission, lanes, staging, workers) sees the
     # canonical name with the timestamp last. The capture time is unchanged.
     renamed = 0
@@ -46,12 +42,6 @@ def prepare_sync_uploads(files: list[UploadFile], uid: str) -> list[UploadFile]:
             renamed += 1
     if renamed:
         logging.getLogger(__name__).info('sync_upload_name_canonicalized uid=%s count=%s', uid, renamed)
-    if any(re.search(r'_u[0-9]+\.bin$', file.filename or '') for file in nonempty):
-        # The legacy parser refused every unresolved tail (including aliases
-        # that the whole-request collision guard cannot safely rename). Do
-        # not let the direct-reader extension mint a new HTTP ledger identity
-        # that an old revision cannot reproduce during a roll or rollback.
-        raise SyncCaptureTimeRejected()
     return nonempty
 
 

@@ -663,11 +663,6 @@ async def sync_local_files_v2(
     capture_received_at = time.time()
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
-    except SyncCaptureTimeRejected:
-        return JSONResponse(
-            status_code=400,
-            content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
-        )
     except EmptySyncUpload:
         if repair_identity is not None:
             return JSONResponse(

@@ -14,8 +14,6 @@ date validation, filename timestamp parsing, chunked-upload envelopes).
 
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-import os
-import re
 from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
@@ -97,13 +95,12 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
 
 
 MAX_IMAGE_CHUNK_TOTAL = 4096
-_SYNC_COLLISION_TIMESTAMP = re.compile(r'.+_([0-9]+(?:\.[0-9]+)?)_u[0-9]+\.(bin|wav)')
 
 
 def parse_sync_filename_timestamp(path: str, *, enforce_window: bool = True) -> int | float:
     """Parse and validate the unix timestamp in a sync upload/segment filename.
 
-    Upload filenames end with _<unix-seconds-or-millis>[_u<digits>].bin;
+    Upload filenames are expected to end with _<unix-seconds-or-millis>.bin;
     VAD segment files are named <unix-seconds-or-millis>.wav. The returned
     timestamp is UTC seconds and is safe to pass to fromtimestamp(...,
     tz=timezone.utc). Capture times may sit ahead of the server clock within
@@ -120,16 +117,6 @@ def parse_sync_filename_timestamp(path: str, *, enforce_window: bool = True) -> 
     filename = path.split('/')[-1]
     timestamp_part = filename.rsplit('_', 1)[1] if '_' in filename else filename
     raw_timestamp_text = timestamp_part.rsplit('.', 1)[0]
-    collision = _SYNC_COLLISION_TIMESTAMP.fullmatch(filename)
-    if collision and (
-        not enforce_window
-        or collision[2] == 'wav'
-        or os.getenv('SYNC_COLLISION_SUFFIX_ENABLED', 'true').strip().lower() not in ('0', 'false', 'off', 'no')
-    ):
-        # Read the original clock without renaming: the basename remains part
-        # of storage, manifest and content identity. Internal reads and decoded
-        # WAVs must still drain admitted work after new admission is switched off.
-        raw_timestamp_text = collision[1]
     try:
         raw_timestamp = Decimal(raw_timestamp_text)
     except InvalidOperation as e:

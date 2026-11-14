@@ -1,7 +1,10 @@
-"""Legacy HTTP upload naming is part of durable sync content identity.
+"""Canonical Offline Sync upload names.
 
-Keep this grammar and the whole-request collision guard stable across rolls:
-the content ledger hashes these basenames, not the phone's original names.
+Released apps name a same-second WAL collision ``<stem>_<ts>_u<n>.bin`` (the
+sequence AFTER the capture time). Every timestamp read takes the trailing
+``u<n>`` as the capture time and refuses the file as invalid_capture_time on
+every retry, although its clock is sound. An optional ``_clke<run>`` token
+(``utils.sync.clock_run``) sits directly before the timestamp.
 """
 
 import re
@@ -12,12 +15,14 @@ _TRAILING_COLLISION_SEQUENCE = re.compile(
 
 
 def canonical_sync_upload_filenames(filenames: list[str]) -> list[str]:
-    """Use exactly the basename mapping introduced by 7b1a45549b3c.
+    """Move a trailing ``_u<n>`` collision sequence ahead of the capture time.
 
-    Move the sequence before the timestamp, retaining an optional clock run
-    directly before that timestamp. Leave the whole request untouched if
-    the mapping would collapse two names; HTTP admission must refuse that
-    ambiguous request rather than assign a new content identity.
+    ``<stem>[_clke<run>]_<ts>_u<n>.bin`` becomes ``<stem>_u<n>[_clke<run>]_<ts>.bin``:
+    the timestamp is last again for every parser, the clock-run token still sits
+    directly before it, and the sequence keeps same-second siblings distinct.
+    The timestamp itself is unchanged, so the capture-time window still applies.
+    Every other name is returned as is. If renaming would make two names in the
+    request equal, every name is left untouched: staging must never overwrite.
     """
     canonical = []
     for name in filenames:

@@ -29,7 +29,7 @@ SYNC_CLOCK_RUN_FIELD = 'sync_clock_run'
 # Lowercase alphanumeric, bounded: the run is a client nonce, never user text.
 # Only the part directly before the trailing timestamp counts, so a device name
 # can never be read as a run.
-_TOKEN = re.compile(r'(?:^|_)clke([0-9a-z]{1,32})_[0-9.]+(?:_u[0-9]+)?\.(?:bin|wav)$')
+_TOKEN = re.compile(r'(?:^|_)clke([0-9a-z]{1,32})_[0-9.]+\.(?:bin|wav)$')
 
 
 def clock_run_partition_enabled() -> bool:

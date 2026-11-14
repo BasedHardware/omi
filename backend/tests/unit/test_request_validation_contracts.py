@@ -16,8 +16,6 @@ from utils.request_validation import (
     parse_sync_filename_timestamp,
     validate_calendar_date,
 )
-from utils.observability.reasons import SyncCaptureTimeReason
-from utils.sync.capture_clock import CaptureTimeWindowError
 
 
 class _FormPayload(BaseModel):
@@ -75,48 +73,6 @@ def test_parse_sync_filename_timestamp_accepts_fractional_and_collision_bin_name
     stem = 'audio_pendant1_opus_16000_1_fs100_1735689600.6'
     assert parse_sync_filename_timestamp(f'{stem}.bin') == 1_735_689_600.6
     assert parse_sync_filename_timestamp(f'audio_pendant1_opus_16000_1_fs100_u0_1735689600.6.bin') == 1_735_689_600.6
-
-
-@pytest.mark.parametrize('timestamp', ['1735689600', '1735689600.6', '1735689600600'])
-@pytest.mark.parametrize('suffix', ['', '_u0', '_u12'])
-def test_collision_suffix_keeps_the_canonical_capture_time(monkeypatch, timestamp, suffix):
-    monkeypatch.delenv('SYNC_COLLISION_SUFFIX_ENABLED', raising=False)
-    stem = f'audio_pendant1_opus_16000_1_fs100_{timestamp}'
-    assert parse_sync_filename_timestamp(f'{stem}{suffix}.bin') == parse_sync_filename_timestamp(f'{stem}.bin')
-
-
-@pytest.mark.parametrize('suffix', ['_u', '_u-1', '_ux', '_u0_u1', '_u+1', '_u1x', '_u１２', '_u0\n'])
-def test_collision_suffix_grammar_is_closed(suffix):
-    with pytest.raises(ValueError, match='invalid timestamp') as error:
-        parse_sync_filename_timestamp(f'audio_1735689600{suffix}.bin')
-    assert not isinstance(error.value, CaptureTimeWindowError)
-
-
-@pytest.mark.parametrize('suffix', ['', '_u0'])
-def test_collision_suffix_does_not_bypass_future_clock_policy(suffix):
-    with pytest.raises(CaptureTimeWindowError) as error:
-        parse_sync_filename_timestamp(f'audio_2145916800{suffix}.bin')  # 2038-01-01
-    assert error.value.capture_time_reason is SyncCaptureTimeReason.REJECTED_FUTURE
-
-
-def test_collision_suffix_obeys_existing_early_clock_policy(monkeypatch):
-    name = 'audio_1685577600_u0.bin'
-    monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
-    assert parse_sync_filename_timestamp(name) == 1685577600
-    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
-    with pytest.raises(CaptureTimeWindowError) as error:
-        parse_sync_filename_timestamp(name)
-    assert error.value.capture_time_reason is SyncCaptureTimeReason.REJECTED_EARLY
-
-
-@pytest.mark.parametrize('off', ['false', '0', 'off', 'no'])
-def test_collision_suffix_kill_switch_stops_admission_but_drains_staged_work(monkeypatch, off):
-    monkeypatch.setenv('SYNC_COLLISION_SUFFIX_ENABLED', off)
-    assert parse_sync_filename_timestamp('audio_1735689600.bin') == 1735689600
-    with pytest.raises(ValueError, match='invalid timestamp'):
-        parse_sync_filename_timestamp('audio_1735689600_u0.bin')
-    assert parse_sync_filename_timestamp('audio_1735689600_u0.bin', enforce_window=False) == 1735689600
-    assert parse_sync_filename_timestamp('audio_1735689600_u0.wav') == 1735689600
 
 
 @pytest.mark.parametrize(

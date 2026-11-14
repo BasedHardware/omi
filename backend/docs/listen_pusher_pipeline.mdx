@@ -6753,20 +6753,6 @@ semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
 
-The HTTP upload path always keeps the legacy collision-name normalization:
-`<stem>[_clke<run>]_<ts>_uN.bin` becomes `<stem>_uN[_clke<run>]_<ts>.bin`.
-This has applied to all nonempty V2 uploads since source `7b1a45549b3c`
-(2026-11-01); it is part of the basename-bound durable content identity and
-must remain identical during rolls, retries, artifact repair and rollback.
-Bytes are unchanged; signed manifest claims are matched to the normalized
-names. A colliding pair retains two distinct names and content keys. Ambiguous
-aliases that cannot be normalized without collapse keep their legacy refusal.
-`SYNC_COLLISION_SUFFIX_ENABLED` defaults on for direct admission readers that
-still see a trailing suffix. Set it to `false`, `0`, `off` or `no` to restore
-their previous parser behavior; HTTP normalization and its legacy identity
-remain unchanged in both states. Internal reads and decoded WAVs still drain
-admitted work. Early-clock, future-skew and custody policies are unchanged.
-
 V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill
 pacing, without treating the invalid year as a lookback age. Valid historical
