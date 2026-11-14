@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
-# How long this process trusts that it already wrote an owner's re-offer marker.
-FRESH_REOFFER_MARK_SECONDS = 30.0
+# Owners the give-up clock tracks per process.
 FRESH_REOFFER_MARK_PRUNE = 4096
 # An owner left waiting this long past the head wait without one commit is no longer
 # re-offered by this process.
@@ -143,8 +142,6 @@ class OrderedMerge:
         self.held_owners: set[str] = set()
         # Owner keys whose last drain here left ready fresh rows on the probe page.
         self._fresh_waiting: set[str] = set()
-        # Owner key -> monotonic time this process last ensured its re-offer marker.
-        self._fresh_marked: dict[str, float] = {}
         # Owner key -> (wall time its ready fresh rows were first left waiting with no commit
         # since, wall time last seen waiting).
         self._fresh_stalled: dict[str, tuple[float, float]] = {}
@@ -212,13 +209,6 @@ class OrderedMerge:
         unit of its own need settle soon, and the global ready page can be full of held
         backlog rows. Maintenance re-offers marked owners; ``release_hold`` clears the marker
         once a drain finds no ready fresh row left."""
-        marked = self._fresh_marked.get(key)
-        if marked is not None and time.monotonic() - marked < FRESH_REOFFER_MARK_SECONDS:
-            return
-        if len(self._fresh_marked) > FRESH_REOFFER_MARK_PRUNE:
-            # Entries past the throttle window carry no information.
-            cutoff = time.monotonic() - FRESH_REOFFER_MARK_SECONDS
-            self._fresh_marked = {k: at for k, at in list(self._fresh_marked.items()) if at >= cutoff}
         wrote: list[bool] = []
 
         def mark(tx):
@@ -229,7 +219,6 @@ class OrderedMerge:
 
         try:
             self.store.run(mark)
-            self._fresh_marked[key] = time.monotonic()
             if wrote:
                 logger.info('event=batch_merge outcome=fresh_reoffer_marked source=%s count=1', self.commit_source)
         except Exception as error:  # noqa: BLE001
@@ -562,6 +551,11 @@ class OrderedMerge:
                     type(error).__name__,
                 )
                 pending = []
+                # This call could not see whether ready fresh rows wait. Keep (or write) the
+                # re-offer marker so that next drain happens; without it a marker held for
+                # such rows would be cleared after this visit.
+                if self._fresh_left_waiting(key, now, False, wait):
+                    self._reoffer_fresh(key, now)
             fresh, skipped = _fresh_pick(pending, now, wait)
             if len(pending) >= FRESH_PROBE_ROWS and not any(row.get('state') == 'result_ready' for row in pending):
                 # The probe sees one page. A full page with no ready row may hide ready rows

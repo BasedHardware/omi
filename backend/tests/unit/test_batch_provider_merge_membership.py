@@ -392,6 +392,44 @@ def test_a_full_table_does_not_evict_owners_still_waiting(world, monkeypatch):
     assert set(merge._fresh_stalled) == {'d'}
 
 
+def test_a_marker_cleared_elsewhere_is_written_again_at_once(world, monkeypatch):
+    """No per-process memory of "already marked": another process may have cleared the marker."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None and _marker(store).get('held') is True
+    key = owner_key(OWNER)
+    store.run(lambda tx: tx.put('merge_holds', key, {**tx.get('merge_holds', key), 'held': False}))
+    assert merge.commit_next(OWNER, 231.0) is None
+    assert _marker(store).get('held') is True
+
+
+def test_a_failed_probe_keeps_the_owner_marked(world, monkeypatch):
+    """A transient probe error must not let the visit clear a marker held for waiting rows."""
+    from google.api_core.exceptions import ServiceUnavailable
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None and _marker(store).get('held') is True
+    real = store.fresh_pending
+
+    def failing(*args, **kwargs):
+        raise ServiceUnavailable('probe')
+
+    monkeypatch.setattr(store, 'fresh_pending', failing)
+    merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 240.0))
+    assert _marker(store).get('held') is True
+    monkeypatch.setattr(store, 'fresh_pending', real)
+    committed = []
+    merge.reoffer_marked(lambda owner_id: committed.extend(drain(merge, 261.0)))
+    assert [e['segment_id'] for e in committed] == ['ready']
+
+
 def test_a_failing_marker_write_does_not_stop_the_drain(world, monkeypatch, caplog):
     store, _ = _legacy_backlog(world, monkeypatch, 1)
     admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)

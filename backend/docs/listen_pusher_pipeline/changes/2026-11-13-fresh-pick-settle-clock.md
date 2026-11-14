@@ -63,6 +63,9 @@ holding a re-offer marker that reaches the depth cap gets a depth-hold marker in
   owners and evicts only owners not seen for 10 minutes; when it is full, a further owner is
   not tracked and not marked (`fresh_reoffer_table_full`).
 - A failed marker write is logged (`fresh_reoffer_mark_retry`) and never stops the drain.
+- A transient error on the probe query keeps or writes the marker, under the same bound: the call
+  could not see whether rows wait. The marker transaction is not throttled per process, because
+  another process may have cleared the marker.
 - Cost of a visit: the marker listing reads the owner's first pending row, then one drain of up to
   100 commit attempts (each a strict transaction, the probe query, and a second transaction when
   a row commits; a visit that commits nothing is one attempt). Maintenance visits at most 50
