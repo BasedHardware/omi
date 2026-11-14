@@ -26,6 +26,15 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Desktop Swift Static & Test Contracts: SCA-1981 (nightly run
+    # 43357908980) measured the prelude ahead of the suite step at 41 minutes
+    # (checkout, pinned Xcode, cold from-source formatter/linter bootstrap,
+    # macOS manifest checks, debug prebuild), which the 90-min ceiling could
+    # not admit alongside the job's own declared 70-min suite budget (4200s)
+    # plus the ~158s post-step: the job was cancelled before its step-budget
+    # guard could publish a diagnosable failure. 120 restores that headroom;
+    # budget_p50 stays 29.
+    ("desktop-swift-ci.yml", "desktop-swift-verify", "timeout-minutes"): "120",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
