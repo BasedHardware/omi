@@ -22,6 +22,11 @@ AUDIO_TIMELINE_QUERY_PARAM = 'audio_timeline'
 AUDIO_TIMELINE_PROTOCOL = 2
 PUSHER_AUDIO_TIMELINE_ACK_OPCODE = 202
 PUSHER_AUDIO_CUSTODY_ACK_OPCODE = 203
+PUSHER_RECORD_CLOSE_ACK_OPCODE = 204
+
+
+def record_close_ack_frame() -> bytes:
+    return struct.pack('<I', PUSHER_RECORD_CLOSE_ACK_OPCODE) + b'{"type":"record_close_ack","version":1}'
 
 
 def audio_custody_ack_frame(receipt: Dict[str, Any]) -> bytes:

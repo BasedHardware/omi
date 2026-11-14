@@ -34,6 +34,7 @@ PATH = ('users', 'uid-at', 'conversations', 'record')
 
 @pytest.fixture
 def records(env, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     registry = barrier_module._ProcessRecordTokens()
     monkeypatch.setattr(barrier_module, '_process_record_tokens', lambda: registry)
     client = StrictFirestore()
@@ -668,3 +669,45 @@ def test_partial_audio_does_not_clear_refusal_clock(records):
     assert records.rows[PATH]['record_seal_refused_at'] == 100
     assert not records.rows[PATH].get('record_audio_closed')
     assert not records.transactions[-1].updates
+
+
+async def test_close_only_flushes_and_seals_while_socket_continues_without_finalization(records, monkeypatch):
+    closed = asyncio.Event()
+    original = record_audio_db.seal_record_audio
+
+    loop = asyncio.get_running_loop()
+
+    def signal_seal(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result is None:
+            loop.call_soon_threadsafe(closed.set)
+        return result
+
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', signal_seal)
+    control = struct.pack('<I', 104) + json.dumps({'conversation_id': 'record', 'record_close_only': True}).encode()
+
+    class StillOpen(FakeWebSocket):
+        async def receive_bytes(self):
+            if not self.frames:
+                await asyncio.wait_for(closed.wait(), 5)
+            return await super().receive_bytes()
+
+    await _run(StillOpen([_conversation('record'), _audio(100, b'\x01\x00' * RATE), control]))
+    assert records.rows[PATH]['record_audio_closed'] is True
+    pusher.process_conversation_task.assert_not_called()
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeypatch, enabled):
+    from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
+
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', enabled)
+    ws = FakeWebSocket([])
+    ws.sent = []
+
+    async def send(data):
+        ws.sent.append(data)
+
+    ws.send_bytes = send
+    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=1)
+    assert any(struct.unpack('<I', f[:4])[0] == PUSHER_RECORD_CLOSE_ACK_OPCODE for f in ws.sent) is (enabled == 'true')

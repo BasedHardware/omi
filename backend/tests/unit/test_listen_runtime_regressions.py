@@ -1482,3 +1482,21 @@ async def test_quiet_final_billing_window_releases_shadow_hold_without_usage_wri
     assert runtime.allowance_operation.closed
     runtime.allowance_operation.billed.assert_called_once_with(0)
     usage.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('route', ['cloud_tasks', 'queued', 'blocked_byok'])
+async def test_durable_finalization_also_notifies_capture_close_without_pusher_finalizer(monkeypatch, route):
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic'),
+        client_kind='omi',
+        request_conversation_processing=AsyncMock(),
+        request_recording_close=AsyncMock(),
+        persistence=SimpleNamespace(call=AsyncMock(return_value={'route': route})),
+    )
+    monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
+    controller = LiveConversationController(host)
+    controller.on_conversation_processing_started = MagicMock()
+    assert await controller.schedule_finalization('conversation-1')
+    host.request_recording_close.assert_awaited_once_with('conversation-1')
+    host.request_conversation_processing.assert_not_awaited()

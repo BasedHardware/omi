@@ -268,6 +268,49 @@ REAL_UPDATE = db.update_conversation
 
 
 @pytest.mark.asyncio
+async def test_async_metadata_keeps_playback_and_identity_callbacks(world):
+    refreshed = MagicMock()
+    cache = projection.PusherAudioProjection('u', on_refresh=refreshed)
+    path = world.add(100)
+    assert await cache.defer_close_refresh('c', [path], closing=False)
+    await cache.persist_pending()
+    assert world.stored[0]['chunk_timestamps'] == [100]
+    refreshed.assert_called_once_with('c', True)
+    assert await cache.defer_close_refresh('c')
+    await cache.persist_pending()
+    assert refreshed.call_count == 2
+    assert 'c' in cache.finished
+
+
+@pytest.mark.asyncio
+async def test_fast_drain_rechecks_deleted_owner_before_projection(world, monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda _: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda _: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda _: True)
+    monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda _: 'standard')
+    monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(record_audio, 'set_record_upload_pending', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio, 'seal_record_audio', MagicMock(return_value='deleted'))
+    pcm = b'\x01\x00' * 160
+    receipt = AudioReceipt('bucket', 'path', '1', 'digest', 'manifest', '1', 'digest', 'digest', 'c', 100, 160, 16000)
+    monkeypatch.setattr(pusher, 'commit_pcm_window', lambda *_: receipt)
+    read = MagicMock(return_value=pcm)
+    upload = MagicMock()
+    monkeypatch.setattr(pusher, 'read_pcm', read)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    world.gone[0] = True
+
+    from tests.unit.test_pusher_audio_timeline import FakeWebSocket
+
+    sock = FakeWebSocket([struct.pack('<I', 103) + b'c', struct.pack('<Id', 101, 100) + pcm])
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'u', 16000, audio_timeline=2), 5)
+    read.assert_not_called()
+    upload.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'durable,ending',
     [
@@ -278,6 +321,8 @@ REAL_UPDATE = db.update_conversation
     ],
 )
 async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, durable, ending):
+    # Exercise the synchronous rollback contract, including its inline retries.
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true' if durable else 'false')
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda _: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda _: False)

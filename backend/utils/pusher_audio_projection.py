@@ -23,6 +23,7 @@ from utils.observability.fallback import record_fallback
 from utils.executors import run_blocking, storage_executor, db_executor, start_background_task
 from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
+from utils.pusher_receive_metrics import observe_work
 
 PROJECTIONS = Counter('omi_pusher_audio_file_projection_total', 'Pusher playback projection refreshes', ['mode'])
 # Why a refresh paid for a full prefix discovery. Closed values; one increment
@@ -106,8 +107,9 @@ class PusherAudioProjection:
     existing pack index every flush; those fragments are not append-only.
     """
 
-    def __init__(self, uid: str):
+    def __init__(self, uid: str, *, on_refresh=None):
         self.uid = uid
+        self.on_refresh = on_refresh
         self.has_uploaded_paths = False
         self.close_debt: set[str] = set()
         # Separate metadata-only overflow inventory; never retain PCM receipts
@@ -118,6 +120,9 @@ class PusherAudioProjection:
         self.finished: set[str] = set()
         self.close_retries: dict[str, int] = {}
         self.inventory: dict[str, Inventory | None] = {}
+        self.pending_refresh: dict[str, tuple[list[str], bool]] = {}
+        self.refresh_task: asyncio.Task | None = None
+        self.refresh_worker: PusherAudioProjection | None = None
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
@@ -309,6 +314,63 @@ class PusherAudioProjection:
             deleted_conversations.add(conv_id)
         return True
 
+    async def defer_close_refresh(self, conv_id: str, paths=None, *, closing: bool = True) -> bool:
+        """Keep optional playback discovery out of the proven audio drain."""
+        if not closing:
+            self.finished.discard(conv_id)
+        if closing and conv_id in self.finished:
+            return True
+        if not durable_debt_enabled():
+            return False
+        previous, force = self.pending_refresh.get(conv_id, ([], False))
+        merged = list(dict.fromkeys([*previous, *(paths or [])]))
+        if (
+            conv_id not in self.pending_refresh
+            and len(self.pending_refresh) >= MAX_CONVERSATIONS
+            or sum(len(p) for cid, (p, _) in self.pending_refresh.items() if cid != conv_id) + len(merged) > MAX_CHUNKS
+        ):
+            return False
+        self.pending_refresh[conv_id] = merged, closing or force
+        if self.refresh_task is None or self.refresh_task.done():
+            self.refresh_task = start_background_task(self._refresh_metadata(), name='pusher:playback_refresh')
+        if closing and not await self.defer_rebuild(conv_id):
+            return False
+        self.inventory.pop(conv_id, None)
+        self.has_uploaded_paths = True
+        if closing and len(self.finished) < MAX_CONVERSATIONS:
+            self.finished.add(conv_id)
+        return True
+
+    async def _refresh_metadata(self) -> None:
+        # Only this coordinator touches its separate synchronous cache owner.
+        # Audio/close tasks never wait on optional playback discovery.
+        if self.refresh_worker is None:
+            self.refresh_worker = PusherAudioProjection(self.uid)
+        while self.pending_refresh:
+            cid = next(iter(self.pending_refresh))
+            paths, closing = self.pending_refresh.pop(cid)
+            try:
+                with observe_work('drain_refresh'):
+                    applied = await run_blocking(
+                        storage_executor, self.refresh_worker.refresh, cid, paths, force=closing
+                    )
+                if self.on_refresh is not None:
+                    self.on_refresh(cid, applied)
+                if applied:
+                    schedule_person_voice_learning_retry(self.uid, cid)
+                elif applied is None:
+                    await self.defer_rebuild(cid)
+            except Exception:
+                await self.defer_rebuild(cid)
+                record_fallback(
+                    component='pusher',
+                    from_mode='incremental_audio_files',
+                    to_mode='audio_file_listing',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+
     async def defer_rebuild(self, conv_id: str) -> bool:
         """Queue optional metadata without awaiting Firestore on the close path."""
         if not durable_debt_enabled():
@@ -357,12 +419,16 @@ class PusherAudioProjection:
                 self.marker_sequence += 1
                 self.marker_retry[cid] = self.marker_sequence
         self._start_marker_task()
-        if self.marker_task is None:
+        if self.marker_task is None and self.refresh_task is None:
             return
         try:
             async with asyncio.timeout(MARKER_CLOSE_SECONDS):
+                if self.refresh_task is not None:
+                    await asyncio.shield(self.refresh_task)
                 for attempt in range(2):
-                    await asyncio.shield(self.marker_task)
+                    self._start_marker_task()
+                    if self.marker_task is not None:
+                        await asyncio.shield(self.marker_task)
                     if not self.marker_retry or attempt == 1:
                         break
                     self._start_marker_task()

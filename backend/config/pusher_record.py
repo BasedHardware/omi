@@ -9,6 +9,18 @@ def seal_pending_retry_bound_enabled() -> bool:
     return default_on('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED')
 
 
+def close_notify_enabled() -> bool:
+    return default_on('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED')
+
+
+def close_fast_path_enabled() -> bool:
+    return default_on('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED')
+
+
+def seal_wake_enabled() -> bool:
+    return default_on('PUSHER_RECORD_SEAL_WAKE_ENABLED')
+
+
 def abandon_record_drain_cap() -> int:
     try:
         value = int(os.getenv('PUSHER_MAX_ABANDON_RECORD_DRAINS', '4'))

@@ -5,6 +5,7 @@ import random
 import struct
 import time
 from collections import deque
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Awaitable, Callable, cast, Deque, Dict, List, Optional, Tuple, TYPE_CHECKING
@@ -32,6 +33,8 @@ from utils.pusher_protocol import (
     PUSHER_AUDIO_TIMELINE_ACK_OPCODE,
 )
 from config.audio_outbox import enabled as audio_outbox_enabled
+from config.pusher_record import close_notify_enabled
+from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -213,6 +216,8 @@ class ListenPusherSession:
         # silently downgraded and never used to terminate the recording.
         self.audio_timeline_active = False
         self.audio_timeline_suspended = False
+        self.record_close_supported = False
+        self.pending_record_closes: set[str] = set()
 
     @property
     def uid(self):
@@ -412,8 +417,39 @@ class ListenPusherSession:
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
-    async def _audio_bytes_flush(self):
+    async def request_recording_close(self, conversation_id: str) -> bool:
+        """Order accepted audio before a close-only request; never run a finalizer."""
+        if not close_notify_enabled():
+            return False
+        if len(self.pending_record_closes) < self.config.max_pending_requests:
+            self.pending_record_closes.add(conversation_id)
+        self.pending_request_event.set()
+        if not self.record_close_supported or not self.pusher_connected:
+            return False  # An old pusher must never interpret this as finalization.
+        socket = self.pusher_ws
         async with self.audio_flush_lock:
+            await self._audio_bytes_flush(lock_held=True)
+            if (
+                not self.pusher_connected
+                or not self.record_close_supported
+                or socket is None
+                or self.pusher_ws is not socket
+                or self.audio_runs
+            ):
+                return False  # Failed/withheld audio keeps its producer fence.
+            try:
+                await socket.send(
+                    struct.pack('<I', 104)
+                    + json.dumps({'conversation_id': conversation_id, 'record_close_only': True}).encode()
+                )
+            except Exception:
+                logger.warning('event=record_close_notify outcome=send_failed')
+                return False
+            self.pending_record_closes.discard(conversation_id)
+            return True
+
+    async def _audio_bytes_flush(self, *, lock_held: bool = False):
+        async with nullcontext() if lock_held else self.audio_flush_lock:
             # Relay delivery never waits for storage. The raw archive retains
             # the original bytes; only its window checkpoint releases WAL.
             current_conversation_id = self.deps.get_current_conversation_id()
@@ -607,11 +643,18 @@ class ListenPusherSession:
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
                 await self._audio_bytes_flush()
+            if self.record_close_supported:
+                for cid in list(self.pending_record_closes):
+                    await self.request_recording_close(cid)
 
     async def pusher_receive(self):
         """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
         while self.deps.is_active():
-            if not self.pending_conversation_requests and not self.audio_timeline_suspended:
+            if (
+                not self.pending_conversation_requests
+                and not self.pending_record_closes
+                and not self.audio_timeline_suspended
+            ):
                 self.pending_request_event.clear()
                 try:
                     await asyncio.wait_for(self.pending_request_event.wait(), timeout=5.0)
@@ -629,7 +672,20 @@ class ListenPusherSession:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
 
-                if header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
+                if header_type == PUSHER_RECORD_CLOSE_ACK_OPCODE:
+                    if self.pusher_ws is not sock:
+                        continue  # An old socket cannot qualify its replacement.
+                    ack = json.loads(msg[4:].decode('utf-8'))
+                    self.record_close_supported = (
+                        isinstance(ack, dict)
+                        and ack.get('type') == 'record_close_ack'
+                        and type(ack.get('version')) is int
+                        and ack['version'] == 1
+                    )
+                    if self.record_close_supported:
+                        for cid in list(self.pending_record_closes):
+                            await self.request_recording_close(cid)
+                elif header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
                     if self._audio_timeline_ack_check(msg):
                         await self._resume_audio_timeline(sock)
                 elif header_type == 201:
@@ -978,6 +1034,9 @@ class ListenPusherSession:
                 'client_kind': self.config.client_kind,
             }
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
+            self.record_close_supported = False
+            if close_notify_enabled():
+                connect_kwargs['record_close_protocol'] = 1
             if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL
             self.pusher_ws = await self.deps.connect_to_pusher(self.uid, pusher_sample_rate, **connect_kwargs)
