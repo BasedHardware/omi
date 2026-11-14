@@ -6,6 +6,7 @@ import asyncio
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
+from urllib.parse import quote
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -413,11 +414,12 @@ async def get_google_calendar_events(
     search_query: Optional[str] = None,
     *,
     uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     try:
         async with asyncio.timeout(20):
             return await _get_selected_calendar_events(
-                access_token, time_min, time_max, max_results, search_query, uid=uid
+                access_token, time_min, time_max, max_results, search_query, uid=uid, selections=selections
             )
     except GoogleAPIError:
         if uid:
@@ -433,6 +435,7 @@ async def _get_selected_calendar_events(
     search_query: Optional[str] = None,
     *,
     uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Read only the owner's selected calendars, globally ordered and bounded.
 
@@ -440,12 +443,10 @@ async def _get_selected_calendar_events(
     preserve identity through linking, import dedupe and later event mutations.
     Callers without an Omi owner retain the legacy primary-only helper contract.
     """
-    from urllib.parse import quote
-
     now = datetime.now(timezone.utc)
     time_min = (time_min or now).astimezone(timezone.utc)
     time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
-    calendars = await read_ids(uid, access_token) if uid else ['primary']
+    calendars = await read_ids(uid, access_token, selections) if uid else ['primary']
     collected: List[Dict[str, Any]] = []
     for calendar_id in calendars:
         params: Dict[str, Any] = {
@@ -469,7 +470,10 @@ async def _get_selected_calendar_events(
                     params=params,
                 )
             except GoogleAPIError as error:
-                if calendar_id != 'primary' and error.status_code in {403, 404, 410}:
+                # A 403 is also how Google reports quota exhaustion, which is
+                # transient and not a lost grant. Dropping the calendar there
+                # would return a partial read as a successful one.
+                if calendar_id != 'primary' and error.status_code in {403, 404, 410} and not error.is_quota_error:
                     if uid:
                         google_calendar_catalog_cache.invalidate(uid)
                     # Access can disappear after catalog enumeration. Keep other

@@ -9,19 +9,12 @@ from database import google_calendar_preferences as preferences
 from utils.google_calendar_identity import account_key
 from utils.executors import db_executor, run_blocking
 from utils.retrieval import google_calendar_catalog_cache as catalog_cache
+from utils.retrieval.google_transport import google_api_request
 
 BASE = 'https://www.googleapis.com/calendar/v3'
 MAX_SELECTED = 25
 MAX_CATALOG_PAGES = 20
 EVENT_PREFIX = 'omi-gcal:'
-
-
-async def google_api_request(*args: Any, **kwargs: Any) -> Any:
-    # tools/__init__.py eagerly imports calendar_tools. Resolve this transport at
-    # call time so importing the pure catalog/identity helpers cannot cycle back.
-    from utils.retrieval.tools.google_utils import google_api_request as request
-
-    return await request(*args, **kwargs)
 
 
 async def readable_calendars(access_token: str) -> tuple[str, list[dict[str, Any]]]:
@@ -91,8 +84,13 @@ async def catalog(uid: str, access_token: str) -> dict[str, Any]:
     return {'account_id': primary, 'calendars': rows, 'selected_ids': ids, 'write_calendar_id': 'primary'}
 
 
-async def read_ids(uid: str, access_token: str) -> list[str]:
-    selections = await run_blocking(db_executor, preferences.get_selections, uid)
+async def read_ids(uid: str, access_token: str, selections: dict | None = None) -> list[str]:
+    if selections is None:
+        # Async callers resolve preferences here. A caller that already runs on a
+        # DB worker passes the preferences it read directly: submitting to the
+        # same pool from inside a worker would make the probe queue behind its
+        # own waiting callers.
+        selections = await run_blocking(db_executor, preferences.get_selections, uid)
     if not selections:
         # Released users retain the exact primary-only lane, including legacy
         # grants that can read events but cannot enumerate the calendar catalog.

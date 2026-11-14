@@ -10,6 +10,7 @@ from routers import google_calendar as routes
 from utils.retrieval import google_calendar_selection as selection
 from utils.retrieval import google_calendar_catalog_cache as cache
 from utils.retrieval.tools import calendar_tools as tools
+from utils.retrieval import google_transport as transport
 from utils.retrieval.tools.google_utils import GoogleAPIError
 
 
@@ -399,3 +400,60 @@ async def test_google_documented_private_restricted_writer_is_readable(provider)
     calendars.append(calendar('restricted-writer', role='writerWithoutPrivateAccess'))
     _, rows = await selection.readable_calendars('token')
     assert any(row['id'] == 'restricted-writer' for row in rows)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'status,reason,raises',
+    [
+        (403, 'rateLimitExceeded', True),
+        (403, 'userRateLimitExceeded', True),
+        (404, 'notFound', False),
+        (403, 'forbidden', False),
+    ],
+)
+async def test_secondary_failures_distinguish_quota_from_lost_access(provider, monkeypatch, status, reason, raises):
+    # Google reports quota exhaustion as 403. Treating that as a revoked grant
+    # would return a partial read as a successful one.
+    store, owner, _, _ = provider
+    store['omi-Q'] = {prefs.account_key(owner['primary']): [owner['primary'], 'team/#?@group.test']}
+
+    async def request(method, url, token, params=None, body=None, **kwargs):
+        if url.endswith('/calendarList'):
+            return {
+                'items': [
+                    calendar(owner['primary'], primary=True, role='owner'),
+                    calendar('team/#?@group.test'),
+                ]
+            }
+        if '/calendars/primary/events' in url:
+            return {'items': [event('primary-event', 12)]}
+        raise GoogleAPIError(status, '{"error":{"errors":[{"reason":"%s"}]}}' % reason)
+
+    monkeypatch.setattr(tools, 'google_api_request', request)
+    if raises:
+        with pytest.raises(GoogleAPIError):
+            await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
+    else:
+        rows = await tools.get_google_calendar_events('synthetic-token', uid='omi-Q')
+        assert [row['id'] for row in rows] == ['primary-event']
+
+
+@pytest.mark.asyncio
+async def test_pre_resolved_selections_do_not_re_enter_the_db_pool(provider, monkeypatch):
+    # The failed-finalization probe already runs on a db worker; re-reading
+    # preferences there would queue behind its own waiting callers.
+    def _unexpected(uid):
+        raise AssertionError('read_ids must not re-read preferences when supplied')
+
+    monkeypatch.setattr(prefs, 'get_selections', _unexpected)
+    assert await selection.read_ids('omi-Q', 'synthetic-token', {}) == ['primary']
+
+
+def test_provider_url_masks_calendar_identity():
+    # Calendar ids are frequently the owner's email address; percent encoding
+    # does not redact them.
+    assert (
+        transport.redacted_url('https://www.googleapis.com/calendar/v3/calendars/ada%40example.com/events')
+        == 'https://www.googleapis.com/calendar/v3/calendars/<redacted>/events'
+    )
