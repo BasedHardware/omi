@@ -599,6 +599,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             return None
         lease = now + lease_seconds
         latest['available_at'] = lease
+        latest['record_intake_claimed_at'] = now
         tx.put('jobs', segment, latest)
         return lease
 

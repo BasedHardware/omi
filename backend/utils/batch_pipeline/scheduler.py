@@ -637,6 +637,8 @@ class Scheduler:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
                 token = uuid.uuid4().hex
+                if (job.get('projection_binding') or {}).get('native_record'):
+                    job.setdefault('record_first_leased_at', now)
                 job.update(
                     state='leased',
                     token=token,

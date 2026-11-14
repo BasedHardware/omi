@@ -115,6 +115,19 @@ def _awaiting_projection(tx, owner: dict) -> int:
     return sequence - done if done else 0
 
 
+def _record_sibling_pending(tx, job: dict) -> bool:
+    """Every merge route preserves the immutable native recording's unit order."""
+    binding = job.get('projection_binding') or {}
+    if binding.get('native_record') is not True:
+        return False
+    for sibling in binding.get('segment_ids') or ():
+        if sibling == job['segment_id']:
+            return False
+        if tx.get('jobs', sibling).get('state') != 'committed':
+            return True
+    return True  # An incomplete/malformed binding cannot authorize a bypass.
+
+
 class OrderedMerge:
     def __init__(
         self,
@@ -395,6 +408,8 @@ class OrderedMerge:
                 except FailedPrecondition as error:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
+                return None
+            if _record_sibling_pending(tx, candidate):
                 return None
             if not fresh_first and _backlog_held(candidate):
                 # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.

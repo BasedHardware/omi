@@ -2135,6 +2135,7 @@ def get_conversations_without_photos(
                 'folder_user_set',
                 'episode_id',
                 'finalization_status',
+                'notes_written_at',
                 *SETTLING_FIELDS,
                 *SUMMARY_DEBT_FIELDS,
                 *transcribing_hold.READ_FIELDS,

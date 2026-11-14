@@ -128,6 +128,7 @@ def test_only_recent_sealed_native_records_enqueue_notes_without_settle(monkeypa
     session = Mock()
     session.job = {
         'priority': 0,
+        'record_notes_after_complete': case == 'recent',
         'fresh_capture': True,
         'record_finished_at': NOW - (1801 if case == 'old' else 700),
         'projection_binding': {'native_record': binding.native_record, 'partial_record': binding.partial_record},
@@ -157,9 +158,43 @@ def test_only_recent_sealed_native_records_enqueue_notes_without_settle(monkeypa
     # First-summary debt already clips the legacy 600s settle to 120s.
     # Refreshes keep the full settle. The sealed-record wake removes both.
     delay = 600 if summary_seen else 120
-    assert row['due_at'] == (NOW if case == 'recent' else NOW + delay)
+    if case == 'recent':
+        # The receipt is ready, but only content completion may create notes.
+        assert (row or {}).get('version', 0) == int(summary_seen)
+        assert receipt_ref.get().to_dict()['record_notes_deferred'] is True
+    else:
+        assert row['due_at'] == NOW + delay
     assert receipt_ref.get().to_dict()['state'] == 'ready'
     session.guard.assert_called_once_with(client.transactions[0], ['capture'])
+
+
+@pytest.mark.parametrize('transactional', [False, True])
+@pytest.mark.parametrize('older_stock', [False, True])
+def test_expired_head_wait_never_bypasses_an_unready_record_sibling(monkeypatch, transactional, older_stock):
+    from dataclasses import asdict
+
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', str(transactional).lower())
+    store = MemoryStore()
+    queue = Scheduler(store)
+    if older_stock:
+        queue.enqueue(item('stock', owner='owner', capture=1), NOW)
+        store.rows['jobs', 'stock'].update(state='retry', fresh_capture=False)
+    binding = ProjectionBinding('owner', 'record-job', 'record-content', ('first', 'last'), native_record=True)
+    for i, sid in enumerate(binding.segment_ids):
+        queue.enqueue(item(sid, owner='owner', capture=NOW - 100 + i), NOW)
+        store.rows['jobs', sid].update(projection_binding=asdict(binding), fresh_capture=True)
+    store.rows['jobs', 'last'].update(
+        state='result_ready', result=WorkResult('last', 'gs://synthetic/result').to_dict(), ready_at=NOW - 600
+    )
+    merge = OrderedMerge(store)
+    assert merge.commit_next('owner', NOW) is None
+    assert merge.commit_next('owner', NOW + 600) is None
+    assert store.rows['jobs', 'last']['state'] == 'result_ready'
+    store.rows['jobs', 'first'].update(
+        state='result_ready', result=WorkResult('first', 'gs://synthetic/result').to_dict(), ready_at=NOW
+    )
+    assert merge.commit_next('owner', NOW + 600)['segment_id'] == 'first'
+    assert merge.commit_next('owner', NOW + 600)['segment_id'] == 'last'
 
 
 @pytest.mark.asyncio

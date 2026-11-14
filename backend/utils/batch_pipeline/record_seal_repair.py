@@ -1,6 +1,7 @@
 """Exact-job record seal repair. Plans stay private; public reports are aggregates."""
 
 from collections import Counter
+import time
 from datetime import datetime
 import hashlib
 import json
@@ -332,6 +333,12 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
             )
             patch: dict[str, Any] = {'record_audio_closed': True}
+            if (
+                not row.get('record_audio_closed')
+                or row.get('record_upload_sessions')
+                or row.get('record_upload_failed')
+            ):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
             if row.get('record_upload_failed'):
