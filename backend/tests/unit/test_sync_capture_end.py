@@ -274,3 +274,9 @@ def test_status_event_carries_the_silence_timer_only_when_set():
     assert 'end_silence_seconds' not in MessageServiceStatusEvent(status='mobile_batch_admission').to_json()
     sent = MessageServiceStatusEvent(status='mobile_batch_admission', end_silence_seconds=120).to_json()
     assert sent['end_silence_seconds'] == 120
+
+
+def test_the_store_names_the_same_collection_as_the_session_authority():
+    from database import recording_sessions
+
+    assert store.RECORDING_SESSIONS_COLLECTION == recording_sessions.RECORDING_SESSIONS_COLLECTION

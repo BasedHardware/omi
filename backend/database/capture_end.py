@@ -11,14 +11,24 @@ from __future__ import annotations
 import logging
 from typing import Any, Mapping
 
-from google.cloud import firestore
-
-from database._client import get_firestore_client, run_transactional
-from database.recording_sessions import RECORDING_SESSIONS_COLLECTION
 from utils.sync import capture_end as policy
 from utils.sync.capture_end import FIELD
 
 logger = logging.getLogger(__name__)
+
+# Import-light on purpose: the frozen legacy sync pipeline imports this module,
+# and its tests load that pipeline with the Firestore client stubbed. Storage
+# dependencies are imported where they are used. The collection name is pinned
+# to ``database.recording_sessions`` by a test.
+RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
+
+
+def _client(firestore_client: Any) -> Any:
+    if firestore_client is not None:
+        return firestore_client
+    from database._client import get_firestore_client
+
+    return get_firestore_client()
 
 
 def _ref(client: Any, uid: str, recording_session_id: str) -> Any:
@@ -39,7 +49,11 @@ def store(
     end decision with the same pending count), ``stale`` (an older decision), or
     ``unbound`` when no session document exists for this owner.
     """
-    client = firestore_client if firestore_client is not None else get_firestore_client()
+    from google.cloud import firestore
+
+    from database._client import run_transactional
+
+    client = _client(firestore_client)
     ref = _ref(client, uid, recording_session_id)
 
     @firestore.transactional
@@ -70,8 +84,7 @@ def store(
 
 def load(uid: str, recording_session_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
     """One document read; ``None`` when the session or its marker is absent."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    snapshot = _ref(client, uid, recording_session_id).get()
+    snapshot = _ref(_client(firestore_client), uid, recording_session_id).get()
     if not getattr(snapshot, 'exists', False):
         return None
     data = snapshot.to_dict() or {}
