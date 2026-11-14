@@ -4,6 +4,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass
+from typing import TypeGuard, cast
 
 from google.api_core.exceptions import Aborted
 from prometheus_client import Counter
@@ -18,8 +19,8 @@ REFUSED = Counter('omi_batch_pipeline_backlog_refused_total', 'Backlog gate refu
 FIELDS = ('state', 'rate_per_hour', 'reach_seconds', 'window', 'tokens_used', 'updated_at')
 
 
-def _number(value) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+def _number(value: object) -> TypeGuard[float]:
+    return type(value) in (int, float) and math.isfinite(cast(float, value))
 
 
 @dataclass(frozen=True)
