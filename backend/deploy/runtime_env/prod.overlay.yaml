@@ -50,6 +50,8 @@ overlay:
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
         HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
@@ -274,6 +276,8 @@ overlay:
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
         HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
@@ -545,6 +549,8 @@ overlay:
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
@@ -917,6 +923,8 @@ overlay:
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
@@ -1313,6 +1321,8 @@ overlay:
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
@@ -1671,6 +1681,8 @@ overlay:
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
