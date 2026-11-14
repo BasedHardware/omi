@@ -132,6 +132,28 @@ final class MemoriesTruncatedReadStateTests: XCTestCase {
     XCTAssertTrue(viewModel.listReadTruncated, "and the list says it is unfinished")
   }
 
+  // MARK: - Load more
+
+  func testTruncatedLaterPageFlagsTheListFromLoadMore() async throws {
+    let first = makeMemory(id: "first")
+    let second = makeMemory(id: "second")
+    // The first page is complete and resumable; the page behind its cursor is
+    // where the server stopped.
+    let viewModel = makeViewModel(
+      browsePages: [page([first], nextCursor: "after-first"), page([second], truncated: true)])
+    await viewModel.loadMemories()
+    XCTAssertEqual(viewModel.memories.map(\.id), ["first"])
+    XCTAssertTrue(viewModel.hasMoreMemories)
+    XCTAssertFalse(viewModel.listReadTruncated, "a complete first page is not flagged")
+
+    await viewModel.loadMore()
+
+    XCTAssertEqual(viewModel.memories.map(\.id), ["first", "second"], "the rows that did arrive are appended")
+    XCTAssertTrue(viewModel.listReadTruncated, "a truncated later page means the history on screen stops early")
+    XCTAssertFalse(viewModel.hasMoreMemories, "a truncated page carries no resumable cursor")
+    XCTAssertFalse(viewModel.isLoadingMore)
+  }
+
   // MARK: - Page states
 
   /// Renders the two unfinished-read states so a reviewer can see them without
@@ -170,10 +192,12 @@ final class MemoriesTruncatedReadStateTests: XCTestCase {
 
   // MARK: - Helpers
 
-  private func page(_ memories: [ServerMemory], truncated: Bool = false) -> APIClient.MemoryListPage {
+  private func page(
+    _ memories: [ServerMemory], truncated: Bool = false, nextCursor: String? = nil
+  ) -> APIClient.MemoryListPage {
     APIClient.MemoryListPage(
       memories: memories,
-      nextCursor: nil,
+      nextCursor: nextCursor,
       canonicalLifecycleExposed: false,
       deviceScopeSupported: true,
       defaultMemoryDeleteSupported: true,
