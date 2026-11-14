@@ -27,6 +27,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -67,6 +68,7 @@ class Transaction(Protocol):
 
 class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def projection_finish_backfill_complete(self) -> bool: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -450,6 +452,9 @@ class FirestoreStore:
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_complete(self.client, self.namespace)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -966,7 +971,9 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
 
 # 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
 # (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
-TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+# provider_running is in-flight vendor work; provider_pending stays out (allowance holds park it for a
+# day) and is exported by the provider-stage stock gauges instead.
+TIMELINESS_ACTIVE_STATES = ('leased', 'provider_running', 'result_ready')
 TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
 TIMELINESS_PROJECTION_SCAN_LIMIT = 50

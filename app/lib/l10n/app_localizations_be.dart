@@ -15433,6 +15433,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашу картку адхілілі';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Абнавіце картку або вярніце $plan за $price у месяц';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Абнавіце картку, каб вярнуць $plan';
   }
@@ -15457,4 +15462,31 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перайсці на штомесячны';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price у месяц';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замяняе неаплачаны гадавы плацёж $yearly. Падаўжаецца штомесяц. Скасаваць можна ў любы час.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Аплата адхілена. Ваш план не змяніўся.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Пераход зараз недаступны. Замест гэтага абнавіце картку.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Цяпер у вас штомесячная аплата';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сёння аплачана $price. Падаўжаецца штомесяц.';
+  }
 }

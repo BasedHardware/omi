@@ -81,6 +81,30 @@
       "basis": "planning-bound",
       "source": "SCA-2012: two count aggregations per 60s per prod/dev leader; each costs max(1, ceil(index entries/1000)); 100,000 total and <=100,000 pending => 200/sample, 288,000/day/environment. Not a throughput cap; revisit budget if cohorts exceed this planning envelope. Normally empty/small windows cost 2/sample. Existing lease check adds <=1 metadata read per maintenance call outside this count budget.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{namespace}_control'",
+      "collection_pattern": "batch_pipeline_*_control",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "serving process-minute or backfill page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 80000,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/projection-finish-backfill.md: 35 replicas x 1440 negative-marker checks/day plus up to 10000 backfill pages x 2 checkpoint reads. Completed marker is read once per process lifetime; lever off reads zero.",
+      "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/batch_pipeline_projection_finish_backfill.py",
+      "expression": "f'{store.namespace}_results'",
+      "collection_pattern": "batch_pipeline_*_results",
+      "owner": "batch projection finish backfill (SCA-2024)",
+      "unit": "historical finish row stamped (including page query)",
+      "reads_per_unit_budget": 4,
+      "reads_per_day_budget": 2000000,
+      "basis": "planning-bound",
+      "source": "SCA-2024 census ~478000 persisted/ready rows: one page-query read plus one transactional fence read per row, allowing one repeated pass/retry (~1.912M). Operator-only, capped at 200 rows/page and 10000 pages/invocation; normal serving never invokes stamping.",
+      "reviewed": "2026-11-13"
     }
   ],
   "exempt": []

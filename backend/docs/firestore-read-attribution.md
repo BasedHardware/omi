@@ -170,6 +170,100 @@ Which code produced the QUERY reads:
 topk(20, sum by (caller, collection) (rate(omi_firestore_billed_reads_by_caller_total{kind="query"}[30m])))
 ```
 
+## Batch unit-budget and billed-step tickets (SCA-2189)
+
+`FirestoreBatchReadsPerAudioHourHigh` (`omi-firestore-batch-reads-audio-hour`)
+means batch reads no longer follow completed work: the rolling hourly ratio exceeds
+60,000 reads/audio-hour for 2h, versus a 45,000 budget, with at least 50 audio-hours
+completed in that hour. First query: compare
+`sum by (caller) (increase(omi_firestore_billed_reads_by_caller_total{caller=~"(database|utils)\\\\.batch.*"}[1h]))`
+with the same expression using `[1h] offset 1d`, then inspect
+`sum(increase(omi_batch_pipeline_completed_audio_seconds_total[1h])) / 3600`.
+Owner: Firestore cost owner, SCA-2173. A firing ticket on introduction is expected;
+keep agent routing (no human page) until the ratio has been below 45,000 once.
+Promotion is a separate reviewed change, not an automatic severity transition.
+
+`FirestoreBatchReadsWithNoOutput` (`omi-firestore-batch-reads-no-output`) is the
+complementary ticket: more than 10M batch reads in an hour with fewer than 50
+completed audio-hours, sustained for 2h. Missing completed-output series count as
+zero, so a stalled pipeline cannot hide behind division by zero. Start with the
+same caller query and yesterday comparison, and check output telemetry before
+diagnosing a stall. Exactly 50 audio-hours belongs to the ratio rule; exactly 10M
+reads does not fire. Owner: Firestore cost owner, SCA-2173.
+
+`FirestoreBilledReadsStep` (`omi-firestore-billed-reads-step`) means total native
+billed reads in the last full UTC hour exceed 1.25x the median of the matching hour
+on the previous seven days for 2h. First query: compare the caller query above
+against `[1h] offset 1d`, then break native reads down by `type`. Owner: Firestore
+cost owner, SCA-2173. Remove the batch caller filter for this fleet-wide step.
+The native metric is a per-minute DELTA exposed as a gauge,
+not a counter: the rule sums raw per-60s samples with `sum(sum_over_time(...[1h]))`,
+never `increase()` or an extrapolated mean times 60. A 1ms raw-selector offset
+excludes the next hour's boundary sample, giving the completed interval
+`[hour_start, hour_end)` even on older Prometheus range-selector semantics.
+Each selected hour requires
+all three read types and at least 58 raw samples for every series. Up to two
+missing minutes are tolerated without inventing reads; 57 or fewer samples
+make that hour unavailable. Coverage is checked before hourly alignment, on
+the raw series rather than a resampled subquery that could conceal a gap.
+An hourly-aligned subquery and `last_over_time` select the last full hour; seven
+explicit daily offsets with distinct `day` labels feed `quantile(0.5, ...)`.
+This avoids a `[7d:1d]` subquery, whose daily alignment samples UTC midnight rather
+than the current hour. Only the two-hour pending duration is continuous; the
+step input changes on UTC hour boundaries. The median requires all seven daily
+samples (`count(...) == 7`) and a strictly positive median; partial history or
+a zero median is never used as a divisor.
+Missing history makes the median NoData, which this rule maps to Alerting after
+its pending duration, routed as the same agent-tier ticket. The existing
+unattributed-reads blind rule additionally covers missing/stale native data.
+
+All three rules use the production-only `gmp-cloud-run` datasource, the existing
+agent Telegram receiver, warning labels and ticket annotations, and are selected
+by `live-alert-gate.json`. `isPaused=true` plus re-import disables an individual
+rule. Rollback: revert the merge commit. No runtime flags or production writes
+are required by the source change; release still requires independent review and
+live GMP expression values, not just offline fixtures.
+
+The existing checksum-pinned `check_record_token_lease_promql.py` local/CI hook
+also runs `tests/promql/firestore_cost_budget.py`; no workflow change is needed.
+
+## Unattributed-reads alert
+
+`omi-firestore-unattributed-reads` in
+`backend/charts/monitoring/alerts/firestore.json` fires when the same-window
+coverage gap is above 3% for 30 minutes and resolves at or below 3%:
+
+```promql
+# A, instrumented reads/s (complete counter, GMP datasource)
+sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)
+# B, billed reads/s (native Cloud Monitoring DELTA published as a gauge)
+avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60
+# C, unattributed share; D fires when C > 0.03
+($B - $A) / $B
+```
+
+Both sides use the same 30m window. `A` is the complete counter on the
+`gmp-cloud-run` datasource (Cloud Run and GKE); the in-cluster Prometheus only
+scrapes GKE, so a ratio computed there is not the fleet ratio. A missing
+instrumented series reads as zero through `or vector(0)` and fires; a missing
+billed series is NoData and is covered by `omi-firestore-metric-absent`.
+
+Measured 2026-11-12T06:51Z on GMP `query_range`, 2026-11-02T06:51Z through
+2026-11-12T06:51Z at 1h steps (241 points): the gap ranged 0.134-0.568 with a
+mean of 0.321. Daily means were 0.274 (11-09), 0.196 (11-10), 0.163 (11-11) and
+0.162 (11-12). No retained hour is at or below 0.03, so the alert is firing on
+the current fleet; the resolve side is proven by fixtures, not by live history.
+The 95% acceptance figure below is historical and is not the current
+measurement.
+
+The switch is the rule's committed `isPaused` flag: `false` (enabled) by
+default, `true` to disable, `false` to re-enable, and the import path enforces
+exact paused parity. The alert-rule selector is membership of the UID in
+`backend/charts/monitoring/live-alert-gate.json` `uids[]`; it is present by
+default and is listed in `PRODUCTION_ONLY_IMPORT_UIDS` because the
+`gmp-cloud-run` datasource exists only in production. Neither switch changes
+runtime read behaviour.
+
 ## Acceptance
 
 For dashboard investigation only, after deploy each of the three type ratios

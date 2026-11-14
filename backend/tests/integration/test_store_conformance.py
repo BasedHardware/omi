@@ -71,6 +71,48 @@ def need(harness, *names):
         pytest.skip(f'not applicable to the {harness.name} backend')
 
 
+def test_shared_ready_cursor_rejects_stale_progress_and_reaches_fresh_owner(h, monkeypatch):
+    from utils.batch_pipeline.ready_discovery import ReadyDiscovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', '2')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '60')
+    put_all(
+        h,
+        [
+            (
+                'jobs',
+                key,
+                job(
+                    h,
+                    key,
+                    owner_key=key,
+                    state='result_ready',
+                    merge_pending=True,
+                    fresh_capture=key == 'z',
+                    stt_route={'stt_route': 'provider'},
+                ),
+            )
+            for key in ('b', 'd', 'f', 'h', 'z')
+        ],
+    )
+    serving, pump = ReadyDiscovery(h.store, 'serving'), ReadyDiscovery(h.store, 'pump')
+    stale = serving.page()
+    for expected in (['b', 'd'], ['f', 'h']):
+        page = pump.page()
+        assert [key for key, _ in pump.owners(page)] == expected
+        assert pump.finish(page)
+    progress = h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    assert progress['after_owner_key'] == 'h' and progress['revision'] == 2
+    assert [key for key, _ in serving.owners(stale)] == ['b', 'd']
+    assert serving.finish(stale)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    page = pump.page()
+    assert [key for key, _ in pump.owners(page)] == ['z']
+    assert pump.finish(page)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))['revision'] == 3
+
+
 # -- document semantics ------------------------------------------------------------------------------
 def test_missing_document_reads_as_empty_dict(h):
     assert h.store.run(lambda tx: tx.get('jobs', 'nope')) == {}
@@ -1197,6 +1239,45 @@ def test_transactional_fresh_first_sees_ready_past_40_unready_rows_and_terminal_
             lambda tx: (tx.fresh_first_pending(row['owner_key']), tx.fresh_first_ready_pending(row['owner_key']))
         )
         assert first['segment_id'] == 'f00' and ready['segment_id'] == 'f40'
+
+
+@pytest.mark.parametrize('head_class', [True, None])
+@pytest.mark.parametrize('wait', [0, 60])
+@pytest.mark.parametrize('privacy_blocked', [False, True])
+def test_unready_fresh_or_legacy_head_does_not_hide_fresh_behind_held_provider(
+    h, monkeypatch, head_class, wait, privacy_blocked
+):
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    uid = h.uid('o')
+    key = scheduler_owner_key(uid)
+    rows = [
+        job(
+            h,
+            name,
+            owner_key=key,
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=True,
+            state='result_ready' if name in ('held', 'fresh') else 'retry',
+            protocol_version=1,
+            result={'text': ''},
+            ready_at=1.0,
+        )
+        for i, name in enumerate(('head', *(f'blocked-{n}' for n in range(40)), 'held', 'fresh'))
+    ]
+    if head_class is None:
+        rows[0].pop('fresh_capture')
+    rows[-2].update(fresh_capture=False, stt_route={'stt_route': 'provider'})
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    if privacy_blocked:
+        h.customer.block_privacy(uid)
+    entry = OrderedMerge(h.store, head_wait_seconds=wait, catch_up_depth=1).commit_next(uid, 100.0)
+    assert (entry['segment_id'] if entry else None) == ('fresh' if wait and not privacy_blocked else None)
+    assert h.store.run(lambda tx: tx.get('jobs', 'held'))['state'] == 'result_ready'
 
 
 @pytest.mark.parametrize('initial_state', ['leased', 'dead'])

@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "เมื่อเพื่อนอีก 3 คนซื้อ",
     "referralClaimShort": "รับ",
     "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
+    "paymentDeclinedMonthlyMessage": "อัปเดตบัตร หรือกลับมาใช้ {plan} ในราคา {price} ต่อเดือน",
     "paymentDeclinedMessage": "อัปเดตบัตรเพื่อกลับมาใช้ {plan}",
     "hasLinkedTasksLabel": "มีงานที่เชื่อมโยง",
     "hasTasksFilter": "มีงาน",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "เปลี่ยนเป็นรายเดือน",
+    "monthlySwitchPlanValue": "{plan} {price} ต่อเดือน",
+    "monthlySwitchNote": "แทนที่ค่าบริการรายปี {yearly} ที่ยังไม่ได้ชำระ ต่ออายุทุกเดือน ยกเลิกได้ทุกเมื่อ",
+    "monthlySwitchDeclined": "การชำระเงินถูกปฏิเสธ แพ็กเกจของคุณไม่เปลี่ยนแปลง",
+    "monthlySwitchUnavailable": "ตอนนี้ยังเปลี่ยนไม่ได้ อัปเดตบัตรแทน",
+    "monthlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายเดือนแล้ว",
+    "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน"
 }

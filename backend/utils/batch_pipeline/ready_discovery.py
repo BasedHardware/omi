@@ -64,11 +64,16 @@ class ReadyDiscovery:
         deadline = time.monotonic() + ready_discovery_tick_seconds()
         try:
             state = self.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+            expected = dict(state)
+            revision = state.get('revision', 0)
+            if type(revision) is not int or revision < 0:
+                raise ValueError('invalid ready cursor revision')
             state['owners_per_tick'] = ready_discovery_owners_per_tick(state.get('owners_per_tick', 20))
             if not state.get('ceiling_owner_key') and time.monotonic() >= deadline:
                 # The cursor read spent the tick: start the pass (its ceiling query) next tick.
                 return dict(
                     cursor=state,
+                    expected_cursor=expected,
                     deadline=deadline,
                     owners=0,
                     missing=0,
@@ -84,7 +89,16 @@ class ReadyDiscovery:
                     ceiling_owner_key=ceiling[0][0] if ceiling else None,
                     pass_started_at=time.time(),
                 )
-            return dict(cursor=state, deadline=deadline, owners=0, missing=0, spent=0, wrapped=0, failed=False)
+            return dict(
+                cursor=state,
+                expected_cursor=expected,
+                deadline=deadline,
+                owners=0,
+                missing=0,
+                spent=0,
+                wrapped=0,
+                failed=False,
+            )
         except Exception as error:
             self.retry(error)
             return None
@@ -134,11 +148,22 @@ class ReadyDiscovery:
         state = page['cursor']
         if page['wrapped']:
             state.update(after_owner_key=None, ceiling_owner_key=None)
+
+        def save(tx):
+            if tx.get('merge_discovery', 'cursor') != page['expected_cursor']:
+                return False
+            tx.put('merge_discovery', 'cursor', {**state, 'revision': page['expected_cursor'].get('revision', 0) + 1})
+            return True
+
         try:
-            self.store.run(lambda tx: tx.put('merge_discovery', 'cursor', state))
+            saved = self.store.run(save)
         except Exception as error:
             self.retry(error)
             return False
+        if not saved:
+            # Another tick owns the progress. Do not rewind it or claim a stale wrap.
+            page['wrapped'] = 0
+            logger.info('event=batch_merge action=ready_cursor outcome=stale_page source=%s count=1', self.source)
         self.log(page['owners'], 1 - page['wrapped'], page['wrapped'], page['spent'], page['missing'])
         return True
 

@@ -272,7 +272,9 @@ class OrderedMerge:
                 head['catch_up'] = _catch_up(candidate)
                 head['backlog'] = _backlog_held(candidate)
             if tx_fresh:
-                if not candidate or not (_catch_up(candidate) or _backlog_held(candidate)):
+                if not candidate or not (
+                    _catch_up(candidate) or _backlog_held(candidate) or candidate['state'] != 'result_ready'
+                ):
                     return None
                 try:
                     first = tx.fresh_first_pending(key)
@@ -286,7 +288,11 @@ class OrderedMerge:
                     raise _FreshGateReadError(error) from error
                 if fresh is None and not (metered and _backlog_held(candidate)):
                     return None
-                if fresh is not None and (first is None or first['segment_id'] != fresh['segment_id']):
+                if fresh is not None and (
+                    first is None
+                    or first['segment_id'] != fresh['segment_id']
+                    or not (_catch_up(candidate) or _backlog_held(candidate))
+                ):
                     since = _ready_since(fresh)
                     if since is None:
                         # The probe can measure a later ready row's wait and pick this row.
@@ -347,7 +353,11 @@ class OrderedMerge:
                 current = tx.get('jobs', fresh['segment_id'])
                 if not (
                     candidate
-                    and (_catch_up(candidate) or _backlog_held(candidate))
+                    and (
+                        _catch_up(candidate)
+                        or _backlog_held(candidate)
+                        or (tx_fresh and candidate['state'] != 'result_ready')
+                    )
                     and current.get('merge_pending')
                     and current.get('state') == 'result_ready'
                     and current.get('fresh_capture') is True
@@ -628,6 +638,36 @@ class OrderedMerge:
             if held and not held.get('backlog'):
                 # The released ready row is catch-up and the owner is at depth.
                 self.held_owners.add(owner_id)
+            if (
+                entry is None
+                and held.get('backlog')
+                and fresh_query
+                and kill_switch('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', log=False)
+                and time.monotonic() >= self._fresh_tx_retry_at
+            ):
+                # An unready fresh/legacy head can hide held provider stock
+                # before ready fresh work. The head wait keeps selecting that
+                # stock; reselect fresh in one transaction after the same wait.
+                try:
+                    entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                except BatchPrivacyBlocked:
+                    return None
+                except _FreshGateReadError as failure:
+                    if isinstance(failure.error, FailedPrecondition):
+                        self._fresh_tx_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
+                        record_fallback(
+                            component='firestore_read',
+                            from_mode='fresh_tx_gate',
+                            to_mode='strict_order',
+                            reason='unavailable',
+                            outcome='degraded',
+                            log=logger,
+                        )
+                    logger.warning(
+                        'event=batch_merge outcome=blocked_fresh_gate_retry source=%s exception_type=%s count=1',
+                        self.commit_source,
+                        type(failure.error).__name__,
+                    )
         if backlog.get('refusal'):
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):

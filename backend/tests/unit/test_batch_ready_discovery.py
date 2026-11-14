@@ -2,6 +2,7 @@
 
 import logging
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -20,7 +21,71 @@ SWITCH = 'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED'
 BUDGET = 'BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK'
 
 
-def stock(sim=False, count=60):
+@pytest.mark.parametrize('sim', [False, True])
+def test_stale_serving_page_preserves_pump_progress_and_reaches_fresh(monkeypatch, sim):
+    monkeypatch.setenv(SWITCH, 'true')
+    monkeypatch.setenv(BUDGET, '1')
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    store, owners = stock(sim)
+    service = Serving(store)
+    serving = ready_discovery.ReadyDiscovery(store, 'serving')
+    pump = ready_discovery.ReadyDiscovery(store, 'pump')
+    stale = serving.page()
+    for expected in owners[:2]:
+        page = pump.page()
+        assert [owner for _, owner in pump.owners(page)] == [expected]
+        service.drain_owner(expected)
+        assert pump.finish(page)
+    progress = store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    assert progress['after_owner_key'] == owner_key(owners[1])
+    for _, owner in serving.owners(stale):
+        service.drain_owner(owner)
+    assert serving.finish(stale)
+    assert store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    page = pump.page()
+    assert [owner for _, owner in pump.owners(page)] == owners[2:]
+    service.drain_owner(owners[2])
+    assert pump.finish(page)
+    assert store.rows['jobs', 's2']['state'] == 'committed'
+    assert store.rows['jobs', 's0']['state'] == store.rows['jobs', 's1']['state'] == 'result_ready'
+
+
+def test_stale_wrap_cannot_replace_a_new_pass_with_the_same_start_time(monkeypatch):
+    monkeypatch.setenv(BUDGET, '1')
+    monkeypatch.setattr(ready_discovery, 'time', SimpleNamespace(monotonic=time.monotonic, time=lambda: 10.0))
+    store, _ = stock(count=1)
+    pump = ready_discovery.ReadyDiscovery(store, 'pump')
+    serving = ready_discovery.ReadyDiscovery(store, 'serving')
+
+    def advance():
+        page = pump.page()
+        list(pump.owners(page))
+        assert pump.finish(page)
+
+    advance()
+    advance()
+    stale = serving.page()
+    advance()  # Wrap the first pass.
+    advance()
+    advance()  # Same position and pass_started_at, but in a new pass.
+    progress = store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    list(serving.owners(stale))
+    assert stale['wrapped'] == 1
+    assert serving.finish(stale)
+    assert store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    assert stale['wrapped'] == 0, 'a rejected stale write must not claim a published wrap'
+
+
+@pytest.mark.parametrize('revision', [None, True, -1, '1'])
+def test_malformed_cursor_revision_falls_back_without_writing(revision):
+    store = MemoryStore()
+    original = {'revision': revision}
+    store.rows['merge_discovery', 'cursor'] = original.copy()
+    assert ready_discovery.ReadyDiscovery(store, 'serving').page() is None
+    assert store.rows['merge_discovery', 'cursor'] == original
+
+
+def stock(sim=False, count=51):
     customer = CustomerData()
     store = SimStore(customer) if sim else MemoryStore()
     owners = sorted(['synthetic-a', 'synthetic-b', 'synthetic-c'], key=owner_key)
@@ -75,11 +140,13 @@ async def test_quiet_owner_commits_within_one_pass_without_markers(monkeypatch, 
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
     store, _ = stock(sim)
     service = Pump(Scheduler(store), Mock()) if pump else Serving(store)
-    for _ in range(3):
+    # Two held owners with 51 rows each fill the old 100-row page, so one tick shows the old path's miss;
+    # the cursor visits one owner per tick and needs all three.
+    for _ in range(3 if enabled else 1):
         await tick(service)
     assert (store.rows['jobs', 's2']['state'] == 'committed') == enabled
     assert not any(t == 'merge_holds' for t, _ in store.rows)
-    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 121 - enabled
+    assert sum(v['state'] == 'result_ready' for (t, _), v in store.rows.items() if t == 'jobs') == 103 - enabled
 
 
 async def tick(service):

@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "جب مزید 3 دوست خریدیں",
     "referralClaimShort": "حاصل کریں",
     "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
+    "paymentDeclinedMonthlyMessage": "کارڈ اپ ڈیٹ کریں، یا {plan} ماہانہ {price} میں واپس حاصل کریں",
     "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں",
     "hasLinkedTasksLabel": "منسلک کام موجود ہیں",
     "hasTasksFilter": "کام والے",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "ماہانہ پر منتقل کریں",
+    "monthlySwitchPlanValue": "{plan}، ماہانہ {price}",
+    "monthlySwitchNote": "{yearly} کی غیر ادا شدہ سالانہ فیس کی جگہ۔ ہر ماہ تجدید ہوتی ہے۔ کسی بھی وقت منسوخ کریں۔",
+    "monthlySwitchDeclined": "ادائیگی مسترد ہو گئی۔ آپ کا پلان تبدیل نہیں ہوا۔",
+    "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
+    "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
+    "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔"
 }

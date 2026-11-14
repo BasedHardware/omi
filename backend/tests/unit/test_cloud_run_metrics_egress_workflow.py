@@ -40,6 +40,7 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
         'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml',
         'backend/charts/monitoring/alerts/live-stt.json',
         'backend/charts/monitoring/alerts/resilience.json',
+        'backend/charts/monitoring/alerts/firestore.json',
         'backend/charts/monitoring/live-alert-gate.json',
         'backend/charts/monitoring/mute-timings.json',
         'backend/charts/monitoring/gmp/frontend-values.prod.yaml',

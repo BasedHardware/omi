@@ -299,7 +299,9 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   `omi_episode_compose_trigger_skipped_total{reason="evidence_unchanged"}` counts
   avoided triggers. All have bounded labels and no user identifiers.
 - Triggers: close, member finalize (including `sync_update`, gated on the changed
-  member already loaded by finalization), and a
+  member already loaded by finalization), a late member attaching to an
+  already-composed closed episode (`EPISODE_COMPOSE_LATE_ATTACH_ENABLED`, default
+  on; the attach memo can suppress the later finalize), and a
   read-side safety net in `home_read.project_episodes` for a closed episode that
   is uncomposed, drifted or whose visible members changed, closed over a minute
   ago (at most two per read, each episode at most every ten minutes per process).

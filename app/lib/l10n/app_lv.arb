@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Kad vēl 3 draugi nopērk",
     "referralClaimShort": "Saņemt",
     "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
+    "paymentDeclinedMonthlyMessage": "Atjauniniet karti vai atgūstiet {plan} par {price} mēnesī",
     "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}",
     "hasLinkedTasksLabel": "Ir saistīti uzdevumi",
     "hasTasksFilter": "Ar uzdevumiem",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Pāriet uz mēneša maksu",
+    "monthlySwitchPlanValue": "{plan}, {price} mēnesī",
+    "monthlySwitchNote": "Aizstāj neapmaksāto gada maksu {yearly}. Atjaunojas katru mēnesi. Atceliet jebkurā laikā.",
+    "monthlySwitchDeclined": "Maksājums noraidīts. Jūsu plāns nav mainīts.",
+    "monthlySwitchUnavailable": "Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.",
+    "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
+    "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi."
 }

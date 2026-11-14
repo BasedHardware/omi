@@ -197,6 +197,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
         {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
         {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
@@ -3698,22 +3700,24 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
     generated = read_lever_manifest.build_manifest()
     assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
     notes = '\n'.join(generated['notes'])
-    assert 'UNRESOLVED: chart-vs-CR batch_timeliness_leader' in notes
+    assert 'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100' in notes
     assert 'UNRESOLVED: README-vs-base triple' in notes
     for lever in ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'):
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
     integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert prod_worker['explicit'] == integration['explicit']
+    assert prod_worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
     assert prod_worker['effective']['bpp_decision_cache'] == 100
-    assert prod_worker['effective']['batch_timeliness_leader'] == 0
+    assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
         assert surface['explicit']['bpp_decision_cache'] == 100
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
-    assert generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 0
+    assert (
+        generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 100
+    )
 
 
 @pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries', 'all'])
@@ -3770,7 +3774,7 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
     generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
-    assert generated['notes'] == read_lever_manifest.UNRESOLVED_NOTES
+    assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
 
@@ -3836,9 +3840,17 @@ def test_read_lever_partial_code_default_cannot_hide_behind_chart_inheritance(mo
 
 
 @pytest.mark.parametrize(
-    'prefix', ['base/', 'overlay/prod/', 'runtime/dev/', 'runtime/prod/', 'chart/dev/', 'chart/prod/']
+    ('prefix', 'has_partials'),
+    [
+        ('base/', True),
+        ('overlay/prod/', True),
+        ('runtime/dev/', True),
+        ('runtime/prod/', True),
+        ('chart/dev/', True),
+        ('chart/prod/', True),
+    ],
 )
-def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix):
+def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix, has_partials):
     policy, sources, _ = read_lever_sources
     selected = {surface: values for surface, values in sources.items() if surface.startswith(prefix)}
     assert selected
@@ -3849,7 +3861,7 @@ def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_source
             del expiry[surface][lever]
             errors = read_lever_manifest.expiry_errors(sources, expiry, today=date(2026, 11, 11))
             assert any(f'{surface}/{lever}=' in error for error in errors)
-    assert any(0 < value < 100 for values in selected.values() for value in values.values())
+    assert any(0 < value < 100 for values in selected.values() for value in values.values()) == has_partials
 
 
 @pytest.mark.parametrize(

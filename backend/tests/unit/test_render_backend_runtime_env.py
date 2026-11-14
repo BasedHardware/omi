@@ -1390,23 +1390,26 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         enabled = environment == 'prod' and name.startswith('cloud_run/')
         literal = env['FIRESTORE_READ_LEVERS']
         assert set(literal) == {'value', 'category'}, name
-        # Only prod backend-sync restores monthly reads for compute admission (admitscope 2026-11-01).
-        # All other services/jobs (including listen/pusher) retain the guard literal.
+        # All non-Cloud-Run hosts (including listen/pusher) retain the guard literal.
         wanted = {**expected}
-        if environment == 'prod' and name == 'cloud_run/backend-sync':
-            wanted.update(usage_month_cache=100, usage_month_total=100)
-            assert {key for key in wanted if wanted[key] != expected[key]} == {
-                'usage_month_cache',
-                'usage_month_total',
-            }
-        # Ruling ec191a row 3: pin the live Cloud Run literals without widening other hosts.
+        # Ruling ec191a row 3 pins the live Cloud Run literals without widening other hosts.
+        # SCA-2173 / SCA-2222 Train 1: the prod read train carries the same five lever values
+        # on backend-integration, backend-sync and backend — monthly readers on
+        # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
+        # sampler election and capped backlog counts on), privacy shadow 0.
+        # backend-sync-backfill keeps its ec191a row 3 pins.
         if enabled:
-            wanted.update(
-                bpp_decision_cache=100,
-                privacy_negative_lookup_cache=100,
-                privacy_checks_shadow=100 if name == 'cloud_run/backend-sync-backfill' else 10,
-                batch_timeliness_leader=0,
-            )
+            wanted.update(bpp_decision_cache=100, privacy_negative_lookup_cache=100)
+            if name == 'cloud_run/backend-sync-backfill':
+                wanted.update(privacy_checks_shadow=100, batch_timeliness_leader=0)
+            else:
+                wanted.update(
+                    usage_month_cache=100,
+                    usage_month_total=100,
+                    lifecycle_record_pending_head=100,
+                    batch_timeliness_leader=100,
+                    privacy_checks_shadow=0,
+                )
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name

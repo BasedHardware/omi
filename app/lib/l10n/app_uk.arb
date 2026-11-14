@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Коли ще 3 друзі куплять",
     "referralClaimShort": "Отримати",
     "paymentDeclinedTitle": "Вашу картку відхилено",
+    "paymentDeclinedMonthlyMessage": "Оновіть картку або поверніть {plan} за {price} на місяць",
     "paymentDeclinedMessage": "Оновіть картку, щоб повернути {plan}",
     "hasLinkedTasksLabel": "Є пов’язані завдання",
     "hasTasksFilter": "Із завданнями",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Перейти на щомісячний",
+    "monthlySwitchPlanValue": "{plan}, {price} на місяць",
+    "monthlySwitchNote": "Замінює неоплачений річний платіж {yearly}. Подовжується щомісяця. Скасувати можна будь-коли.",
+    "monthlySwitchDeclined": "Платіж відхилено. Ваш план не змінився.",
+    "monthlySwitchUnavailable": "Перехід зараз недоступний. Натомість оновіть картку.",
+    "monthlySwitchDoneTitle": "Тепер ви платите щомісяця",
+    "monthlySwitchDoneBody": "Сьогодні сплачено {price}. Подовжується щомісяця."
 }

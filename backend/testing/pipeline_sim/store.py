@@ -30,6 +30,7 @@ import hashlib
 from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -154,7 +155,12 @@ class SimTransaction:
         return self._fresh_first(owner_key, ready=True)
 
     def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
-        rows = [self.get('jobs', segment) for segment in self.store._pending_by_owner.get(owner_key, ())]
+        # Filter borrowed rows before copying: a held owner can retain hundreds of
+        # backlog jobs, and neither fresh query needs to materialize their payloads.
+        rows = (
+            self.writes.get(('jobs', segment), self.store.rows.get(('jobs', segment), {}))
+            for segment in self.store._pending_by_owner.get(owner_key, ())
+        )
         rows = [
             row
             for row in rows
@@ -404,6 +410,9 @@ class SimStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""

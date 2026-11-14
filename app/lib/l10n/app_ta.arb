@@ -12196,11 +12196,19 @@
     "referralRewardSecondDetail": "மேலும் 3 நண்பர்கள் வாங்கும்போது",
     "referralClaimShort": "பெறுக",
     "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
+    "paymentDeclinedMonthlyMessage": "கார்டைப் புதுப்பிக்கவும், அல்லது {plan} ஐ மாதம் {price}க்கு மீண்டும் பெறவும்",
     "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்",
     "hasLinkedTasksLabel": "இணைக்கப்பட்ட பணிகள் உள்ளன",
     "hasTasksFilter": "பணிகள் உள்ளவை",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "மாதாந்திரத்துக்கு மாறவும்",
+    "monthlySwitchPlanValue": "{plan}, மாதத்துக்கு {price}",
+    "monthlySwitchNote": "செலுத்தப்படாத {yearly} ஆண்டுக் கட்டணத்துக்குப் பதிலாக. மாதந்தோறும் புதுப்பிக்கப்படும். எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.",
+    "monthlySwitchDeclined": "கட்டணம் நிராகரிக்கப்பட்டது. உங்கள் திட்டம் மாறவில்லை.",
+    "monthlySwitchUnavailable": "இப்போது மாற்ற இயலாது. அதற்குப் பதிலாக கார்டைப் புதுப்பிக்கவும்.",
+    "monthlySwitchDoneTitle": "நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்",
+    "monthlySwitchDoneBody": "இன்று {price} செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்."
 }
