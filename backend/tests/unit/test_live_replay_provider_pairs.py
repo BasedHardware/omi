@@ -32,6 +32,10 @@ from utils.stt.streaming import SafeModulateSocket
 
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
+# SCA-1999: replay still races real event-loop deadlines with its virtual clock.
+# backend-slow-timing-tests.yml runs this file on every main push.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -581,6 +585,16 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     captured = []
 
     async def ingest():
+        # Synthetic capture starts only once the successor's paced prefix has
+        # actually begun. Before the first replay packet is enqueued nothing on
+        # the replay leg pins the virtual clock, so a runner-slowed failover
+        # dial parked off-clock while this free-running loop advanced audio time
+        # past it; the rebased prefix then serialized after the full 21 s of
+        # capture and landed past the 20 s wall the budget asserts below
+        # (SCA-2182: replay_wall 39.974 vs the 21.537 bound on shard 2/8).
+        async with asyncio.timeout(10):
+            while not (raws and raws[-1]._send_queue.enqueued_audio):
+                await asyncio.sleep(0)
         for n in range(70):  # 21s of real-time capture; continues past adoption.
             await virtual_clock.sleep(0.3)
             data = (6000 + n).to_bytes(2, 'little') * 4800
@@ -599,7 +613,13 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
         assert PREFIX_SECONDS - 0.1 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
         expected = original[-PREFIX_BYTES:] + b''.join(tail)
-        await until(lambda: raws[-1]._ws.byte_count == len(expected))
+        await until(lambda: raws[-1]._ws.byte_count >= len(expected) or raws[-1].is_connection_dead)
+        assert not raws[-1].is_connection_dead, (
+            raws[-1].death_reason,
+            raws[-1]._ws.byte_count,
+            len(expected),
+            virtual_clock.now,
+        )
         transport = raws[-1]._ws
         assert transport.pcm == expected
         assert raws[-1]._send_queue.high_water <= 2

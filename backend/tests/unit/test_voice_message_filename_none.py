@@ -67,6 +67,9 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return _AutoMock(spec.name)
 
     def exec_module(self, module):
+        if module.__name__ == 'utils.stt.allowance_session':
+            module.operation = lambda *args, **kwargs: (lambda endpoint: endpoint)
+            module.current = types.SimpleNamespace(get=lambda: None)
         if module.__name__ == 'utils.multipart':
             module.CHAT_FILE_MAX_PART_SIZE = 50 * 1024 * 1024
             module.VOICE_MESSAGE_MAX_PART_SIZE = 200 * 1024 * 1024

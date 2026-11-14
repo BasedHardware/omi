@@ -34,6 +34,11 @@ def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
         logger.warning('event=jobstore_shadow op=refresh outcome=hook_error', exc_info=True)
 
 
+def shadow_mode_enabled() -> bool:
+    """Whether this process mirrors batch state into the Postgres shadow."""
+    return _shadow_mode()
+
+
 def purge_owner(namespace: str, uid: str) -> int:
     """A5, at the end of a batch purge: erase ``uid``'s Postgres copy to match the purged primary.
 

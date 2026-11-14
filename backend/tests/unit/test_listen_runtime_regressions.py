@@ -1453,3 +1453,32 @@ async def test_heartbeat_stops_after_close_message_instead_of_crashing():
     await runtime._heartbeat()
 
     assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_quiet_final_billing_window_releases_shadow_hold_without_usage_write(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='synthetic')
+    runtime.persistence = _Persistence()
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(
+        fair_use_track_dg_usage=False,
+        dg_usage_ms_pending=0,
+        last_usage_record_timestamp=123.0,
+        last_audio_received_time=123.0,
+        words_transcribed_since_last_record=0,
+    )
+    runtime.receiver = SimpleNamespace(vad_gate=None)
+    runtime.allowance_operation = SimpleNamespace(closed=False, billed=MagicMock())
+    monkeypatch.setattr(runtime_module, 'billable_transcription_seconds', lambda *a, **kw: 0)
+    monkeypatch.setattr(runtime_module, 'live_usage_metadata', lambda _runtime: {})
+    monkeypatch.setattr(runtime_module, 'ladder_enabled', lambda *_: False)
+    usage = MagicMock()
+    monkeypatch.setattr(runtime_module, 'record_usage', usage)
+
+    assert await runtime._flush_usage(final=True) == 0
+    assert runtime.allowance_operation.closed
+    runtime.allowance_operation.billed.assert_called_once_with(0)
+    usage.assert_not_called()

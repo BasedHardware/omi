@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -12,10 +13,10 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_k
 from database.batch_pipeline_projection import held_without_recovery
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, expire_held_in_transaction
-from tests.unit.test_batch_pipeline_quarantine_recovery import setup  # noqa: F401
+from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline import held_dead_letter as sweep
-from utils.batch_pipeline.intake import _held_status
+from utils.batch_pipeline.intake import _held_status  # pyright: ignore[reportPrivateUsage] -- unit contract seam
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 
@@ -64,6 +65,8 @@ def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_h
     # Keep the strict document fake off query paths; the emulator covers a cold DRR ring.
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Main's retain-attempt contract; class 3 on resets attempt (test_backlog_state_machine.py).
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     recovery = RecoveryStore(store)
     assert recovery.requeue_quarantined('bad', 30)
     after = deepcopy(client.rows)
@@ -84,6 +87,8 @@ def test_expired_row_requeues_through_unchanged_legacy_redrive_with_flag_off(set
     assert row(client)['merge_pending'] is True
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Main's retain-attempt contract; class 3 on resets attempt (test_backlog_state_machine.py).
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     # Only the unchanged, pre-feature path is available after a code rollback.
     queue = Scheduler(store)
     assert queue.redrive_dead('bad', 31)
@@ -179,7 +184,7 @@ def test_flag_off_preserves_legacy_quarantine_and_sweep_is_zero_io(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
     assert not batch_held_dead_letter_enabled()
-    store = MemoryStore()
+    store = cast(Any, MemoryStore())
     queue = Scheduler(store)
     queue.enqueue(item('bad'), 0)
     lease = queue.pull(0)[0]
@@ -194,7 +199,8 @@ def test_flag_off_preserves_legacy_quarantine_and_sweep_is_zero_io(monkeypatch):
 
 
 def model_store(monkeypatch, n=35):
-    store = MemoryStore()
+    monkeypatch.setattr(sweep, 'input_expiring_candidates', lambda *a, **kw: ([], {}))
+    store = cast(Any, MemoryStore())
     store.client, store.namespace = None, 'synthetic'
     queue = Scheduler(store)
     for i in range(n):
@@ -225,10 +231,11 @@ def model_store(monkeypatch, n=35):
 
 def test_nightly_bounded_cursor_survives_restart_and_double_delivery(monkeypatch):
     store = model_store(monkeypatch)
-    metrics = QueueMetrics(CollectorRegistry())
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
     runner = sweep.HeldDeadLetter(store, metrics=metrics)
     assert runner.tick(86400) == {'expired': 32, 'requeued': 0}
-    assert metrics.held_expired._value.get() == 32
+    assert registry.get_sample_value('omi_batch_held_expired_total') == 32
     before = deepcopy(store.rows)
     assert runner.tick(86400) == {'expired': 0, 'requeued': 0}
     assert store.rows == before
@@ -236,10 +243,10 @@ def test_nightly_bounded_cursor_survives_restart_and_double_delivery(monkeypatch
     runner = sweep.HeldDeadLetter(store, metrics=metrics)
     assert runner.tick(86700) == {'expired': 3, 'requeued': 0}
     assert runner.tick(172800) == {'expired': 0, 'requeued': 32}
-    assert metrics.held_expired_stock._value.get() == 3
+    assert registry.get_sample_value('omi_batch_held_expired_units') == 3
     assert sweep.HeldDeadLetter(store).tick(173100) == {'expired': 0, 'requeued': 3}
     assert not any(job['state'] == 'dead' for (table, _), job in store.rows.items() if table == 'jobs')
-    assert metrics.held_expired._value.get() == 35
+    assert registry.get_sample_value('omi_batch_held_expired_total') == 35
 
 
 def test_crash_before_checkpoint_replays_without_duplicate_expiry(monkeypatch):

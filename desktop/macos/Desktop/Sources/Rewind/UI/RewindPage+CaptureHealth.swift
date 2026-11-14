@@ -57,7 +57,7 @@ extension RewindPage {
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     screenAnalysisEnabled = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(enabled)
 
     if enabled {
       ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in

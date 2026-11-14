@@ -636,33 +636,32 @@ def resolve_conversation_speakers(
     )
     score_rows = []
     try:
-        if match_scores.enabled():
-            for position, root in enumerate(keep):
-                parts = [i for i in score_members[root] if i in decisions]
-                if position not in new_id_of or not parts:
-                    continue
-                combined_distances = {
-                    pid: min(distances[i][pid] for i in parts if pid in distances[i])
-                    for pid in {pid for i in parts for pid in distances[i]}
-                }
-                representative = root if root in decisions else parts[0]
-                known_seconds = [seconds for i in score_members[root] if (seconds := score_seconds[i]) is not None]
-                combined_seconds = sum(known_seconds) if len(known_seconds) == len(score_members[root]) else None
-                row = match_scores.summarize(
-                    new_id_of[position],
-                    combined_distances,
-                    decisions[representative],
-                    combined_seconds,
-                    'resolution',
-                    threshold=VOICE_MATCH_THRESHOLD,
-                    margin_threshold=SPEAKER_MATCH_MARGIN,
-                )
-                row['merged_cluster_count'] = len(score_members[root])
-                row['scored_cluster_count'] = len(parts)
-                row['distance_aggregation'] = 'min_constituent_v1'
-                row['margin_aggregation'] = 'representative_v1'
-                score_rows.append(row)
-            score_rows = match_scores.merge(None, score_rows)
+        for position, root in enumerate(keep):
+            parts = [i for i in score_members[root] if i in decisions]
+            if position not in new_id_of or not parts:
+                continue
+            combined_distances = {
+                pid: min(distances[i][pid] for i in parts if pid in distances[i])
+                for pid in {pid for i in parts for pid in distances[i]}
+            }
+            representative = root if root in decisions else parts[0]
+            known_seconds = [seconds for i in score_members[root] if (seconds := score_seconds[i]) is not None]
+            combined_seconds = sum(known_seconds) if len(known_seconds) == len(score_members[root]) else None
+            row = match_scores.summarize(
+                new_id_of[position],
+                combined_distances,
+                decisions[representative],
+                combined_seconds,
+                'resolution',
+                threshold=VOICE_MATCH_THRESHOLD,
+                margin_threshold=SPEAKER_MATCH_MARGIN,
+            )
+            row['merged_cluster_count'] = len(score_members[root])
+            row['scored_cluster_count'] = len(parts)
+            row['distance_aggregation'] = 'min_constituent_v1'
+            row['margin_aggregation'] = 'representative_v1'
+            score_rows.append(row)
+        score_rows = match_scores.merge(None, score_rows)
     except Exception:
         match_scores.record_failure(None)
     return SpeakerResolution(

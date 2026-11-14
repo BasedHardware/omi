@@ -33,7 +33,6 @@ class _AutoMockModule(ModuleType):
 _STUBS = [
     "redis",
     "cachetools",
-    "prometheus_client",
     "google.cloud.tasks_v2",
     "ulid",
     "pinecone",

@@ -31,7 +31,15 @@ except ModuleNotFoundError:
         'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
     ]
 
-    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance', 'salience')
+    _OMIT_WHEN_UNSET = (
+        'meeting_type',
+        'participants',
+        'insights',
+        'note_claims',
+        'title_provenance',
+        'salience',
+        'gist',
+    )
 
     def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
         for field_name in fields:
@@ -198,6 +206,10 @@ except ModuleNotFoundError:
         title: str = Field(description='A title/name for this conversation', default='')
         overview: str = Field(
             description='A brief overview of the conversation, highlighting the key details from it',
+            default='',
+        )
+        gist: str = Field(
+            description='One line of at most 12 words saying what this conversation was about',
             default='',
         )
         # The neutral "nothing chose" default (models.conversation_emoji.NEUTRAL_EMOJI):

@@ -20,12 +20,16 @@ import 'package:omi/services/wals/wal.dart';
 /// Delete buttons.
 
 class _Sync extends ChangeNotifier implements SyncProvider {
-  _Sync(this.wals);
+  _Sync(this.wals, {this.removeOnDelete = true, this.relistOnDiscover = const []});
 
   final List<Wal> wals;
+  final bool removeOnDelete;
+  final List<Wal> relistOnDiscover;
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
   int retried = 0;
+  int discovered = 0;
+  String? skipDeleteId;
   final manuallyRetried = <Wal>[];
 
   @override
@@ -52,12 +56,34 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   Future<void> deleteWal(Wal wal) async {
     deleted.add(wal);
-    wals.remove(wal);
+    if (removeOnDelete && wal.id != skipDeleteId) {
+      wals.remove(wal);
+    }
     notifyListeners();
   }
 
   @override
-  int get clearableWalsCount => 0;
+  int get clearableWalsCount => wals.length;
+  @override
+  List<Wal> get syncedWals => wals.where((w) => w.status == WalStatus.synced).toList();
+  @override
+  List<Wal> get pendingDeletableWals => wals.where((w) => w.status != WalStatus.synced).toList();
+  @override
+  Future<void> deleteAllPendingWals() async {
+    for (final wal in List<Wal>.of(pendingDeletableWals)) {
+      await deleteWal(wal);
+    }
+  }
+
+  @override
+  Future<void> deleteAllClearableWals() => deleteAllPendingWals();
+  @override
+  Future<void> deleteAllSyncedWals() async {
+    for (final wal in List<Wal>.of(syncedWals)) {
+      await deleteWal(wal);
+    }
+  }
+
   @override
   bool get syncCompleted => false;
   @override
@@ -69,7 +95,16 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   @override
   bool get isRateLimited => false;
   @override
-  Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
+  Future<void> discoverDeviceWals({String? firmwareVersion}) async {
+    discovered++;
+    for (final wal in relistOnDiscover) {
+      if (!wals.any((w) => w.id == wal.id && w.storage == wal.storage)) {
+        wals.add(wal);
+      }
+    }
+    notifyListeners();
+  }
+
   @override
   List<Wal> get uploadedWals => const [];
   @override
@@ -105,8 +140,13 @@ List<Wal> _tooOldAfternoon() {
   ];
 }
 
-Future<_Sync> _pump(WidgetTester tester, List<Wal> wals) async {
-  final sync = _Sync(wals);
+Future<_Sync> _pump(
+  WidgetTester tester,
+  List<Wal> wals, {
+  bool removeOnDelete = true,
+  List<Wal> relistOnDiscover = const [],
+}) async {
+  final sync = _Sync(wals, removeOnDelete: removeOnDelete, relistOnDiscover: relistOnDiscover);
   tester.view.physicalSize = const Size(1170, 4000);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -247,5 +287,81 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Share Recording'), findsOneWidget);
     expect(find.text('Try Again'), findsNothing, reason: 'automatic recovery owns deterministic refusals');
+  });
+
+  testWidgets('swiping a grouped recording row confirms once and deletes every file in the block', (tester) async {
+    final sync = await _pump(tester, _tooOldAfternoon());
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, hasLength(10));
+    expect(sync.wals, isEmpty);
+  });
+
+  testWidgets('swiping a recording whose device delete fails snaps back instead of asserting', (tester) async {
+    final start = DateTime.now().subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final ringWal = Wal(
+      timerStart: start,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.flashPage,
+      device: 'omi_ring',
+    );
+    final sync = await _pump(tester, [ringWal], removeOnDelete: false);
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, [ringWal]);
+    expect(sync.wals, [ringWal]);
+    expect(find.byKey(ValueKey('${sync.wals.first.id}#${sync.wals.first.storage.name}')), findsOneWidget);
+    expect(find.text('Failed to delete some items'), findsOneWidget);
+  });
+
+  testWidgets('swiping an SD-card recording verifies the device listing when StorageSync drops the local row', (
+    tester,
+  ) async {
+    final start = DateTime.now().subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final sdcardWal = Wal(
+      timerStart: start,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'omi_devkit',
+    );
+    final sync = await _pump(tester, [sdcardWal], removeOnDelete: true, relistOnDiscover: [sdcardWal]);
+
+    await tester.drag(find.byType(Dismissible).first, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(sync.deleted, [sdcardWal]);
+    expect(sync.discovered, greaterThanOrEqualTo(2));
+    expect(sync.wals, [sdcardWal]);
+    expect(find.byKey(ValueKey('${sync.wals.first.id}#${sync.wals.first.storage.name}')), findsOneWidget);
+    expect(find.text('Failed to delete some items'), findsOneWidget);
+  });
+  testWidgets('partial bulk Pending cleanup reports failure and keeps the skipped recording', (tester) async {
+    final rows = _tooOldAfternoon();
+    final kept = rows.first;
+    final sync = await _pump(tester, rows);
+    sync.skipDeleteId = kept.id;
+    await tester.tap(find.text('Manage Storage'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Clear').last);
+    await tester.pumpAndSettle();
+    expect(sync.wals, [kept]);
+    expect(find.text('Failed to delete some items'), findsOneWidget);
+    expect(find.text('Deleted pending recordings'), findsNothing);
   });
 }

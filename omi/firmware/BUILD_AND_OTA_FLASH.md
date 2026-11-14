@@ -48,6 +48,9 @@ The OMI firmware is a dual-core nRF5340 application with the following features:
 - **Bootloader**: MCUboot for secure OTA updates
 - **Partition Manager**: Static memory layout for dual-core operation
 
+Read [CV1 MCUboot and safe wire flashing](docs/cv1-bootloader.md) before any SWD operation.
+Release app-core HEX combines the pinned qualified MCUboot with the exact OTA app; never flash stock MCUboot or unvalidated raw sysbuild output.
+
 ## Environment Setup
 
 ### 1. Install nRF Connect SDK 2.9.0
@@ -165,7 +168,7 @@ The build generates several important files in the `build/` directory:
 - `dfu_application.zip_manifest.json` - Package metadata
 
 ### Firmware Images
-- `merged.hex` (869 KB) - Complete firmware for direct programming
+- `merged.hex` - Internal sysbuild output, **not approved for direct programming**; release staging constructs a qualified bootloader + exact OTA app HEX
 - `signed_by_mcuboot_and_b0_ipc_radio.hex` - Signed application firmware
 - `merged_CPUNET.hex` (533 KB) - Network core firmware
 
@@ -302,7 +305,7 @@ Confirm the generated `build/partitions.yml` when building.
 ### Security Features
 - **Image Signing**: MCUboot uses `bootloader/mcuboot/root-rsa-2048.pem`, a public sample key in the repository; this is not a private production signing key.
 - **Secure Boot**: MCUboot verifies signatures before execution
-- **Rollback Protection**: Prevents downgrade to vulnerable versions
+- **Downgrade Prevention**: Rejects older signed headers; overwrite-only has no automatic trial rollback
 - **OTA Transport**: MCUmgr SMP over Bluetooth LE; verify the effective SDK configuration before assuming encryption is required.
 
 ### Build Configuration Highlights

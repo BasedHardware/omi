@@ -74,7 +74,6 @@ GEOMETRY = {"Growth": (0, 5), "Activation": (5, 5), "Retention": (10, 5), "Reven
 STAT_H = 3
 STRIP_H = 1
 WALL_H = 27
-FUNNEL_H = 9
 # One value size and label size on every stat; sized so the widest value
 # ("10,287", "$72.4K") fits a three-value column at 1440 px.
 STAT_VALUE_SIZE, STAT_LABEL_SIZE = 26, 13
@@ -109,6 +108,33 @@ def prop(name, *props):
 def hidden(name):
     """In the tooltip only (counts behind a rate, an unplotted total)."""
     return prop(name, ("custom.hideFrom", {"legend": True, "tooltip": False, "viz": True}))
+
+
+def short_label(override, label):
+    """Shorter legend label for a series' own override, so a legend beside the plot stays narrow."""
+    for prop_ in override["properties"]:
+        if prop_["id"] == "displayName":
+            prop_["value"] = label
+    return override
+
+
+# Legend labels for the cost stack, short enough for a legend beside a 4-column plot.
+STACK_LABELS = {"GCP": "GCP", "Vertex LLM": "Vertex", "OpenAI": "OpenAI", "Anthropic": "Anthropic",
+                "STT measured": "STT meas.", "STT cash (Mercury)": "STT cash", "SaaS measured (Mercury)": "SaaS meas.",
+                "STT est.": "STT est.", "SaaS est.": "SaaS est.", "Modulate modelled": "Modulate"}
+
+
+def legend_right(panel):
+    """The legend beside the plot, not a list under it: a short panel has no room for the list."""
+    panel["options"]["legend"]["placement"] = "right"
+
+
+def mrr_extra(panel):
+    """Legend beside the plot, and a break across missing book days: the Stripe book
+    has no snapshot from 2026-10-07 to 2026-11-07, and a smooth ramp across that
+    month reads as measured growth."""
+    legend_right(panel)
+    disconnect_after(1.5)(panel)
 
 
 def dashed(name, hex_):
@@ -233,6 +259,9 @@ PLATFORM_COLUMNS = [("mobile", "Mobile", "number"), ("macos", "macOS", "number")
                     ("other", "Other", "number")]
 PLATFORM_OVERRIDES = [color(n, h) for n, h in PLATFORM.items()]
 DATE = ("date", "date", "timestamp")
+# The uptime sidecar emits the UTC day as epoch milliseconds (a number); a plain "timestamp"
+# column parses it to null and the panel reads "Data outside time range".
+UPTIME_DATE = ("date", "date", "timestamp_epoch")
 
 
 MATURING = ("The shaded band on the right is cohorts still inside their first week: a cohort is drawn 8 days "
@@ -283,7 +312,7 @@ def columns():
                   [target("growth", "weekly", [DATE, *PLATFORM_COLUMNS, ("mcp", "MCP-only", "number")])],
                   unit="short", draw="bars", stack=True, overrides=PLATFORM_OVERRIDES,
                   time_from="182d")),
-        (6, chart("New, returning & lost users",
+        (6, chart("New, returning, lost",
                   "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
                   [target("growth", "weekly", [DATE, ("retained", "Returning", "number"),
                                                ("resurrected", "Back after a break", "number"),
@@ -348,13 +377,13 @@ def columns():
         stat("Revenue", "MRR: live Stripe Omi-plan book (change = same-source FinOps 7-day change). Per user = MRR ÷ monthly users (qualified MAU; change vs prior week). Hardware: Shopify net device sales, last complete Mon–Sun week vs the prior week. Relative % change.",
              [("headline", "mrr", "MRR", "currencyUSD", 1), ("headline", "arpmau", "Per user", "currencyUSD", 2),
               ("headline", "hardware", "Hardware", "currencyUSD", 0)]),
-        (5, chart("MRR by plan",
-                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+        (6, chart("MRR by plan",
+                   "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
                    [target("revenue", "mrr", [DATE, *[(k, n, "number") for k, n in PLAN_NAMES.items()],
                                               ("other", "Other", "number")])],
                    unit="currencyUSD", stack=True, time_from="40d",
-                   overrides=[color(n, h) for n, h in PLANS.items()])),
-        (6, chart("Shopify sales per week",
+                   overrides=[color(n, h) for n, h in PLANS.items()], extra=mrr_extra)),
+        (5, chart("Shopify sales per week",
                    "Mon–Sun weeks. Net device sales (refunds restate their sale week, no tax/shipping) and Omi Unlimited plan prepay cash (reported separately, never MRR). Device units in the tooltip. The latest Hardware bar is the Hardware stat.",
                    [target("revenue", "hardware", [("date", "Week ending", "timestamp"),
                                                    ("hardwareUsd", "Hardware", "number"),
@@ -386,17 +415,19 @@ def columns():
                                               ("revenuePerDay", "Revenue", "number"),
                                               ("oneTimeExcluded", "One-time excluded", "number"),
                                               ("total", "All-in total", "number")])],
+                   # Legend under the plot, not beside it: Health is a 4-column
+                   # panel, and a right-hand legend left the 35 days ~100px wide.
                    unit="currencyUSD", draw="bars", stack=True, time_from="35d",
-                   overrides=[*[color(n, h) for n, h in COST.items()],
-                              *[color(n, h) for n, h in MEASURED.items()],
-                              *[estimate(n, h) for n, h in ESTIMATE.items()],
+                   overrides=[*[short_label(color(n, h), STACK_LABELS[n]) for n, h in COST.items()],
+                              *[short_label(color(n, h), STACK_LABELS[n]) for n, h in MEASURED.items()],
+                              *[short_label(estimate(n, h), STACK_LABELS[n]) for n, h in ESTIMATE.items()],
                               line("Revenue", REVENUE, 3),
                               hidden("One-time excluded"), hidden("All-in total")])),
         (10, chart("Uptime by journey",
                    UPTIME + "One point per UTC day (that day's settled attempts); the white line is all journeys "
                    "together. A journey with no settled attempts that day draws nothing, not 0%. Attempts and "
                    "failures for the last 7 days are in the Health stat's source frame `journeys`.",
-                   [target("uptime", "daily", [DATE, ("all", "All journeys", "number"),
+                   [target("uptime", "daily", [UPTIME_DATE, ("all", "All journeys", "number"),
                                                ("capture", "Live capture", "number"),
                                                ("saved", "Conversation saved", "number"),
                                                ("chat", "Chat answer", "number"),
@@ -408,6 +439,9 @@ def columns():
         (1, data_through()),
     ]
     return dict(zip(COLUMNS, [growth, activation, retention, revenue, health]))
+
+
+MARGIN_EMPTY = "No day in the last 35 has both plan cost and revenue"
 
 
 def margin_by_plan():
@@ -430,6 +464,9 @@ def margin_by_plan():
 
     def centre(panel):
         panel["fieldConfig"]["defaults"]["custom"]["axisCenteredZero"] = True
+        # An empty frame is a real answer here (no day in the window has both a
+        # settled plan cost and a revenue book), not a load still in flight.
+        panel["fieldConfig"]["defaults"]["noValue"] = MARGIN_EMPTY
         disconnect_after(1.5)(panel)  # any missing day is a gap (e.g. no 09-29 book)
 
     return chart("Margin by plan",
@@ -465,10 +502,14 @@ VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23)
                    "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
                    "MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure "
                    "and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for "
-                   "today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D−2 beneath it; "
+                   "today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, "
+                   "else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. "
+                   "The meter's figure is its own 24-hour basis, so the last point can step away from the "
+                   "trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. "
+                   "Settled through D−2 beneath it; "
                    "the sparkline is the daily trailing-7d series over 60 days. "
                    f"Goal {MARGIN_GOAL_PCT:g}%: green at or above, red below. When the latest day has no MRR book snapshot the "
-                   "headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame "
+                   "headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame "
                    "names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
@@ -560,7 +601,7 @@ def curve_options(panel):
 
 
 def funnel_row():
-    """Below the TV's fixed wall: a full-width row reached by scrolling."""
+    """The funnel board: a full-width row that fills the 1920×1080 kiosk, in its own rotation."""
     proxy = ("Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as "
              "organic, and pairing is itself an early success, so the gap between the two is overstated. ")
     series_colors = [color("Device", MAGENTA), color("Organic", NEUTRAL)]
@@ -606,22 +647,33 @@ def build_wall_board():
             panels.append({**panel, "gridPos": {"x": x, "y": y, "w": w, "h": h}})
             y += h
         assert y == WALL_H, (name, y)  # every column fills the TV exactly, no scroll
-    x = 0
+    return _board("omi-tv-v2", "Omi TV · v3", panels,
+                  "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health.")
+
+
+def build_funnel_board():
+    """Funnel and cohorts in their own rotation: three charts that fill the kiosk, no scroll."""
+    panels, x = [], 0
     for w, panel in funnel_row():
-        panels.append({**panel, "gridPos": {"x": x, "y": WALL_H, "w": w, "h": FUNNEL_H}})
+        panels.append({**panel, "gridPos": {"x": x, "y": 0, "w": w, "h": WALL_H}})
         x += w
     assert x == 24
+    return _board("omi-tv-funnel", "Omi TV · funnel", panels,
+                  "Device vs organic funnel, weekly activation and platform split. Its own rotation board: it fills the 1920×1080 kiosk.")
+
+
+def _board(uid, title, panels, description):
     for i, panel in enumerate(panels, 1):
         panel["id"] = i
-    return {"uid": "omi-tv-v2", "title": "Omi TV · v3", "schemaVersion": 39, "version": 1, "timezone": "utc",
-            "refresh": "1m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
+    return {"uid": uid, "title": title, "schemaVersion": 39, "version": 1, "timezone": "utc",
+            "refresh": "5m", "editable": True, "graphTooltip": 1, "tags": ["omi-tv", "v3"],
             "time": {"from": "now-182d", "to": "now"}, "timepicker": {"hidden": True}, "templating": {"list": []},
-            "annotations": {"list": []}, "panels": panels, "links": [],
-            "description": "Growth → Activation → Retention → Revenue → Health. Stats above native charts; v2 metric definitions via /api/omi/stats/wall/series. Every chart's latest point is the stat above it. The data-through day is the line under Health."}
+            "annotations": {"list": []}, "panels": panels, "links": [], "description": description}
 
 
 def write_wall_board():
-    (HERE / "dashboards/omi-tv-v2.json").write_text(json.dumps(build_wall_board(), indent=2) + "\n")
+    for uid, board in (("omi-tv-v2", build_wall_board()), ("omi-tv-funnel", build_funnel_board())):
+        (HERE / f"dashboards/{uid}.json").write_text(json.dumps(board, indent=2) + "\n")
 
 
 if __name__ == "__main__":

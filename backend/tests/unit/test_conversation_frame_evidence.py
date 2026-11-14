@@ -1,6 +1,8 @@
 import sys
 from types import ModuleType
 
+import pytest
+
 from services import conversation_frame_evidence
 
 # Snapshot at collection: this file imports conversation_frame_evidence and
@@ -33,7 +35,43 @@ def test_conversation_frame_read_requires_owner_conversation_and_photo(monkeypat
     assert reads == [("uid-1", "permanent/uid/frame")]
 
 
+def test_conversation_frame_read_rejects_soft_deleted_tombstone(monkeypatch):
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        "get_conversation",
+        lambda uid, cid: {"id": cid, "deleted": True},
+    )
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        "get_conversation_photos",
+        lambda uid, cid: [{"id": "photo-1", "storage_id": "permanent/uid/frame", "content_type": "image/webp"}],
+    )
+    reads = []
+    monkeypatch.setattr(
+        conversation_frame_evidence,
+        "download_frame_request_pixels",
+        lambda uid, storage_id: reads.append((uid, storage_id)) or b"pixels",
+    )
+
+    with pytest.raises(KeyError, match="conversation frame not found"):
+        conversation_frame_evidence.read_conversation_frame("uid-1", "conv-1", "photo-1")
+
+    assert reads == []
+
+
+def test_conversation_frame_read_rejects_missing_conversation(monkeypatch):
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, "get_conversation", lambda uid, cid: None)
+    with pytest.raises(KeyError, match="conversation frame not found"):
+        conversation_frame_evidence.read_conversation_frame("uid-1", "conv-1", "photo-1")
+
+
 def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed_pixels(monkeypatch):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
     events = []
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
@@ -84,9 +122,17 @@ def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed
 
 
 def test_conversation_frame_deletion_defaults_to_sync_sources_deleter(monkeypatch):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, 'purge_conversation_lake_objects', lambda *args: None)
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
     events = []
     merge_mod = ModuleType("utils.conversations.merge_conversations")
-    merge_mod.delete_conversation_with_sync_sources = lambda uid, cid: events.append(("sync-sources", uid, cid))
+    merge_mod.delete_conversation_with_sync_sources = lambda uid, cid, **kwargs: events.append(
+        ("sync-sources", uid, cid)
+    )
     monkeypatch.setitem(sys.modules, "utils.conversations.merge_conversations", merge_mod)
     monkeypatch.setattr(
         conversation_frame_evidence.conversations_db,
@@ -116,3 +162,103 @@ def test_conversation_frame_deletion_defaults_to_sync_sources_deleter(monkeypatc
         ("sync-sources", "uid-1", "conv-1"),
         ("request-metadata", "uid-1", "conv-1"),
     ]
+
+
+def _stub_frame_delete(monkeypatch, events):
+    from utils.other import lake_wipe
+
+    monkeypatch.setattr(lake_wipe, '_fence_conversation_uploads', lambda *args: None)
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, 'get_conversation_photos', lambda *args: [])
+    monkeypatch.setattr(
+        conversation_frame_evidence.frame_requests_db, 'list_all_frame_request_storage_ids', lambda *args, **kwargs: []
+    )
+    monkeypatch.setattr(
+        conversation_frame_evidence.frame_requests_db,
+        'persist_conversation_frame_deletion_outbox',
+        lambda *args: events.append('outbox'),
+    )
+    monkeypatch.setattr(
+        conversation_frame_evidence.frame_requests_db,
+        'delete_frame_requests_for_conversation',
+        lambda *args: events.append('requests'),
+    )
+
+
+def test_lake_purge_precedes_doc_delete_and_includes_deduped_donors(monkeypatch):
+    from utils.other import object_lake
+
+    events = []
+    _stub_frame_delete(monkeypatch, events)
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *args: {'sync_merged_from': ['c', 'd', 'd', '', 'e']},
+    )
+    monkeypatch.setattr(object_lake, 'delete_space_entity', lambda uid, cid: events.append(('lake', uid, cid)) or 1)
+    monkeypatch.setattr(
+        object_lake,
+        'delete_entity_upload_candidates',
+        lambda uid, cid, **kw: events.append(('candidates', uid, cid)) or 1,
+    )
+    conversation_frame_evidence.delete_conversation_and_frame_evidence(
+        'u', 'c', delete_conversation=lambda *args: events.append('delete')
+    )
+    assert events == [
+        'outbox',
+        ('lake', 'u', 'c'),
+        ('candidates', 'u', 'c'),
+        ('lake', 'u', 'd'),
+        ('candidates', 'u', 'd'),
+        ('lake', 'u', 'e'),
+        ('candidates', 'u', 'e'),
+        'delete',
+        'requests',
+    ]
+
+
+def test_lake_dark_deletion_still_purges_candidate_bindings(monkeypatch):
+    from utils.other import object_lake
+
+    events = []
+    _stub_frame_delete(monkeypatch, events)
+    monkeypatch.delenv('BUCKET_OBJECT_LAKE', raising=False)
+
+    def forbidden(*args):
+        raise AssertionError('lake-dark delete performed IO')
+
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        object_lake,
+        'delete_entity_upload_candidates',
+        lambda uid, cid, **kw: events.append(('candidates', uid, cid)) or 0,
+    )
+    monkeypatch.setattr(object_lake, 'delete_space_entity', forbidden)
+    conversation_frame_evidence.delete_conversation_and_frame_evidence(
+        'u', 'c', delete_conversation=lambda *args: events.append('delete')
+    )
+    assert events == ['outbox', ('candidates', 'u', 'c'), 'delete', 'requests']
+
+
+def test_lake_failure_prevents_doc_delete(monkeypatch):
+    import pytest
+    from utils.other import object_lake
+
+    events = []
+    _stub_frame_delete(monkeypatch, events)
+    monkeypatch.setenv('BUCKET_OBJECT_LAKE', 'synthetic-lake')
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {}
+    )
+
+    def unavailable(*args):
+        raise object_lake.LakeFetchError('lake down')
+
+    monkeypatch.setattr(object_lake, 'delete_space_entity', unavailable)
+    with pytest.raises(object_lake.LakeFetchError):
+        conversation_frame_evidence.delete_conversation_and_frame_evidence(
+            'u', 'c', delete_conversation=lambda *args: events.append('delete')
+        )
+    assert events == ['outbox']

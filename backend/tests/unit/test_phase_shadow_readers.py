@@ -116,8 +116,8 @@ def test_episode_member_projection_is_identical(monkeypatch, no_firestore, list_
     assert (episode, rows) == before
 
 
-def test_attention_projection_is_identical_and_reuses_the_one_query(monkeypatch):
-    # Only this legacy reader queries. Count the complete query footprint each time.
+def test_attention_projection_is_identical_and_reuses_the_same_query_footprint(monkeypatch):
+    # Compare the complete footprint: three candidate sources with Home projection on, one off.
     store = Mock()
     query = store.collection.return_value.document.return_value.collection.return_value
     query.where.return_value.limit.return_value.stream.side_effect = lambda: iter(

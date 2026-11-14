@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from config.episodes import home_transcription_deadline_seconds, home_transcription_presentation_gate_enabled
 from database import conversations
 from routers import conversations as routes
-from utils.conversations import transcribing_hold
+from utils.conversations import home_step, transcribing_hold
 from utils.episodes import home_membership
 from utils.developer_item_reads import read_conversation_item
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
@@ -318,3 +318,29 @@ def test_encoded_empty_capture_has_visible_overdue_exit(monkeypatch, level):
     page = conversations.get_conversations_without_photos('u', limit=1, presentation=True)
     assert page[0]['transcript_segments'] == []
     assert transcribing_hold.project(page[0])['structured']['title'] == "Couldn't transcribe"
+
+
+@pytest.mark.parametrize('indexed', [False, True])
+def test_stale_processing_list_projection_preserves_stored_state(monkeypatch, indexed):
+    raw = capture(status='processing', finished_at=NOW - timedelta(hours=7), updated_at=NOW, memory_id='capture')
+    db = Db([raw])
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'indexed_list_reads_enabled', lambda: indexed)
+    rows = conversations.get_conversations_without_photos('u', list_fields_only=True)
+    assert len(rows) == 1
+    assert rows[0]['finished_at'] == raw['finished_at']
+    assert home_step.project(rows[0])['home_step'] == 'failed'
+    assert rows[0]['status'] == 'processing'
+    assert 'home_step' not in rows[0]
+
+
+def test_stale_processing_failed_only_on_list_wire(api):
+    client, raw = api
+    raw.update(status='processing', finished_at=NOW - timedelta(hours=7))
+    listed = client.get('/v1/conversations')
+    detail = client.get('/v1/conversations/capture')
+    assert listed.status_code == detail.status_code == 200
+    assert listed.json()[0]['home_step'] == 'failed'
+    assert listed.json()[0]['status'] == detail.json()['status'] == 'processing'
+    assert 'home_step' not in detail.json()
+    assert 'home_step' not in raw

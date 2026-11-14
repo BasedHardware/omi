@@ -12,8 +12,6 @@ from utils.enrichment import custody, outbox, scan
 @pytest.mark.parametrize('expired_lease', [False, True])
 def test_c3_watchdog_advances_past_valid_prefix_and_wraps(state, monkeypatch, expired_lease):  # noqa: F811
     rows, wakes = state
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
     for index in range(7):

@@ -88,10 +88,10 @@ def resolve_direct(uid, conversation, *, resolve, on_persist):
     Terminal direct results settle only after the caller's canonical persist.
     A crashed caller retains leased custody for the existing sweeper.
     """
+    if not final_pass_enabled_for(uid, getattr(conversation, 'transcript_segments', ())):
+        return resolve(uid, conversation)
     from utils.conversations import final_pass_batch as batch
 
-    if not final_pass_enabled_for(uid, conversation.transcript_segments):
-        return resolve(uid, conversation)
     store = _store()
     # Failure before a confirmed durable claim must fail the processing call;
     # it cannot acknowledge speaker work without custody.

@@ -20,6 +20,8 @@ import time
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from database.batch_pipeline_projection_finish import projection_finish_state_fields
+
 NAMESPACE_RE = re.compile(r'batch_pipeline_(prod|dev|test_[a-z0-9_]{1,40})\Z')
 MAX_BATCH_SIZE = 250
 
@@ -72,8 +74,10 @@ def reconcile(client, namespace, *, apply=False, batch_size=100, max_rows=10000,
             if not apply:
                 continue
             try:
+                # A finish-state write must carry the clock: with the backoff
+                # lever on, a row without one is outside the filtered page.
                 snapshot.reference.update(
-                    {'projection_state': 'ready'},
+                    {'projection_state': 'ready', **projection_finish_state_fields('ready', time.time())},
                     option=firestore.LastUpdateOption(snapshot.update_time),
                     timeout=min(3.0, remaining),
                     retry=None,

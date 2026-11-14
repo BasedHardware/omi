@@ -4,7 +4,7 @@
   "schemaVersion": 39,
   "version": 1,
   "timezone": "utc",
-  "refresh": "1m",
+  "refresh": "5m",
   "editable": true,
   "graphTooltip": 1,
   "tags": [
@@ -521,7 +521,7 @@
     },
     {
       "type": "timeseries",
-      "title": "New, returning & lost users",
+      "title": "New, returning, lost",
       "description": "Each week's active users = returning (also active the prior 7 days) + back after a break + new (first seen this week). Lost = last week's users not active this week, drawn below zero.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
@@ -3413,7 +3413,7 @@
     {
       "type": "timeseries",
       "title": "MRR by plan",
-      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
+      "description": "Neo = legacy Unlimited (plan id unlimited), Unlimited = unlimited_v2, Pro = operator. Daily FinOps snapshots of the Stripe plan book (deduplicated by snapshot date; known gaps: an unmapped enterprise price and two JPY subscriptions). A day with no snapshot is a gap, never a line drawn across it (no book exists from 2026-10-07 to 2026-11-07). The final point is the live Stripe book, the MRR stat. Shopify plan prepay is cash and never included.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3487,7 +3487,7 @@
             "gradientMode": "none",
             "showPoints": "never",
             "pointSize": 5,
-            "spanNulls": true,
+            "spanNulls": false,
             "barAlignment": 0,
             "axisPlacement": "left",
             "axisLabel": "",
@@ -3501,7 +3501,8 @@
             "lineInterpolation": "smooth",
             "thresholdsStyle": {
               "mode": "off"
-            }
+            },
+            "insertNulls": 129600000
           },
           "noValue": "Loading\u2026"
         },
@@ -3626,7 +3627,7 @@
         "legend": {
           "showLegend": true,
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "right"
         },
         "tooltip": {
           "mode": "multi",
@@ -3657,7 +3658,7 @@
         "x": 15,
         "y": 4,
         "w": 5,
-        "h": 5
+        "h": 6
       },
       "id": 19
     },
@@ -3836,16 +3837,16 @@
       ],
       "gridPos": {
         "x": 15,
-        "y": 9,
+        "y": 10,
         "w": 5,
-        "h": 6
+        "h": 5
       },
       "id": 20
     },
     {
       "type": "stat",
       "title": "Variable margin (live est.)",
-      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for today, from metered Cloud Monitoring usage lagged 5 minutes; settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book), never the previous day's margin. The variableMarginStatus frame names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
+      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate (Mercury cash), OpenRouter and Pinecone (configured, dated estimates) and Stripe fees. The development project's GCP is excluded. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and counted in the variableMarginStatus frame of /api/omi/stats/wall/series/health. The headline is the live estimate (est.) for today: the margin meter's newest hourly row (omi_finops.margin_meter_hourly) while it is under 3 hours old, else the metered Cloud Monitoring estimate lagged 5 minutes when there is one, else no value. The meter's figure is its own 24-hour basis, so the last point can step away from the trailing-7d sparkline; the variableMarginStatus frame names the meter hour, or how long it has been stale. Settled through D\u22122 beneath it; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book) unless a fresh margin-meter row supplies it (the meter uses its own revenue basis), never the previous day's margin. The variableMarginStatus frame names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -4118,7 +4119,7 @@
             },
             "insertNulls": 129600000
           },
-          "noValue": "Loading\u2026",
+          "noValue": "No day in the last 35 has both plan cost and revenue",
           "decimals": 0
         },
         "overrides": [
@@ -5732,7 +5733,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Vertex LLM"
+                "value": "Vertex"
               },
               {
                 "id": "color",
@@ -5789,7 +5790,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "STT measured"
+                "value": "STT meas."
               },
               {
                 "id": "color",
@@ -5808,7 +5809,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "STT cash (Mercury)"
+                "value": "STT cash"
               },
               {
                 "id": "color",
@@ -5827,7 +5828,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "SaaS measured (Mercury)"
+                "value": "SaaS meas."
               },
               {
                 "id": "color",
@@ -5900,7 +5901,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Modulate modelled"
+                "value": "Modulate"
               },
               {
                 "id": "color",
@@ -6065,7 +6066,7 @@
             {
               "selector": "date",
               "text": "date",
-              "type": "timestamp"
+              "type": "timestamp_epoch"
             },
             {
               "selector": "all",
@@ -6332,458 +6333,6 @@
         "h": 1
       },
       "id": 27
-    },
-    {
-      "type": "barchart",
-      "title": "Funnel \u00b7 device vs organic",
-      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Latest matured weekly new-user cohort, except Kept, which uses the newest cohort old enough to measure it. Onboarded counts only people who arrived on iOS, Android or Mac, the clients that report it. Install is not shown because PostHog sees nobody before sign-up; first summary is not shown because it has no event.",
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.funnel",
-          "columns": [
-            {
-              "selector": "step",
-              "text": "Step",
-              "type": "string"
-            },
-            {
-              "selector": "Device",
-              "text": "Device",
-              "type": "number"
-            },
-            {
-              "selector": "Organic",
-              "text": "Organic",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#e8e6df"
-          },
-          "custom": {
-            "fillOpacity": 88,
-            "gradientMode": "none",
-            "lineWidth": 0,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "axisSoftMin": 0,
-            "axisBorderShow": false
-          },
-          "noValue": "Loading\u2026",
-          "decimals": 0,
-          "min": 0,
-          "max": 100
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Device"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Device"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d55181"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Organic"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Organic"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#a8a69e"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        },
-        "orientation": "vertical",
-        "barWidth": 0.8,
-        "groupWidth": 0.75,
-        "text": {
-          "valueSize": 13
-        },
-        "showValue": "never",
-        "stacking": "none",
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0,
-        "fullHighlight": false,
-        "barRadius": 0.08
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "Step": 0,
-              "Device": 1,
-              "Organic": 2
-            },
-            "excludeByName": {},
-            "renameByName": {}
-          }
-        }
-      ],
-      "gridPos": {
-        "x": 0,
-        "y": 27,
-        "w": 11,
-        "h": 9
-      },
-      "id": 28
-    },
-    {
-      "type": "timeseries",
-      "title": "Activated \u00b7 device vs organic",
-      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation for each matured weekly cohort, dated by its last day.",
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.funnelWeekly",
-          "columns": [
-            {
-              "selector": "date",
-              "text": "date",
-              "type": "timestamp"
-            },
-            {
-              "selector": "Device",
-              "text": "Device",
-              "type": "number"
-            },
-            {
-              "selector": "Organic",
-              "text": "Organic",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#e8e6df"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "showPoints": "never",
-            "pointSize": 5,
-            "spanNulls": true,
-            "barAlignment": 0,
-            "axisPlacement": "left",
-            "axisLabel": "",
-            "axisSoftMin": 0,
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "lineInterpolation": "smooth",
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "noValue": "Loading\u2026",
-          "decimals": 0
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Device"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Device"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d55181"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Organic"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Organic"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#a8a69e"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "date": 0,
-              "Device": 1,
-              "Organic": 2
-            },
-            "excludeByName": {},
-            "renameByName": {}
-          }
-        }
-      ],
-      "timeFrom": "60d",
-      "hideTimeOverride": true,
-      "gridPos": {
-        "x": 11,
-        "y": 27,
-        "w": 7,
-        "h": 9
-      },
-      "id": 29
-    },
-    {
-      "type": "barchart",
-      "title": "Funnel by platform",
-      "description": "Device = paired an Omi within 48 hours of first seen; other paired hardware counts as organic. It is a proxy: a buyer who never paired counts as organic, and pairing is itself an early success, so the gap between the two is overstated. Week-one activation in the latest matured weekly new-user cohort, by the platform users first arrived on, with its size in the label. Small platforms move a lot week to week.",
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "type": "json",
-          "source": "url",
-          "format": "table",
-          "parser": "backend",
-          "url": "http://127.0.0.1:8899/api/omi/stats/wall/series/activation",
-          "url_options": {
-            "method": "GET"
-          },
-          "root_selector": "frames.funnelPlatforms",
-          "columns": [
-            {
-              "selector": "platform",
-              "text": "Platform",
-              "type": "string"
-            },
-            {
-              "selector": "Device",
-              "text": "Device",
-              "type": "number"
-            },
-            {
-              "selector": "Organic",
-              "text": "Organic",
-              "type": "number"
-            }
-          ]
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#e8e6df"
-          },
-          "custom": {
-            "fillOpacity": 88,
-            "gradientMode": "none",
-            "lineWidth": 0,
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "axisSoftMin": 0,
-            "axisBorderShow": false
-          },
-          "noValue": "Loading\u2026",
-          "decimals": 0,
-          "min": 0,
-          "max": 100
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Device"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Device"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#d55181"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Organic"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Organic"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#a8a69e"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "legend": {
-          "showLegend": true,
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        },
-        "orientation": "horizontal",
-        "barWidth": 0.8,
-        "groupWidth": 0.75,
-        "text": {
-          "valueSize": 13
-        },
-        "showValue": "always",
-        "stacking": "none",
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0,
-        "fullHighlight": false,
-        "barRadius": 0.08
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "indexByName": {
-              "Platform": 0,
-              "Device": 1,
-              "Organic": 2
-            },
-            "excludeByName": {},
-            "renameByName": {}
-          }
-        }
-      ],
-      "gridPos": {
-        "x": 18,
-        "y": 27,
-        "w": 6,
-        "h": 9
-      },
-      "id": 30
     }
   ],
   "links": [],

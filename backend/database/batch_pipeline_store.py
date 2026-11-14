@@ -7,18 +7,30 @@ The transaction callback must be pure; it may be retried by Firestore.
 from copy import deepcopy
 import hashlib
 import logging
+import math
 import os
 import re
 import time
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted, InvalidArgument
 
 from config.firestore_read_levers import lever_enabled
-from config.batch_pipeline import contention_retry_enabled, control_candidate_fanout
+from config.batch_pipeline import (
+    contention_retry_enabled,
+    control_candidate_fanout,
+    held_poll_skip_enabled,
+    MERGE_POLL_TERMINAL_STATES,
+)
+from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
+)
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
+from database import record_recovery_gate
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
@@ -28,13 +40,14 @@ from database.batch_pipeline_transaction_labels import (
     pull_operation as pull_operation,
 )
 from utils.sync.stage import collection_name
+from utils.batch_pipeline.input_retention import held_input_leg, invalid_staged_clock, staged_enqueue
 
 # Every state an obligation can drain from. Assignment needs only ``pending``;
 # completion of persisted/ready rows has its own page. All share one index.
 PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
 PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held')
 PROJECTION_ASSIGNMENT_STATES = ('pending',)
-PROJECTION_FINISH_STATES = ('persisted', 'ready')
+
 
 T = TypeVar('T')
 logger = logging.getLogger(__name__)
@@ -46,6 +59,8 @@ class Transaction(Protocol):
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -53,6 +68,7 @@ class Transaction(Protocol):
 
 class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def projection_finish_backfill_complete(self) -> bool: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -65,6 +81,8 @@ class Store(Protocol):
     ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def cancel_fenced_recovery(self, segment_id: str) -> bool: ...
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
@@ -75,6 +93,8 @@ class Store(Protocol):
 _DIRECT_READ_KINDS = {
     'first_pending': 'jobs_query',
     'first_ready_pending': 'jobs_query',
+    'fresh_first_pending': 'jobs_query',
+    'fresh_first_ready_pending': 'jobs_query',
     'ready_predecessor': 'jobs_query',
     'service_frontier': 'control_query',
     'check_privacy': 'privacy',
@@ -179,6 +199,12 @@ class FirestoreTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=False, transaction=self.transaction)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=True, transaction=self.transaction)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
@@ -217,9 +243,9 @@ class FirestoreTransaction:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results'}:
+            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
-            job = value if table == 'jobs' else self.get('jobs', key)
+            job = self.get('jobs', key) if table == 'results' else value
             identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
             if identity in guarded:
                 continue
@@ -363,6 +389,41 @@ class FirestoreStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        ref = self.client.collection(f'{self.namespace}_jobs').document(segment_id)
+
+        @firestore.transactional
+        def cancel(transaction):
+            job = ref.get(transaction=transaction).to_dict() or {}
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                assert_batch_write_allowed(
+                    self.client,
+                    transaction,
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                transaction.update(ref, {'recovery_state': 'cancelled'})
+                return True
+            return False
+
+        cancelled = cancel(self.client.transaction())
+        if cancelled:
+            from database.batch_pipeline_shadow_hook import mirror_refresh
+
+            mirror_refresh(self.namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+        return cancelled
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         return defer_privacy_blocked_record(self.client, self.namespace, segment_id, until, now)
 
@@ -377,13 +438,21 @@ class FirestoreStore:
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
 
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_complete(self.client, self.namespace)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return projection_page(self.client, self.namespace, limit, after=after, states=states)
+        return projection_page(self.client, self.namespace, limit, after=after, states=states, due_before=due_before)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
@@ -398,8 +467,9 @@ def projection_page(
     namespace: str,
     limit: int = 100,
     *,
-    after=None,
+    after: tuple | None = None,
     states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+    due_before: float | None = None,
 ) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
 
@@ -408,20 +478,54 @@ def projection_page(
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
     A seed cursor ``(committed_at, '')`` starts at that time, before every key
     (the follow-up desync offset); keys are never empty.
+
+    ``due_before`` adds the dark finish-backoff range filter: only rows whose
+    ``projection_finish_due_at`` has passed. That field leads the ordering
+    because Firestore serves a range filter on the first ordered field only, so
+    the cursor becomes ``(due_at, committed_at, key)`` and a seed
+    ``(due_at,)`` starts at that clock.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
-    query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
-    if after is not None and after[1] == '':
+    if due_before is None:
+        query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
+    else:
+        query = (
+            collection.where('projection_state', 'in', list(states))
+            .where(PROJECTION_FINISH_DUE_FIELD, '<=', float(due_before))
+            .order_by(PROJECTION_FINISH_DUE_FIELD)
+            .order_by('committed_at')
+            .order_by('__name__')
+        )
+    seeded = after is not None and len(after) == 2 and after[1] == ''
+    if due_before is not None:
+        if after is not None and len(after) == 3:
+            query = query.start_after(
+                {
+                    PROJECTION_FINISH_DUE_FIELD: after[0],
+                    'committed_at': after[1],
+                    '__name__': collection.document(after[2]),
+                }
+            )
+        elif after is not None:
+            query = query.start_at({PROJECTION_FINISH_DUE_FIELD: after[0]})
+    elif after is not None and seeded:
         query = query.start_at({'committed_at': after[0]})
     elif after is not None:
-        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[1])})
+        query = query.start_after({'committed_at': after[0], '__name__': collection.document(after[-1])})
     size = max(1, min(limit, 200))
     docs = list(query.limit(size).stream())
     # Wrap even when blocked rows remain. Rows inserted behind the cursor are
     # revisited on the next cycle; no durable obligation is skipped or mutated.
-    cursor = (docs[-1].to_dict()['committed_at'], docs[-1].id) if len(docs) == size else None
+    if len(docs) == size:
+        last = docs[-1].to_dict()
+        if due_before is None:
+            cursor = (last['committed_at'], docs[-1].id)
+        else:
+            cursor = (last[PROJECTION_FINISH_DUE_FIELD], last['committed_at'], docs[-1].id)
+    else:
+        cursor = None
     return [doc.id for doc in docs], cursor
 
 
@@ -442,16 +546,22 @@ def projection_successor(client: Any, namespace: str, owner_key: str, previous: 
     return docs[0].id if len(docs) == 1 else None
 
 
-def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
-    docs = list(
-        client.collection(f'{namespace}_jobs')
-        .where('owner_key', '==', owner_key)
-        .where('merge_pending', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(1)
-        .stream(transaction=transaction)
+def first_pending(
+    client: Any, namespace: str, owner_key: str, *, transaction: Any = None, skip_terminal: bool = True
+) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs').where('owner_key', '==', owner_key).where('merge_pending', '==', True)
     )
+    base = query
+    skip = skip_terminal and held_poll_skip_enabled()
+    if skip:
+        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
+    try:
+        docs = list(query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
+    except (FailedPrecondition, InvalidArgument):
+        if not skip:
+            raise
+        docs = list(base.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction))
     return docs[0].to_dict() if docs else None
 
 
@@ -503,9 +613,27 @@ def held_merge_owners(
     marks = query.limit(max(1, min(limit, 100))).stream()
     owners = []
     for mark in marks:
-        job = first_pending(client, namespace, mark.id)
+        job = first_pending(client, namespace, mark.id, skip_terminal=False)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
+
+
+def fresh_first_pending(client: Any, namespace: str, owner_key: str, *, ready: bool, transaction: Any) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('fresh_capture', '==', True)
+    )
+    if ready:
+        query = query.where('state', '==', 'result_ready')
+    return next(
+        (
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction)
+        ),
+        None,
+    )
 
 
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
@@ -513,17 +641,28 @@ def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> li
 
     Non-transactional discovery hint: it takes no transactional query lock.
     """
-    docs = (
+    query = (
         client.collection(f'{namespace}_jobs')
         .where('owner_key', '==', owner_key)
         .where('merge_pending', '==', True)
         .where('fresh_capture', '==', True)
-        .order_by('capture_at')
-        .order_by('segment_id')
-        .limit(max(1, min(limit, 32)))
-        .stream()
     )
-    return [doc.to_dict() for doc in docs]
+    base = query
+    skip = held_poll_skip_enabled()
+    if skip:
+        query = query.where('state', 'not-in', list(MERGE_POLL_TERMINAL_STATES))
+    try:
+        return [
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
+    except (FailedPrecondition, InvalidArgument):
+        if not skip:
+            raise
+        return [
+            doc.to_dict()
+            for doc in base.order_by('capture_at').order_by('segment_id').limit(max(1, min(limit, 32))).stream()
+        ]
 
 
 def ready_predecessor(
@@ -544,15 +683,30 @@ def ready_predecessor(
     return docs[0].to_dict() if len(docs) == 1 else None
 
 
+def promote_record_recoveries(client: Any, namespace: str, now: float, limit: int = 100, *, budget: Any = None) -> int:
+    """Resume accepted bytes from the active repair path even after mode rollback."""
+    if budget is not None:
+        budget.check()
+    promoted = 0
+    for segment in due(client, namespace, record_recovery_gate.WAITING_STATE, now, limit):
+        if budget is not None:
+            budget.check()
+        promoted += record_recovery_gate.promote(client, namespace, segment, now)
+    return promoted
+
+
 def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
-    if state not in {'leased', 'retry', 'result_ready', 'record_pending'}:
+    if state not in {'leased', 'retry', 'result_ready', 'record_pending', record_recovery_gate.WAITING_STATE}:
         raise ValueError('only recoverable states may be scanned')
     field = {
         'leased': 'lease_until',
         'retry': 'available_at',
         'result_ready': 'enqueued_at',
         'record_pending': 'available_at',
+        record_recovery_gate.WAITING_STATE: 'available_at',
     }[state]
+    if state == 'record_pending':
+        promote_record_recoveries(client, namespace, now, limit)
     docs = (
         client.collection(f'{namespace}_jobs')
         .where('state', '==', state)
@@ -796,13 +950,21 @@ def is_terminal_empty(job: dict[str, Any]) -> bool:
 
 @read_origin('job:batch_pipeline_store:timeliness_sample')
 def timeliness_sample(
-    client: Any, namespace: str, epoch: float, now: float, sla: float, *, terminal_empty_processed: bool = False
+    client: Any,
+    namespace: str,
+    epoch: float,
+    now: float,
+    sla: float,
+    *,
+    terminal_empty_processed: bool = False,
 ) -> dict[str, Any]:
     """Unpublished units by wait leg: oldest ``enqueued_at`` at or after ``epoch``, counts past ``sla`` for the
     new cohort, and backlog counts before ``epoch``. With ``batch_timeliness_leader`` on, each backlog
     count is capped at 10,000 index entries: values at the cap are lower bounds. The assignment-held
     backlog alert treats saturation as actionable stock, independently of its one-hour growth condition.
     Lever 0 restores the exact, unbounded historical counts. Post-epoch counts stay exact.
+
+    All-time companion counts are not computed here; see ``timeliness_all_time_counts``.
 
     ``terminal_empty`` is always counted. With ``terminal_empty_processed`` those units leave the quarantined
     leg: its count subtracts them exactly, so a page of them can hide a younger unit but never a breach.
@@ -816,10 +978,50 @@ def timeliness_sample(
     jobs = client.collection(f'{namespace}_jobs')
     results = client.collection(f'{namespace}_results')
     due = now - sla
+    invalid_staged_clocks: set[str] = set()
+    unclocked_staged_inputs: set[str] = set()
 
     def first(query, field):
         docs = list(query.order_by(field).limit(1).stream())
         return docs[0].to_dict()[field] if docs else None
+
+    def first_valid_clock(query, field, predicate=None, clock=None):
+        # Metrics-only: a malformed clock must not mask a later dated held row.
+        # Keep limit(1) on each RPC: valid stock still costs one document read.
+        query = query.order_by(field).limit(1)
+        examined = 0
+        oldest = None
+        while docs := list(query.stream()):
+            # Do not publish a false healthy zero or run an unbounded fleet scan.
+            # The existing sample-error/staleness path reports incomplete ages.
+            examined += 1
+            if predicate is not None and examined > 128:
+                raise RuntimeError('staged input age scan incomplete')
+            doc = docs[0]
+            job = doc.to_dict()
+            if clock is not None and held_input_leg(job) and invalid_staged_clock(job):
+                invalid_staged_clocks.add(doc.id)
+                if staged_enqueue(job) is None:
+                    unclocked_staged_inputs.add(doc.id)
+            started = job.get(field)
+            if clock is not None and oldest is not None and isinstance(started, (int, float)) and started >= oldest:
+                return oldest  # A restage cannot predate its admission; later admissions cannot win.
+            if (
+                isinstance(started, (int, float))
+                and not isinstance(started, bool)
+                and math.isfinite(started)
+                and started > 0
+                and (predicate is None or predicate(doc.to_dict()))
+            ):
+                if clock is None:
+                    return started
+                stamp = clock(doc.to_dict())
+                if stamp is not None and stamp >= started:
+                    oldest = min(oldest, stamp) if oldest is not None else stamp
+                    if oldest == started:
+                        return oldest
+            query = query.start_after(doc)
+        return oldest
 
     def count(query):
         return int(query.count().get()[0][0].value)
@@ -919,15 +1121,28 @@ def timeliness_sample(
         quarantined_oldest = kept[0] if kept else docs[-1]['enqueued_at'] if over_sla['quarantined'] and docs else None
     else:
         quarantined_oldest = first(quarantined.where('enqueued_at', '>=', epoch), 'enqueued_at')
-    return {
+    staged = [
+        first_valid_clock(
+            jobs.where('state', '==', state).where('recovery_state', 'in', ['held', 'failed_held']),
+            'enqueued_at',
+            lambda job: held_input_leg(job) is not None and staged_enqueue(job) is not None,
+            clock=staged_enqueue,
+        )
+        for state in ('quarantined', 'committed')
+    ]
+    sample: dict[str, Any] = {
+        # Bounded-prefix observations, not a distinct-row fleet census.
+        'staged_input_clock_invalid': len(invalid_staged_clocks),
         # Alert-only stock ages: no epoch or rolling-cohort lower bound. Indexed oldest-first
-        # limit(1) reads stay exact even when the stock is larger than a scan page.
+        # reads stay exact even when the stock is larger than a scan page; held legs skip invalid clocks.
         'drain_oldest': first(projection, 'committed_at'),
         'held_oldest': {
-            'quarantine_held': first(legs['quarantine_held_rows'][0], 'committed_at'),
-            'held_expired': first(legs['held_expired_rows'][0], 'committed_at'),
-            'assignment_held': first(legs['assignment_held'][0], 'enqueued_at'),
-            'record_pending': first(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
+            # Current restage time when stamped; admission proxy for legacy objects. Never GCS metadata.
+            'staged_input': min((stamp for stamp in staged if stamp is not None), default=None),
+            'quarantine_held': first_valid_clock(legs['quarantine_held_rows'][0], 'committed_at'),
+            'held_expired': first_valid_clock(legs['held_expired_rows'][0], 'committed_at'),
+            'assignment_held': first_valid_clock(legs['assignment_held'][0], 'enqueued_at'),
+            'record_pending': first_valid_clock(jobs.where('state', '==', 'record_pending'), 'enqueued_at'),
         },
         'new_oldest': {
             'uncommitted': min((started for started, _ in walks if started is not None), default=None),
@@ -949,8 +1164,37 @@ def timeliness_sample(
         'truncated': {
             'uncommitted': any(truncated for _, truncated in walks),
             'projection': projection_truncated,
+            'staged_input': bool(unclocked_staged_inputs),
         },
     }
+    return sample
+
+
+def timeliness_all_time_counts(client: Any, namespace: str) -> dict[str, int]:
+    """Exact all-time counts for the companion legs, with no epoch filter and no document walk.
+
+    Diagnostic only. Run by the metrics caller after the epoch gauges publish, never on scrape and
+    never inside ``timeliness_sample``. Each leg fails alone: a failed COUNT logs and is omitted, so
+    the caller clears that series rather than exporting a fake zero.
+    """
+    jobs = client.collection(f'{namespace}_jobs')
+    results = client.collection(f'{namespace}_results')
+    legs = {
+        'quarantine_held_rows': results.where('projection_state', '==', 'quarantine_held'),
+        'assignment_held': jobs.where('state', '==', 'committed').where('recovery_state', '==', 'held'),
+        'projection': results.where('projection_state', 'in', list(PROJECTION_DISCOVERY_STATES)),
+    }
+    counts: dict[str, int] = {}
+    for leg, query in legs.items():
+        try:
+            counts[leg] = int(query.count().get()[0][0].value)
+        except Exception as error:
+            logger.warning(
+                'event=batch_timeliness_all_time_sample outcome=unavailable leg=%s exception_type=%s',
+                leg,
+                type(error).__name__,
+            )
+    return counts
 
 
 def reseed_hinted_activation(client: Any, namespace: str, key: str, priority: int) -> bool:
