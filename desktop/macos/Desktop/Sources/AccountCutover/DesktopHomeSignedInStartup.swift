@@ -59,13 +59,11 @@ enum DesktopHomeSignedInStartup {
 
   static func loadDataIfAdmitted(
     loadAllData: () async -> Void,
-    scheduleConversationWarmup: () -> Void,
-    scheduleAgentVMProvisioning: () -> Void
+    scheduleConversationWarmup: () -> Void
   ) async {
     await AccountCutoverControlManager.shared.prepareSignedInShell()
     guard AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
     await loadAllData()
     scheduleConversationWarmup()
-    scheduleAgentVMProvisioning()
   }
 }

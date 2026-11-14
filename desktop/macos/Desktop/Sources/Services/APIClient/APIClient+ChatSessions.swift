@@ -114,34 +114,4 @@ extension APIClient {
       authorizationSnapshot: pinnedAuthorization,
       requestTimeout: Self.managedSynthesisTimeout)
   }
-
-  // MARK: - Agent VM
-
-  struct AgentProvisionResponse: Decodable {
-    let status: String
-    let vmName: String
-    let ip: String?
-    let authToken: String
-    let agentStatus: String
-  }
-
-  /// Provision a cloud agent VM for the current user (fire-and-forget)
-  func provisionAgentVM() async throws -> AgentProvisionResponse {
-    return try await post("v2/agent/provision", customBaseURL: rustBackendURL)
-  }
-
-  struct AgentStatusResponse: Decodable {
-    let vmName: String
-    let zone: String
-    let ip: String?
-    let status: String
-    let authToken: String
-    let createdAt: String
-    let lastQueryAt: String?
-  }
-
-  /// Get current agent VM status
-  func getAgentStatus() async throws -> AgentStatusResponse? {
-    return try await get("v2/agent/status", customBaseURL: rustBackendURL)
-  }
 }

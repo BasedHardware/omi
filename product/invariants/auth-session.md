@@ -120,7 +120,6 @@ rejected before any owner-B lookup, render, or journal mutation.
 - `desktop/macos/Desktop/Tests/RuntimeOwnerIdentityTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/PushToTalkStateMachineTests.swift`
 - `desktop/macos/Desktop/Tests/RewindDatabaseLifecycleTests.swift`
-- `desktop/macos/Desktop/Tests/AgentSyncBatchQueryTests.swift`
 - `desktop/macos/tests/test-signed-artifact-smoke.sh`
 - `.github/scripts/check_desktop_auth_session.py` — ratchet on 401 handlers
 
@@ -135,7 +134,6 @@ rejected before any owner-B lookup, render, or journal mutation.
 - `desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift`
 - `desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift`
-- `desktop/macos/Desktop/Sources/AgentSyncService.swift`
 - `desktop/macos/Desktop/Sources/APIClient.swift`
 - `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift`
 - `desktop/macos/scripts/smoke-signed-desktop-artifact.sh`

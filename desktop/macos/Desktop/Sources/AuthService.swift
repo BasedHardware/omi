@@ -2508,11 +2508,6 @@ class AuthService {
           }
         },
         prepareLocalStorageTransition: { previousOwner, _ in
-          // Drain owner-bound VM work before unlinking its database. Merely
-          // cancelling here is insufficient: gzip/upload continuations can
-          // otherwise keep an open handle and publish after local deletion.
-          await AgentVMService.shared.cancelForOwnerTransition()
-          await AgentSyncService.shared.stop(flushPendingChanges: false)
           await SiriIndexLifecycle.suspendForOwnerTransition()
           try await RewindStorage.shared.resetForOwnerTransition()
           try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
