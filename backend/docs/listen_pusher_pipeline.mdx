@@ -6730,6 +6730,15 @@ semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
 
+Sync accepts the released `_<timestamp>_u<ASCII decimal digits>.bin` collision
+suffix with `SYNC_COLLISION_SUFFIX_ENABLED` on by default. Only the numeric
+timestamp is parsed; raw filenames, bytes, signed claims, storage objects and
+content identities remain unchanged, so same-time siblings stay distinct.
+Clock-run markers and decoded `.wav` names retain this suffix. Set the switch
+to `false`, `0`, `off` or `no` to refuse new collision uploads; internal reads
+and decoded WAVs still drain already admitted work. The existing early-clock,
+future-skew and custody policies apply unchanged.
+
 V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill
 pacing, without treating the invalid year as a lookback age. Valid historical

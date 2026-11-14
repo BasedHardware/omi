@@ -150,6 +150,7 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
 )
 from utils.http_client import _get_semaphore
+from utils.request_validation import parse_sync_filename_timestamp
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -2327,7 +2328,7 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
         if '_' not in filename:
             raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         try:
-            timestamp = get_timestamp_from_path(filename)
+            timestamp = parse_sync_filename_timestamp(filename)
         except CaptureTimeWindowError as error:
             _record_capture_time_admission(error.capture_time_reason)
             raise SyncCaptureTimeRejected() from error

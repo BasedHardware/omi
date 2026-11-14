@@ -14,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import hashlib
 from pathlib import Path
+import struct
+import wave
 from unittest.mock import MagicMock, Mock, call, patch
 from prometheus_client import REGISTRY
 
@@ -32,9 +34,9 @@ from utils.sync.capture_clock import CaptureTimeWindowError, SyncCaptureTimeReje
 from utils.sync.clock_run import clock_run_from_path
 from utils.sync.empty_upload import nonempty_manifest_claims
 from utils.sync.files import get_timestamp_from_path
+from utils.batch_pipeline.capture_decode import decode_units
 from utils.sync.pipeline import _retrieve_file_paths_v2
-from utils.sync.upload_names import canonical_sync_upload_filenames
-from utils.sync.content_id import compute_sync_content_id
+from utils.sync.content_id import compute_sync_content_id, compute_sync_segment_id
 
 
 def _capture_time_counter(outcome: str) -> float:
@@ -50,6 +52,7 @@ def _filename(seconds_from_now: float) -> str:
 def _default_skew(monkeypatch):
     monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
+    monkeypatch.delenv('SYNC_COLLISION_SUFFIX_ENABLED', raising=False)
 
 
 # --- shared window ---
@@ -136,7 +139,10 @@ def test_retrieve_file_paths_v2_accepts_and_stages_within_tolerance_skew(tmp_pat
     'filename,expected_outcome',
     [
         (_filename(5 * 365 * 86400), 'rejected_future'),
+        ('audio_omi_opus_16000_1_fs160_2145916800.bin', 'rejected_future'),
+        ('audio_omi_opus_16000_1_fs160_2145916800_u0.bin', 'rejected_future'),
         ('audio_omi_opus_16000_1_fs160_1685577600.bin', 'rejected_early'),  # 2023-06-01
+        ('audio_omi_opus_16000_1_fs160_1685577600_u0.bin', 'rejected_early'),
     ],
 )
 def test_retrieve_file_paths_v2_rejects_implausible_times_typed(tmp_path, monkeypatch, filename, expected_outcome):
@@ -594,10 +600,11 @@ async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('retrim', [False, True])
-async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkeypatch, tmp_path, retrim):
+@pytest.mark.parametrize('suffix', ['', '_u0'])
+async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkeypatch, tmp_path, retrim, suffix):
     from utils.sync.wal_audio_coverage import apply_wal_audio_coverage, build_sync_source_frame_maps
 
-    source = str(tmp_path / 'audio_omi_pcm16_16000_1704067199.wav')
+    source = str(tmp_path / f'audio_omi_pcm16_16000_1704067199{suffix}.wav')
     pipeline.AudioSegment.silent(duration=4000, frame_rate=16000).export(source, format='wav')
     claim = {
         'capture_root': '123e4567-e89b-12d3-a456-426614174000',
@@ -1372,41 +1379,117 @@ def _collided(seconds_from_now: float, run: str = '') -> str:
     return f'audio_omi_opus_16000_1_fs160{clock}_{stamp:.0f}_u3.bin'
 
 
-@pytest.mark.parametrize(
-    'name, expected',
-    [
-        ('audio_omi_opus_16000_1_fs160_1761955200_u3.bin', 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin'),
-        (
-            'audio_omi_opus_16000_1_fs160_clkeab12cd_1761955200_u0.bin',
-            'audio_omi_opus_16000_1_fs160_u0_clkeab12cd_1761955200.bin',
-        ),
-        ('audio_omi_opus_16000_1_fs160_1761955200.5_u12.bin', 'audio_omi_opus_16000_1_fs160_u12_1761955200.5.bin'),
-        # Already canonical, ordinary, or not a collision tail: untouched.
-        ('audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin'),
-        ('audio_omi_opus_16000_1_fs160_1761955200.bin', 'audio_omi_opus_16000_1_fs160_1761955200.bin'),
-        ('audio_omi_opus_16000_1_fs160_not-a-number.bin', 'audio_omi_opus_16000_1_fs160_not-a-number.bin'),
-        ('audio_omi_opus_16000_1_fs160_1761955200_ux.bin', 'audio_omi_opus_16000_1_fs160_1761955200_ux.bin'),
-        ('', ''),
-    ],
-)
-def test_canonical_name_moves_trailing_collision_sequence_before_capture_time(name, expected):
-    assert canonical_sync_upload_filenames([name]) == [expected]
+@pytest.mark.parametrize('extension', ['bin', 'wav'])
+def test_collision_suffix_keeps_capture_time_and_clock_run(extension):
+    original = f'audio_omi_opus_16000_1_fs160_clkeab12cd_1761955200_u3.{extension}'
+    assert get_timestamp_from_path(original) == 1761955200
+    assert clock_run_from_path(original) == 'ab12cd'
 
 
-def test_canonical_name_keeps_capture_time_and_clock_run():
-    original = 'audio_omi_opus_16000_1_fs160_clkeab12cd_1761955200_u3.bin'
-    [canonical] = canonical_sync_upload_filenames([original])
+@pytest.mark.parametrize('suffix', ['_u0', '_u12'])
+def test_collision_pair_stages_distinct_bytes_and_storage_keys(tmp_path, monkeypatch, suffix):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'synthetic-collision-test')
+    stem = 'audio_omi_opus_16000_1_fs160_1761955200'
+    uploads = [_Upload(f'{stem}.bin'), _Upload(f'{stem}{suffix}.bin')]
+    uploads[0].file = BytesIO(b'first-captured-audio')
+    uploads[1].file = BytesIO(b'second-captured-audio')
 
-    assert get_timestamp_from_path(canonical) == 1761955200
-    assert clock_run_from_path(canonical) == 'ab12cd'
-    with pytest.raises(ValueError):
-        get_timestamp_from_path(original)
+    paths = _retrieve_file_paths_v2(uploads, 'u1', 'collision-job')
+
+    assert paths == [f'syncing/u1/collision-job/{upload.filename}' for upload in uploads]
+    assert [Path(path).read_bytes() for path in paths] == [b'first-captured-audio', b'second-captured-audio']
+    assert [get_timestamp_from_path(path) for path in paths] == [1761955200, 1761955200]
+    stored = {}
+    monkeypatch.setattr(
+        pipeline, 'upload_syncing_temporal_file', lambda path: stored.update({path: Path(path).read_bytes()})
+    )
+    pipeline._stage_files_to_gcs(paths)
+    assert stored == dict(zip(paths, [b'first-captured-audio', b'second-captured-audio']))
+    # Even identical bytes retain distinct basename-bound idempotency keys.
+    Path(paths[1]).write_bytes(Path(paths[0]).read_bytes())
+    ids = [compute_sync_content_id('u1', [path]) for path in paths]
+    assert len(set(ids)) == 2
+    assert compute_sync_content_id('u1', paths) not in ids
 
 
-def test_canonical_names_never_collapse_two_uploads_into_one_staged_file():
-    names = ['audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'audio_omi_opus_16000_1_fs160_1761955200_u3.bin']
+def test_batch_capture_decode_preserves_both_collision_pair_payloads(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stem = 'audio_omi_pcm16_16000_1_fs160_1761955200'
+    uploads = [_Upload(f'{stem}.bin'), _Upload(f'{stem}_u0.bin')]
+    pcm = [b'\x01\0' * 160, b'\x02\0' * 160]
+    for upload, samples in zip(uploads, pcm):
+        upload.file = BytesIO(struct.pack('<I', len(samples)) + samples)
+    paths = _retrieve_file_paths_v2(uploads, 'u1', 'decode-job')
 
-    assert canonical_sync_upload_filenames(names) == names
+    units = list(decode_units(paths))
+
+    assert len(units) == 2
+    assert [unit.capture_at for unit in units] == [1761955200, 1761955200]
+    decoded = []
+    for unit in units:
+        with wave.open(BytesIO(unit.wav), 'rb') as stream:
+            decoded.append(stream.readframes(stream.getnframes()))
+    assert decoded == pcm
+
+
+@pytest.mark.asyncio
+async def test_collision_wavs_keep_both_vad_segments_and_segment_identities(tmp_path, monkeypatch):
+    monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'synthetic-collision-test')
+    paths = [str(tmp_path / f'audio_omi_pcm16_16000_1_fs160_1761955200{suffix}.wav') for suffix in ('', '_u0')]
+    for path in paths:
+        with wave.open(path, 'wb') as stream:
+            stream.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+            stream.writeframes(b'\x01\0' * 16000)
+
+    async def inline(_executor, function, *args, **kwargs):
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, 'run_blocking', inline)
+    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 0, 'end': 1}])
+    segments = set()
+    errors, _ = await pipeline._run_sync_vad_phase(paths, segments, {}, {})
+    assert not errors
+    assert len(segments) == 2
+    assert {get_timestamp_from_path(path) for path in segments} == {1761955200}
+    assert len({compute_sync_segment_id('u1', path) for path in segments}) == 2
+
+
+def test_collision_suffix_keeps_lane_capture_times(monkeypatch):
+    plain = _filename(-10)
+    collided = plain.replace('.bin', '_u0.bin')
+    canonical = lanes.classify_sync_lane([plain], client_device_id='dev-1')
+    collision_pair = lanes.classify_sync_lane([plain, collided], client_device_id='dev-1')
+    assert collision_pair == canonical
+
+
+def test_retrieve_file_paths_v2_keeps_existing_early_clock_recovery(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    before = _capture_time_counter('accepted_early_clamped')
+    name = 'audio_1685577600_u0.bin'
+    paths = _retrieve_file_paths_v2([_Upload(name)], 'u1', 'job')
+    assert paths == [f'syncing/u1/job/{name}']
+    assert get_timestamp_from_path(paths[0]) == 1685577600
+    assert _capture_time_counter('accepted_early_clamped') == before + 1
+
+
+@pytest.mark.parametrize('suffix', ['_u', '_u-1', '_ux', '_u0_u1'])
+def test_retrieve_file_paths_v2_rejects_malformed_collision_suffix(tmp_path, monkeypatch, suffix):
+    monkeypatch.chdir(tmp_path)
+    before = _capture_time_counter('rejected_malformed')
+    with pytest.raises(SyncCaptureTimeRejected) as error:
+        _retrieve_file_paths_v2([_Upload(f'audio_1761955200{suffix}.bin')], 'u1', 'job')
+    assert error.value.status_code == 400
+    assert _capture_time_counter('rejected_malformed') == before + 1
+    assert list(tmp_path.rglob('*.bin')) == []
+
+
+def test_retrieve_file_paths_v2_obeys_collision_admission_kill_switch(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('SYNC_COLLISION_SUFFIX_ENABLED', 'false')
+    with pytest.raises(SyncCaptureTimeRejected):
+        _retrieve_file_paths_v2([_Upload('audio_1761955200_u0.bin')], 'u1', 'job')
+    assert list(tmp_path.rglob('*.bin')) == []
 
 
 def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monkeypatch):
@@ -1424,20 +1507,13 @@ def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monk
     response = _post_sync(client, name)
 
     assert response.status_code == 202, response.text
-    assert staged == [name.replace('_u3.bin', '.bin').replace('_fs160_', '_fs160_u3_')]
+    assert staged == [name]
     assert _capture_time_counter('rejected_malformed') == before
 
 
-def test_manifest_claim_follows_its_file_to_the_canonical_name():
+def test_manifest_claim_preserves_the_raw_collision_filename():
     collided, plain = 'audio_omi_opus_16000_1_fs160_1761955200_u3.bin', 'audio_omi_opus_16000_1_fs160_1761955300.bin'
     claims = [{'name': collided, 'sha256': 'a'}, {'name': plain, 'sha256': 'b'}]
-    staged = canonical_sync_upload_filenames([collided, plain])
-
-    assert nonempty_manifest_claims(claims, staged) == [
-        {'name': plain, 'sha256': 'b'},
-        {'name': 'audio_omi_opus_16000_1_fs160_u3_1761955200.bin', 'sha256': 'a'},
-    ]
-    # Unrenamed requests keep the verified claims exactly as before.
     assert nonempty_manifest_claims(claims, [collided, plain]) == claims
 
 
