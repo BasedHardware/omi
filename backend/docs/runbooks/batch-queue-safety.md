@@ -126,9 +126,10 @@ cadence at approximately 514s; the prior 120s arm was a false positive. This
 alert-only budget does not alter producer cadence or adapter freshness. Other
 query arms remain unchanged. Read back the 900s expression after import.
 
-`omi-batch-unit-unpublished-2h` lands paused for the known backlog. Its threshold
-and source freshness gates are unchanged. Unpause only after #24731/#24893
-drain work ships and both fresh sources stay below 7200s for 24h with no blind
-scan, via a separate owner-approved change. Missing/stale samples cannot prove
-recovery. Full import disposition and the five paused UIDs are in
-[the pipeline alert runbook](../../charts/monitoring/batch-projection/pipeline-alerts.md#production-import-disposition-lead2-ruling-699300-2026-11-08t1513z).
+`omi-batch-unit-unpublished-2h` was paused at the 2026-11-08 import for the
+known backlog. SCA-2116 retired that pause on 2026-11-14: the rule is active,
+stays page tier, and its repeat is capped at 24h so a standing breach pages at
+most once a day. Its threshold and source freshness gates are unchanged; the
+written disposition and review date are in the rule's annotations. Full history
+and the other four UIDs are in
+[the pipeline alert runbook](../../charts/monitoring/batch-projection/pipeline-alerts.md#2026-11-14-disposition-sca-2116-pauses-retired-page-duty-kept-one-page-a-day).

@@ -33,7 +33,7 @@ def test_sources_match_inventory_and_are_routed_resolving_warnings():
         assert rule['keep_firing_for'] == '0s'
         assert rule['missingSeriesEvalsToResolve'] == 2
         assert rule['noDataState'] == 'OK'
-        assert rule['isPaused'] == (uid in {'omi-pipeline-held-row-age', 'omi-pipeline-projection-drain-stall'})
+        assert rule['isPaused'] is False
         assert uid not in gate
         assert (BACKEND.parent / rule['annotations']['runbook']).is_file()
         assert rule['annotations']['verification']

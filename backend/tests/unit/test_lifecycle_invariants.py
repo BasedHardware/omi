@@ -18,7 +18,6 @@ from tests.support.lifecycle_state_table import (
     ABANDON_RECORD_PRODUCER,
     CLAUSES,
     FIELD_BUILDERS,
-    IMPORT_PAUSED_DWELL_ROWS,
     ORDERING_RULES,
     PATCH_CONTRACTS,
     STATES,
@@ -551,21 +550,6 @@ KNOWN_GAPS = {
 }
 
 
-# Ruling699300 reviewed the coverage loss explicitly. Never derive these gaps
-# from isPaused or from assertion failures: only the fixed reviewed table may enter.
-# Real unpause makes test_latch_clause XPASS strictly, forcing debt cleanup.
-KNOWN_GAPS.update(
-    {
-        (key, 'dwell_alert'): (
-            f'Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938: {uid} paused for known '
-            'backlog until #24731/#24893 ships and its written clean24h unpause criteria hold; '
-            'active dwell protection is absent, not repaired. Owner: omi-pipeline/two-lane-lead.'
-        )
-        for key, uid in IMPORT_PAUSED_DWELL_ROWS.items()
-    }
-)
-
-
 def parameters():
     for row in STATES:
         for clause in CLAUSES:
@@ -649,28 +633,8 @@ def test_resolved_plan_gaps_do_not_regress():
         assert_clause(rows[key], clause)
 
 
-@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
-def test_reviewed_import_pauses_remain_real_dwell_coverage_gaps(key, uid):
-    row = next(row for row in STATES if row.key == key)
-    assert row.alert.uid == uid
-    assert (key, 'dwell_alert') in KNOWN_GAPS
-    rule = alerts()[uid]
-    assert rule['isPaused'] is True
-    assert '24h' in rule['annotations']['unpause_criteria']
-    with pytest.raises(AssertionError):
-        assert_clause(row, 'dwell_alert')
-
-
-@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
-def test_real_unpause_will_require_removing_the_strict_gap(key, uid, monkeypatch):
-    row = next(row for row in STATES if row.key == key)
-    monkeypatch.setitem(alerts(), uid, {**alerts()[uid], 'isPaused': False})
-    assert_clause(row, 'dwell_alert')  # Real source unpause would make the strict xfail XPASS.
-
-
 def test_unreviewed_pause_still_fails_the_active_dwell_contract(monkeypatch):
     row = next(row for row in STATES if row.key == 'finalization:queued')
-    assert row.key not in IMPORT_PAUSED_DWELL_ROWS
     monkeypatch.setitem(alerts(), row.alert.uid, {**alerts()[row.alert.uid], 'isPaused': True})
     with pytest.raises(AssertionError):
         assert_clause(row, 'dwell_alert')

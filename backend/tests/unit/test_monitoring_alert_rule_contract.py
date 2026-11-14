@@ -2136,7 +2136,7 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
             assert page['for'] == pending
             assert page['noDataState'] == 'OK'
             assert page['labels']['tier'] == ('agent' if prefix == 'omi_finalization_byok' else 'page')
-            assert page['isPaused'] == (prefix != 'omi_finalization_byok')
+            assert page['isPaused'] is False
             if prefix != 'omi_finalization_byok':
                 assert '2026-11-04T09:27Z' in page['annotations']['scope']
             assert page['notification_settings']['mute_time_intervals'] == (

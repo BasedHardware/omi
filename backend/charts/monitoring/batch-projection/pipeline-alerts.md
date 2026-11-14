@@ -194,3 +194,43 @@ before importing. Undo an incorrect import using the provisioner's backup; do
 not restore the known 120s false-page arm as a rollout shortcut. Reverting these
 definitions requires another authorized provisioning apply; source edits alone
 do not change production Grafana.
+
+## 2026-11-14 disposition (SCA-2116): pauses retired, page duty kept, one page a day
+
+The 2026-11-08 import ruling left five page alarms paused with no owner and no deadline, and the
+blind-spot audit named that as the blind spot that hid Japanese for about eight days. SCA-2116
+re-read the live signals (Managed Prometheus, ro-prod, 2026-11-14T10:30Z) and retired the pause.
+Every rule below is active and stays page tier with its threshold unchanged. Each carries a
+written `page_disposition` and a `page_review_by` date in its annotations, and its repeat is capped
+so a standing breach pages at most once a day. The live readings that set the repeat cap:
+
+| UID | Live reading 2026-11-14T10:30Z | Repeat | Owner | Disposition review |
+| --- | --- | --- | --- | --- |
+| `omi-batch-unit-unpublished-2h` | see `page_disposition` | 24h | two-lane-lead | 2026-11-21 |
+| `omi-record-pending-dwell` | see `page_disposition` | 24h | two-lane-lead | 2026-11-21 |
+| `omi-enrichment-fresh-dwell` | see `page_disposition` | 24h | two-lane-lead | 2026-11-21 |
+| `omi-pipeline-projection-drain-stall` | see `page_disposition` | 24h | omi-pipeline | 2026-11-21 |
+| `omi-pipeline-held-row-age` | see `page_disposition` | 24h | omi-pipeline | 2026-11-21 |
+
+### `omi-batch-unit-unpublished-2h`
+
+Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: new-cohort legs 10.9-12.2 d old and the all-epoch compute proxy 25.5 d, all sources fresh, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the drain lands; the rule stays page tier because it is the page the Japanese provider-STT failure should have triggered. Owner: two-lane-lead. Review/expiry: 2026-11-21.
+
+### `omi-record-pending-dwell`
+
+Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the 24h new-cohort oldest age is 86,400 s (the cohort cap) against a 7,200 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the record-admission drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.
+
+### `omi-enrichment-fresh-dwell`
+
+Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the fresh-enrichment oldest age is 86,334 s against a 3,600 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the enrichment drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.
+
+### `omi-pipeline-projection-drain-stall`
+
+Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: pending projection debt is 27 d old, so the stall condition is red and the existing 24h repeat is one page per day at most. Kept at 24h; no threshold change. Owner: omi-pipeline. Review/expiry: 2026-11-21.
+
+### `omi-pipeline-held-row-age`
+
+Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: held legs are 15.7-27.1 d old against the 6h threshold, so the stall condition is red and the existing 24h repeat is one page per day at most. Kept at 24h; no threshold change. Owner: omi-pipeline. Review/expiry: 2026-11-21.
+
+Rollback: restore `isPaused: true` and the 4h repeat for the critical rules and re-apply the
+export; no threshold, datasource or custody state changes in this disposition.
