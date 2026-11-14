@@ -1330,12 +1330,12 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2173 / SCA-2222 (2026-11-14): finish backoff is on for prod backend-integration, which runs
-        # the finish sweep, and for prod backend-sync, which can reach the same sweep through its
-        # reconcile and batch metrics routes (review SCA-2270), now that the stamping marker is
-        # complete. No other service or environment declares it (SCA-1993).
+        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
+        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
+        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
+        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
         if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
         expected = {}
