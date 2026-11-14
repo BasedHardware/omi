@@ -93,12 +93,33 @@ def test_home_ready_metric_observes_once_per_process_revision_without_mutation(m
     metric = Mock()
     monkeypatch.setattr(home_latency, 'NOTES_TO_HOME', metric)
     monkeypatch.setattr(home_latency, '_SEEN', home_latency.OrderedDict())
-    row = {'id': 'synthetic-capture', 'record_lane_owner': 'batch_sync_v1', 'notes_written_at': stamp}
+    row = {
+        'id': 'synthetic-capture',
+        'record_lane_owner': 'batch_sync_v1',
+        'notes_written_at': stamp,
+        'finished_at': 990,
+    }
     before = dict(row)
     home_latency.observe(row, now=1005)
     home_latency.observe(row, now=1010)
     metric.observe.assert_called_once_with(5)
     assert row == before
+
+
+@pytest.mark.parametrize('finished,written', [(-1000, 1000), (1030, 1000), (None, 1000), (990, 980)])
+def test_home_metric_excludes_old_or_untrusted_captures_and_pre_end_notes(monkeypatch, finished, written):
+    metric = Mock()
+    monkeypatch.setattr(home_latency, 'NOTES_TO_HOME', metric)
+    home_latency.observe(
+        {
+            'id': 'synthetic-capture',
+            'record_lane_owner': 'batch_sync_v1',
+            'finished_at': finished,
+            'notes_written_at': written,
+        },
+        now=1005,
+    )
+    metric.observe.assert_not_called()
 
 
 def test_home_pending_row_does_not_count_as_readable(monkeypatch):

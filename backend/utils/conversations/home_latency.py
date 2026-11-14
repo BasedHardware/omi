@@ -7,10 +7,11 @@ from threading import Lock
 import time
 
 from prometheus_client import Histogram
+from config.record_latency import recent_record_end
 
 NOTES_TO_HOME = Histogram(
     'omi_record_notes_to_home_read_seconds',
-    'Notes write to first Home-ready row observed per process/revision; excludes client rendering',
+    'Recent recording post-end notes write to first Home-ready row observed per process/revision; excludes client rendering',
     buckets=(0.1, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600),
 )
 _SEEN: OrderedDict[tuple[str, float], None] = OrderedDict()
@@ -27,7 +28,13 @@ def observe(row: dict, *, now: float | None = None) -> None:
         written = written.timestamp()
     if isinstance(written, bool) or not isinstance(written, (float, int)) or not math.isfinite(written):
         return
-    elapsed = (time.time() if now is None else now) - written
+    current = time.time() if now is None else now
+    finished = row.get('finished_at')
+    if isinstance(finished, datetime):
+        finished = finished.timestamp()
+    if not isinstance(finished, (int, float)) or not recent_record_end(finished, current) or written < finished:
+        return  # Historical Home rows and older notes are outside the post-seal cohort.
+    elapsed = current - written
     if elapsed < 0 or not math.isfinite(elapsed):
         return
     key = (str(row['id']), float(written))
