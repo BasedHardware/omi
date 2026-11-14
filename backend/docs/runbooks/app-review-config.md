@@ -72,6 +72,25 @@ until the scheduler is enabled and a successful sweep tick has completed.
    successful tick. The paging rule fires only for unavailable credentials or
    store API errors; routine reconciliation repairs and live clears do not page.
 
+## Monitoring and TTL-only fallback
+
+The Cloud Run scrape contracts declare all four app-review lifecycle metrics:
+`omi_app_review_config_alert_total`,
+`omi_app_review_config_last_alert_timestamp_seconds`,
+`omi_app_review_config_sweep_total`, and
+`omi_app_review_config_last_sweep_timestamp_seconds`. The backend-sync scrape
+keeps these `omi_` metrics. Credential and store API failures route to the
+human Telegram paging receiver; the silent-sweep rule remains paused until its
+first successful tick.
+
+When store credentials are unavailable or the store API fails, the sweep still
+runs TTL cleanup and emits `omi_fallback_total` with
+`component=app_review_config`, `to_mode=ttl_only`, and the bounded reason
+`store_credentials_unavailable` or `store_api_error`. The app-review alert
+counter reports the store error separately. A TTL-only tick does not mean store
+reconciliation succeeded; restore read-only store access and verify a
+successful sweep before enabling the silent-sweep alert.
+
 The Play API requires an edit ID to read a track. Each poll opens a temporary
 uncommitted edit, reads only the `production` track, and deletes the edit in a
 `finally` path. It never commits an edit. Only releases with

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -295,10 +296,26 @@ def test_store_api_failures_still_run_ttl_and_keep_unexpired_hides(monkeypatch):
 
 
 def test_app_review_alert_metrics_are_scraped_and_use_the_unmuted_paging_receiver():
-    metrics = json.loads((BACKEND_ROOT / 'charts/monitoring/metric-inventory.prod.json').read_text())[
-        'declared_metrics'
-    ]
-    assert 'omi_app_review_config_sweep_total' in metrics
+    app_review_metrics = {
+        'omi_app_review_config_alert_total',
+        'omi_app_review_config_last_alert_timestamp_seconds',
+        'omi_app_review_config_sweep_total',
+        'omi_app_review_config_last_sweep_timestamp_seconds',
+    }
+    inventory = json.loads((BACKEND_ROOT / 'charts/monitoring/metric-inventory.prod.json').read_text())
+    assert app_review_metrics <= set(inventory['declared_metrics'])
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        scrape_config = yaml.safe_load((BACKEND_ROOT / 'deploy' / profile).read_text())
+        relabels = scrape_config['spec']['endpoints'][0]['metricRelabeling']
+        for metric in app_review_metrics:
+            labels = {'__name__': metric}
+            for relabel in relabels:
+                value = ';'.join(labels.get(label, '') for label in relabel['sourceLabels'])
+                matches = re.fullmatch(relabel['regex'], value)
+                if relabel['action'] == 'keep':
+                    assert matches, (profile, metric)
+                elif relabel['action'] == 'drop':
+                    assert not matches, (profile, metric)
 
     expected_uids = {'omi-app-review-config-alert', 'omi-app-review-config-sweep-silent'}
     split = json.loads((BACKEND_ROOT / 'charts/monitoring/alerts/app-review-config.json').read_text())
