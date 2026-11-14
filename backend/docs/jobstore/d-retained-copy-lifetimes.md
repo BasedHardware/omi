@@ -81,3 +81,13 @@ remain missing. The generic legal-hold remote helper alone cannot qualify a PG
 unknown-COMMIT outcome: a missing prepared operation is not rollback proof, and
 DB transport errors must not be classified as definitive erasure outcomes.
 The last PG custodian must survive until those units have definitive outcomes.
+
+Migration 0015 also requires the existing exclusive owner lock before census
+changes and original custodian deletion (including registered outbox and journal
+cleanup). It checks caller ownership rather than acquiring/upgrading in a
+trigger. Without this boundary an unlocked deletion could race the first,
+uncommitted census. The concurrent real-PG test holds the actual inventory's
+L_x, blocks a destructive transaction until census COMMIT, then verifies that
+the committed census refuses its deletion. Unregistered legacy outboxes retain
+their old path. Sorted multi-owner destructive units and final proofs remain
+requirements; this serialization does not grant an erasure certificate.

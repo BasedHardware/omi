@@ -444,3 +444,82 @@ def test_real_redirect_admission_target_is_in_conversation_erasure_census(contex
         purge_conversation(uid, target, progress, firestore_client=handoff.client, retained_copies=copies)
     assert not any(handoff.client.document(path).get().exists for path in manifest['private_paths'])
     assert handoff.ref('intent', binding.job_id).get().exists
+
+
+@pytest.mark.parametrize('table', ['queue_handoffs', 'units', 'recordings', 'queue_custody', 'queue_journal', 'outbox'])
+def test_original_deletion_requires_owner_x_even_before_first_census(retained, table):
+    r = retained
+    with r.handoff.pool.connection() as conn:
+        with pytest.raises(Exception, match='exclusive privacy owner lock'):
+            with conn.transaction():
+                lock(conn, owner_key(r.uid))  # a work/shared guard cannot erase original custody
+                conn.execute("SELECT set_config('omi.queue_epoch','3',true)")
+                conn.execute(f'DELETE FROM {table} WHERE namespace=%s', (r.handoff.ticket.namespace,))
+
+
+def test_census_progress_requires_owner_x(retained):
+    r = retained
+    r.purge.inventory(r.uid, r.conversation)
+    with r.handoff.pool.connection() as conn:
+        with pytest.raises(Exception, match='exclusive privacy owner lock'):
+            with conn.transaction():
+                lock(conn, owner_key(r.uid))
+                conn.execute(
+                    "UPDATE queue_retained_copy_custody SET phase='private_erased' WHERE namespace=%s",
+                    (r.handoff.ticket.namespace,),
+                )
+        assert conn.execute(
+            'SELECT phase FROM queue_retained_copy_custody WHERE namespace=%s', (r.handoff.ticket.namespace,)
+        ).fetchone() == ('inventoried',)
+    assert private_left(r) == 5
+
+
+def test_real_first_census_serializes_with_destructive_sql(retained, monkeypatch):
+    import threading
+
+    r = retained
+    census_holds_x, release, deletion_waiting, deletion_granted = (threading.Event() for _ in range(4))
+    original = r.purge._manifest
+    inventoried, errors = [], []
+
+    def paused(row):
+        census_holds_x.set()
+        assert release.wait(2)
+        return original(row)
+
+    monkeypatch.setattr(r.purge, '_manifest', paused)
+
+    def inventory():
+        try:
+            inventoried.extend(r.purge.inventory(r.uid, r.conversation))
+        except BaseException as error:
+            errors.append(error)
+
+    def delete():
+        try:
+            with r.handoff.pool.connection() as conn, conn.transaction():
+                deletion_waiting.set()
+                lock(conn, owner_key(r.uid), exclusive=True)
+                deletion_granted.set()
+                conn.execute("SELECT set_config('omi.queue_epoch','3',true)")
+                conn.execute('DELETE FROM queue_handoffs WHERE namespace=%s', (r.handoff.ticket.namespace,))
+        except BaseException as error:
+            errors.append(error)
+
+    first, second = threading.Thread(target=inventory), threading.Thread(target=delete)
+    first.start()
+    try:
+        assert census_holds_x.wait(2)
+        second.start()
+        assert deletion_waiting.wait(2)
+        assert not deletion_granted.wait(0.1)
+    finally:
+        release.set()
+        first.join(5)
+        if second.ident is not None:
+            second.join(5)
+    assert not first.is_alive() and not second.is_alive()
+    assert len(inventoried) == 1 and deletion_granted.is_set()
+    assert len(errors) == 1 and 'original PG custody' in str(errors[0])
+    with r.handoff.pool.connection() as conn:
+        assert r.handoff._required_row(conn, r.view.identity)['owner_key'] == owner_key(r.uid)

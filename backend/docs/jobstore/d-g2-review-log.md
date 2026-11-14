@@ -128,3 +128,8 @@ uses the explicit class protocol when installed and a no-op only when absent;
 an installed scope failure still propagates. The actual provider coordinator
 binding remains mandatory. The lifecycle inventory now records the real
 private publication, preserving its existing field/state assertions.
+
+Migration 0015 requires the existing exclusive owner lock before census
+changes and original custodian deletion. A real concurrent first-census/delete
+test proves serialization and post-lock refusal; triggers never acquire or
+upgrade a guard. Unregistered legacy outboxes retain their existing path.
