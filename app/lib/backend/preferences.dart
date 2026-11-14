@@ -1546,8 +1546,8 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
-  /// Clears persisted user identity and server-backed display caches while
-  /// preserving device, onboarding, permissions, and offline recording state.
+  /// Clears persisted user identity, account-scoped consent and onboarding, and
+  /// server-backed display caches while preserving device and offline recording state.
   void clearUserDisplayCache() {
     _conversationCacheReadSession++;
     final ownerUid = uid;
@@ -1558,6 +1558,9 @@ class SharedPreferencesUtil {
     email = '';
     givenName = '';
     familyName = '';
+    aiConsentGiven = false;
+    onboardingCompleted = false;
+    permissionsCompleted = false;
     cachedConversations = <ServerConversation>[];
     cachedMessages = <ServerMessage>[];
     cachedPeople = <Person>[];
