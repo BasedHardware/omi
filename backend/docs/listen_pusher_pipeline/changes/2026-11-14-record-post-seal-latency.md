@@ -175,7 +175,11 @@ Cut 2 (complete-record notes dispatch) and cut 3 (bounded projection follow-up
 wake) run only through CPU `Projector`/`ProjectionStore`/owner drains. The
 dedicated GPU pump has neither a projector nor an `on_committed` callback.
 They remain enabled in CPU configuration, as does cut 1 (intake due-now guard);
-unused worker bindings are harmless and retained for uniform rollback. Long
+unused worker bindings are harmless and retained for uniform rollback. The
+independent seal-repair/sweeper deployments also consume the batch-worker image
+from the same chart; a CPU backend roll does not update their code. Keep their
+existing image tonight rather than silently crossing the worker-image restriction.
+Long
 records outside the existing unit-based 600-second fresh class do not gain
 cut 4 tonight. Notes eager eligibility still requires the existing fresh class.
 
@@ -219,4 +223,7 @@ server barrier closure, not the client end decision. The existing ledger
 The Home histogram uses existing `notes_written_at` and observes the first
 READY read per process/revision, a different event that includes request idle
 time and excludes client rendering. No new Firestore read or document write
-is added for these clocks.
+is added for these clocks. The ledger admitted_at clock is capture admission
+(CAPTURING), before post-seal staging; it cannot substitute for a real intake
+claim or ready timestamp. The first GPU lease field will remain absent on the
+unrolled old worker, so ready-to-lease measurement needs its later qualified roll.
