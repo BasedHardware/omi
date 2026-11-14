@@ -3,11 +3,11 @@
 from database.firestore_query_types import FirestoreIndexField, FirestoreIndexRequirement
 
 
-def _index(name, collection, *fields):
+def _index(name, collection, *fields, scope='COLLECTION'):
     return FirestoreIndexRequirement(
         name,
         collection,
-        'COLLECTION',
+        scope,
         tuple(FirestoreIndexField(field, order='ASCENDING') for field in (*fields, '__name__')),
     )
 
@@ -17,4 +17,23 @@ INDEX_REQUIREMENTS = (
     _index('enrichment_active_cohort', 'sync_reprocess_outbox', 'dormant', 'first_pending_at'),
     _index('enrichment_lane_stock', 'sync_reprocess_outbox', 'summary_lane', 'due_at'),
     _index('finalization_byok_entry_cohort', 'conversation_finalization_jobs', 'status', 'blocked_byok_at'),
+    # Collection-group single-field scans are not auto-served, and a same-direction
+    # field+__name__ composite is rejected as redundant. The census pages newest
+    # first so this opposite-direction pair is a real composite.
+    FirestoreIndexRequirement(
+        'audio_silence_conversations_window',
+        'conversations',
+        'COLLECTION_GROUP',
+        (
+            FirestoreIndexField('created_at', order='DESCENDING'),
+            FirestoreIndexField('__name__', order='ASCENDING'),
+        ),
+    ),
+    _index(
+        'audio_silence_conversation_received_window',
+        'conversations',
+        'server_batch_audio_received',
+        'created_at',
+    ),
+    _index('audio_silence_outbox_owner_window', 'sync_reprocess_outbox', 'uid', 'first_pending_at'),
 )

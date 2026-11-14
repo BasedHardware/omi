@@ -17,6 +17,7 @@ from config.batch_timeliness import (
     timeliness_epoch,
     timeliness_interval_seconds,
 )
+from database.audio_silence_census import sample as audio_silence_sample
 from database.batch_pipeline_store import (
     Store,
     FirestoreStore,
@@ -27,7 +28,7 @@ from database.batch_pipeline_store import (
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
-from utils.lifecycle_metrics import PhaseMetrics
+from utils.lifecycle_metrics import PhaseMetrics, SilenceCensusMetrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
 
 PROJECTION_FINISH_READS = Counter(
@@ -270,6 +271,7 @@ class QueueMetrics:
         self._timeliness_due = 0.0
         self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
         self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
+        self.audio_silence = SilenceCensusMetrics(registry=registry)
         self.oldest_age = _FreshQueueGauge(
             'omi_batch_pipeline_oldest_age_seconds',
             'Oldest admitted uncommitted item age',
@@ -440,6 +442,8 @@ class QueueMetrics:
 
             self.record_pending.refresh(now, lambda: record_pending(store.client, store.namespace, now))
             self.nojob.refresh(now, lambda: nojob(store.client, store.namespace))
+            if kill_switch('AUDIO_SILENCE_CENSUS_ENABLED', log=False):
+                self.audio_silence.refresh(now, lambda: audio_silence_sample(store.client, store.namespace, now))
             self.refresh_timeliness(store, now)
             self.refresh_projection(store, now)
         self.sampler_observed_at.labels(*self.scope).set(now)

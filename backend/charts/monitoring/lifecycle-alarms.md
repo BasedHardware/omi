@@ -52,6 +52,43 @@ Enrichment's backfill stock includes backfill-labeled pending first summaries;
 the fresh age gauge also includes those summaries, matching watchdog promotion.
 Fresh count is the recent-cohort sampled count, not a fleet-wide total.
 
+## Audio silence census
+
+`omi_audio_silence_census{state,source}` counts unique users, never UIDs, over
+24-hour app/audio evidence. The three states are `app_active_no_audio`,
+`app_active_with_audio` and `audio_no_app_activity`; sources are limited to
+`omi`, `desktop` and `other` (nine series maximum). A user is assigned the
+source of their latest observed source-bearing row. App activity is a recent
+conversation or batch job. Audio evidence is a batch job, a received/upload
+session stamp on a recent conversation, or a recent `sync_reprocess_outbox`
+row. Audio in one state exits when the opposite activity/audio evidence enters
+the rolling window or the current evidence ages out; no persistent user state
+is written.
+
+The existing batch/pusher lifecycle refresh runs this observer every 21,600
+seconds per observer. `AUDIO_SILENCE_CENSUS_ENABLED` is in the runtime-env flag
+registry, defaults on when unset, and literal `false` stops subsequent reads;
+no deployment binding is required. No Cloud Run service, scheduler or account
+write is added.
+
+Each run reads at most 300 indexed rows from conversations, the stage's batch
+jobs and the outbox. Full pages make the result partial. Candidate users then
+use bounded `COUNT(1)` existence aggregations only for missing app/audio
+stamps. Documents plus one charged read per aggregation have a hard ceiling of
+4,000 reads per observer run. Unseen non-empty upload-session maps cannot be
+excluded by an aggregate, so those candidates remain unclassified rather than
+becoming false silence. Under saturation, `source` is only the latest
+source-bearing row actually read, and candidates with no source-bearing row
+fold to `other`; per-source attribution is partial rather than a full-window
+claim. `omi_audio_silence_census_partial=1` marks every count as a lower bound after source saturation, unclassifiable evidence or budget
+exhaustion. `omi_audio_silence_census_observed_at_seconds` marks completed full
+or partial observations. Exceptions retain prior values and their timestamp.
+There is deliberately no alert threshold while the bounded census establishes
+its baseline; its runbook query is `max by (state, source)
+(omi_audio_silence_census) and on() (omi_audio_silence_census_partial == 0)`.
+Use `max`, never `sum`, across per-observer values so replicas do not multiply
+the same census.
+
 ## Pair consistency and repair fences
 
 The pair observer rotates through three indexed legs: active finalization jobs,

@@ -77,6 +77,18 @@
       "basis": "planning-bound",
       "source": "SCA-2024 census ~478000 persisted/ready rows: one page-query read plus one transactional fence read per row, allowing one repeated pass/retry (~1.912M). Operator-only, capped at 200 rows/page and 10000 pages/invocation; normal serving never invokes stamping.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/audio_silence_census.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "refactor-lead / audio silence census",
+      "unit": "observer sample (once per six hours per process)",
+      "reads_per_unit_budget": 4000,
+      "reads_per_day_budget": 16000,
+      "basis": "planning-bound",
+      "source": "SCA-1985: 300-row indexed job page shares the sample-wide 4,000 modeled read ceiling with two other pages and candidate COUNT existence checks. Four samples/day/observer => 16,000 modeled reads/day/observer; fleet cost multiplies by observer count. This is a planning allocation, not a hard billed-read bound: Firestore COUNT bills per 1,000 matched index entries. No fleet-size or matched-entry bound is asserted. AUDIO_SILENCE_CENSUS_ENABLED=false stops future reads.",
+      "reviewed": "2026-11-14"
     }
   ],
   "exempt": []

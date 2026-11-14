@@ -42,6 +42,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED': True,
     'BATCH_PIPELINE_HELD_PARTIAL_ENABLED': True,
+    'AUDIO_SILENCE_CENSUS_ENABLED': True,
     # Backlog state machine (config/backlog_state_machine.py). Defaults follow the
     # lead2 rule: ON only where the change just cuts wasted work or retries, OFF
     # where it changes custody, settle or expiry semantics.
@@ -49,7 +50,7 @@ KILL_SWITCHES = {
     'BATCH_HELD_REDRIVE_COUNTER_ENABLED': True,
     'BATCH_HELD_REDRIVE_BUDGET_ENABLED': False,
 }
-DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED'})
+DISABLE_ONLY_SWITCHES = frozenset({'BATCH_PIPELINE_LEADER_LEASE_ENABLED', 'AUDIO_SILENCE_CENSUS_ENABLED'})
 # Trimmed, case-insensitive true means on; never use the capture-coverage
 # serve-mode parser, which treats an unset default-off switch as on.
 BACKLOG_STATE_MACHINE_SWITCHES = frozenset(

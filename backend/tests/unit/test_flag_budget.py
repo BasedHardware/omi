@@ -203,6 +203,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
     assert helper_names == HELPER_KILL_SWITCHES | {
+        'AUDIO_SILENCE_CENSUS_ENABLED',
         'STT_FREE_ALLOWANCE_WATCH_ENABLED',
         'PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED',
         'CONVERSATION_TERMINAL_FAMILY_MODE',

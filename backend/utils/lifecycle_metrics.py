@@ -21,6 +21,58 @@ def seconds(value):
     return float(value)
 
 
+SILENCE_CENSUS_INTERVAL_SECONDS = 6 * 60 * 60
+SILENCE_CENSUS_STATES = ('app_active_no_audio', 'app_active_with_audio', 'audio_no_app_activity')
+SILENCE_CENSUS_SOURCES = ('omi', 'desktop', 'other')
+
+
+class SilenceCensusMetrics:
+    """Six-hour bounded user observations; partial counts are never exact zeros."""
+
+    def __init__(self, *, registry=REGISTRY, interval_seconds=SILENCE_CENSUS_INTERVAL_SECONDS):
+        self.users = Gauge(
+            'omi_audio_silence_census',
+            'Unique classifiable users in the 24h bounded observation; lower bounds when partial',
+            ('state', 'source'),
+            registry=registry,
+        )
+        self.partial = Gauge(
+            'omi_audio_silence_census_partial',
+            '1 when source saturation, unclassifiable evidence or the hard read budget makes counts lower bounds',
+            registry=registry,
+        )
+        self.observed = Gauge(
+            'omi_audio_silence_census_observed_at_seconds',
+            'Last completed bounded silence-census observation, including a partial observation',
+            registry=registry,
+        )
+        self.interval_seconds = interval_seconds
+        self._lock = threading.Lock()
+        self._due = 0.0
+
+    def refresh(self, now, sample):
+        if not self._lock.acquire(blocking=False):
+            return
+        try:
+            if now < self._due:
+                return
+            self._due = now + self.interval_seconds
+            try:
+                result = sample()
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=audio_silence_census outcome=unavailable exception_type=%s', type(error).__name__
+                )
+                return
+            for state in SILENCE_CENSUS_STATES:
+                for source in SILENCE_CENSUS_SOURCES:
+                    self.users.labels(state, source).set(result['counts'][state, source])
+            self.partial.set(int(result['partial']))
+            self.observed.set(now)
+        finally:
+            self._lock.release()
+
+
 class PhaseMetrics:
     """One bounded source, serialized across its supervised refresh callers.
 
