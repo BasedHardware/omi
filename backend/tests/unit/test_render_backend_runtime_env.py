@@ -1338,6 +1338,10 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
             assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
         else:
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
+        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
+        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
+        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
         expected = {}
         if environment == 'prod':
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'

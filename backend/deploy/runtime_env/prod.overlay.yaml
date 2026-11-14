@@ -503,6 +503,10 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
@@ -1302,6 +1306,10 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
