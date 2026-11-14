@@ -32,6 +32,10 @@ from utils.stt.streaming import SafeModulateSocket
 
 from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 
+# SCA-1999: replay still races real event-loop deadlines with its virtual clock.
+# backend-slow-timing-tests.yml runs this file on every main push.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:

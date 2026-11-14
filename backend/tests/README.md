@@ -89,6 +89,15 @@ an exact-set pin — add its file to `tests/slow_guardrail_manifest.txt` so
 whose job is to notice a change nobody anticipated cannot be gated on the change set that triggered the run.
 Stress and network tests still belong in `slow` with no manifest entry.
 
+The timing-sensitive `test_soniox_recovery_retry.py` and
+`test_live_replay_provider_pairs.py` files use that same `slow` marker while
+SCA-1998 and SCA-1999 track deterministic rewrites. `Backend slow timing tests`
+executes both files in separate jobs on every main push, without path filtering
+or concurrency coalescing. Its failures are visible as red checks with JUnit
+artifacts; it is independent of the required `Backend unit suite` PR check.
+Keep these files out of the blocking slow-guardrail manifest. When restoring
+their PR coverage, remove each marker and its workflow matrix entry together.
+
 ## Asana project chooser regression
 
 From the repository root, with the locked backend environment installed:
