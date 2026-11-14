@@ -429,31 +429,45 @@ arc_lock_is_stale() {
 
   IFS=$'\t' read -r owner_pid owner_start < "$owner_file" || true
   [[ "$owner_pid" =~ ^[0-9]+$ ]] || return 0
-  if [ -z "$owner_start" ] || ! kill -0 "$owner_pid" 2>/dev/null; then
+  if ! kill -0 "$owner_pid" 2>/dev/null; then
     return 0
   fi
 
-  current_start="$(arc_process_start_stamp "$owner_pid")"
-  [ -n "$current_start" ] && [ "$current_start" = "$owner_start" ] && return 1
-  return 0
+  # An unavailable ps result is not proof that a live pid was reused.
+  [ -n "$owner_start" ] || return 1
+  current_start="$(arc_process_start_stamp "$owner_pid" || true)"
+  [ -n "$current_start" ] && [ "$current_start" != "$owner_start" ]
 }
 
-# Remove a directory only after arc_lock_is_stale agrees no live owner exists.
-# Never rm -rf here: rmdir leaves a directory that still holds a record alone.
-arc_recover_stale_lock() {
+# Pin the directory before checking/removing its record. Another reclaimer may
+# remove this generation and a new owner may recreate the pathname while we
+# are paused; relative unlinks must still address the old generation.
+arc_recover_stale_lock() (
   local lock_dir="$1"
-  local owner_file
+  case "$lock_dir" in
+    /*) ;;
+    *) lock_dir="$PWD/$lock_dir" ;;
+  esac
 
-  arc_lock_is_stale "$lock_dir" || return 1
-  owner_file="$(arc_lock_owner_file "$lock_dir")"
-  rm -f "$owner_file" "$lock_dir/pid" 2>/dev/null || true
+  cd "$lock_dir" 2>/dev/null || return 1
+  arc_lock_is_stale . || return 1
+  rm -f "$ARC_LOCK_OWNER_FILE" pid 2>/dev/null || true
   rmdir "$lock_dir" 2>/dev/null
-}
+)
 
 arc_acquire_lock() {
   local lock_dir="$1"
   local timeout_seconds="${2:-600}"
-  local started now owner_file owner_start temp
+  local started now owner_start temp
+  case "$lock_dir" in
+    /*) ;;
+    *) lock_dir="$PWD/$lock_dir" ;;
+  esac
+  owner_start="$(arc_process_start_stamp "$$" || true)"
+  if [ -z "$owner_start" ]; then
+    echo "ERROR: cannot determine agent runtime lock owner start stamp" >&2
+    return 1
+  fi
   mkdir -p "$(dirname "$lock_dir")"
   started="$(date +%s)"
   while :; do
@@ -461,11 +475,11 @@ arc_acquire_lock() {
       # Publish atomically: a contender must never read a half-written record.
       # The temp file lives beside the lock directory, not inside it, so a
       # crashed publish cannot leave the directory non-empty and defeat rmdir.
-      owner_file="$(arc_lock_owner_file "$lock_dir")"
-      owner_start="$(arc_process_start_stamp "$$")"
       temp="$(dirname "$lock_dir")/.$(basename "$lock_dir").owner.$$"
       printf '%s\t%s\n' "$$" "$owner_start" >"$temp"
-      if mv -f "$temp" "$owner_file" 2>/dev/null; then
+      # Pin this directory while publishing, too: a reclaimer's final rmdir
+      # may remove an empty generation, in which case publication must fail.
+      if (cd "$lock_dir" && mv -f "$temp" "./$ARC_LOCK_OWNER_FILE") 2>/dev/null; then
         return 0
       fi
       rm -f "$temp" 2>/dev/null || true
