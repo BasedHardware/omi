@@ -20,7 +20,8 @@ For shutdown, the stricter no-delay requirement takes precedence over the propos
 best-effort flush: close clears diagnostics without sink IO or scheduling another
 task. The last incomplete window can be lost; this is not a durable census.
 
-Each cell has exclusive `trigger` (`external`, `continuation`, `again`, `retry`),
+Each cell has exclusive `trigger` (`external`, `continuation`, `again`, `retry`,
+or `unknown` when admission metadata was unavailable),
 `origins` bitmask, `positive` (0/1), normalized `stop`, and `executed` (whether the
 chain turn began). `n`, `rows`, `steps`, `timing_ms` and `timing_buckets` aggregate
 that cell. Origins: unknown=1, discovery-after-assignment=2,

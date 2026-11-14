@@ -248,12 +248,19 @@ async def test_diagnostic_claim_and_retry_admissions(monkeypatch, claims, drain_
 
 
 def test_diagnostic_bounds_stop_safety_flush_interval_and_shutdown(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1')
     monkeypatch.setattr(diagnostic, 'MAX_OWNERS', 1)
     monkeypatch.setattr(diagnostic, 'MAX_CELLS', 1)
     clock = [0.0]
     monkeypatch.setattr(diagnostic.time, 'monotonic', lambda: clock[0])
     sink = Mock()
     monkeypatch.setattr(diagnostic.logger, 'info', sink)
+    projector = projector_for(ResultLog())
+    projector.request_drain('first', reason='targeted_wake')
+    projector.request_drain('second', reason='discovery_after_assignment')
+    assert list(projector.drain_requests) == ['first', 'second']
+    assert projector.drain_requests == {'first': 8, 'second': None}
+    assert projector.drain_request_counts['handoff_overflow'] == 1
     stats = diagnostic.Diagnostics()
     stats.request('secret-owner', 2, 'queued')
     stats.request('overflow-owner', 8, 'queued')
@@ -262,7 +269,7 @@ def test_diagnostic_bounds_stop_safety_flush_interval_and_shutdown(monkeypatch):
     turn.stop = 'unsafe-owner-task-content'
     turn.elapsed('prefetch_wait', 0.002)
     stats.finish('secret-owner')
-    stats.begin('overflow-owner')
+    assert stats.begin('overflow-owner').trigger == 'unknown'
     stats.finish('overflow-owner', 'claim_held')
     assert len(stats.cells) == 1 and stats.counts['cell_overflow'] == 1
     sink.assert_not_called()
@@ -320,6 +327,12 @@ def test_diagnostic_sink_failure_does_not_interrupt_or_retry_per_turn(monkeypatc
     stats.begin('owner')
     stats.finish('owner', cancelled=True, flush=False)
     assert sink.call_count == 1
+    clock[0] = 180
+    sink.side_effect = None
+    stats.flush()
+    payload = json.loads(sink.call_args.args[1])
+    assert payload['window_ms'] == 180000  # retained counters retain their full denominator
+    assert payload['counts']['completed'] == 4 and payload['counts']['sink_failures'] == 1
     stats.close()
 
 

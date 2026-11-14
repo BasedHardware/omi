@@ -23,7 +23,7 @@ ORIGINS = {
     'targeted_wake': 8,
     'internal_retry': 16,
 }
-TRIGGERS = frozenset({'external', 'continuation', 'again', 'retry'})
+TRIGGERS = frozenset({'external', 'continuation', 'again', 'retry', 'unknown'})
 STOPS = frozenset(
     {
         'end',
@@ -95,6 +95,7 @@ class Diagnostics:
         self.counts = Counter()
         self.cells: dict[tuple, dict] = {}
         self.last_flush = time.monotonic()
+        self.window_started = self.last_flush
 
     def request(self, owner, mask, disposition):
         self.counts['requests'] += 1
@@ -125,8 +126,8 @@ class Diagnostics:
         self.queue(owner, trigger, active.origins if active else ORIGINS['internal_retry'])
 
     def begin(self, owner):
-        trigger, mask = self.pending.pop(owner, ('external', ORIGINS['unknown']))
-        turn = Turn(trigger if trigger in TRIGGERS else 'external', mask or ORIGINS['unknown'])
+        trigger, mask = self.pending.pop(owner, ('unknown', ORIGINS['unknown']))
+        turn = Turn(trigger if trigger in TRIGGERS else 'unknown', mask or ORIGINS['unknown'])
         self.active[owner] = turn  # bounded by MAX_OWNER_DRAINS, not backlog size
         return turn
 
@@ -160,7 +161,7 @@ class Diagnostics:
         if not self.counts and not self.cells:
             return
         payload = {
-            'window_ms': int((time.monotonic() - self.last_flush) * 1000),
+            'window_ms': int((time.monotonic() - self.window_started) * 1000),
             'counts': dict(self.counts),
             'cells': [
                 dict(trigger=k[0], origins=k[1], positive=k[2], stop=k[3], executed=k[4], **v)
@@ -180,6 +181,7 @@ class Diagnostics:
         self.cells.clear()
         self.counts.clear()
         self.last_flush = time.monotonic()
+        self.window_started = self.last_flush
 
     def close(self):
         self.pending.clear()

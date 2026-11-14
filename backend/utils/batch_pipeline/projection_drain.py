@@ -112,24 +112,18 @@ class OwnerDrains:
         if self.closed:
             return
         for owner in owners:
-            if self.diagnostics is not None:
-                mask = owners.get(owner) if isinstance(owners, dict) else None
-                disposition = (
-                    'deferred'
-                    if owner in self.delayed and owner not in self.privacy_heads
-                    else (
-                        'active'
-                        if owner in self.tasks
-                        else 'coalesced' if owner in self.queue or owner in self.backlog else 'queued'
-                    )
-                )
-                self.diagnostics.request(owner, mask or diagnostics.ORIGINS['unknown'], disposition)
+            disposition = 'coalesced'
             if owner in self.delayed and owner not in self.privacy_heads:
-                continue
-            if owner in self.tasks:
+                disposition = 'deferred'
+            elif owner in self.tasks:
                 self.again.add(owner)
+                disposition = 'active'
             elif owner not in self.queue and owner not in self.backlog:
                 self.queue.append(owner)
+                disposition = 'queued'
+            if self.diagnostics is not None:
+                mask = owners.get(owner) if isinstance(owners, dict) else None
+                self.diagnostics.request(owner, mask or diagnostics.ORIGINS['unknown'], disposition)
         self.launch()
 
     def classes(self) -> bool:
