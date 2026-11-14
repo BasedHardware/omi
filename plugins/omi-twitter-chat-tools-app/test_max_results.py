@@ -68,11 +68,24 @@ def load_app():
     ):
         setattr(db, name, lambda *args, **kwargs: None)
 
+    class StubAsyncClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+        async def post(self, *args, **kwargs):
+            class StubResponse:
+                status_code = 200
+                def json(self):
+                    return {}
+            return StubResponse()
+
     stubs = {
         "fastapi": module("fastapi", FastAPI=FastAPI, Request=object, Query=lambda *a, **k: None, HTTPException=Exception),
         "fastapi.responses": module("fastapi.responses", HTMLResponse=str, RedirectResponse=str, JSONResponse=dict),
         "dotenv": module("dotenv", load_dotenv=lambda *a, **k: None),
         "requests": module("requests"),
+        "httpx": module("httpx", AsyncClient=StubAsyncClient),
         "db": db,
         "models": module("models", ChatToolResponse=ChatToolResponse),
     }
