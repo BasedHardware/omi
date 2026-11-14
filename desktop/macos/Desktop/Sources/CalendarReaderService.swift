@@ -338,6 +338,10 @@ actor CalendarReaderService {
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !events.isEmpty else { return (0, 0, "") }
+    guard !AIProvider.shouldSkipConnectorSynthesis() else {
+      log("CalendarReaderService: skipping event synthesis: Local provider, Connector synthesis is Off")
+      return (0, 0, "")
+    }
 
     // Format events compactly for the backend
     var eventLines: [String] = []

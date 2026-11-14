@@ -1,0 +1,3 @@
+{
+  "change": "Follow-up chat messages are now faster on local models and cheaper on cloud ones, because follow-ups no longer re-send the whole conversation context on every turn - only what changed since the last message."
+}

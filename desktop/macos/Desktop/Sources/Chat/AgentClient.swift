@@ -139,6 +139,14 @@ enum AgentClient {
       get async { await bridge.isAlive }
     }
 
+    /// The pi provider ("omi"/"omi-local") the shared runtime is actually
+    /// running (or, pre-launch, about to be launched with). Read-through to
+    /// `AgentBridge.providerMode`; see its doc comment for why this must not
+    /// be re-derived from a per-`ChatProvider` copy.
+    var providerMode: String {
+      get async { await bridge.providerMode }
+    }
+
     func start() async throws {
       try await bridge.start()
     }
@@ -532,6 +540,7 @@ enum AgentClient {
       surface: AgentSurfaceReference,
       mode: String? = nil,
       imageData: Data? = nil,
+      imageIsScreenCapture: Bool = false,
       attachments: [AgentQueryAttachment] = [],
       producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
@@ -551,6 +560,7 @@ enum AgentClient {
         surface: surface,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -572,6 +582,7 @@ enum AgentClient {
       surface: AgentSurfaceReference,
       mode: String? = nil,
       imageData: Data? = nil,
+      imageIsScreenCapture: Bool = false,
       attachments: [AgentQueryAttachment] = [],
       producingTurnId: String? = nil,
       expectedContext: AgentContextFreshness? = nil,
@@ -603,6 +614,7 @@ enum AgentClient {
               surface: surface,
               mode: mode,
               imageData: imageData,
+              imageIsScreenCapture: imageIsScreenCapture,
               attachments: attachments,
               producingTurnId: producingTurnId,
               expectedContext: admittedContext,
