@@ -24,9 +24,12 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 280,
+  "count": 283,
   "names": {
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
+    "BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED": {"owner": "provider-stt-drain", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
+    "BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS": {"owner": "provider-stt-drain", "review_by": "2026-12-14"},
+    "BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK": {"owner": "provider-stt-drain", "review_by": "2026-12-14"},
     "BATCH_PIPELINE_FRESH_GUARD_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-13", "registry": "config/feature-flags.yaml"},
     "STT_FREE_ALLOWANCE_WATCH_ENABLED": {"owner": "margin-owner", "review_by": "2026-12-12", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {"owner": "margin / SCA-1800", "review_by": "2026-11-26"},
