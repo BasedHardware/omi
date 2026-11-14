@@ -421,6 +421,59 @@ class BrakeTests(unittest.TestCase):
         for workflow in ["mobile_rollout_watch.yml", "mobile_daily_train.yml"]:
             self.assertIn(f"actions/workflows/{workflow}", paths)
 
+    def test_scheduler_pause_check_uses_existing_read_only_cloud_identity(self):
+        response = Mock()
+        response.json.return_value = {"state": "PAUSED"}
+        with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": '{"type":"service_account"}'}):
+            with patch(
+                "google.oauth2.service_account.Credentials.from_service_account_info", return_value=object()
+            ) as credentials_factory:
+                with patch("google.auth.transport.requests.AuthorizedSession") as session_factory:
+                    session_factory.return_value.get.return_value = response
+
+                    self.assertEqual(brake.scheduler_job_json(), {"state": "PAUSED"})
+
+        credentials_factory.assert_called_once_with(
+            {"type": "service_account"},
+            scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"],
+        )
+        session_factory.return_value.get.assert_called_once_with(
+            "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"
+            "jobs/app-review-config-sweep-hourly",
+            timeout=30,
+        )
+        response.raise_for_status.assert_called_once_with()
+
+    def test_scheduler_pause_check_without_existing_identity_fails_closed(self):
+        with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": ""}):
+            with self.assertRaisesRegex(brake.BrakeError, "cannot verify app-review-config-sweep-hourly"):
+                brake.scheduler_job_json()
+
+    def test_scheduler_pause_check_fails_closed_when_existing_identity_is_unauthorized(self):
+        response = Mock()
+        response.raise_for_status.side_effect = RuntimeError("403 forbidden")
+        with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": '{"type":"service_account"}'}):
+            with patch("google.oauth2.service_account.Credentials.from_service_account_info", return_value=object()):
+                with patch("google.auth.transport.requests.AuthorizedSession") as session_factory:
+                    session_factory.return_value.get.return_value = response
+
+                    with self.assertRaisesRegex(brake.BrakeError, "cannot verify app-review-config-sweep-hourly"):
+                        brake.scheduler_job_json()
+
+    def test_default_quiescence_helpers_are_resolved_at_call_time(self):
+        paths = []
+
+        def fetch(path):
+            paths.append(path)
+            return {"workflow_runs": []} if "/runs?" in path else {"state": "disabled_manually"}
+
+        with patch.object(brake, "github_json", side_effect=fetch):
+            with patch.object(brake, "scheduler_job_json", return_value={"state": "PAUSED"}) as scheduler:
+                brake.require_quiesced_writers()
+
+        self.assertEqual(len(paths), 4)
+        scheduler.assert_called_once_with()
+
     def test_active_app_review_scheduler_refuses_to_open_a_play_edit(self):
         def fetch(path):
             return {"workflow_runs": [{"status": "completed"}]} if "/runs?" in path else {"state": "disabled_manually"}

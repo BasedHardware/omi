@@ -16,6 +16,12 @@ After pausing the scheduler, confirm any request it already started has finished
 Scheduler history or backend-sync logs. Do not run any other Play writer or use Play
 Console concurrently. GitHub dispatch completion does not prove the Codemagic build it
 started has finished.
+
+The brake reads Scheduler state through the existing `google_play` Codemagic identity
+(`GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`) using the read-only Cloud Scheduler API. That
+principal must already have `cloudscheduler.jobs.get` for this job. Missing credentials,
+an authorization error, or an unreadable response fails closed before any Play edit; the
+brake does not create or change credentials or IAM bindings.
 Confirm that Play Console has no unrelated changes waiting to be sent for review:
 the later Play Console → Publishing overview → Send for review press submits
 every held change together, including a brake's. `CONFIRM=brake` attests these operator

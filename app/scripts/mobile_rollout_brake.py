@@ -7,7 +7,6 @@ import copy
 import json
 import math
 import os
-import subprocess
 import sys
 from pathlib import Path
 import urllib.parse
@@ -40,31 +39,36 @@ def github_json(path: str) -> object:
 
 
 def scheduler_job_json() -> object:
-    result = subprocess.run(
-        [
-            "gcloud",
-            "scheduler",
-            "jobs",
-            "describe",
-            "app-review-config-sweep-hourly",
-            "--location=us-central1",
-            "--project=based-hardware",
-            "--format=json",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if result.returncode:
+    credentials_raw = os.environ.get("GCLOUD_SERVICE_ACCOUNT_CREDENTIALS", "").strip()
+    if not credentials_raw:
         raise BrakeError("cannot verify app-review-config-sweep-hourly is paused")
     try:
-        return json.loads(result.stdout)
-    except (json.JSONDecodeError, TypeError):
+        from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_raw),
+            scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"],
+        )
+        session = AuthorizedSession(credentials)
+        response = session.get(
+            "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"
+            "jobs/app-review-config-sweep-hourly",
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError("Cloud Scheduler returned a non-object response")
+        return result
+    except Exception:
         raise BrakeError("cannot verify app-review-config-sweep-hourly is paused") from None
 
 
-def require_quiesced_writers(fetch=github_json, scheduler_fetch=scheduler_job_json) -> None:
+def require_quiesced_writers(fetch=None, scheduler_fetch=None) -> None:
     """Require the scheduled sweep and both GitHub Play writers to be paused."""
+    fetch = fetch or github_json
+    scheduler_fetch = scheduler_fetch or scheduler_job_json
     try:
         for workflow in ("mobile_rollout_watch.yml", "mobile_daily_train.yml"):
             metadata = fetch(f"actions/workflows/{workflow}")
