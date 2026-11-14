@@ -108,9 +108,10 @@ class CaptureEndDetector {
 typedef CaptureEndPoster = Future<bool> Function(CaptureEndSignal signal,
     {required int pendingWals, required DateTime sentAt});
 
-/// Tells the server about an end, and tells it once more when every sealed file
-/// of that recording up to the end has been accepted, so the final copy carries
-/// zero pending files. At most two accepted reports per end: the first, and the
+/// Tells the server about an end, and tells it once more when all audio of
+/// that recording up to the end has been accepted, so the final copy carries
+/// zero pending files. Purely an observer of capture and upload: it seals
+/// nothing, starts no upload and changes no chunk boundary. At most two accepted reports per end: the first, and the
 /// one at zero. A report the server did not accept is retried on the next
 /// accepted file. Latency information only: a marker that is never sent
 /// changes nothing about custody or upload, and the server keeps its wait.
@@ -122,27 +123,22 @@ class CaptureEndReporter {
     required CaptureEndPoster post,
     required int Function(CaptureEndSignal signal) pendingWals,
     required Future<bool> Function() disabled,
-    Future<void> Function()? settle,
     DateTime Function()? now,
   })  : _post = post,
         _pendingWals = pendingWals,
         _disabled = disabled,
-        _settle = settle,
         _now = now ?? DateTime.now;
 
   static const int maxTracked = 16;
 
   final CaptureEndPoster _post;
 
-  /// Sealed files of the signal's recording, with audio up to its end, that
-  /// the server has not accepted.
+  /// Audio of the signal's recording, up to its end, that the server has not
+  /// accepted: registered files, and anything still being written or
+  /// published. The reporter only reads this; it never seals or uploads.
   final int Function(CaptureEndSignal signal) _pendingWals;
   final Future<bool> Function() _disabled;
 
-  /// Completes when the chunk open at the end is sealed and registered as a
-  /// file. Counting before that would miss the recording's last file and
-  /// report nothing pending while one is still on its way.
-  final Future<void> Function()? _settle;
   final DateTime Function() _now;
   final Map<String, CaptureEndSignal> _open = {};
   final Set<String> _accepted = {};
@@ -181,7 +177,6 @@ class CaptureEndReporter {
         _forget(id);
         return;
       }
-      if (first) await _settle?.call();
       final pending = _pendingWals(signal);
       // Once the server holds this end, only "nothing left" is worth a call.
       if (_accepted.contains(id) && pending != 0) return;

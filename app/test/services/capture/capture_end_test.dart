@@ -95,7 +95,6 @@ void main() {
     late Map<String, int> pending;
     late bool disabled;
     late bool accept;
-    late int settled;
     late CaptureEndReporter reporter;
 
     CaptureEndSignal signal(String id, {int decided = 1010}) => CaptureEndSignal(
@@ -106,7 +105,6 @@ void main() {
       pending = {};
       disabled = false;
       accept = true;
-      settled = 0;
       reporter = CaptureEndReporter(
         post: (signal, {required pendingWals, required sentAt}) async {
           sent.add((signal.recordingSessionId, pendingWals));
@@ -114,7 +112,6 @@ void main() {
         },
         pendingWals: (signal) => pending[signal.recordingSessionId] ?? 0,
         disabled: () async => disabled,
-        settle: () async => settled++,
         now: () => at(2000),
       );
     });
@@ -133,26 +130,16 @@ void main() {
       expect(sent, [('s', 5), ('s', 0)]);
     });
 
-    test('the open chunk is settled into a file before the first count, and only then', () async {
-      // The count becomes visible only once the final chunk is registered.
-      final late_ = CaptureEndReporter(
-        post: (signal, {required pendingWals, required sentAt}) async {
-          sent.add((signal.recordingSessionId, pendingWals));
-          return true;
-        },
-        pendingWals: (signal) => pending[signal.recordingSessionId] ?? 0,
-        disabled: () async => false,
-        settle: () async {
-          settled++;
-          pending['s'] = 1; // the last sealed file appears in the index
-        },
-      );
-      await late_.report(signal('s'));
-      expect(sent, [('s', 1)], reason: 'never zero while the final file is still being published');
-      pending['s'] = 0;
-      await late_.uploadAccepted('s');
+    test('never zero while the final audio is still open or publishing; zero once it is accepted', () async {
+      // The count is whatever capture and upload say it is; the reporter only reads it.
+      pending['s'] = 1; // the final chunk is still being written
+      await reporter.report(signal('s'));
+      expect(sent, [('s', 1)]);
+      await reporter.uploadAccepted('s'); // an earlier file was accepted; the final one is still publishing
+      expect(sent, [('s', 1)]);
+      pending['s'] = 0; // sealed by the capture lifecycle, registered, uploaded, accepted
+      await reporter.uploadAccepted('s');
       expect(sent, [('s', 1), ('s', 0)]);
-      expect(settled, 1, reason: 'resends do not seal again');
     });
 
     test('nothing pending at the end is one call', () async {
@@ -179,13 +166,12 @@ void main() {
       expect(sent, isEmpty);
     });
 
-    test('the kill switch sends nothing, seals nothing and forgets the end', () async {
+    test('the kill switch sends nothing and forgets the end', () async {
       disabled = true;
       await reporter.report(signal('s'));
       disabled = false;
       await reporter.uploadAccepted('s');
       expect(sent, isEmpty);
-      expect(settled, 0);
     });
 
     test('a later end of the same recording replaces the earlier one', () async {

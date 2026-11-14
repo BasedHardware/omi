@@ -268,14 +268,18 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
         // Kept by the reporter and retried on the next accepted file.
         ApiFailure() => false,
       },
+      // Observation only: the reporter never seals, flushes or publishes.
+      // Audio up to the end that is still being written or published counts
+      // as pending until the capture lifecycle seals it and it is accepted.
       // Later chunks of trailing silence are not part of the ended recording.
-      pendingWals: (signal) => phone is LocalWalSyncImpl
-          ? phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt)
-          : 0,
-      // The chunk open at the end must be a registered file before it is counted.
-      settle: () async {
-        lane.buffer.seal();
-        await lane.buffer.pending;
+      pendingWals: (signal) {
+        final through = signal.decidedAt.millisecondsSinceEpoch ~/ 1000;
+        final unregistered =
+            lane.buffer.unregisteredStarts(signal.recordingSessionId).where((start) => start <= through).length;
+        final registered = phone is LocalWalSyncImpl
+            ? phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt)
+            : 0;
+        return unregistered + registered;
       },
       disabled: CaptureEndMarkerPolicy.disabled,
     );
