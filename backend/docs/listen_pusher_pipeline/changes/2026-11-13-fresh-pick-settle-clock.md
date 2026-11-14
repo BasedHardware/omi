@@ -6,8 +6,9 @@ When an owner's head is catch-up or held backlog, the merge probes the owner's e
 fresh rows and commits the earliest once it is ready. If that earliest fresh row is not ready, a
 later ready fresh row may pass it after the head wait. That wait was measured only from the row's
 `ready_at`. A provider row that settled while the stamp was off, or whose `ready_at` was removed,
-carries the same instant on `provider_intent.settled_at`. The head-wait path already read it
-(`_ready_since`); the fresh pick did not, so for such a row the wait never ended.
+carries a settle instant on `provider_intent.settled_at`. The head-wait path already read it
+(`_ready_since`); the fresh pick did not, so such a row's wait was not measured and it did not pass
+the unready row in front.
 
 Production, 2026-11-13 (job metadata, counts only): 15 of 71 owners with fresh provider units
 committed none. Each had a fresh unit held on a rate-limited vendor in front, and ready fresh rows

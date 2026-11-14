@@ -1175,3 +1175,90 @@ def test_state_census_counts_only_pending_missing_null_or_unknown_rows(h, monkey
         census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
         census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
         assert census(client.transaction(read_only=True), client, collection) == 3
+
+
+def test_transactional_fresh_first_sees_ready_past_40_unready_rows_and_terminal_states(h):
+    rows = [
+        job(
+            h,
+            f'f{i:02}',
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=True,
+            state='result_ready' if i == 40 else 'leased',
+        )
+        for i in range(41)
+    ]
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    for state in ('leased', 'dead', 'quarantined', 'committed'):
+        row = {**rows[0], 'state': state}
+        put_all(h, [('jobs', row['segment_id'], row)])
+        first, ready = h.store.run(
+            lambda tx: (tx.fresh_first_pending(row['owner_key']), tx.fresh_first_ready_pending(row['owner_key']))
+        )
+        assert first['segment_id'] == 'f00' and ready['segment_id'] == 'f40'
+
+
+@pytest.mark.parametrize('initial_state', ['leased', 'dead'])
+def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch, initial_state):
+    from unittest.mock import Mock
+
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    uid = h.uid('o')
+    key = scheduler_owner_key(uid)
+    rows = [
+        job(
+            h,
+            name,
+            owner_key=key,
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=i > 0,
+            state=initial_state if i == 1 else 'leased',
+            protocol_version=1,
+            result={'text': ''},
+            ready_at=1.0,
+        )
+        for i, name in enumerate(('backlog', 'early', 'later'))
+    ]
+    rows[2]['state'] = 'result_ready'
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    stale = [rows[2].copy()]
+    probe = Mock(return_value=stale)
+    monkeypatch.setattr(h.store, 'fresh_pending', probe)
+    tx_type = h.store.run(type)
+    first_query, query, put = tx_type.fresh_first_pending, tx_type.fresh_first_ready_pending, tx_type.put
+    firsts, reads, writes = [], [], []
+
+    def first(tx, key):
+        firsts.append(tx)
+        return first_query(tx, key)
+
+    def read(tx, key):
+        reads.append(tx)
+        return query(tx, key)
+
+    def write(tx, table, key, value):
+        if table == 'results':
+            writes.append(tx)
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(tx_type, 'fresh_first_pending', first)
+    monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
+    monkeypatch.setattr(tx_type, 'put', write)
+    run, calls = h.store.run, []
+
+    def interleave(body):
+        calls.append(body)
+        result = run(body)
+        if len(calls) == 1:
+            assert result is None
+            run(lambda tx: tx.put('jobs', 'early', {**rows[1], 'state': 'result_ready'}))
+        return result
+
+    monkeypatch.setattr(h.store, 'run', interleave)
+    entry = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=4).commit_next(uid, 100.0)
+    assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
+    assert firsts and reads and writes and firsts[-1] is reads[-1] is writes[-1]
+    probe.assert_not_called()
