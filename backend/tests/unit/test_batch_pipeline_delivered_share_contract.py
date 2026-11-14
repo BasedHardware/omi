@@ -103,7 +103,9 @@ class Client:
         assert name.startswith('batch_pipeline_dev_')
         return Query(self)
 
-    def get_all(self, refs, *, timeout, retry):
+    def get_all(self, refs, *, field_paths, timeout, retry):
+        assert field_paths == ('projection_state', 'projection.persisted_at', 'projection_parts')
+        assert timeout == 10 and retry is None
         return [Snapshot(doc_id, self.results[doc_id]) for doc_id in refs]
 
 
@@ -141,6 +143,78 @@ def test_backfill_falls_back_to_the_result_receipt_for_unstamped_rows(monkeypatc
         'late': False,
         'stamped': True,
     }
+
+
+@pytest.mark.parametrize('with_baseline', [False, True])
+def test_backfill_cli_reads_windows_and_reports_the_japanese_dip(monkeypatch, capsys, with_baseline):
+    import sys
+
+    from google.cloud import firestore
+
+    client = object()
+    monkeypatch.setattr(firestore, 'Client', lambda **kwargs: client)
+    calls = []
+
+    def historical_rows(actual_client, namespace, now):
+        assert actual_client is client and namespace == 'batch_pipeline_prod'
+        calls.append(now)
+        return [
+            {
+                'policy': {'stt_route': 'provider'},
+                'projection_binding': {'language': 'ja'},
+                'delivered_in_target': now < report._epoch('2026-11-13T00:00Z'),
+            }
+            for _ in range(36)
+        ], False
+
+    monkeypatch.setattr(report, '_historical_rows', historical_rows)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'report',
+            '--project',
+            'based-hardware',
+            '--from',
+            '2026-11-13T00:00Z',
+            '--to',
+            '2026-11-13T00:15Z',
+        ]
+        + (['--baseline-from', '2026-11-12T00:00Z', '--baseline-to', '2026-11-12T00:15Z'] if with_baseline else []),
+    )
+    assert report.main() == 0
+    assert calls == [report._epoch('2026-11-13T00:20Z')] + (
+        [report._epoch('2026-11-12T00:20Z')] if with_baseline else []
+    )
+    printed = capsys.readouterr().out
+    assert 'provider   ja               36          0   0.000' in printed
+    if with_baseline:
+        assert 'FIRING provider/ja: 0.000 vs baseline 1.000' in printed
+
+
+@pytest.mark.parametrize('flag', ['--baseline-from', '--baseline-to'])
+def test_backfill_cli_rejects_partial_baseline_before_reading(monkeypatch, capsys, flag):
+    import sys
+
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'report',
+            '--project',
+            'based-hardware',
+            '--from',
+            '2026-11-13T00:00Z',
+            '--to',
+            '2026-11-14T00:00Z',
+            flag,
+            '2026-11-12T00:00Z',
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        report.main()
+    assert error.value.code == 2
+    assert 'must be supplied together' in capsys.readouterr().err
 
 
 @pytest.mark.slow

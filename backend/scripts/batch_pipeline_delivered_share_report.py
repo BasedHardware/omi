@@ -59,7 +59,16 @@ def _historical_rows(client, namespace: str, now: float):
     missing = [row for row in rows if 'delivered_in_target' not in row]
     if missing:
         refs = [client.collection(f'{namespace}_results').document(row['segment_id']) for row in missing]
-        snapshots = client.get_all(refs, timeout=10, retry=None) if refs else []
+        snapshots = (
+            client.get_all(
+                refs,
+                field_paths=('projection_state', 'projection.persisted_at', 'projection_parts'),
+                timeout=10,
+                retry=None,
+            )
+            if refs
+            else []
+        )
         by_id = {snapshot.id: snapshot.to_dict() for snapshot in snapshots}
         for row in missing:
             delivered = _delivered_at(by_id.get(row['segment_id']))
@@ -183,14 +192,16 @@ def main() -> int:
     parser.add_argument('--from', dest='start', help='window start, ISO-8601')
     parser.add_argument('--to', dest='end', help='window end, ISO-8601')
     parser.add_argument('--step', type=int, default=900, help='window size in seconds (default 900)')
-    parser.add_argument('--baseline-from', help='baseline window start, ISO-8601')
-    parser.add_argument('--baseline-to', help='baseline window end, ISO-8601')
+    parser.add_argument('--baseline-from', dest='baseline_start', help='baseline window start, ISO-8601')
+    parser.add_argument('--baseline-to', dest='baseline_end', help='baseline window end, ISO-8601')
     parser.add_argument('--drill', action='store_true', help='run the hermetic simulator drill instead of a read')
     args = parser.parse_args()
     if args.drill:
         return drill(args)
     if not (args.project and args.start and args.end):
         parser.error('--project, --from and --to are required unless --drill is set')
+    if bool(args.baseline_start) != bool(args.baseline_end):
+        parser.error('--baseline-from and --baseline-to must be supplied together')
     return backfill(args)
 
 
