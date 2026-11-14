@@ -897,7 +897,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 except BillingCurrencyUnavailable:
                     raise
                 except Exception as exc:
-                    logger.warning(f"Failed to resolve currency price {type(exc).__name__}: {exc}")
+                    logger.warning(f"Failed to resolve currency price: {type(exc).__name__}")
                     raise BillingCurrencyUnavailable(
                         'Please reopen Plans & Billing to select a price in your billing currency.'
                     )
