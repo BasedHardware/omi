@@ -503,6 +503,10 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
@@ -910,8 +914,8 @@ overlay:
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff: backend-sync can run the same sweep through its authenticated
           # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
-          # backend-integration (SCA-2173, review SCA-2270). Kill switch: set it false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          # backend-integration (SCA-2173, review SCA-2270). Off since 2026-11-14 19:41Z (SCA-2283).
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1302,6 +1306,10 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -1659,10 +1667,10 @@ overlay:
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff on the only service that runs the finish sweep. On since the
-          # one-time stamping pass completed and the finish counters exported (2026-11-14, SCA-2173,
-          # SCA-2222). Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx
+          # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
+          # async-policy finish rows are never deferred; #25314 is the fix for those reads.
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
