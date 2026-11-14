@@ -1206,8 +1206,9 @@ async def test_inline_finish_waits_for_projection_and_kill_switch_keeps_backgrou
     assert client.rows[path]['record_audio_closed'] is True
     assert client.rows[path]['record_upload_sessions'] == {}
     # Fifty frames share one producer begin; neither inline nor background
-    # closure introduces frame-frequency Firestore reads.
-    assert len(client.transactions) == 3  # begin, token clear, seal
+    # closure introduces frame-frequency Firestore reads. The fourth
+    # transaction is the post-seal ledger write, not a per-frame read.
+    assert len(client.transactions) == 4  # begin, token clear, seal, ledger
 
 
 @pytest.mark.asyncio

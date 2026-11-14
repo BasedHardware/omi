@@ -97,6 +97,10 @@ MEMORY_REVIEW_EXPORT_COLLECTIONS = (
     'memory_corrections',
 )
 
+# The in-flight capture ledger is content-free implementation state, but it is
+# durable per-user data and must be portable and erasable with the account.
+PIPELINE_LEDGER_EXPORT_COLLECTIONS = ('pipeline_ledger',)
+
 # Account-lifetime canonical ledger history and lineage authority. These rows
 # are retained independently of the user-facing MemoryDB projection and must
 # remain portable, including content-free tombstones and receipts.
@@ -315,6 +319,15 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
         yield f"    {json.dumps(collection_name)}: "
         yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
         yield ",\n" if index < len(JIT_EXPORT_COLLECTIONS) - 1 else "\n"
+    yield '  },\n'
+
+    # Content-free capture lifecycle rows: stage, deadlines, bounded reasons
+    # and timestamps only. No transcript, title, overview or audio path.
+    yield '  "pipeline_ledger": {\n'
+    for index, collection_name in enumerate(PIPELINE_LEDGER_EXPORT_COLLECTIONS):
+        yield f"    {json.dumps(collection_name)}: "
+        yield from _yield_json_array(_iter_user_subcollection(uid, collection_name))
+        yield ",\n" if index < len(PIPELINE_LEDGER_EXPORT_COLLECTIONS) - 1 else "\n"
     yield '  },\n'
 
     # Soft-dismissed people stay in the user's portable archive even though

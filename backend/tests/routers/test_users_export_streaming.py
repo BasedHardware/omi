@@ -459,3 +459,7 @@ def test_source_error_closes_iterator_without_completion(monkeypatch):
     assert closes == [True]
     body = b''.join(m.get('body', b'') for m in sent if m['type'] == 'http.response.body')
     assert b'export_complete' not in body
+
+
+def test_export_inventory_includes_pipeline_ledger():
+    assert 'pipeline_ledger' in data_export.PIPELINE_LEDGER_EXPORT_COLLECTIONS
