@@ -390,6 +390,8 @@ extension SettingsContentView {
         }
       }
 
+      cancelSubscriptionEntry
+
       chatUsageQuotaCard
 
       overageCard

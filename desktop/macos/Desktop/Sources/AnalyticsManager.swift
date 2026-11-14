@@ -1641,6 +1641,45 @@ class AnalyticsManager {
     PostHogManager.shared.track("Upgrade Cancelled")
   }
 
+  // MARK: - Cancel flow parity (SCA-2171)
+  //
+  // Same five wire names as mobile; the only addition is `platform`, which the
+  // macOS super properties already register as "macos" and is emitted here
+  // explicitly so the web/macOS/mobile cancel-reason rate is segmentable.
+
+  private var cancelFlowProperties: [String: Any] { ["platform": "macos"] }
+
+  func subscriptionCancelFlowStarted() {
+    PostHogManager.shared.track("Subscription Cancel Flow Started", properties: cancelFlowProperties)
+  }
+
+  func subscriptionCancelReasonSelected(reason: String?) {
+    var properties = cancelFlowProperties
+    properties["reason"] = SubscriptionFunnelWire.cancelReason(reason)
+    PostHogManager.shared.track("Subscription Cancel Reason Selected", properties: properties)
+  }
+
+  func subscriptionCancelConfirmed(reason: String?, hasDetails: Bool) {
+    var properties = cancelFlowProperties
+    properties["reason"] = SubscriptionFunnelWire.cancelReason(reason)
+    properties["has_details"] = hasDetails
+    PostHogManager.shared.track("Subscription Cancel Confirmed", properties: properties)
+  }
+
+  func subscriptionCancelKeptPlan(step: Int, reason: String?) {
+    var properties = cancelFlowProperties
+    properties["step"] = step
+    properties["reason"] = SubscriptionFunnelWire.cancelReason(reason)
+    PostHogManager.shared.track("Subscription Cancel Kept Plan", properties: properties)
+  }
+
+  func subscriptionCancelAbandoned(step: Int, reason: String?) {
+    var properties = cancelFlowProperties
+    properties["step"] = step
+    properties["reason"] = SubscriptionFunnelWire.cancelReason(reason)
+    PostHogManager.shared.track("Subscription Cancel Abandoned", properties: properties)
+  }
+
 }
 
 enum SubscriptionFunnelWire {
@@ -1700,5 +1739,19 @@ enum SubscriptionFunnelWire {
       "plan": self.plan(plan),
       "billing_interval": interval(billingInterval),
     ]
+  }
+
+  /// Closed cancel-reason vocabulary shared with mobile; absent/unknown reasons
+  /// keep the contract's `none`/`unknown` buckets instead of a free string.
+  static func cancelReason(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case "too_expensive", "not_using_enough", "missing_features", "audio_quality", "battery_drain",
+      "found_alternative", "other":
+      return raw!.trimmingCharacters(in: .whitespacesAndNewlines)
+    case "none":
+      return "none"
+    default:
+      return "unknown"
+    }
   }
 }

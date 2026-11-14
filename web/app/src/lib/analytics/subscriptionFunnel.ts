@@ -1,4 +1,5 @@
 import { PostHogManager } from '@/lib/analytics/posthog';
+import { cancelReasonWire } from '@/lib/cancelReasons';
 
 const PLANS = new Set([
   'basic',
@@ -88,4 +89,50 @@ export function trackUpgradeSucceeded(plan: string, billingInterval: string): vo
 
 export function trackUpgradeCancelled(): void {
   PostHogManager.track('Upgrade Cancelled');
+}
+
+// ---------------------------------------------------------------------------
+// Cancel flow parity (SCA-2171)
+//
+// The five mobile cancel events are reused verbatim. The only addition is the
+// `platform` property, so a web/macOS/mobile cancel-reason rate is
+// segmentable: mobile keeps its `app_platform` super property, macOS already
+// registers `platform=macos`, and these emitters make web explicit.
+// ---------------------------------------------------------------------------
+
+const WEB_PLATFORM = { platform: 'web' } as const;
+
+export function trackCancelFlowStarted(): void {
+  PostHogManager.track('Subscription Cancel Flow Started', WEB_PLATFORM);
+}
+
+export function trackCancelReasonSelected(reason: string): void {
+  PostHogManager.track('Subscription Cancel Reason Selected', {
+    reason: cancelReasonWire(reason),
+    ...WEB_PLATFORM,
+  });
+}
+
+export function trackCancelConfirmed(reason: string, hasDetails: boolean): void {
+  PostHogManager.track('Subscription Cancel Confirmed', {
+    reason: cancelReasonWire(reason),
+    has_details: hasDetails,
+    ...WEB_PLATFORM,
+  });
+}
+
+export function trackCancelKeptPlan(step: number, reason?: string | null): void {
+  PostHogManager.track('Subscription Cancel Kept Plan', {
+    step,
+    reason: cancelReasonWire(reason),
+    ...WEB_PLATFORM,
+  });
+}
+
+export function trackCancelAbandoned(step: number, reason?: string | null): void {
+  PostHogManager.track('Subscription Cancel Abandoned', {
+    step,
+    reason: cancelReasonWire(reason),
+    ...WEB_PLATFORM,
+  });
 }

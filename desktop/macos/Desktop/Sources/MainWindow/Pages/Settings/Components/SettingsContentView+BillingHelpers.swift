@@ -1233,6 +1233,42 @@ extension SettingsContentView {
     }
   }
 
+  /// Cancel entry for the current-plan card (SCA-2171). Hidden while the
+  /// parity flag is off, so today's Manage-only path is unchanged; Manage still
+  /// opens the Stripe portal either way.
+  @ViewBuilder
+  var cancelSubscriptionEntry: some View {
+    if hasPaidSubscription,
+      userSubscription?.subscription.cancelAtPeriodEnd != true,
+      CancelSubscriptionFlowSheet.isEnabled
+    {
+      settingsCard(settingId: "planusage.cancel") {
+        HStack(spacing: OmiSpacing.md) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Cancel Subscription")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("We'll ask why before anything changes.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Button("Cancel Subscription") {
+            showCancelSubscriptionFlow = true
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .accessibilityIdentifier("current-plan-cancel")
+          .sheet(isPresented: $showCancelSubscriptionFlow) {
+            CancelSubscriptionFlowSheet(
+              periodEnd: userSubscription?.subscription.currentPeriodEnd,
+              onClose: { showCancelSubscriptionFlow = false },
+              onSubscriptionChanged: { loadSubscriptionInfo() })
+          }
+        }
+      }
+    }
+  }
+
   func openCustomerPortal() {
     guard !isOpeningCustomerPortal else { return }
     isOpeningCustomerPortal = true

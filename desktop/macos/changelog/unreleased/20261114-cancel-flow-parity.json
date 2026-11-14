@@ -1,0 +1,3 @@
+{
+  "change": "Cancel Subscription now asks why, then shows the existing stay offer, before confirming, on macOS too. Manage still opens the billing portal."
+}
