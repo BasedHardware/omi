@@ -9216,7 +9216,9 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 `sync_processing_hold.pending_since` and `last_content_at` in the existing
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
-rechecks the current row before any full notes/title/memory/task work. The
+rechecks the current row before any full notes/title/memory/task work.
+`SYNC_PROCESSING_QUIET_SECONDS` tunes that quiet window per call (default 600, clamped to 120 to 600; a
+malformed value keeps the default), so clients that send no end-of-recording proof can be moved without a release. The
 shared outbox remains production/emulator-only; dev hosts keep local eager
 processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account
