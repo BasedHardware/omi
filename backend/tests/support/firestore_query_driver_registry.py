@@ -4528,3 +4528,89 @@ _add(
         domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )
+_add(DriverEntry('database.first_value_recovery.recent_starts', base={'uid': UID, 'now': T0}))
+_add(
+    DriverEntry(
+        'database.first_value_recovery.due_push_starts',
+        base={'now': T0},
+        neutrals={'limit': (50, 'bounded experiment probe page; fixed')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.first_value_recovery.claim_prompt',
+        base={
+            'uid': UID,
+            'start_id': 'a' * 32,
+            'start': {
+                'variant': 'treatment',
+                'paid_start_at': T0 - timedelta(days=4),
+                'expires_at': T1,
+                'signal_coverage': 'complete',
+                'client_time_zone': 'UTC',
+                'ready_result_at': T0 - timedelta(days=2),
+                'ready_result_conversation_id': 'result-1',
+            },
+            'now': T0.replace(hour=12),
+        },
+        domains={'kind': ['capture', 'result'], 'channel': ['in_app', 'push']},
+    )
+)
+_add(DriverEntry('database.first_value_recovery._probe_conversations', base={'uid': UID, 'paid_start_at': T0}))
+_add(
+    DriverEntry(
+        'database.first_value_recovery.push_access',
+        base={
+            'uid': UID,
+            'start': {
+                'client_protocol': 1,
+                'client_time_zone': 'UTC',
+                'client_capability_at': T0,
+                'push_permission_granted_at': T0,
+            },
+            'now': T0,
+        },
+    )
+)
+_add(
+    DriverEntry(
+        'database.first_value_recovery.probe_start',
+        base={
+            'uid': UID,
+            'start_id': 'a' * 32,
+            'start': {
+                'variant': 'treatment',
+                'paid_start_at': T0,
+                'expires_at': T1,
+                'signal_coverage': 'pending',
+            },
+            'now': T0,
+        },
+    )
+)
+
+
+def _seed_first_value_result_open(client, combo, trial):
+    client.documents[f'users/{UID}/conversations/result-1'] = {
+        'status': 'completed',
+        'summary_completed_at': T0,
+    }
+    client.documents[f'users/{UID}/first_value_starts/{"a" * 32}'] = {
+        'variant': 'control',
+        'paid_start_at': T0,
+        'expires_at': T1,
+    }
+
+
+_add(
+    DriverEntry(
+        'database.first_value_recovery.record_result_open',
+        base={'uid': UID, 'conversation_id': 'result-1', 'now': T1},
+        setup=_seed_first_value_result_open,
+        patchers=(
+            lambda client: unittest.mock.patch.dict(
+                'os.environ', {'FIRST_VALUE_RECOVERY_ENABLED': 'true', 'FIRST_VALUE_RECOVERY_COHORT_PERCENT': '100'}
+            ),
+        ),
+    )
+)

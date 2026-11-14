@@ -6203,6 +6203,29 @@
       ]
     },
     {
+      "collectionGroup": "first_value_starts",
+      "fieldPath": "next_push_probe_at",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "llm_usage",
       "fieldPath": "date",
       "ttl": false,

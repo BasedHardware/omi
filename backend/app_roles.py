@@ -30,6 +30,7 @@ from routers import messaging
 from routers import (
     fleet_telemetry,
     budget_choice,
+    first_value_recovery,
     candidate_integration_sweep,
     chat_receipts,
     dream_cohort,
@@ -182,6 +183,7 @@ class Mount:
 # the pre-B8 include order in main.py (asserted by the census test).
 ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(budget_choice),
+    Mount(first_value_recovery),
     Mount(messaging),
     Mount(proactivity),
     Mount(dream_cohort),

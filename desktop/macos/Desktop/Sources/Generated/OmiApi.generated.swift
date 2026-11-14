@@ -12530,6 +12530,33 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func prepareRecoveryPromptV1FirstValueRecoveryPrepareGet(client: OmiApiClient, xOmiFirstValueProtocol: String? = nil, xOmiNotificationPermission: String? = nil, xOmiTimeZone: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+    let _path = "/v1/first-value/recovery/prepare"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xOmiFirstValueProtocol { req.setValue(String(xOmiFirstValueProtocol), forHTTPHeaderField: "X-Omi-First-Value-Protocol") }
+    if let xOmiNotificationPermission { req.setValue(String(xOmiNotificationPermission), forHTTPHeaderField: "X-Omi-Notification-Permission") }
+    if let xOmiTimeZone { req.setValue(String(xOmiTimeZone), forHTTPHeaderField: "X-Omi-Time-Zone") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
   public static func clientFlagsV1FlagsGet(client: OmiApiClient, surface: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> ClientFlagsResponse {
     let _path = "/v1/flags"
     guard var components = URLComponents(string: client.baseURL + _path) else {

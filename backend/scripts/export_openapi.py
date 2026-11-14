@@ -81,6 +81,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/dream/runs',
     '/v1/episodes',
     '/v1/fair-use',
+    '/v1/first-value/recovery/prepare',
     '/v1/flags',
     '/v1/frame-requests',
     '/v1/folders',

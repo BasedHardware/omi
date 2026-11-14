@@ -225,7 +225,7 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
                 invalid_tokens.append(tokens[idx])
                 logger.error(f'Invalid token removed - Error: {error_code}')
             else:
-                logger.error(f'FCM send failed: {result.exception}({error_code})')
+                logger.error('FCM send failed code=%s', error_code)
 
     return success_count, invalid_tokens
 
@@ -267,7 +267,7 @@ def _send_to_user(
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
-        logger.info(f"No tokens found for user {user_id}")
+        logger.info('No push tokens found')
         return 0
 
     # Build messages for all tokens
@@ -299,7 +299,7 @@ def _send_to_user(
         return success_count
 
     except Exception as e:
-        logger.error(f'FCM batch send error: {e}')
+        logger.error('FCM batch send error type=%s', type(e).__name__)
         return 0
 
 
@@ -327,7 +327,7 @@ async def _send_to_user_async(
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
     if not tokens:
-        logger.info(f"No tokens found for user {user_id}")
+        logger.info('No push tokens found')
         return 0
 
     messages = [
@@ -356,7 +356,7 @@ async def _send_to_user_async(
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
     except Exception as e:
-        logger.error(f'FCM batch send error: {e}')
+        logger.error('FCM batch send error type=%s', type(e).__name__)
         return 0
 
 
@@ -380,7 +380,7 @@ def send_notification_result(
     undeliverable one (no tokens, or every send rejected), which
     ``send_notification``'s ``None`` return cannot express.
     """
-    logger.info(f'send_notification to user {user_id}')
+    logger.info('send_notification_result attempted')
     body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)

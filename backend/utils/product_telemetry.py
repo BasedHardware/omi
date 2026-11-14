@@ -162,6 +162,7 @@ def server_event_properties(uid: str, properties: Mapping[str, Any]) -> dict[str
     experiment = properties.get('experiment_id')
     if isinstance(experiment, str) and experiment in {
         'EXP-001-day3-reengagement',
+        'EXP-005-first-value-recovery',
     }:
         safe['experiment_id'] = experiment
     context = _context.get()
