@@ -6,6 +6,25 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum OnDeviceTranscriptionUsedRoute {
+  allowance("allowance"),
+  custom("custom"),
+  offlineBatch("offline_batch");
+  const OnDeviceTranscriptionUsedRoute(this.wireName);
+  final String wireName;
+}
+
+final class OnDeviceTranscriptionUsed extends RegisteredEvent {
+  const OnDeviceTranscriptionUsed({required this.route, required this.audioMs, required this.segmentCount});
+  final OnDeviceTranscriptionUsedRoute route;
+  final int audioMs;
+  final int segmentCount;
+  @override
+  String get wireName => "On Device Transcription Used";
+  @override
+  Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),

@@ -111,7 +111,7 @@ async def settle(projector):
     """Wait until the process drain has nothing running or queued."""
     for _ in range(1000):
         drains = projector.drains
-        if drains is None or (not drains.tasks and not drains.queue):
+        if drains is None or (not drains.tasks and not drains.queue and not drains.backlog):
             return
         await asyncio.gather(*list(drains.tasks.values()), return_exceptions=True)
         await asyncio.sleep(0)
@@ -130,6 +130,7 @@ def owner_rows(log, owner):
 async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
     """One slot, one two-row step per turn: owners take FIFO turns, in chain order."""
     monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 1)
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)  # The single FIFO queue.
     monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
     # Each read jumps past any turn deadline, so every turn is exactly one step.
     ticks = itertools.count(0.0, 10_000.0)
@@ -149,6 +150,89 @@ async def test_heavy_owners_cannot_starve_a_light_owner(monkeypatch, claims):
     # second turn, after 8 heavy rows instead of all 24.
     assert log.persist_order.index(light[-1]) == 10
     assert claims.overlaps == 0 and not projector.draining
+
+
+@pytest.mark.asyncio
+async def test_backlog_owners_do_not_hold_a_new_owner_behind_them(monkeypatch, claims):
+    """2026-11-13: a few hundred backlog owners held every slot for two minutes a turn and
+    owners with a few fresh rows waited behind them. A new owner now goes before queued
+    backlog owners; every chain still projects whole and in order."""
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection, 'OWNER_DRAIN_STEP_ROWS', 2)
+    ticks = itertools.count(0.0, 10_000.0)
+    monkeypatch.setattr(projection_drain, 'time', Mock(monotonic=lambda: next(ticks)))
+    log = ResultLog()
+    heavy = {name: chain(log, name, name, 12) for name in ('h1', 'h2', 'h3')}
+    light = chain(log, 'light', 'l', 2)
+    projector = projector_for(log)
+    projector.drain_requests = dict.fromkeys(['h1', 'h2', 'h3', 'light'])
+    projector.start_drains()
+    await settle(projector)
+    for name, rows in heavy.items():
+        assert owner_rows(log, name) == rows
+    assert owner_rows(log, 'light') == light
+    # The light owner is done after one first turn of each heavy owner ahead of it in the
+    # queue (6 rows), before any heavy owner gets a second turn.
+    assert log.persist_order.index(light[-1]) == 7
+    assert claims.overlaps == 0 and not projector.draining
+
+
+def test_new_owners_launch_first_and_the_backlog_still_advances(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 2)
+    monkeypatch.setattr(projection_drain, 'BACKLOG_OWED_TURNS', 1)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.backlog.extend(['b1', 'b2'])
+    drains.queue.extend(['n1', 'n2', 'n3'])
+    assert [drains.next_owner(), drains.next_owner()] == ['n1', 'n2']
+    # One round of new owners with no backlog owner running: the backlog is owed a turn.
+    assert drains.next_owner() == 'b1' and drains.backlog_running == {'b1'}
+    assert drains.next_owner() == 'n3'
+    # No new owner waiting: backlog owners may use any free slot.
+    assert drains.next_owner() == 'b2'
+    assert drains.next_owner() is None
+
+
+def test_a_backlog_turn_yields_only_for_a_new_owner_without_a_slot(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'MAX_OWNER_DRAINS', 3)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    drains.tasks = dict.fromkeys(['b1', 'b2', 'b3'])
+    drains.backlog_running = {'b1', 'b2', 'b3'}
+    assert drains.should_yield('b1') is False  # Nobody is waiting.
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is True
+    assert drains.should_yield('b2') is False  # One waiting owner takes one slot.
+    drains.queue.append('n2')
+    assert drains.should_yield('b2') is True
+    drains.queue.append('n3')
+    assert drains.should_yield('b3') is False  # Never the last backlog turn running.
+    # A free slot serves the waiting owner without ending anyone's turn.
+    drains.yielding.clear()
+    drains.tasks.pop('b3')
+    drains.backlog_running.discard('b3')
+    drains.queue.clear()
+    drains.queue.append('n1')
+    assert drains.should_yield('b1') is False
+    # A new owner's own first turn is never ended early.
+    drains.queue.extend(['n2', 'n3'])
+    assert drains.should_yield('n9') is False
+
+
+def test_first_turn_zero_keeps_the_single_fifo_queue(monkeypatch):
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 0.0)
+    drains = projection_drain.OwnerDrains(projector_for(ResultLog()))
+    assert drains.classes() is False
+    monkeypatch.setattr(projection_drain, 'FIRST_TURN_SECONDS', 15.0)
+    assert drains.classes() is True
+
+
+def test_first_turn_seconds_setting(monkeypatch):
+    from config.batch_pipeline import owner_drain_first_turn_seconds
+
+    monkeypatch.delenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raising=False)
+    assert owner_drain_first_turn_seconds() == 15
+    for raw, want in (('0', 0), ('30', 30), ('999', 120), ('-5', 0), ('junk', 15)):
+        monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', raw)
+        assert owner_drain_first_turn_seconds() == want
 
 
 @pytest.mark.asyncio

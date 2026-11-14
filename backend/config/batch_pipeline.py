@@ -650,6 +650,20 @@ def provider_backlog_release_enabled() -> bool:
     return default_off('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED')
 
 
+def provider_fresh_capture_lag_seconds() -> int:
+    """Longest capture-to-admission lag at which a provider-route upload is still fresh (2026-11-13).
+
+    Default 86400. The GPU lane keeps ``FRESH_CAPTURE_LAG_SECONDS`` (600). While the provider
+    backlog is held, a provider row not stamped fresh does not commit, and it cannot commit in
+    plain order either because the owner's held rows sit in front of it. With the shared
+    10-minute bar, every provider upload that arrived late was therefore not delivered: 167 of
+    1,195 provider admissions in 36 minutes on 2026-11-13, 103 of them within a day of capture,
+    none committed. A device that was offline for a day and then syncs is normal use.
+    ``600`` restores the shared bar; values are clamped to 600-86400.
+    """
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS', '86400'), 86400, 86400, 600)
+
+
 def provider_merge_membership_enabled() -> bool:
     """Kill switch: provider-route units take part in the ordered merge the way GPU units do.
 
@@ -773,6 +787,31 @@ def projection_pump_sweep_pages() -> int:
 
 def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
+
+
+def projection_recent_discovery_seconds() -> int:
+    """Seconds of the newest commits that up to half of each assignment discovery page
+    reads from (2026-11-13); 0 is off.
+
+    Discovery pages the pending results oldest first, 100 rows a tick per process. With
+    154,000 pending rows a newly committed result waited about 15 minutes to be seen at
+    all, and GPU-route commits have no other wake. Each tick now also reads up to half a
+    page from a random point inside this window and offers each row there once per
+    process; the rest of the page keeps walking the whole log. 0 restores the single
+    cursor and removes the main cursor's 30-minute restart."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '120'), 120, 3600, 0)
+
+
+def owner_drain_first_turn_seconds() -> int:
+    """Seconds a newly requested owner's first projection turn may run (2026-11-13); 0 is off.
+
+    A productive turn that ends with rows left makes its owner a backlog owner. Backlog
+    owners keep the full two-minute turn but wait in their own queue, behind newly
+    requested owners, and end a turn at the next step when one of those is waiting for a
+    slot. Without this a few hundred backlog owners hold every slot for two minutes each
+    and an owner with a handful of fresh rows waits behind all of them. 0 restores the
+    single FIFO queue."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', '15'), 15, 120, 0)
 
 
 def projection_drain_claim_aware_enabled() -> bool:

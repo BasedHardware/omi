@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
@@ -264,7 +265,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         entry = names[name]
         flag = flags[name]
         assert entry['registry'] == 'config/feature-flags.yaml'
-        if name == 'PROJECTION_PRIVACY_REFUSAL_RESUME':
+        if name == 'BATCH_PIPELINE_FRESH_GUARD_ENABLED':
+            assert entry['owner'] == 'Goal: Pipeline'
+            assert entry['review_by'] == '2026-12-13'
+        elif name == 'PROJECTION_PRIVACY_REFUSAL_RESUME':
             assert entry['owner'] == 'omi-pipeline / refusal-resume'
             assert entry['review_by'] == '2026-12-06'
         elif name == 'PROJECTION_DRAIN_PRIVACY_BACKOFF':
