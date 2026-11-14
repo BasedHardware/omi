@@ -926,4 +926,3 @@ class Pump:
                     return
                 if self.on_committed:
                     await self._run_blocking('projection', sync_executor, self.on_committed, entry)
-            await self._run_blocking('ordered_merge', db_executor, self.merge.drain_budget_spent, owner_id, time.time())

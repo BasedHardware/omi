@@ -126,8 +126,6 @@ class Serving:
         for _ in range(100):
             if self.merge.commit_next(owner_id, time.time(), release=release) is None:
                 break
-        else:
-            self.merge.drain_budget_spent(owner_id, time.time())
 
     @with_batch_privacy_attempt
     async def drain_settled_async(self, owner_id: str) -> None:

@@ -664,23 +664,6 @@ def provider_fresh_capture_lag_seconds() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS', '86400'), 86400, 86400, 600)
 
 
-def fresh_reoffer_marker_enabled() -> bool:
-    """Kill switch: the merge marks an owner whose drain left ready fresh rows waiting.
-
-    Such an owner has no other wake: its head is unready or held backlog, the merge writes no
-    depth-hold marker for a held-backlog head, and maintenance's ready page (the 100 oldest
-    ``result_ready`` rows) is full of held backlog rows. 2026-11-13: 23 owners with about 3,400
-    ready fresh rows committed nothing once their own units stopped settling. On, the merge
-    writes the existing ``merge_holds`` marker (with ``reoffer: fresh``) and maintenance re-offers
-    the owner until a drain finds no ready fresh row, or until the owner has gone the head wait plus
-    30 minutes without a commit. ``false`` stops new marker writes for this
-    reason; re-offer markers already written are cleared on their owner's next maintenance visit.
-    """
-    from config.policy import kill_switch
-
-    return kill_switch('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED', log=False)
-
-
 def provider_merge_membership_enabled() -> bool:
     """Kill switch: provider-route units take part in the ordered merge the way GPU units do.
 
