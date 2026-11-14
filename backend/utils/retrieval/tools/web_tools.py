@@ -340,10 +340,10 @@ async def fetch_url_tool(url: str) -> str:
     try:
         status, content_type, body = await _fetch_page(clean_url, headers)
     except ValueError as e:
-        logger.warning(f"fetch_url_tool blocked - {sanitize(str(e))}")
+        logger.warning(f"fetch_url_tool blocked - {type(e).__name__}")
         return f'Error: {sanitize(str(e))}'
     except Exception as e:
-        logger.error(f"fetch_url_tool - error fetching {sanitize(clean_url)}: {sanitize(str(e))}", exc_info=True)
+        logger.error(f"fetch_url_tool - error fetching {sanitize(clean_url)}: {type(e).__name__}", exc_info=True)
         return 'Error: Failed to fetch the URL. Please verify the URL or try again later.'
 
     if status != 200:

@@ -157,10 +157,28 @@ async def test_successful_fetch_url():
 
 @pytest.mark.asyncio
 async def test_ssrf_blocked_exception():
-    with patch.object(wt, "_fetch_page", new_callable=AsyncMock) as mock_fetch:
+    with (
+        patch.object(wt, "_fetch_page", new_callable=AsyncMock) as mock_fetch,
+        patch.object(wt.logger, "warning") as mock_warn,
+    ):
         mock_fetch.side_effect = ValueError("URL resolves to a private or reserved address")
         res = await wt.fetch_url_tool.func("http://169.254.169.254/latest/meta-data/")
         assert "Error: URL resolves to a private or reserved address" in res
+        mock_warn.assert_called_once_with("fetch_url_tool blocked - ValueError")
+
+
+@pytest.mark.asyncio
+async def test_generic_fetch_exception_logging():
+    with (
+        patch.object(wt, "_fetch_page", new_callable=AsyncMock) as mock_fetch,
+        patch.object(wt.logger, "error") as mock_err,
+    ):
+        mock_fetch.side_effect = RuntimeError("sensitive raw connection failed")
+        res = await wt.fetch_url_tool.func("https://example.com/test")
+        assert res == "Error: Failed to fetch the URL. Please verify the URL or try again later."
+        mock_err.assert_called_once()
+        assert "sensitive raw connection failed" not in str(mock_err.call_args)
+        assert "RuntimeError" in str(mock_err.call_args)
 
 
 @pytest.mark.asyncio
@@ -197,7 +215,9 @@ def test_html_document_without_head_tag():
 def test_html_unclosed_head_resets_on_body():
     # A <head> missing its closing </head> tag should have its skip depth reset
     # upon encountering <body>, ensuring body text is not silently dropped.
-    html_unclosed_head = "<html><head><title>Page Title</title><body><h1>Visible Main Content</h1><p>Body paragraph.</p></body></html>"
+    html_unclosed_head = (
+        "<html><head><title>Page Title</title><body><h1>Visible Main Content</h1><p>Body paragraph.</p></body></html>"
+    )
     extracted = wt._html_to_text(html_unclosed_head)
     assert "Page Title" in extracted
     assert "Visible Main Content" in extracted
