@@ -39,6 +39,21 @@
       "basis": "planning-bound",
       "source": "Read path in database/conversation_batch_purge_jobs.py + conversation_tombstones.accept_deletion: accept txn 3, due scans ~3, claim/begin/finish 3, tombstone 1, ~2 busy retries x 4; reconciler empty polls 1,440/day. Volume: prod Cloud Run request logs 2026-11-12 17:30 UTC onward, 1,021 phone cascade deletes in ~18 h (~1,400/day) as an all-accepted upper bound.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "collection": "batch_pipeline_prod_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
+    },
+
+    {
+      "collection": "batch_pipeline_dev_backlog_release", "owner": "SCA-2015",
+      "unit": "held-backlog owner attempt",
+      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
+      "reviewed": "2026-11-14"
     }
   ],
   "dynamic": [

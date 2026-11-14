@@ -177,6 +177,8 @@ def backlog_flood_fresh_latency(
         flags={
             'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED': 'true',
             'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': str(release == 'unmetered').lower(),
+            # The unmetered arm characterizes rollback to the legacy release path.
+            'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': str(release != 'unmetered').lower(),
             'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': '60',
             'BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH': '0' if release == 'unmetered' else '16',
             'BATCH_PIPELINE_MAX_OWNER_DRAINS': '8',

@@ -632,6 +632,11 @@ def recovered_merge_release_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
 
 
+def provider_backlog_release_closed() -> bool:
+    """Live close-only override for the metered gate; unset never opens a gate."""
+    return os.getenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', '').strip().lower() == 'false'
+
+
 def provider_backlog_release_enabled() -> bool:
     """Opt-in: the ordered merge may commit provider-route catch-up rows.
 
