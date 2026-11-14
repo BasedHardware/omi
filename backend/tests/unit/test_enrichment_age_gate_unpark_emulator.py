@@ -1,6 +1,7 @@
 """Real Firestore newest-first paging and atomic unpark; isolated loopback emulator only."""
 
 import os
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from google.auth.credentials import AnonymousCredentials
@@ -31,7 +32,8 @@ def source(monkeypatch):
     for snapshot in collection.where(filter=firestore.FieldFilter('age_gate_parked', '==', True)).stream():
         snapshot.reference.delete()
     monkeypatch.setattr(unpark, 'assert_batch_write_allowed', lambda *args, **kwargs: 1)
-    monkeypatch.setattr(unpark.time, 'time', lambda: NOW)
+    # Keep gRPC's real wall clock: freezing the shared time module expires RPC deadlines.
+    monkeypatch.setattr(unpark, 'time', SimpleNamespace(time=lambda: NOW, sleep=lambda _seconds: None))
     ids = []
     conversations = []
     for name, parked_at in (('older', 100), ('newest', 300), ('middle', 200)):
