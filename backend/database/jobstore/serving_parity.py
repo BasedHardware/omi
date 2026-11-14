@@ -17,6 +17,7 @@ from prometheus_client import Counter
 import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from database import rpc_deadline
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from utils.observability.reasons import ReasonFamily, reason_label
 
 STORE_QUERIES = frozenset(
@@ -92,6 +93,12 @@ class _ParityPostgresStore(PostgresStore):
                 yield conn
 
     read_connection = _read_conn
+
+    def projection_finish_backfill_complete(self) -> bool:
+        # The serving read goes through run(): its own pool connection and a row lock on the marker.
+        # An observation takes neither; it reads the marker on the bounded connection.
+        with self.read_connection() as conn:
+            return backfill_marker_complete(self.read_doc(conn, 'control', BACKFILL_KEY))
 
 
 def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bool, budget_s: float):

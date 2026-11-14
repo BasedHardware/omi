@@ -826,6 +826,42 @@ def test_partial_purge_configuration_raises_instead_of_claiming_erasure(monkeypa
         dual_store.purge_owner('batch_pipeline_dev', 'synthetic')
 
 
+def test_observing_the_finish_marker_uses_the_bounded_connection_and_takes_no_lock(monkeypatch):
+    from contextlib import nullcontext
+
+    from database.jobstore import serving_parity
+    from database.jobstore.postgres_store import PostgresStore
+
+    statements = []
+
+    class Conn:
+        def execute(self, query, params=None):
+            statements.append(str(query))
+            return self
+
+        def fetchone(self):
+            return ({'version': 1, 'complete': True},)
+
+        def transaction(self):
+            return nullcontext()
+
+    class Pool:
+        def connection(self, timeout=None, existing_only=False):
+            assert existing_only is True  # an observation never opens a connection
+            return nullcontext(Conn())
+
+    store = PostgresStore('batch_pipeline_test_marker', pool=Pool(), customer_client=None)
+    monkeypatch.setattr(PostgresStore, 'run', lambda *a, **k: pytest.fail('observation opened a serving transaction'))
+    assert (
+        serving_parity.query_value(
+            store, 'projection_finish_backfill_complete', (), {}, transaction=False, budget_s=1.0
+        )
+        is True
+    )
+    assert any('control' in s or 'docs' in s for s in statements)
+    assert not any('FOR UPDATE' in s for s in statements)
+
+
 def test_serving_parity_reports_changing_pairs_and_refuses_mutations():
     from database.jobstore.serving_parity import compare_serving_query
 
