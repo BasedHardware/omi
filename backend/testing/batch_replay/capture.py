@@ -36,6 +36,7 @@ JOB_FIELDS = (
     'unit_kind',
     'conversation_id',
     'fresh_capture',
+    'late_upload',
     'state',
     'attempt',
     'recovery_state',
@@ -226,7 +227,8 @@ def sanitize(job, entry, owner, target, digest):
         'references': None,
         'lane': (
             'backfill'
-            if job.get('fresh_capture') is False
+            # A late provider upload stamped fresh keeps backfill conflict handling.
+            if job.get('fresh_capture') is False or job.get('late_upload') is True
             else 'fresh' if job.get('fresh_capture') is True else 'unknown'
         ),
         'record_origin': binding.get('record_origin') is True,

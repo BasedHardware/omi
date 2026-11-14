@@ -650,6 +650,20 @@ def provider_backlog_release_enabled() -> bool:
     return default_off('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED')
 
 
+def provider_fresh_capture_lag_seconds() -> int:
+    """Longest capture-to-admission lag at which a provider-route upload is still fresh (2026-11-13).
+
+    Default 86400. The GPU lane keeps ``FRESH_CAPTURE_LAG_SECONDS`` (600). While the provider
+    backlog is held, a provider row not stamped fresh does not commit, and it cannot commit in
+    plain order either because the owner's held rows sit in front of it. With the shared
+    10-minute bar, every provider upload that arrived late was therefore not delivered: 167 of
+    1,195 provider admissions in 36 minutes on 2026-11-13, 103 of them within a day of capture,
+    none committed. A device that was offline for a day and then syncs is normal use.
+    ``600`` restores the shared bar; values are clamped to 600-86400.
+    """
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS', '86400'), 86400, 86400, 600)
+
+
 def provider_merge_membership_enabled() -> bool:
     """Kill switch: provider-route units take part in the ordered merge the way GPU units do.
 

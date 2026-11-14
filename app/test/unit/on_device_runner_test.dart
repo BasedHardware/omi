@@ -23,6 +23,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import '../support/on_device_fakes.dart';
 import '../support/refactor_flag_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -110,10 +111,12 @@ void main() {
     controller.debugActivate(settings: const OnDeviceSettings(enabled: true, keepEverythingOnDevice: true));
     var calls = 0;
     final rows = <ServerConversation>[];
+    final usage = <RegisteredEvent>[];
     final runner = OnDeviceRunner(
         sync: sync,
         controller: controller,
         publish: rows.add,
+        emitUsage: usage.add,
         transcribeChunk: (bytes, language) async {
           calls++;
           final duration = (bytes.length - 44) / 32000;
@@ -131,9 +134,12 @@ void main() {
     expect(persisted, isNotEmpty);
     expect(rows.single.transcriptSegments.map((s) => s.start), [0, 30, 60]);
     expect(OnDeviceProvenance.fromConversation(rows.single)?.summary, OnDeviceSummaryOrigin.none);
+    expect(usage, hasLength(1));
+    expect(usage.single.properties, {'route': 'offline_batch', 'audio_ms': 61000, 'segment_count': 3});
     await runner.run(transcribeNow: true);
     expect(calls, 3);
     expect(rows, hasLength(1));
+    expect(usage, hasLength(1));
     runner.dispose();
     controller.dispose();
   });
