@@ -161,6 +161,18 @@ remain; eagerly initialized live-STT fallback components are dropped. Backend
 keeps its broad 30s configuration with the CPU allocation above; desktop uses
 its own CPU profile above, while listen and jobs retain their existing profiles.
 
+Since SCA-2067 (2026-11-13) the fleet also keeps the enrichment LLM cost/usage
+families the SCA-1960 guardrail regression reads: `omi_conversation_llm_calls_total`
+(attributable calls by bounded feature/outcome), `omi_shaped_agent_input_tokens_total`
+(shaped input tokens by feature and cache kind), the `omi_notes_agent_*` counters
+and histograms (runs, decisions, tokens, repairs, estimated cost, latency) and
+`omi_episode_moment_{cost_usd_total,tokens_total,updates_total}`. SCA-2057 proved
+all four were dropped by this keep rule even though `backend-integration` emits
+them. The names are explicit, not a prefix catch-all; the worst-case bound is
+~400 series per instance against the 15000-sample ceiling. The cost families are
+estimates — the gateway ledger is authoritative — and an empty vector means the
+family was not scraped, never that spend was zero.
+
 The fleet and David gates currently read projection logs and durable job state;
 the fleet gate also reads native `run.googleapis.com/request_count`. These paths
 are unaffected by metric relabeling. Consumer changes must update the allowlist

@@ -491,6 +491,7 @@ _LOOPS = (
     'reconcile_stale_processing_conversations',
     'reconcile_stale_in_progress_conversations',
     'reconcile_abandoned_byok_finalization_jobs',
+    'reconcile_conversation_batch_purges',
     'publish_all_queue_oldest_ready_ages',
 )
 

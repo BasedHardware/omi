@@ -25,6 +25,24 @@ from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 
 PROJECTIONS = Counter('omi_pusher_audio_file_projection_total', 'Pusher playback projection refreshes', ['mode'])
+# Why a refresh paid for a full prefix discovery. Closed values; one increment
+# per full discovery, so the sum equals the mode="full" count above.
+FULL_CAUSES = (
+    'disabled',
+    'forced',
+    'no_paths',
+    'no_inventory',
+    'listing_expired',
+    'point_read_failed',
+    'order_fallback',
+    'projection_error',
+    'cas_conflict',
+)
+FULL_DISCOVERIES = Counter(
+    'omi_pusher_audio_file_full_discovery_total', 'Pusher playback full discoveries by cause', ['cause']
+)
+for _cause in FULL_CAUSES:
+    FULL_DISCOVERIES.labels(cause=_cause)
 logger = logging.getLogger(__name__)
 CLOSE_RETRY_BUDGET = 2
 REFRESH_SECONDS = 300
@@ -116,6 +134,18 @@ class PusherAudioProjection:
         chunks = None
         expected = None
         listed_at = now
+        if not enabled():
+            cause = 'disabled'
+        elif force:
+            cause = 'forced'
+        elif not paths:
+            cause = 'no_paths'
+        elif state is None:
+            cause = 'no_inventory'
+        elif now - state.listed_at >= REFRESH_SECONDS:
+            cause = 'listing_expired'
+        else:
+            cause = 'order_fallback'
         if incremental and state is not None and paths and not force and now - state.listed_at < REFRESH_SECONDS:
             try:
                 new_chunks = get_uploaded_audio_chunks(self.uid, conversation_id, paths)
@@ -127,6 +157,7 @@ class PusherAudioProjection:
                     listed_at = state.listed_at
             except Exception:
                 # Point-read failures must rebuild, never silently reuse stale files.
+                cause = 'point_read_failed'
                 record_fallback(
                     component='pusher',
                     from_mode='incremental_audio_files',
@@ -152,6 +183,7 @@ class PusherAudioProjection:
                     files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id)
                 listed_at = time.monotonic()
                 mode = 'full'
+                FULL_DISCOVERIES.labels(cause=cause).inc()
             else:
                 # Raw fragments can shrink or split as encoded coverage grows;
                 # re-derive them, never append yesterday's projected fragments.
@@ -162,6 +194,7 @@ class PusherAudioProjection:
                     # Rediscover encoded siblings before matching main's
                     # raw-index failure behavior.
                     chunks = None
+                    cause = 'projection_error'
                     continue
                 files = conversations_db.create_audio_files_from_chunks(self.uid, conversation_id, listed_chunks=listed)
                 mode = 'incremental'
@@ -184,6 +217,7 @@ class PusherAudioProjection:
                     )
             except conversations_db.AudioFilesChanged:
                 chunks = None
+                cause = 'cas_conflict'
                 continue
             if (
                 applied

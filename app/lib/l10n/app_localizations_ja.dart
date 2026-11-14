@@ -15170,6 +15170,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paymentDeclinedTitle => 'カードが拒否されました';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'カードを更新するか、$planを月額$priceで再開できます';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$planを再開するにはカードを更新してください';
   }
@@ -15194,4 +15199,31 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '月払いに切り替える';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan、月額$price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '未払いの年額$yearlyの請求に代わります。毎月更新されます。いつでも解約できます。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'お支払いが拒否されました。プランは変更されていません。';
+
+  @override
+  String get monthlySwitchUnavailable => '現在は切り替えできません。カードを更新してください。';
+
+  @override
+  String get monthlySwitchDoneTitle => '月払いに切り替わりました';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '本日$priceをお支払いいただきました。毎月更新されます。';
+  }
 }

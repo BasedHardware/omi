@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
+from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES
 from database.jobstore.connection import Pool, sql
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -86,6 +87,12 @@ class _Recording:
     def first_pending(self, owner_key: str) -> dict | None:
         return self._tx.first_pending(owner_key)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_pending(owner_key)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._tx.fresh_first_ready_pending(owner_key)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._tx.ready_predecessor(owner_key, priority, segment_id)
 
@@ -97,6 +104,9 @@ class _Recording:
 
 
 class PgSimStore(SimStore):
+    def projection_finish_backfill_complete(self) -> bool:
+        return self.pg.projection_finish_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
@@ -163,13 +173,23 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        return self.pg.ready_owners(after_owner_key, limit, ceiling_owner_key=ceiling_owner_key, descending=descending)
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return self.pg.held_merge_owners(limit, after=after)
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return self.pg.projection_page(limit, after=after, states=states)
+        return self.pg.projection_page(limit, after=after, states=states, due_before=due_before)
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

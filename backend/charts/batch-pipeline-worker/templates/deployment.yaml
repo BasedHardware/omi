@@ -114,6 +114,9 @@ spec:
             - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
             - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
             - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
+            {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
+            - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
+            {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
@@ -124,6 +127,8 @@ spec:
             - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
             - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
             - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED, value: {{ .Values.worker.unlimitedV2BackfillHoursCapEnabled | default false | quote }}}
+            - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS, value: {{ .Values.worker.unlimitedV2BackfillHoursCapHours | default "24" | quote }}}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:

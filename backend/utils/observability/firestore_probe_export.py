@@ -9,7 +9,12 @@ import tempfile
 
 from prometheus_client import CollectorRegistry, Gauge, start_http_server
 
-from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER, bound_caller
+from database.firestore_document_probe import (
+    FIRESTORE_BILLED_READS,
+    FIRESTORE_BILLED_READS_BY_CALLER,
+    FIRESTORE_CALLER_LABEL_OVERFLOW,
+    bound_caller,
+)
 
 from database import record_token_lease_metrics as lease_metrics
 from config.record_seal_rules import token_lease_mode
@@ -21,6 +26,10 @@ COLLECTORS = (
     lease_metrics.EXPIRED_WOULD,
     lease_metrics.EXPIRED_SEALED,
     lease_metrics.LATE_APPEND,
+    # Custom-registry processes (batch pipeline worker, record-seal worker) serve
+    # this tuple, not the default REGISTRY. Without the overflow counter the
+    # caller-overflow alert's precise arm is blind to them.
+    FIRESTORE_CALLER_LABEL_OVERFLOW,
 )
 # Sample names and label keys of the served counters, pinned from their
 # declarations in database/firestore_document_probe.py. prometheus_client
@@ -39,6 +48,7 @@ COUNTER_SAMPLES = {
         FIRESTORE_BILLED_READS_BY_CALLER,
         ('collection', 'kind', 'caller'),
     ),
+    'omi_firestore_caller_label_overflow_total': (FIRESTORE_CALLER_LABEL_OVERFLOW, ()),
 }
 CHILD_FD_ENV = 'OMI_FIRESTORE_PROBE_TERMINAL_FD'
 MAX_TERMINAL_BYTES = 4 * 1024 * 1024

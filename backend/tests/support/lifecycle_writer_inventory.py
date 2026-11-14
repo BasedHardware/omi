@@ -1,6 +1,66 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/batch_pipeline_allowance_hold.py': [
+        (
+            'park',
+            'state',
+            "STATE; literal aliases=[('STATE', ('allowance_held',))]",
+            ('allowance_held_at', 'merge_pending', 'state'),
+        ),
+        ('restore_retry', 'state', "'retry'", ('available_at', 'lease_until', 'merge_pending', 'state', 'token')),
+    ],
+    # Shadow allowance operation lifecycle, separate from audio custody.
+    'database/free_allowance_leases.py': [
+        ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),
+        ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
+    ],
+    'database/batch_pipeline_coalescing_completion.py': [
+        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+    ],
+    'utils/batch_pipeline/upload_coalescing.py': [
+        (
+            'member_status',
+            'status',
+            "'completed'",
+            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+        ),
+        (
+            'queued',
+            'status',
+            "'queued'",
+            (
+                'errors',
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
+    'database/batch_pipeline_coalescing.py': [
+        ('checkpoint_completion.commit', 'status', "'completed'", ('expires_at', 'result', 'status')),
+        ('claim.commit', 'state', "'sealed'", ('lease_until', 'state', 'token')),
+        (
+            'enqueue.commit',
+            'state',
+            "'holding'",
+            ('bytes', 'files', 'first_accept_at', 'id', 'key', 'members', 'release_by', 'scan_at', 'seconds', 'state'),
+        ),
+        (
+            'enqueue.commit',
+            'status',
+            "'processing'",
+            ('batch_pipeline', 'dispatch_protocol', 'job_id', 'owner_id', 'status'),
+        ),
+        ('finish.commit', 'state', "'done'", ('lease_until', 'state')),
+    ],
     'utils/retrieval/tools/edit_tools.py': [
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
         ('update_conversation', 'summary_due_at', 'None', ('summary_due_at',)),
@@ -231,15 +291,13 @@ FIELD_SITES = {
         (
             'ProjectionSession.persist',
             'projection_state',
-            "'quarantine_held' if held and all((part['state'] in "
-            "{'ready', 'quarantined'} for part in parts.values())) else "
-            "'persisted' if held else summary['state']",
+            "'quarantine_held' if quarantined else receipt['state']",
             ('projection', 'projection_state'),
         ),
         (
             'ProjectionSession.persist',
             'projection_state',
-            "'quarantine_held' if quarantined else receipt['state']",
+            "summary_state; literal aliases=[('summary_state', ('persisted', 'quarantine_held'))]",
             ('projection', 'projection_state'),
         ),
         (
@@ -2666,6 +2724,7 @@ FIELD_SITES = {
             (
                 'committed_at',
                 'conversation_id',
+                'fresh_capture',
                 'late_capture',
                 'log_sequence',
                 'owner_id',
@@ -2678,6 +2737,14 @@ FIELD_SITES = {
             ),
         ),
         ('OrderedMerge.commit_next.commit', 'state', "'committed'", ('merge_pending', 'state')),
+        # Transactional fresh gate: the skipped-row note copies the unready first row's state
+        # for the commit record; it is read, never written to a job.
+        (
+            'OrderedMerge.commit_next.commit',
+            'state',
+            "first.get('state') if first else None",
+            ('segment_ids', 'state', 'waited'),
+        ),
         ('_fresh_pick', 'state', "rows[0].get('state')", ('segment_ids', 'state', 'waited')),
     ],
     'utils/batch_pipeline/provider_stt.py': [
@@ -2798,6 +2865,7 @@ FIELD_SITES = {
             "'ready'",
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
         ),
+        ('Scheduler.release_allowance_in_transaction', 'state', "'ready'", ('compute_decision', 'state')),
         (
             'Scheduler.requeue_quarantined_in_transaction',
             'state',

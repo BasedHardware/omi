@@ -5,11 +5,13 @@ import argparse
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-# Full batch-job lifecycle inventory, including provider states; pinned by the complement test.
-KNOWN_STATES = (
-    'record_pending ready leased retry result_ready vendor_held committed dead quarantined '
-    'privacy_blocked partial_retired provider_pending provider_running provider_superseded'
-).split()
+from config.batch_census import JOB_STATES
+
+# Full batch-job lifecycle inventory, including provider states; generated from
+# the census registry and pinned by the complement test. This complement counts
+# only jobs with merge_pending == True, so record_recovery_waiting (written with
+# merge_pending: False) is measured by the registry's own census leg, not here.
+KNOWN_STATES = list(JOB_STATES)
 
 
 @firestore.transactional

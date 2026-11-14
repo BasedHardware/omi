@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
@@ -171,6 +172,7 @@ from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
 from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
+from utils import backfill_hours_cap
 from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import (
@@ -1508,6 +1510,14 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     def cap_enforced() -> bool:
         return (recovery_admission_enabled if cap_recovery else cap_enabled)(uid, cap_dispatch_lane)
 
+    def backfill_cap_active() -> bool:
+        # The default-off unlimited_v2 backfill day cap is independent of the
+        # legacy/offline dispatch scope: it only ever refuses historical work.
+        return sync_lane == SyncLane.BACKFILL.value and backfill_hours_cap.cap_enabled()
+
+    def admission_enforced() -> bool:
+        return cap_enforced() or backfill_cap_active()
+
     if cap_recovery and not cap_enforced():
         return False
     cap_context = {
@@ -1550,8 +1560,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         if ambiguous_binding_pending(uid, lineage_binding):
             phase = 'persistence'
             raise SyncAssignmentConflict('sync lineage ambiguous', subtype=Conflict.LINEAGE_OWNERSHIP_AMBIGUOUS)
-        if cap_enforced():
-            if not sync_allowed(uid, lane=cap_dispatch_lane):
+        if admission_enforced():
+            if not sync_allowed(uid, lane=cap_dispatch_lane, backfill=backfill_cap_active()):
                 return hold_for_cap()
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
@@ -1585,8 +1595,14 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     language,
                     path,
                     selector=get_prerecorded_service,
-                    before_probe=lambda: not cap_enforced()
-                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
+                    before_probe=lambda: not admission_enforced()
+                    or sync_allowed(
+                        uid,
+                        provider='modulate',
+                        lane=cap_dispatch_lane,
+                        path=DispatchPath.LANGUAGE_PROBE,
+                        backfill=backfill_cap_active(),
+                    ),
                     cohort_key=uid,
                 ),
             )
@@ -1637,12 +1653,13 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             if (
                 cap_recovery
                 and not cap_enforced()
-                or cap_enforced()
+                or admission_enforced()
                 and not sync_allowed(
                     uid,
                     provider=provider,
                     lane=cap_dispatch_lane,
                     path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
+                    backfill=backfill_cap_active(),
                 )
             ):
                 return hold_for_cap()
@@ -1663,8 +1680,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
-            if cap_enforced():
-                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
+            if admission_enforced():
+                allowance = funded_allowance(uid, lane=cap_dispatch_lane, backfill=backfill_cap_active())
                 record_cap_audio(
                     'sync', 'accepted', provider, get_wav_duration(path), allowance.reason == 'plan_allowance_exhausted'
                 )
@@ -2563,6 +2580,7 @@ async def _resolve_safety_wal_target(
 @sync_attempt
 @sync_snapshot_resolve_job
 @with_batch_privacy_attempt
+@allowance_operation('sync', live=False)
 async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -3031,6 +3049,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             total_speech_seconds = await run_blocking(
                 sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
             )
+            allowance_scope = current_allowance_operation.get()
+            if allowance_scope is not None:
+                allowance_scope.seconds = int(total_speech_seconds)
             total_speech_ms = int(total_speech_seconds * 1000)
             total_segments = len(segmented_paths)
 

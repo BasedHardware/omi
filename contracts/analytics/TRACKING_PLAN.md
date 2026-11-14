@@ -4,6 +4,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
+| onDeviceTranscriptionUsed | On Device Transcription Used | route, audio_ms, segment_count | active | on-device-transcription-usage |
 | savedPendantReconnectObserved | Saved Pendant Reconnect | trigger, attempt, result, disconnected_ms | active | saved-pendant-reconnect |
 | onboardingCompleted | Onboarding Completed | none | active | mobile-instrumentation-presence |
 | recordingProducedNoConversation | Recording Produced No Conversation | source, duration_s, transcript_observed, reason | active | onboarding-activation-funnel |
@@ -216,6 +217,10 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionPaymentIssueShown | Subscription Payment Issue Shown | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueUpdateTapped | Subscription Payment Issue Update Tapped | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssuePortalOpened | Subscription Payment Issue Portal Opened | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyShown | Subscription Payment Issue Monthly Shown | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyTapped | Subscription Payment Issue Monthly Tapped | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlySwitched | Subscription Payment Issue Monthly Switched | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyFailed | Subscription Payment Issue Monthly Failed | reason | active | subscription-payment-recovery |
 
 ## App Review Opportunity decisions
 

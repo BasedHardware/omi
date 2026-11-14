@@ -121,6 +121,12 @@ struct OmiBleReconnectDiagnostics {
         return (timestamp, max(0, atMs - timestamp))
     }
 
+    /// Start timestamp of one disconnect-history row, used to match a reconnect
+    /// interval back to the event that started it.
+    static func eventTimestamp(_ entry: [String: Any]) -> Int64 {
+        entry["timestamp"] as? Int64 ?? 0
+    }
+
     /// Age of one disconnect-history row. A resolved lost-audio row stays until
     /// the later of its start and `lostAudioResolvedAt` leaves the window, so
     /// Dart can import a recovery whose outage began earlier. Unresolved rows
@@ -146,12 +152,17 @@ struct OmiBleReconnectDiagnostics {
 
     mutating func backfilledHistory<T>(
         _ history: [T], nowMs: Int64, hadConnection: Bool,
-        timestampOf: (T) -> Int64, withDuration: (T, Int64) -> T
+        timestampOf: (T) -> Int64, resolvedAtOf: (T) -> Int64?,
+        onLookupMiss: (Int64) -> Void, withDuration: (T, Int64) -> T
     ) -> [T]? {
-        guard let recovery = recovered(atMs: nowMs, hadConnection: hadConnection),
-              let index = history.lastIndex(where: { timestampOf($0) == recovery.eventTimestampMs }) else { return nil }
+        guard let recovery = recovered(atMs: nowMs, hadConnection: hadConnection) else { return nil }
+        guard let index = history.lastIndex(where: { timestampOf($0) == recovery.eventTimestampMs }) else {
+            onLookupMiss(recovery.eventTimestampMs)
+            return nil
+        }
         var result = history
-        result[index] = withDuration(history[index], recovery.durationMs)
+        let duration = resolvedAtOf(history[index]).map { max(0, $0 - recovery.eventTimestampMs) } ?? recovery.durationMs
+        result[index] = withDuration(history[index], duration)
         return result
     }
 }

@@ -390,7 +390,13 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
         if not created and not _exists(uid, identity):
             record_capture('ack_without_authority')
     return _finish(
-        identity, seconds, funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason, receipt, created
+        identity,
+        seconds,
+        funded_allowance(
+            uid, lane=metadata.get('origin', 'sync'), backfill=metadata.get('sync_lane') == 'backfill'
+        ).reason,
+        receipt,
+        created,
     )
 
 

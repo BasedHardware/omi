@@ -21,6 +21,7 @@ from typing import Any, TypeGuard
 from google.cloud import firestore
 
 from database.batch_pipeline_projection_protocol import normalized_binding
+from database.batch_pipeline_projection_finish import projection_finish_state_fields
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
@@ -288,7 +289,11 @@ class ProjectionReleaseStore:
                         cohort, invalid_cohort = projection_ghost_settle_cohort()
                         transaction.update(
                             self.store.ref('results', segment_id),
-                            {'projection_state': 'ready', 'ghost_settled_cohort': cohort},
+                            {
+                                'projection_state': 'ready',
+                                'ghost_settled_cohort': cohort,
+                                **projection_finish_state_fields('ready', now),
+                            },
                         )
                         return ('ghost_settled', bucket, invalid_cohort)
                     return (classification, bucket)
@@ -338,6 +343,7 @@ class ProjectionReleaseStore:
                 return False
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
+                **projection_finish_state_fields('pending', now),
                 'projection_redriven_at': now,
                 'projection_release_attempts': attempts + 1,
                 'projection': {},

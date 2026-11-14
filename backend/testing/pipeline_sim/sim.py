@@ -194,6 +194,7 @@ class SimConfig:
     stage_roles: dict[str, str] = field(default_factory=dict)
     trace_policy: bool = False
     policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
+    backlog_flood: dict[str, Any] | None = None  # backlog_flood.py scenario inputs; otherwise None.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
     # C8 admission route (intake.accept_upload): stored language, BYOK, legacy_sync mode.
     language: str = 'en'
@@ -606,6 +607,8 @@ class Simulation:
 
     def _cancel_fenced_recovery(self, store, segment_id):
         """Model of cancel_fenced_recovery(): revocation-only write after the fence rejects."""
+        if hasattr(store, 'cancel_fenced_recovery'):
+            return store.cancel_fenced_recovery(segment_id)
         job = store.rows.get(('jobs', segment_id), {})
         if not job or not job.get('recovery'):
             return False
@@ -723,8 +726,8 @@ class Simulation:
             )
         return items
 
-    def _accept_batch(self, record: UploadRecord) -> None:
-        """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
+    def _accept_batch(self, record: UploadRecord, *, provider: bool | None = None, deliver: bool = True) -> None:
+        """Mirrors intake around the REAL admit(); backlog fixtures may seed the post-STT state."""
         upload = record.spec
         record.policy = self.config.policy or resolve_batch_policy(upload.owner, flags=self._policy_flags('admission'))
         if not record.policy.batch_enabled:
@@ -733,7 +736,8 @@ class Simulation:
         # C8, as intake: a language Parakeet cannot serve takes the provider stage once legacy is
         # draining or dark; the admission policy records the route actually taken.
         route = resolve_route(self.config.language, byok=self.config.byok)
-        provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
+        if provider is None:
+            provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
         stamp = {
             'stt_route': 'provider' if provider else 'parakeet',
             'provider_reason': route.provider_reason if provider else ('byok' if self.config.byok else 'none'),
@@ -782,10 +786,11 @@ class Simulation:
             self.counters['duplicate_uploads_deduplicated'] += 1
             return
         loop = asyncio.get_running_loop()
-        for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
-            loop.call_later(
-                self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
-            )
+        if deliver:
+            for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
+                loop.call_later(
+                    self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
+                )
         record.status = 'admitted'
         record.accepted_at = self.clock.now
         record.job_id = binding.job_id
