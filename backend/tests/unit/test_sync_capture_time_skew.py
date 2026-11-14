@@ -1507,7 +1507,7 @@ def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monk
     response = _post_sync(client, name)
 
     assert response.status_code == 202, response.text
-    assert staged == [name]
+    assert staged == [name.replace('_u3.bin', '.bin').replace('_fs160_', '_fs160_u3_')]
     assert _capture_time_counter('rejected_malformed') == before
 
 
