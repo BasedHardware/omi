@@ -137,6 +137,94 @@
       ]
     },
     {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner_key",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner_key",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "batch_pipeline_prod_results",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1271,6 +1359,40 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fresh_capture",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "owner_id",
           "order": "ASCENDING"
         },
@@ -1496,6 +1618,40 @@
         },
         {
           "fieldPath": "fresh_capture",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "capture_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "segment_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "owner_key",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "merge_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fresh_capture",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "state",
           "order": "ASCENDING"
         },
         {

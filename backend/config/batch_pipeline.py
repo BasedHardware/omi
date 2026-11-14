@@ -573,13 +573,11 @@ PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
 def projection_finish_backoff_enabled() -> bool:
     """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
 
-    Dark read lever: with this off the finish page keeps its exact shape and no
-    result field is written. With it on, a finish walk that changed nothing
-    writes a durable next-attempt clock on the row and the page skips rows whose
-    clock has not passed, so a replay of already-projected work costs no reads.
-    A state change clears the clock in the same transaction, so no obligation
-    waits on it. Rollback is this one switch; the field is additive and unused
-    when off, so no backfill is needed.
+    Off keeps the legacy query and disables no-change deferral transactions.
+    Clock writes on state transitions are unconditional on every writer host.
+    On uses the due-clock filter only after the shared backfill marker exists;
+    until then it keeps the legacy page without per-row stamping. Rollback and
+    re-enable are safe because flag-off writers keep maintaining the clock.
     """
     from config.policy import kill_switch
 
@@ -734,6 +732,18 @@ def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
         return max(minimum, min(int(raw), maximum))
     except ValueError:
         return default
+
+
+def ready_discovery_cursor_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', log=False)
+
+
+def ready_discovery_owners_per_tick(default: int = 20) -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', str(default)), 20, 100)
+
+
+def ready_discovery_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '10'), 10, 60)
 
 
 def serving_sweep_page_rows() -> int:

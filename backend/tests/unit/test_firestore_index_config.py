@@ -214,3 +214,15 @@ def test_field_exemption_check_only_runs_where_the_apply_operation_is_accepted()
     condition = str(check_steps[0].get('if', ''))
     assert condition, 'the field-exemption check must be scoped to the environment that can apply it'
     assert "== 'prod'" in condition
+
+
+def test_transactional_fresh_queries_have_indexes_with_capture_tie_breaks():
+    for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev'):
+        for ready in (False, True):
+            fields = ['owner_key', 'merge_pending', 'fresh_capture'] + (['state'] if ready else [])
+            fields += ['capture_at', 'segment_id', '__name__']
+            assert any(
+                index['collectionGroup'] == f'{namespace}_jobs'
+                and _fields(index) == [(field, 'ASCENDING') for field in fields]
+                for index in _index_specs()
+            )
