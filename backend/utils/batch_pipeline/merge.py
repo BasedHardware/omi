@@ -8,6 +8,7 @@ from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
 from config.batch_pipeline import (
     merge_catch_up_depth,
     merge_head_wait_seconds,
+    fresh_reoffer_marker_enabled,
     provider_backlog_release_enabled,
     provider_merge_membership_enabled,
     recovered_merge_release_enabled,
@@ -25,6 +26,14 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
+# Owners the give-up clock tracks per process.
+FRESH_REOFFER_MARK_PRUNE = 4096
+# An owner left waiting this long past the head wait without one commit is no longer
+# re-offered by this process.
+FRESH_REOFFER_MAX_SECONDS = 1800.0
+FRESH_REOFFER_GAP_SECONDS = 600.0
+# Value of a marker's ``reoffer`` field when it was written only for the fresh re-offer.
+FRESH_REOFFER = 'fresh'
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -131,6 +140,11 @@ class OrderedMerge:
         # cap with rows pending. Maintenance re-offers them by owner: a held
         # backlog can fill the global result_ready page and hide them.
         self.held_owners: set[str] = set()
+        # Owner keys whose last drain here left ready fresh rows on the probe page.
+        self._fresh_waiting: set[str] = set()
+        # Owner key -> (wall time its ready fresh rows were first left waiting with no commit
+        # since, wall time last seen waiting).
+        self._fresh_stalled: dict[str, tuple[float, float]] = {}
         self._marked_after: str | None = None
 
     def _head_wait(self) -> float:
@@ -146,10 +160,21 @@ class OrderedMerge:
     def release_hold(self, key: str, *, force: bool = False) -> None:
         """Clear an owner's durable hold marker once it is below the depth cap (or has nothing pending)."""
         depth = self._catch_up_depth()
+        if not force and key in self._fresh_waiting:
+            # Ready fresh rows still wait behind this owner's head: keep the marker so the
+            # next maintenance pass drains it again.
+            return
 
         def clear(tx):
             mark = tx.get('merge_holds', key)
-            if mark.get('held') and (force or not depth or _awaiting_projection(tx, tx.get('owners', key)) < depth):
+            # A marker written only for the fresh re-offer is not a depth hold: with no
+            # ready fresh row left it goes whatever the projection depth.
+            if mark.get('held') and (
+                force
+                or not depth
+                or mark.get('reoffer') == FRESH_REOFFER
+                or _awaiting_projection(tx, tx.get('owners', key)) < depth
+            ):
                 tx.put('merge_holds', key, {**mark, 'held': False})
 
         self.store.run(clear)
@@ -176,6 +201,77 @@ class OrderedMerge:
                     self.commit_source,
                     type(error).__name__,
                 )
+
+    def _reoffer_fresh(self, key: str, now: float) -> None:
+        """Keep a durable marker on an owner that still has ready fresh rows behind its head.
+
+        Nothing else drains such an owner again: its head is unready or held backlog, so no
+        unit of its own need settle soon, and the global ready page can be full of held
+        backlog rows. Maintenance re-offers marked owners; ``release_hold`` clears the marker
+        once a drain finds no ready fresh row left."""
+        wrote: list[bool] = []
+
+        def mark(tx):
+            wrote.clear()  # Firestore may retry this callback.
+            if not tx.get('merge_holds', key).get('held'):
+                tx.put('merge_holds', key, {'held': True, 'held_at': now, 'reoffer': FRESH_REOFFER})
+                wrote.append(True)
+
+        try:
+            self.store.run(mark)
+            if wrote:
+                logger.info('event=batch_merge outcome=fresh_reoffer_marked source=%s count=1', self.commit_source)
+        except Exception as error:  # noqa: BLE001
+            # The marker is a wake hint. Whatever the store raises (contention exhausted, a
+            # driver error), the drain that called this must go on.
+            logger.warning(
+                'event=batch_merge outcome=fresh_reoffer_mark_retry source=%s exception_type=%s count=1',
+                self.commit_source,
+                type(error).__name__,
+            )
+
+    def _fresh_left_waiting(self, key: str, now: float, committed: bool, wait: float) -> bool:
+        """Record that a call left ready fresh rows on the probe page; False once the owner has
+        stayed that way for the head wait plus ``FRESH_REOFFER_MAX_SECONDS`` without a commit
+        in this process.
+
+        The bound stops a row that never commits (for a reason this code does not foresee) from
+        keeping its owner on every maintenance pass for good. It is longer than any head wait,
+        so a row inside its wait is never dropped. A commit, or a gap of
+        ``FRESH_REOFFER_GAP_SECONDS`` between sightings, starts the clock again. The table
+        holds ``FRESH_REOFFER_MARK_PRUNE`` owners; when it is full of owners seen within the
+        gap, a further owner is not marked."""
+        if not fresh_reoffer_marker_enabled():
+            return False
+        stalled = self._fresh_stalled
+        if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
+            # Drop owners not seen for a gap (their clock would restart anyway). An owner
+            # still being seen is never evicted: that would restart its clock and undo the
+            # bound. If the table is still full, this owner is not tracked and not marked.
+            for other, value in list(stalled.items()):
+                if now - value[1] > FRESH_REOFFER_GAP_SECONDS and stalled.get(other) == value:
+                    stalled.pop(other, None)
+            if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
+                logger.warning(
+                    'event=batch_merge outcome=fresh_reoffer_table_full source=%s count=1', self.commit_source
+                )
+                return False
+        since, seen = stalled.get(key, (now, now))
+        if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
+            since = now
+        stalled[key] = (since, now)
+        if now - since >= max(0.0, wait) + FRESH_REOFFER_MAX_SECONDS:
+            logger.warning('event=batch_merge outcome=fresh_reoffer_gave_up source=%s count=1', self.commit_source)
+            return False
+        self._fresh_waiting.add(key)
+        return True
+
+    def drain_budget_spent(self, owner_id: str, now: float) -> None:
+        """A drain stopped at its commit budget. If its last commit left ready fresh rows on
+        the probe page, mark the owner so maintenance comes back for them."""
+        key = owner_key(owner_id)
+        if key in self._fresh_waiting:
+            self._reoffer_fresh(key, now)
 
     def _head_wait_unavailable(self) -> None:
         self._head_wait_retry_at = time.monotonic() + HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS
@@ -219,6 +315,7 @@ class OrderedMerge:
         wait; only the recovered unit also passes the catch-up depth hold. The
         body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
+        self._fresh_waiting.discard(key)
         wait = self._head_wait()
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held
@@ -288,7 +385,9 @@ class OrderedMerge:
                 # maintenance re-offers this owner, and the durable marker
                 # (owner key only) survives a restart.
                 held['over_cap'] = True
-                if not tx.get('merge_holds', key).get('held'):
+                mark = tx.get('merge_holds', key)
+                if not mark.get('held') or mark.get('reoffer'):
+                    # A marker held only for the fresh re-offer becomes a depth hold.
                     tx.put('merge_holds', key, {'held': True, 'held_at': now})
             if fresh is not None:
                 # Fresh-first (David's fresh bar, 2026-10-20): the probed fresh
@@ -452,6 +551,11 @@ class OrderedMerge:
                     type(error).__name__,
                 )
                 pending = []
+                # This call could not see whether ready fresh rows wait. Keep (or write) the
+                # re-offer marker so that next drain happens; without it a marker held for
+                # such rows would be cleared after this visit.
+                if self._fresh_left_waiting(key, now, False, wait):
+                    self._reoffer_fresh(key, now)
             fresh, skipped = _fresh_pick(pending, now, wait)
             if len(pending) >= FRESH_PROBE_ROWS and not any(row.get('state') == 'result_ready' for row in pending):
                 # The probe sees one page. A full page with no ready row may hide ready rows
@@ -468,6 +572,16 @@ class OrderedMerge:
                     entry = None
                     fresh_first.clear()
                     bypass.clear()
+            ready_left = sum(row.get('state') == 'result_ready' for row in pending) - (1 if entry is not None else 0)
+            if ready_left > 0 and fenced is None:
+                # Ready fresh rows remain on the page. If this call commits nothing they are
+                # inside their wait (or the picked row was refused while others may be fine),
+                # and without a marker nothing drains this owner again until one of its own
+                # units settles. (A drain that stops at its budget marks through
+                # drain_budget_spent.) An owner whose strict transaction was fenced is left
+                # to its fence.
+                if self._fresh_left_waiting(key, now, entry is not None, wait) and entry is None:
+                    self._reoffer_fresh(key, now)
         if entry is None and fenced is not None:
             raise fenced
         if entry is None and release and recovered_merge_release_enabled():

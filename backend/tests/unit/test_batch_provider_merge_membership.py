@@ -278,6 +278,203 @@ def test_a_full_probe_page_with_no_ready_row_is_logged(world, monkeypatch, caplo
     assert 'outcome=fresh_probe_full_no_ready' in caplog.text
 
 
+def _marker(store):
+    return store.run(lambda tx: tx.get('merge_holds', owner_key(OWNER)))
+
+
+def test_an_owner_with_ready_fresh_rows_inside_their_wait_is_marked_for_re_offer(world, monkeypatch):
+    """2026-11-13: owners went quiet while ready fresh rows were inside the head wait behind a
+    held unit. Nothing drained them again: no marker, and the global ready page was full of
+    held backlog. The merge now leaves the durable marker maintenance re-offers."""
+    store, names = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)  # fresh, never settles
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert not _marker(store).get('held')
+    assert merge.commit_next(OWNER, 230.0) is None  # inside the wait
+    assert _marker(store).get('held') is True
+    # Maintenance: the drain commits nothing yet, and the release keeps the marker.
+    merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 240.0))
+    assert _marker(store).get('held') is True
+    # Once the wait is over the re-offer commits the row; with no ready fresh row left the
+    # next pass clears the marker.
+    committed = []
+    merge.reoffer_marked(lambda owner_id: committed.extend(drain(merge, 261.0)))
+    assert [e['segment_id'] for e in committed] == ['ready']
+    assert not _marker(store).get('held')
+    assert job(store, 'stuck')['merge_pending'] is True
+    assert job(store, names[0])['state'] == 'result_ready'
+
+
+def test_a_drain_that_stops_with_ready_fresh_rows_left_keeps_the_marker(world, monkeypatch):
+    """A drain commits a bounded number of rows a visit. Rows left ready keep the owner marked."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    for n in range(3):
+        admit(monkeypatch, store, [item(f'ready{n}', 80 + n)], f'content-ready{n}', JA)
+        settle(store, f'ready{n}', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 261.0)['segment_id'] == 'ready0'  # one commit, two left
+    assert not _marker(store).get('held')  # a drain still running writes nothing
+    merge.drain_budget_spent(OWNER, 261.0)
+    assert _marker(store).get('held') is True
+    merge.release_hold(owner_key(OWNER))
+    assert _marker(store).get('held') is True
+    assert [e['segment_id'] for e in drain(merge, 262.0)] == ['ready1', 'ready2']
+    merge.release_hold(owner_key(OWNER))
+    assert not _marker(store).get('held')
+
+
+def test_the_marker_write_is_logged_and_has_a_kill_switch(world, monkeypatch, caplog):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED', 'false')
+    assert merge.commit_next(OWNER, 230.0) is None
+    assert not _marker(store).get('held')  # off: the owner is left with no wake, as before
+    monkeypatch.delenv('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED')
+    with caplog.at_level(logging.INFO):
+        assert merge.commit_next(OWNER, 231.0) is None
+    assert _marker(store).get('held') is True
+    assert caplog.text.count('outcome=fresh_reoffer_marked') == 1
+
+
+def test_an_owner_whose_ready_fresh_row_never_commits_is_dropped_after_the_bound(world, monkeypatch, caplog):
+    """Loop bound: a ready fresh row that cannot commit must not keep its owner on every
+    maintenance pass for good. The clock runs on the timestamps passed in (no real time):
+    head wait plus 30 minutes without a commit, and the marker is let go."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    key = owner_key(OWNER)
+    assert merge._fresh_left_waiting(key, 1000.0, False, 60.0) is True
+    merge._reoffer_fresh(key, 1000.0)
+    assert _marker(store) == {'held': True, 'held_at': 1000.0, 'reoffer': 'fresh'}
+    for minutes in (8, 16, 24, 30):
+        assert merge._fresh_left_waiting(key, 1000.0 + 60 * minutes, False, 60.0) is True
+        merge.release_hold(key)
+        assert _marker(store).get('held') is True  # still inside head wait + 30 minutes
+    merge._fresh_waiting.discard(key)  # what the next commit_next call does first
+    with caplog.at_level(logging.WARNING):
+        assert merge._fresh_left_waiting(key, 1000.0 + 60 + 1800, False, 60.0) is False
+    assert 'outcome=fresh_reoffer_gave_up' in caplog.text
+    merge.release_hold(key)
+    assert not _marker(store).get('held')
+    # A commit starts the clock again.
+    assert merge._fresh_left_waiting(key, 1000.0 + 60 + 1801, True, 60.0) is True
+
+
+def test_the_bound_is_never_shorter_than_the_head_wait(world, monkeypatch):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=3600, catch_up_depth=16)
+    key = owner_key(OWNER)
+    assert merge._fresh_left_waiting(key, 0.0, False, 3600.0) is True
+    for at in range(500, 5400, 500):
+        assert merge._fresh_left_waiting(key, float(at), False, 3600.0) is True
+    assert merge._fresh_left_waiting(key, 5400.0, False, 3600.0) is False
+
+
+def test_a_full_table_does_not_evict_owners_still_waiting(world, monkeypatch):
+    """Evicting an owner that is still being seen would restart its clock and undo the bound."""
+    import utils.batch_pipeline.merge as merge_module
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', 2)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    for key in ('a', 'b', 'c'):
+        assert merge._fresh_left_waiting(key, 1000.0, False, 60.0) is True
+    assert merge._fresh_left_waiting('d', 1001.0, False, 60.0) is False  # full: not tracked
+    assert set(merge._fresh_stalled) == {'a', 'b', 'c'} and 'd' not in merge._fresh_waiting
+    assert merge._fresh_stalled['a'][0] == 1000.0  # clocks untouched
+    # Owners not seen for the gap make room.
+    assert merge._fresh_left_waiting('d', 1000.0 + 601, False, 60.0) is True
+    assert set(merge._fresh_stalled) == {'d'}
+
+
+def test_a_marker_cleared_elsewhere_is_written_again_at_once(world, monkeypatch):
+    """No per-process memory of "already marked": another process may have cleared the marker."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None and _marker(store).get('held') is True
+    key = owner_key(OWNER)
+    store.run(lambda tx: tx.put('merge_holds', key, {**tx.get('merge_holds', key), 'held': False}))
+    assert merge.commit_next(OWNER, 231.0) is None
+    assert _marker(store).get('held') is True
+
+
+def test_a_failed_probe_keeps_the_owner_marked(world, monkeypatch):
+    """A transient probe error must not let the visit clear a marker held for waiting rows."""
+    from google.api_core.exceptions import ServiceUnavailable
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None and _marker(store).get('held') is True
+    real = store.fresh_pending
+
+    def failing(*args, **kwargs):
+        raise ServiceUnavailable('probe')
+
+    monkeypatch.setattr(store, 'fresh_pending', failing)
+    merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 240.0))
+    assert _marker(store).get('held') is True
+    monkeypatch.setattr(store, 'fresh_pending', real)
+    committed = []
+    merge.reoffer_marked(lambda owner_id: committed.extend(drain(merge, 261.0)))
+    assert [e['segment_id'] for e in committed] == ['ready']
+
+
+def test_a_failing_marker_write_does_not_stop_the_drain(world, monkeypatch, caplog):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    real = store.run
+
+    def run(callback, *args, **kwargs):
+        if getattr(callback, '__name__', '') == 'mark':
+            raise RuntimeError('contention exhausted')
+        return real(callback, *args, **kwargs)
+
+    monkeypatch.setattr(store, 'run', run)
+    with caplog.at_level(logging.WARNING):
+        assert merge.commit_next(OWNER, 230.0) is None  # no exception reaches the drain
+    assert 'outcome=fresh_reoffer_mark_retry' in caplog.text and 'RuntimeError' in caplog.text
+    assert [e['segment_id'] for e in drain(merge, 261.0)] == ['ready']
+
+
+def test_a_re_offer_marker_is_not_kept_by_the_depth_cap_and_a_depth_hold_replaces_it(world, monkeypatch):
+    import utils.batch_pipeline.merge as merge_module
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=4)
+    key = owner_key(OWNER)
+    monkeypatch.setattr(merge_module, '_awaiting_projection', lambda tx, owner: 99)  # at the cap
+    merge._reoffer_fresh(key, 100.0)
+    assert _marker(store).get('reoffer') == 'fresh'
+    merge.release_hold(key)  # no ready fresh row waiting: goes, whatever the depth
+    assert not _marker(store).get('held')
+    # A depth-hold marker (no reoffer field) stays at the cap, as before.
+    store.run(lambda tx: tx.put('merge_holds', key, {'held': True, 'held_at': 100.0}))
+    merge.release_hold(key)
+    assert _marker(store).get('held') is True
+
+
+def test_no_marker_when_no_fresh_row_is_ready(world, monkeypatch):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 261.0) is None
+    assert not _marker(store).get('held')
+
+
 def _project_through(store, segment):
     key = owner_key(OWNER)
     store.run(lambda tx: tx.put('owners', key, {**tx.get('owners', key), 'projection_watermark': segment}))
