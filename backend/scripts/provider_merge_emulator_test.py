@@ -177,6 +177,7 @@ def test_pl585_fresh_provider_passes_held_backlog_without_releasing_it(h, monkey
         monkeypatch.setenv(MEMBERSHIP, 'false')
     merge = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=depth)
     entry = merge.commit_next(h.uid('owner'), SETTLED + 1)
+    assert entry is not None, 'a ready fresh result must pass the held backlog'
     assert entry['segment_id'] == 'fresh' and entry['fresh_first'] is True
     assert entry['fresh_capture'] is True and entry['projection_state'] == 'pending'
     assert merge.commit_next(h.uid('owner'), SETTLED + 1000) is None
@@ -208,6 +209,7 @@ def test_pl584_legacy_settle_clock_obeys_exact_head_wait_and_late_chain(h, monke
     uid = h.uid('owner')
     assert merge.commit_next(uid, SETTLED + 59.999) is None
     entry = merge.commit_next(uid, SETTLED + 60)
+    assert entry is not None, 'the durable settlement clock must release the ready result at the head-wait boundary'
     assert entry['segment_id'] == 'ready' and entry['fresh_first'] is True
     assert entry['head_wait_bypass'] is True and entry['log_sequence'] == 1
     assert row(h, 'waiting')['merge_pending'] is True
