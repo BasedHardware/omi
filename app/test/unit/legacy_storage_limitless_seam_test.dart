@@ -273,7 +273,7 @@ void main() {
     <int>[1, 2, 3, 4], // Timestamp without DATA
     <int>[1, 2, 3, 4, ...List.filled(440, 0)], // Padding without an audio frame
   ]) {
-    test('StorageSync: ${chatter.length}-byte non-audio cannot cancel the 5s deadline', () async {
+    test('StorageSync: ${chatter.length}-byte non-audio cannot cancel the 60s first-DATA deadline', () async {
       final card = _SubscribedStorageDevice(script: [chatter]);
       final local = _FakeLocalSync();
       final head = storageWal(totalBytes: 4 * 440);
@@ -288,11 +288,15 @@ void main() {
       final failure = expectLater(sync.syncAll(), throwsException);
       await card.firstPacketHandled.future;
       expect(timers, hasLength(1));
-      expect(timers.single.delay, const Duration(seconds: 5));
+      expect(timers.single.delay, const Duration(seconds: 60));
       card.controller.add([0]); // More ACKs still prove no audio.
       await Future<void>.delayed(Duration.zero);
       expect(timers.single.isActive, isTrue);
-      timers.single.fire();
+      timers.single.elapse(const Duration(seconds: 59));
+      expect(card.stops, 0);
+      card.controller.add([0]);
+      await Future<void>.delayed(Duration.zero);
+      timers.single.elapse(const Duration(seconds: 1));
       await failure;
       expect(card.stops, 1);
       expect(card.deletes, isEmpty);
@@ -313,6 +317,36 @@ void main() {
     });
   }
 
+  test('StorageSync: first real DATA delayed 20 seconds after ACK completes successfully', () async {
+    final card = _SubscribedStorageDevice(script: [
+      <int>[0]
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(totalBytes: 440);
+    final timers = <_ManualTimer>[];
+    final sync = storageSyncWith(local, card, wal, transferTimer: (delay, callback) {
+      final timer = _ManualTimer(delay, callback);
+      timers.add(timer);
+      return timer;
+    });
+    final transfer = sync.syncAll();
+    await card.firstPacketHandled.future;
+    timers.single.elapse(const Duration(seconds: 20));
+    await Future<void>.delayed(Duration.zero);
+    expect(timers.single.isActive, isTrue, reason: 'ACK is not DATA, but a 20s SD/BLE read is healthy');
+    expect(card.stops, 0);
+    expect(local.added, isEmpty);
+    card.controller.add(_dataPacket([40]));
+    card.controller.add([100]);
+    await transfer;
+    expect(wal.status, WalStatus.synced);
+    expect(local.added.single.totalFrames, 1);
+    expect(card.deletes, [1]);
+    expect(timers.every((timer) => !timer.isActive), isTrue);
+    await card.controller.close();
+    await sync.stop();
+  });
+
   test('StorageSync: DATA renews the 60s idle deadline; ACKs do not; incomplete audio is retained', () async {
     final card = _SubscribedStorageDevice(script: [
       _dataPacket([40])
@@ -327,7 +361,7 @@ void main() {
     });
     final failure = expectLater(sync.syncWal(wal: wal), throwsException);
     await card.firstPacketHandled.future;
-    expect(timers.map((timer) => timer.delay), [const Duration(seconds: 5), const Duration(seconds: 60)]);
+    expect(timers.map((timer) => timer.delay), [const Duration(seconds: 60), const Duration(seconds: 60)]);
     expect(timers.first.isActive, isFalse);
     card.controller.add(_dataPacket([40]));
     await Future<void>.delayed(Duration.zero);

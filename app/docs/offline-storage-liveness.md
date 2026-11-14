@@ -34,17 +34,20 @@ progress signal. A single-byte ACK confirms a command, not bytes read. The
 four-byte DATA prefix is the recording timestamp, not a monotonic progress
 counter. Therefore ACKs/status chatter cannot safely renew audio liveness.
 
-The app uses a conservative **60-second parsed-audio idle deadline**, allowing
-almost four SD read windows and BLE delivery margin. It retains the preexisting
-5-second first-audio deadline and 10-minute overall ceiling. Sixty seconds is
-an app recovery policy, not a firmware-guaranteed upper bound. A longer healthy
+The app uses conservative **60-second deadlines for first parsed audio DATA
+and subsequent audio idle**, allowing almost four SD read windows and BLE
+delivery margin. The 10-minute overall ceiling remains. The first-DATA window
+starts before the read command; ACKs cannot cancel or renew it. Sixty seconds
+is an app recovery policy, not a firmware-guaranteed upper bound. A longer healthy
 gap can still require retry; incomplete reads retain the device record and
 durably save parsed frames without advancing an unread head.
 
 `OMI_STORAGE_AUDIO_LIVENESS_OFF=true` restores any-packet first-data detection
-and disables the DATA idle deadline. It **does not** restore silent successful
+with the original five-second first-packet deadline and disables the DATA idle
+deadline. It **does not** restore silent successful
 returns for incomplete transfers, remove cleanup or weaken durability/delete
 proof. Bulk and single-recording incomplete transfers still report failure.
 
 Guard: `app/test/unit/legacy_storage_limitless_seam_test.dart` checks a healthy
-45-second DATA gap, ACK-only failure, idle expiry, timer cleanup and custody.
+20-second delay before the first DATA, a healthy 45-second DATA gap, ACK-only
+failure at 60 seconds, idle expiry, timer cleanup and custody.
