@@ -505,6 +505,8 @@ and an explicit empty literal renders as `''`.
 | `EPISODE_BATCH_CLOSE_ATTACH_ENABLED` | Default on; attach retained batch audio to its recorded episode at audio close | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `EPISODE_COMPOSER` | Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `EPISODE_COMPOSER_CONTEXT_ENABLED` | Default on; append bounded owner profile and episode-relevant memories to new paid composes | backend | env | open | — | — | — | — | keep | keep | — | quality-lead |
+| `EPISODE_COMPOSER_DETAIL_ENABLED` | Default on; scale chapter and summary-length budgets with speech and duration; long single-recording episodes use the full composer | backend | env | open | — | — | — | — | keep | keep | — | quality-lead |
 | `EPISODE_COMPOSER_REUSE` | Default on; stable notes/L1 reuse and noise admission; false restores source-key writes and L1 extraction while retaining compatible checkpoints | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
 | `EPISODE_COMPOSER_THRIFT` | Default on unless set off; retain paid compose output, map single-member notes, label triggers and compose deferred episodes on open | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
 | `EPISODE_COMPOSE_LATE_ATTACH_ENABLED` | Default on; a member that joins an already-composed closed episode re-arms that episode's compose through the existing evidence compare | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
@@ -1224,6 +1226,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
 - `EPISODE_COMPOSER` — Default on unless set off; a closed episode whose members all finished processing gets one gpt-6-luna summary over member summaries plus the full transcript (title, notes, chapters) (fail: open)
+- `EPISODE_COMPOSER_CONTEXT_ENABLED` — Default on; append bounded owner profile and episode-relevant memories to new paid composes (fail: open)
+- `EPISODE_COMPOSER_DETAIL_ENABLED` — Default on; scale chapter and summary-length budgets with speech and duration; long single-recording episodes use the full composer (fail: open)
 - `EPISODE_COMPOSER_REUSE` — Default on; stable notes/L1 reuse and noise admission; false restores source-key writes and L1 extraction while retaining compatible checkpoints (fail: open)
 - `EPISODE_COMPOSER_THRIFT` — Default on unless set off; retain paid compose output, map single-member notes, label triggers and compose deferred episodes on open (fail: open)
 - `EPISODE_COMPOSE_LATE_ATTACH_ENABLED` — Default on; a member that joins an already-composed closed episode re-arms that episode's compose through the existing evidence compare (fail: open)

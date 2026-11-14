@@ -53,6 +53,8 @@ EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSER_CONTEXT_ENV = 'EPISODE_COMPOSER_CONTEXT_ENABLED'
+EPISODE_COMPOSER_DETAIL_ENV = 'EPISODE_COMPOSER_DETAIL_ENABLED'
 EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED'
 EPISODE_COMPOSE_TRANSCRIPT_READY_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
@@ -174,6 +176,14 @@ def episode_composer_enabled() -> bool:
     Off keeps the live incremental notes as the final episode notes, as before.
     """
     return modes_default_on(EPISODE_COMPOSER_ENV)
+
+
+def episode_composer_context_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_CONTEXT_ENV)
+
+
+def episode_composer_detail_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_DETAIL_ENV)
 
 
 def episode_compose_transcript_wait_enabled() -> bool:
@@ -400,7 +410,16 @@ COMPOSER_TIMEOUT_SECONDS = 90.0
 # About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
 # densest 10-minute windows are kept in time order.
 COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
-COMPOSER_MAX_CHAPTERS = 8
+COMPOSER_MAX_CHAPTERS = 8  # Legacy ceiling when scaled detail is disabled.
+COMPOSER_DETAIL_MAX_CHAPTERS = 20  # Below the existing 48-moment storage ceiling.
+COMPOSER_DETAIL_WORDS_PER_CHAPTER = 2000
+COMPOSER_DETAIL_MIN_WORDS = 100
+COMPOSER_DETAIL_MAX_WORDS = 3500
+COMPOSER_DETAIL_WORD_RATIO = 0.10
+COMPOSER_DETAIL_WORDS_PER_MINUTE = 125
+# At most 4500 background tokens total; no extra model/embedding request.
+COMPOSER_MEMORY_TOKENS = 3500
+COMPOSER_PROFILE_TOKENS = 1000
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.

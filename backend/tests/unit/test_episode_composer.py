@@ -147,7 +147,7 @@ def _c(invoke=None, calls=None):
         tz_name='Asia/Bangkok',
         owner_name=lambda uid: 'David',
         people_names=lambda uid, ids: {},
-        extras={'compose_invoke': invoke or default},
+        extras={'compose_invoke': invoke or default, 'compose_context': lambda *a, **kw: ('', '')},
     )
 
 
