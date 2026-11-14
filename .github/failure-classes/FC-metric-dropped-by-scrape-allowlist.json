@@ -6,7 +6,8 @@
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_relevance_metric_is_scraped.py",
     "backend/tests/unit/test_quiet_check_metrics_are_scraped.py",
-    "backend/tests/unit/test_projection_finish_guard_metrics_are_scraped.py"
+    "backend/tests/unit/test_projection_finish_guard_metrics_are_scraped.py",
+    "backend/tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

@@ -1602,6 +1602,7 @@
     "omi_processing_backlog_choice_total",
     "omi_product_event_total",
     "omi_product_event_user_daily_over_total",
+    "omi_pusher_audio_file_full_discovery_total",
     "omi_pusher_audio_file_projection_total",
     "omi_pusher_record_barrier_failures_total",
     "omi_pusher_record_close_abandoned_outstanding",
@@ -2457,11 +2458,14 @@
   },
   "datasource_metrics": {
     "gmp-cloud-run": {
-      "captured_at": 1793733061,
+      "captured_at": 1794469397,
       "metrics": [
-        "omi_sync_queue_wait_seconds_bucket"
+        "omi_firestore_billed_reads_by_caller_total",
+        "omi_firestore_caller_label_overflow_total",
+        "omi_sync_queue_wait_seconds_bucket",
+        "firestore_googleapis_com:document_read_count"
       ],
-      "evidence": "GMP instant count of backfill histogram series in backend-sync|backend-sync-backfill; 561 series. The in-cluster snapshot does not contain this family.",
+      "evidence": "GMP/Cloud Monitoring read-only series list 2026-11-12: the caller-overflow alert reads both families on this datasource; omi_firestore_caller_label_overflow_total carries service_name and omi_firestore_billed_reads_by_caller_total carries caller/collection/kind/service_name. The in-cluster Cloud Run bridge keeps only documents_per_operation and read_operations_total, so neither family is imported there. GMP instant and query_range reads on 2026-11-12T06:51Z: firestore_googleapis_com:document_read_count has 3 series (type=LOOKUP|QUERY|NOT_FOUND, monitored_resource=firestore_instance, project_id=based-hardware) and sums to ~1.18M per 60s (~1.70B/day), matching the native document/read_count. The in-cluster snapshot does not contain this family; omi_sync_queue_wait_seconds_bucket was the earlier scoped entry.",
       "declared_metrics": [
         "logging_googleapis_com:user_omi_pipeline_upload_admission_503",
         "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted",

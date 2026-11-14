@@ -98,8 +98,8 @@ def test_authorized_metrics_route_exposes_all_bounded_children(monkeypatch):
         metrics.WORK_DURATION,
     )
     samples = [sample for family in families for metric in family.collect() for sample in metric.samples]
-    assert len([sample for sample in samples if not sample.name.endswith('_created')]) == 140
-    assert len(samples) <= 225  # Production may expose prometheus_client's *_created series.
+    assert len([sample for sample in samples if not sample.name.endswith('_created')]) == 179
+    assert len(samples) <= 270  # Production may expose prometheus_client's *_created series.
     for sample in samples:
         assert sample.name in response.text
         assert set(sample.labels) <= {'kind', 'age_bucket', 'reason', 'frames_seen', 'stage', 'le'}

@@ -327,6 +327,14 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
+def test_release_notes_require_verified_runtime_receipt():
+    document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text())
+    publication = next(step["script"] for step in document["workflows"]["omi-desktop-swift-release"]["scripts"] if step.get("name") == "Create GitHub release")
+    notes_command = next(line for line in publication.splitlines() if line.startswith("CHANGELOG_MD="))
+    assert '--runtime-smoke-result "$BUILD_DIR/desktop-smoke-result.json"' in notes_command
+    assert "||" not in notes_command
+
+
 def _module_bool_constant(path: Path, name: str) -> bool:
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):

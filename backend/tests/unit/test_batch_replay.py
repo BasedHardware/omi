@@ -63,6 +63,12 @@ def test_capture_constructs_allowlist_and_hashes_related_identities():
     assert unit['projection_state'] == 'other' and unit['retry_present'] is True
     assert unit['lane'] == 'backfill'
     assert unit['references'] is None and unit['spans'] is None
+    # A late provider upload stamped fresh for the merge keeps the backfill conflict lane.
+    late = sanitize(
+        {'owner_id': 'o', 'duration_seconds': 1, 'fresh_capture': True, 'late_upload': True}, entry, {}, {}, digest
+    )
+    on_time = sanitize({'owner_id': 'o', 'duration_seconds': 1, 'fresh_capture': True}, entry, {}, {}, digest)
+    assert late['lane'] == 'backfill' and on_time['lane'] == 'fresh'
 
 
 def test_rpc_masks_never_request_arrays_with_nested_text_or_paths():

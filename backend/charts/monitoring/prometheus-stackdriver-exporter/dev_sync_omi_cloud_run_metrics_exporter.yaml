@@ -54,6 +54,9 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_total/'
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_units/'
       - 'prometheus.googleapis.com/omi_batch_record_dead_letter_observed_at_seconds/'
+      # Terminal listen finalization dead-letters by bounded cause class. Consumer: the
+      # capture-reliability run (2026-11-12) dead-letter read; no dashboard tile reads it yet.
+      - 'prometheus.googleapis.com/omi_conversation_finalization_dead_letter_total/'
       # Backlog state machine alerts (charts/monitoring/alerts/backlog-state-machine.json).
       - 'prometheus.googleapis.com/omi_backlog_state_transitions_total/'
       - 'prometheus.googleapis.com/omi_capture_retry_cap_total/'

@@ -32,6 +32,8 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -130,6 +132,9 @@ environments:
             category: ops_kill
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -878,6 +883,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -1011,6 +1018,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -1214,6 +1224,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -1332,6 +1344,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1540,6 +1555,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -1661,6 +1678,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1856,6 +1876,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -1967,6 +1989,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -2407,6 +2432,8 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -2505,6 +2532,9 @@ environments:
             category: ops_kill
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -3379,6 +3409,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -3482,7 +3514,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3512,6 +3544,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -3642,6 +3677,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -3842,6 +3880,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -3931,7 +3971,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3960,6 +4000,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4096,6 +4139,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -4299,6 +4348,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -4391,7 +4442,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4420,6 +4471,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4539,6 +4593,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -4731,6 +4788,8 @@ environments:
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
@@ -4813,7 +4872,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4842,6 +4901,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4930,6 +4992,12 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -4953,8 +5021,11 @@ environments:
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
-              value: '7200'
+              value: '86400'
               category: ops_kill
+            BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS:
+              value: '30'
+              category: reliability
             STT_GPU_FLEET_OFF:
               value: 'true'
               category: ops_kill

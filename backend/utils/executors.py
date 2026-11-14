@@ -283,6 +283,10 @@ db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
 # Optional read-cache checks cannot queue behind, or consume, serving DB workers.
+# Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
+free_allowance_executor = MonitoredThreadPoolExecutor(
+    name="free_allowance", max_workers=2, max_queue_size=4, thread_name_prefix="free-allowance"
+)
 read_cache_shadow_executor = MonitoredThreadPoolExecutor(
     name="read_cache_shadow",
     max_workers=2,
@@ -347,6 +351,7 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    free_allowance_executor,
     read_cache_shadow_executor,
     record_barrier_executor,
     llm_executor,
