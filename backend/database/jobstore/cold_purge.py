@@ -33,7 +33,7 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
         ).fetchall()
         if len(rows) > 1000:
             raise AuthorityRefused('cold owner journal census needs continuation paging')
-        keys, uploads, through = {}, {}, 0
+        keys, uploads, versions, through = {}, {}, {}, 0
         for row in rows:
             # Unknown/shared families refuse before any deletion. Never infer
             # a missing cold copy from the serving/shadow mode selector.
@@ -45,6 +45,7 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
                     path = upload_cold_custody.retain(conn, handoff, original, row[3], row[6])
                     paths.append(path)
                     uploads[path] = upload_cold_custody.descriptor(row[6])
+                    versions.setdefault(path, {})[row[0]] = (fingerprint(row), fingerprint(row[6]))
                 key = sink.ref(row[2], row[3]).path
                 if key not in paths:
                     raise AuthorityRefused('cold journal key outside original retained-copy census')
@@ -102,12 +103,14 @@ def erase_recording(retained, uid, identity, manifest, authority, *, conversatio
                     value.get('namespace') != handoff.ticket.namespace
                     or value.get('epoch') != handoff.ticket.value
                     or type(value.get('seq')) is not int
-                    or value['seq'] > keys[ref.path]['seq']
+                    or value['seq'] not in versions[ref.path]
+                    or value.get('source_fingerprint') != versions[ref.path][value['seq']][0]
                     or value.get('identity') != keys[ref.path]['identity']
                     or value.get('family') != upload_cold_custody.FAMILY
                     or not isinstance(value.get('body'), dict)
-                    or set(value['body']) != upload_cold_custody.FIELDS
+                    or frozenset(value['body']) != upload_cold_custody.FIELDS
                     or upload_cold_custody.descriptor(value['body']) != uploads[ref.path]
+                    or fingerprint(value['body']) != versions[ref.path][value['seq']][1]
                 )
             ):
                 raise AuthorityRefused('upload cold destination version/source changed')

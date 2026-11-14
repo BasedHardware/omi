@@ -55,7 +55,7 @@ def retain(conn, handoff, original, identity, body):
         or str(upload['admission_id']) != original['admission']['admission_id']
         or upload['original_deadline'] != jobs[identity['unit_id']]['typed_provider']['custody_deadline']
         or not isinstance(body, dict)
-        or set(body) != FIELDS
+        or frozenset(body) != FIELDS
         or descriptor(body) != descriptor(upload)
         or body['phase'] not in HISTORY[upload['phase']]
         or (body['effect_id'] is not None and str(body['effect_id']) != str(upload['effect_id']))

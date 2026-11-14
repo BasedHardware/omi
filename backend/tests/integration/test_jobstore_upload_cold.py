@@ -198,6 +198,7 @@ def test_upload_stale_version_cannot_replace_published_cold_state(upload_cold):
         ('original_deadline', 99999),
         ('admission_id', 'foreign'),
         ('session', 'not-a-capability'),
+        ('phase', 'fenced'),
     ],
 )
 def test_real_journal_cannot_export_unknown_upload_source_fields(upload_cold, field, value):
@@ -215,7 +216,7 @@ def test_real_journal_cannot_export_unknown_upload_source_fields(upload_cold, fi
         ).fetchone() == (0,)
 
 
-@pytest.mark.parametrize('changed', ['seq', 'body'])
+@pytest.mark.parametrize('changed', ['seq', 'body', 'generation', 'fingerprint', 'unknown_old_seq'])
 def test_purge_refuses_unknown_newer_or_changed_upload_destination(upload_cold, changed):
     c = upload_cold
     target = upload_rows(c)[-1]
@@ -224,6 +225,12 @@ def test_purge_refuses_unknown_newer_or_changed_upload_destination(upload_cold, 
     packet = ref.get().to_dict()
     if changed == 'seq':
         packet['seq'] += 1000
+    elif changed == 'unknown_old_seq':
+        packet['seq'] = 0
+    elif changed == 'generation':
+        packet['body']['generation'] += 1
+    elif changed == 'fingerprint':
+        packet['source_fingerprint'] = 'foreign'
     else:
         packet['body']['attempt_token'] = 'unknown'
     ref.set(packet)
