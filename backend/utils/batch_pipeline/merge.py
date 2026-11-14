@@ -185,6 +185,16 @@ class OrderedMerge:
                 tx.put('merge_holds', key, {**mark, 'held': False})
 
         self.store.run(clear)
+        with self._fresh_lock:
+            waiting = key in self._fresh_waiting
+        if not force and waiting:
+            # A drain on another thread saw ready fresh rows while this clear ran: its
+            # observation wins, so write the marker again.
+            self._reoffer_fresh(key, time.time())
+
+    def _fresh_seen_clear(self, key: str) -> None:
+        with self._fresh_lock:
+            self._fresh_waiting.discard(key)
 
     def marked_page(self, limit: int = 50) -> list[tuple[str, str | None]]:
         """The next page of durable hold markers; the cursor rotates so every
@@ -216,6 +226,8 @@ class OrderedMerge:
         unit of its own need settle soon, and the global ready page can be full of held
         backlog rows. Maintenance re-offers marked owners; ``release_hold`` clears the marker
         once a drain finds no ready fresh row left."""
+        if not fresh_reoffer_marker_enabled():
+            return
         wrote: list[bool] = []
 
         def mark(tx):
@@ -249,6 +261,7 @@ class OrderedMerge:
         holds ``FRESH_REOFFER_MARK_PRUNE`` owners; when it is full of owners seen within the
         gap, a further owner is not marked."""
         if not fresh_reoffer_marker_enabled():
+            self._fresh_seen_clear(key)
             return False
         outcome = self._fresh_track(key, now, committed, wait)
         if outcome != 'waiting':
@@ -259,19 +272,21 @@ class OrderedMerge:
         """Update the owner's clock under the lock; 'waiting', or the outcome name to log."""
         with self._fresh_lock:
             stalled = self._fresh_stalled
-            if len(stalled) > FRESH_REOFFER_MARK_PRUNE and key not in stalled:
+            if len(stalled) >= FRESH_REOFFER_MARK_PRUNE and key not in stalled:
                 # Drop owners not seen for a gap (their clock would restart anyway). An owner
                 # still being seen is never evicted: that would restart its clock and undo the
                 # bound. If the table is still full, this owner is not tracked and not marked.
                 for other in [name for name, value in stalled.items() if now - value[1] > FRESH_REOFFER_GAP_SECONDS]:
                     del stalled[other]
-                if len(stalled) > FRESH_REOFFER_MARK_PRUNE:
+                if len(stalled) >= FRESH_REOFFER_MARK_PRUNE:
+                    self._fresh_waiting.discard(key)
                     return 'fresh_reoffer_table_full'
             since, seen = stalled.get(key, (now, now))
             if committed or now - seen > FRESH_REOFFER_GAP_SECONDS:
                 since = now
             stalled[key] = (since, now)
             if now - since >= max(0.0, wait) + FRESH_REOFFER_MAX_SECONDS:
+                self._fresh_waiting.discard(key)
                 return 'fresh_reoffer_gave_up'
             self._fresh_waiting.add(key)
             return 'waiting'
@@ -327,8 +342,6 @@ class OrderedMerge:
         wait; only the recovered unit also passes the catch-up depth hold. The
         body, late marking and chain are the same as every other commit."""
         key = owner_key(owner_id)
-        with self._fresh_lock:
-            self._fresh_waiting.discard(key)
         wait = self._head_wait()
         depth = self._catch_up_depth()
         # False while the fresh query is backing off: then nothing probes, and a held
@@ -531,6 +544,7 @@ class OrderedMerge:
             # A catch-up row heads the owner. Probe for a ready fresh row
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
+            probed = True
             try:
                 pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
             except FailedPrecondition:
@@ -563,7 +577,7 @@ class OrderedMerge:
                     self.commit_source,
                     type(error).__name__,
                 )
-                pending = []
+                pending, probed = [], False
                 # This call could not see whether ready fresh rows wait. Keep (or write) the
                 # re-offer marker so that next drain happens; without it a marker held for
                 # such rows would be cleared after this visit.
@@ -595,6 +609,15 @@ class OrderedMerge:
                 # to its fence.
                 if self._fresh_left_waiting(key, now, entry is not None, wait) and entry is None:
                     self._reoffer_fresh(key, now)
+            elif probed and ready_left <= 0:
+                # The page shows no ready fresh row left: nothing waits for a re-offer.
+                self._fresh_seen_clear(key)
+        elif entry is None and fenced is None and fresh_query and not (held.get('backlog') or head.get('backlog')):
+            # Nothing committed, the head is not held backlog and no probe is backing off: the
+            # owner's rows follow the plain order and its own wakes. A call that could not
+            # probe (backoff) or that committed in strict order leaves the state as it was,
+            # so a marker kept for ready fresh rows is not cleared unseen.
+            self._fresh_seen_clear(key)
         if entry is None and fenced is not None:
             raise fenced
         if entry is None and release and recovered_merge_release_enabled():

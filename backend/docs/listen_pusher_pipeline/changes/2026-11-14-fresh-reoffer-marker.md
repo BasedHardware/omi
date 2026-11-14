@@ -7,8 +7,13 @@ Follows `2026-11-13-fresh-pick-settle-clock.md`, which shipped without this part
 The merge writes the existing durable hold marker (`merge_holds`) for an
 owner when a merge call commits nothing while ready fresh rows sit on the probe page, or when a
 drain spends its 100-commit budget with such rows left. Maintenance already re-offers marked
-owners; `release_hold` now keeps the marker while the owner's last drain in that process left
-ready fresh rows, and clears a re-offer marker after a drain that finds none. Each marker written for this
+owners; `release_hold` now keeps the marker while the process still records ready fresh rows
+waiting for the owner, and clears a re-offer marker once that record is gone. The record is
+removed only by a call that could see: a successful probe whose page shows no ready fresh row
+left, or a call that commits nothing with no held-backlog head and no probe backoff. A call that
+could not probe (backoff, a transient probe error) or that committed in strict order leaves it.
+If a drain on another thread records waiting rows while a clear is in its transaction, the
+marker is written again. Each marker written for this
 reason logs `event=batch_merge outcome=fresh_reoffer_marked`.
 Kill switch `BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED` (unset = on).
 
@@ -28,7 +33,8 @@ clears it on any visit after which the process has no ready fresh row waiting fo
 whatever the projection depth. A depth-hold marker has no such field and keeps its rule; an owner
 holding a re-offer marker that reaches the depth cap gets a depth-hold marker instead.
 
-- A row inside its head wait: kept until the wait ends and the row commits.
+- A row inside its head wait: kept until the wait ends and the row commits, within the bound
+  below (head wait plus 30 minutes without a commit).
 - An owner with more ready rows than one drain commits: every visit commits rows, so it ends.
 - An owner whose probe page is 32 unready rows with ready rows behind: the page shows no ready
   row, so no marker is written for this reason and one already held is cleared on the next visit.
@@ -63,7 +69,8 @@ holding a re-offer marker that reaches the depth cap gets a depth-hold marker in
 
 ## Off switch
 
-`BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED=false` stops new marker writes for this reason;
+`BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED=false` stops new marker writes for this reason on
+every path, including an owner already recorded as waiting in a running process;
 re-offer markers already written are cleared on their owner's next maintenance visit. The marker is written only on the fresh-probe path, that is when the
 owner's head is catch-up or held backlog. The settle-instant pick has no switch
 of its own: `BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED=false` removes it together with the

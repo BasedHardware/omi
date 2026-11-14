@@ -355,7 +355,6 @@ def test_an_owner_whose_ready_fresh_row_never_commits_is_dropped_after_the_bound
         assert merge._fresh_left_waiting(key, 1000.0 + 60 * minutes, False, 60.0) is True
         merge.release_hold(key)
         assert _marker(store).get('held') is True  # still inside head wait + 30 minutes
-    merge._fresh_waiting.discard(key)  # what the next commit_next call does first
     with caplog.at_level(logging.WARNING):
         assert merge._fresh_left_waiting(key, 1000.0 + 60 + 1800, False, 60.0) is False
     assert 'outcome=fresh_reoffer_gave_up' in caplog.text
@@ -382,45 +381,43 @@ def test_a_full_table_does_not_evict_owners_still_waiting(world, monkeypatch):
     store, _ = _legacy_backlog(world, monkeypatch, 1)
     monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', 2)
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
-    for key in ('a', 'b', 'c'):
+    for key in ('a', 'b'):
         assert merge._fresh_left_waiting(key, 1000.0, False, 60.0) is True
     assert merge._fresh_left_waiting('d', 1001.0, False, 60.0) is False  # full: not tracked
-    assert set(merge._fresh_stalled) == {'a', 'b', 'c'} and 'd' not in merge._fresh_waiting
+    assert set(merge._fresh_stalled) == {'a', 'b'} and 'd' not in merge._fresh_waiting
     assert merge._fresh_stalled['a'][0] == 1000.0  # clocks untouched
     # Owners not seen for the gap make room.
     assert merge._fresh_left_waiting('d', 1000.0 + 601, False, 60.0) is True
     assert set(merge._fresh_stalled) == {'d'}
 
 
-def test_concurrent_drains_keep_the_table_bounded_and_consistent(world, monkeypatch):
-    """Drains run on a shared executor: many threads track, prune and clear owners at once."""
+def test_concurrent_drains_evict_stale_owners_and_admit_exactly_the_limit(world, monkeypatch):
+    """Drains run on a shared executor. The table starts full of owners not seen for the gap;
+    eight threads then offer 400 new owners at once. Every stale owner must be evicted and
+    exactly the limit of new owners admitted: no prune admits none, a racy prune admits more
+    or raises while iterating."""
     import threading
 
     import utils.batch_pipeline.merge as merge_module
 
+    limit = 64
     store, _ = _legacy_backlog(world, monkeypatch, 1)
-    monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', 8)
+    monkeypatch.setattr(merge_module, 'FRESH_REOFFER_MARK_PRUNE', limit)
     merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    for n in range(limit):
+        assert merge._fresh_left_waiting(f'stale-{n}', 0.0, False, 60.0) is True
+    assert len(merge._fresh_stalled) == limit
     errors: list[BaseException] = []
-    largest: list[int] = []
+    admitted: list[str] = []
     start = threading.Barrier(8)
 
     def worker(index: int) -> None:
         try:
             start.wait()
-            for step in range(400):
-                key = f'{index}-{step}'
-                # Every fourth call comes after the gap, so the prune runs while others insert.
-                now = 1000.0 + (700.0 * step if step % 4 == 0 else 0.0)
-                tracked = merge._fresh_left_waiting(key, now, False, 60.0)
-                with merge._fresh_lock:
-                    largest.append(len(merge._fresh_stalled))
-                    if tracked:
-                        assert key in merge._fresh_waiting
-                    else:
-                        assert key not in merge._fresh_stalled
-                with merge._fresh_lock:
-                    merge._fresh_waiting.discard(key)
+            for step in range(50):
+                key = f'new-{index}-{step}'
+                if merge._fresh_left_waiting(key, 1000.0, False, 60.0):
+                    admitted.append(key)
         except BaseException as error:  # noqa: BLE001
             errors.append(error)
 
@@ -430,8 +427,90 @@ def test_concurrent_drains_keep_the_table_bounded_and_consistent(world, monkeypa
     for thread in threads:
         thread.join(30)
     assert not errors and not any(thread.is_alive() for thread in threads)
-    # A new owner is admitted only while the table holds at most the limit.
-    assert max(largest) <= 9
+    assert len(admitted) == limit
+    assert set(merge._fresh_stalled) == set(admitted) == merge._fresh_waiting - {f'stale-{n}' for n in range(limit)}
+    assert not any(name.startswith('stale-') for name in merge._fresh_stalled)
+
+
+def test_tracking_an_owner_waits_for_the_state_lock(world, monkeypatch):
+    """The table is only touched under the lock: while another holder has it, a tracking call
+    does not return and changes nothing."""
+    import threading
+
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    done = threading.Event()
+
+    def track() -> None:
+        merge._fresh_left_waiting('a', 1000.0, False, 60.0)
+        done.set()
+
+    with merge._fresh_lock:
+        thread = threading.Thread(target=track)
+        thread.start()
+        assert not done.wait(0.5)
+        assert not merge._fresh_stalled and not merge._fresh_waiting
+    assert done.wait(10)
+    thread.join(10)
+    assert set(merge._fresh_stalled) == {'a'} and merge._fresh_waiting == {'a'}
+
+
+def test_a_visit_that_cannot_probe_keeps_the_marker(world, monkeypatch):
+    """Lost wake found in review: ready fresh rows wait behind held backlog and the owner is
+    marked; the fresh query then backs off, so a maintenance visit commits nothing and probes
+    nothing. That visit has not seen that the rows are gone, so the marker must stay."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)  # fresh, never settles
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None  # inside the wait: marked
+    assert _marker(store).get('held') is True
+    merge._backlog_probe_retry_at = time.monotonic() + 300  # the probe is backing off
+    probes = []
+    fresh_pending = store.fresh_pending
+    monkeypatch.setattr(store, 'fresh_pending', lambda *args: probes.append(args) or fresh_pending(*args))
+    merge.reoffer_marked(lambda owner_id: merge.commit_next(owner_id, 240.0))
+    assert not probes  # this visit really could not probe
+    assert _marker(store).get('held') is True
+    merge._backlog_probe_retry_at = 0.0
+    committed = []
+    merge.reoffer_marked(lambda owner_id: committed.extend(drain(merge, 261.0)))
+    assert [e['segment_id'] for e in committed] == ['ready']
+    assert not _marker(store).get('held')
+
+
+def test_a_drain_that_sees_ready_rows_during_a_clear_wins(world, monkeypatch):
+    """A drain on another thread records ready fresh rows while a clear is in its transaction:
+    the marker is written again."""
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    key = owner_key(OWNER)
+    merge._reoffer_fresh(key, 1000.0)
+    assert _marker(store).get('held') is True
+    run = store.run
+
+    def racing_run(body):
+        result = run(body)
+        if not merge._fresh_waiting:
+            # The other drain's observation lands right after the clear transaction.
+            monkeypatch.setattr(store, 'run', run)
+            assert _marker(store).get('held') is False
+            merge._fresh_left_waiting(key, 1001.0, False, 60.0)
+        return result
+
+    monkeypatch.setattr(store, 'run', racing_run)
+    merge.release_hold(key)
+    assert _marker(store).get('held') is True and _marker(store).get('reoffer') == 'fresh'
+
+
+def test_the_switch_stops_a_budget_marker_for_an_owner_already_waiting(world, monkeypatch):
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge._fresh_left_waiting(owner_key(OWNER), 1000.0, False, 60.0) is True
+    monkeypatch.setenv('BATCH_PIPELINE_FRESH_REOFFER_MARKER_ENABLED', 'false')
+    merge.drain_budget_spent(OWNER, 1001.0)
+    assert not _marker(store).get('held')
 
 
 def test_a_marker_cleared_elsewhere_is_written_again_at_once(world, monkeypatch):
