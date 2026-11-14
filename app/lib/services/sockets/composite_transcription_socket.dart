@@ -333,7 +333,12 @@ class CompositeTranscriptionSocket implements IPureSocket {
     if (_status != PureSocketStatus.connected) {
       return;
     }
-    primarySocket.send(message);
+    // Every custom STT primary (polling, streaming, Gemini) accepts audio only. Text frames are Omi
+    // control messages (capture evidence, client state, speaker assignments) for the Omi socket;
+    // handing them to the primary only logged 'Unsupported message type: String' per frame (#24191).
+    if (message is List<int>) {
+      primarySocket.send(message);
+    }
     if (_secondaryDegraded) {
       return;
     }
