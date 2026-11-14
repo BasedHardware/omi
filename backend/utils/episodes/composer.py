@@ -1525,6 +1525,10 @@ def needs_compose(
     """
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
         return False
+    projected = _utc(episode.get('_member_transcript_updated_at'))
+    composed_at = _utc(episode.get('composed_at'))
+    if episode_compose_transcript_ready_enabled() and projected and composed_at and projected > composed_at:
+        return True  # A committed late transcript outlives a lost post-commit signal.
     if episode_late_compose_enabled() and not opened and _deferred_within_grace(episode):
         return False
     # A restart loses the local queue. Rollback must still drain persisted pending evidence.

@@ -29,3 +29,12 @@ The legacy `episode_transcription_pending_at` receipt also holds an empty member
 when no Home stamp exists. The projection signal respects the global
 `EPISODES_ENABLED` switch before looking up an episode. Owner-context rendering
 accepts stored non-string metadata without losing composition.
+
+Batch replacement also stamps `episode_transcript_updated_at` in the same
+transaction as new speech. Home's existing bounded member-metadata read carries
+that receipt. A newer visible retained-member receipt re-arms an older compose,
+so a crash between transcript commit and the in-process signal cannot hide the
+late transcript permanently. This adds no query or account scan and keeps the
+read-side scheduling/throttle limits. The private read observation is not stored
+on the episode or returned to clients. The READY kill switch covers the receipt,
+signal and read recovery. Unchanged old rows have no receipt and do not recompose.

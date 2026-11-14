@@ -468,3 +468,39 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
         'projected': ('Recovered transcript', 'completed'),
     }
     assert (wire['title'], wire['status']) == expected[outcome]
+
+
+def test_lost_projection_signal_is_recovered_from_visible_member_on_read(monkeypatch):
+    from utils.episodes import composer
+
+    monkeypatch.setenv('EPISODE_COMPOSER', 'true')
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', raising=False)
+
+    episode = _episode('c')
+    episode.update(
+        status='closed',
+        closed_at=START,
+        composed_at=START,
+        composed_fingerprint='existing',
+        composer_version=composer.COMPOSER_VERSION,
+    )
+    episode['composed_notes'] = composer.notes_hash(episode)
+    member = {
+        'id': 'c',
+        'status': 'completed',
+        'structured': {'title': 'Recovered speech'},
+        'started_at': START,
+        'finished_at': START + timedelta(hours=1),
+        'episode_transcript_updated_at': START + timedelta(hours=2),
+    }
+    assert not composer.needs_compose(episode)
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda *a: 'UTC')
+    wire = home_read.project_episode('u', episode, members={'c': member})
+    assert composer.needs_compose(episode)
+    assert '_member_transcript_updated_at' not in wire
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
+    assert not composer.needs_compose(episode)
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED')
+    member['deleted'] = True
+    assert home_read.project_episode('u', episode, members={'c': member}) is None
+    assert not composer.needs_compose(episode)

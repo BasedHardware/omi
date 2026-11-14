@@ -123,6 +123,7 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcript_updated_at',
     'episode_transcription_pending_at',
     'episode_transcription_deadline_at',
     'server_batch_audio_start',
@@ -446,6 +447,12 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Private read observation only; never persisted or included in the wire projection.
+    episode.pop('_member_transcript_updated_at', None)
+    transcript_updates = []
+    excluded = set(episode.get('discarded_conversation_ids') or []) | set(
+        episode.get('duplicate_conversation_ids') or []
+    )
     retained: list[dict[str, Any]] = []
     hidden = 0
     now = datetime.now(timezone.utc)
@@ -473,6 +480,8 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
+        if cid not in excluded and (updated := utc(row.get('episode_transcript_updated_at'))):
+            transcript_updates.append(updated)
         from utils.conversations.home_titles import neutralize_minimum_title
 
         # Classify on the stored read copy, before the presentation rewrite below.
@@ -518,6 +527,8 @@ def project_episode(
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    if transcript_updates:
+        episode['_member_transcript_updated_at'] = max(transcript_updates)
     retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
