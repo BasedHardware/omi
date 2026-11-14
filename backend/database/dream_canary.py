@@ -1,6 +1,5 @@
 """Only the reserved synthetic account may receive canary records."""
 
-import logging
 import math
 from typing import Any
 
@@ -8,8 +7,6 @@ from google.cloud import firestore
 
 from config.dream_agent import canary_uid
 from database._client import get_firestore_client, run_transactional
-
-logger = logging.getLogger(__name__)
 
 RECORD_ID = 'dream-canary-conversation'
 
@@ -88,15 +85,11 @@ def reset_failures(*, firestore_client=None):
 
 def failure_count(*, firestore_client=None):
     database = firestore_client if firestore_client is not None else get_firestore_client()
-    try:
-        snap = database.collection('dream_canary_health').document('current').get()
-        row = snap.to_dict() if hasattr(snap, 'to_dict') else None
-        if not isinstance(row, dict):
-            row = {}
-        return _coerce_failure_count(row.get('canary_failures'))
-    except Exception as exc:
-        logger.warning('Failed to fetch dream canary failure count: %s', exc)
-        return 0
+    snap = database.collection('dream_canary_health').document('current').get()
+    row = snap.to_dict() if hasattr(snap, 'to_dict') else None
+    if not isinstance(row, dict):
+        row = {}
+    return _coerce_failure_count(row.get('canary_failures'))
 
 
 def record_result(passed, *, firestore_client=None):

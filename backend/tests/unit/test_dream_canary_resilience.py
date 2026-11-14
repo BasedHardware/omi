@@ -246,10 +246,11 @@ def test_failure_count_negative_clamped():
     assert failure_count(firestore_client=client) == 0
 
 
-def test_failure_count_error_boundary():
+def test_failure_count_propagates_read_failure():
     client = MockFirestoreClient()
     client.collection("dream_canary_health").document("current").raise_on_get = True
-    assert failure_count(firestore_client=client) == 0
+    with pytest.raises(RuntimeError, match="Simulated Firestore error"):
+        failure_count(firestore_client=client)
 
 
 # 5. record_result tests
