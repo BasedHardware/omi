@@ -156,6 +156,11 @@ void main() {
         await writeWal(2145916800 + i * 60, conversationId: 'shared', seconds: 300)
           ..recordingSessionId = 'same-session',
     ];
+    // An already submitted held refusal retains its existing automatic recovery
+    // authority; a held miss still requires the user's explicit submission.
+    unknown.first
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400)
+      ..holdForUser = true;
     final firstValid = await writeWal(now - 100, conversationId: 'shared', seconds: 300)
       ..recordingSessionId = 'same-session';
     sync.testWals = [...unknown, firstValid];
@@ -175,7 +180,8 @@ void main() {
       final restored = await WalFileManager.loadWals();
       if (restored.any((wal) => wal.status == WalStatus.miss)) {
         expect(restarts++, lessThan(10));
-        final pendingUnknown = restored.where((wal) => wal.timerStart >= 2145916800 && wal.status == WalStatus.miss);
+        final pendingUnknown = restored.where((wal) =>
+            wal.timerStart >= 2145916800 && (wal.status == WalStatus.miss || wal.status == WalStatus.uploadRejected));
         expect(pendingUnknown.every((wal) => wal.clockRecoveryValidBatches > 0), isTrue,
             reason: 'the actual committed index must carry the turn across each restart before 36 batches');
         sync = LocalWalSyncImpl(_Listener(), uploadGate: uploadGate)..testWals = restored;

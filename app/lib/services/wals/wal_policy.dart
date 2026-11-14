@@ -213,7 +213,7 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
         .where((wal) =>
             wal.storage == WalStorage.disk &&
             !wal.onDeviceOnly &&
-            !wal.holdForUser &&
+            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
             (wal.status == WalStatus.miss || wal.status == WalStatus.uploadRejected) &&
             walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.unknown)
         .toList();
