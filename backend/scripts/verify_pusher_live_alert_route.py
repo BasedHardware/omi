@@ -82,6 +82,9 @@ PRODUCTION_ONLY_IMPORT_UIDS = (
     "omi-incluster-guard-unsafe-page",
     "omi-firestore-unattributed-reads",
     "omi-firestore-unattributed-reads-blind",
+    "omi-firestore-batch-reads-audio-hour",
+    "omi-firestore-batch-reads-no-output",
+    "omi-firestore-billed-reads-step",
 )
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
