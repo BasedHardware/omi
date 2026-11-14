@@ -19,6 +19,7 @@ from google.cloud import firestore
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
+from database import rpc_deadline
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 from database.batch_privacy_attempt import current_attempt
@@ -35,8 +36,13 @@ HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
 
 
-def delete_batch_object(uid: str, uri: str) -> None:
-    """Delete only a configured, owner-scoped object; foreign refs fail closed."""
+def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
+    """Delete only a configured, owner-scoped object; foreign refs fail closed.
+
+    Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
+    no SDK retry, bounded by the time left; ``storage_client`` lets such a
+    caller reuse a client whose session is bound to that deadline.
+    """
     parsed = urlsplit(uri)
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
     allowed_buckets = {
@@ -59,12 +65,23 @@ def delete_batch_object(uid: str, uri: str) -> None:
     ):
         raise ValueError('batch object reference outside configured owner storage')
     generation = int(parsed.fragment) if parsed.fragment else None
-    from utils.other.local_storage import create_storage_client
+    if storage_client is None:
+        from utils.other.local_storage import create_storage_client
 
-    storage_client: Any = create_storage_client()
+        storage_client = create_storage_client()
     blob = storage_client.bucket(bucket_name).blob(path, generation=generation)
+    left = rpc_deadline.remaining()
     try:
-        blob.delete(if_generation_match=generation)
+        if left is not None:
+            if left <= 0:
+                raise rpc_deadline.RpcDeadlineExceeded('object delete not sent: unit deadline passed')
+            # The generation-match default retry runs for 120 s; a gate holder gets one bounded attempt.
+            blob.delete(if_generation_match=generation, timeout=min(timeout or left, left), retry=None)
+        elif timeout is None:
+            blob.delete(if_generation_match=generation)
+        else:
+            # A caller that bounds the call wants one attempt, not the 120 s generation retry.
+            blob.delete(if_generation_match=generation, timeout=timeout, retry=None)
     except NotFound:
         pass
 
@@ -480,6 +497,7 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             privacy_check_metrics.read_snapshot(
                 'batch',
                 store.client.collection('users').document(item.owner_id),
+                uid=item.owner_id,
                 transaction=transaction,
                 read_budget=read_budget,
             ).to_dict()

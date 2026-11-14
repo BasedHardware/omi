@@ -4,6 +4,11 @@ CV1's installed MCUboot is overwrite-only and OTA cannot replace it. A signed
 image that boots badly has no automatic runtime rollback. Signing uses randomized
 RSA signatures: rebuilding tested source does not reproduce the tested bytes.
 
+Release app-core HEX carries the pinned jig-qualified MCUboot and exact OTA app. Every staged HEX is
+reparsed against the [bootloader policy](cv1-bootloader.md) at staging, promotion
+and publish. The built/shipped loader must match the qualified .19 hash; factory .8 remains
+an approved installed/restoration state. Never wire-flash stock MCUboot.
+
 ## Build, test, promote
 
 1. Merge the intended source and firmware revision into main. Normally bump
@@ -11,10 +16,16 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    is also supported. The workflow sets both BLE DIS and the app's signed
    MCUboot header version to that value; packaging verifies the signed header.
 2. Dispatch `firmware_release.yml` **without** `publish` to build QA artifacts.
+   The run first compiles and proves the pinned MCUboot, then executes the simulator gate (`omi/sim/README.md`, "Scenario
+   suite": every scenario plus 40 fuzz seeds at this SHA). Staging fails
+   closed without a passing `sim-report.json` for the same SHA and version;
+   the report ships in the QA artifact, its SHA-256 is in `qa-provenance.json`
+   and promotion and publish revalidate it. The simulator is source-level
+   evidence, not a test of the signed bytes; the bench (step 3) still is.
    The default OTA zip contains only app image 0. Set `include_network_core=true`
    only when intentionally testing a paired app/radio update. This changes zip
-   packaging only: MCUboot, partitions, sysbuild layout, `merged.hex` and
-   `merged_CPUNET.hex` are untouched.
+   packaging only. Release staging constructs app-core HEX from the pinned qualified MCUboot and
+   staged OTA signed app bytes; settings, UICR and network addresses are excluded. `merged_CPUNET.hex` stays separate.
 3. Download `cv1-qa-release-<run ID>-<attempt>` and test its `Omi_CV1_OTA_v<version>.zip` on the bench
    through the stock app. Record the run ID, attempt, asset SHA-256 from
    `qa-provenance.json`, phone/app version, device identity and health results.
@@ -45,11 +56,30 @@ RSA signatures: rebuilding tested source does not reproduce the tested bytes.
    back to the old run-wide artifact name. Older artifacts need a new QA build
    and bench receipt. A mismatched bench signed-image hash fails closed.
    Advancing main requires a new QA build at that SHA. No rebuild, signing,
-   repackaging or renaming occurs on publish. Only the tested zip and two factory
-   hex files are attached. The git refs API atomically creates the tag at the
+   repackaging or renaming occurs on publish. Only the tested zip, qualified merged app-core HEX and separate CPUNET
+   HEX are attached. The git refs API atomically creates the tag at the
    tested SHA and refuses existing tags. A release is created as a draft and its
    tag is verified again before publication. If verification fails, it stays a
    draft; inspect the tag/draft before an approved cleanup and retry.
+
+## Release checklist (each gate fails closed)
+
+- **G0 candidate.** Fixes merged to main with host tests green and the
+  simulator suite (`omi/sim/scenario_runner.py`) passing at that SHA. Every field bug in the release has
+  a scenario whose `baseline_bug` reproduces on the previous release's sources
+  (`scenario_runner.py --baseline`) and whose `expect` passes on the candidate.
+  `omi/sim/check_isolation.py --base <previous release>` lists only the
+  declared fixes.
+- **G1 version minted once.** Bump `CONFIG_BT_DIS_FW_REV_STR` only when the fix
+  set is complete and G0 is green at that SHA. A blocked candidate does not
+  consume a version number.
+- **G2 QA build + simulator gate.** Build-only `firmware_release.yml` run at that
+  SHA (step 2), `sim-report.json` in the artifact.
+- **G3 bench on the QA bytes.** Step 3 plus the safe-mode jig checks in
+  `safe-mode.md`; the gesture subset can be scripted from the scenarios with
+  `tools/cv1/jig_gestures.py`.
+- **G4 publish.** Step 4 with all three provenance inputs; the promoted
+  attempt's simulator report is revalidated by code.
 
 ## Rollout plan: new releases start at 1%, and David expands
 
@@ -83,6 +113,24 @@ New releases start at 1% of devices on an app build that sends `device_id`.
 Older app builds and devices without a usable DIS serial receive a new release
 only at 100%, retaining an earlier eligible release during the ramp. David
 expands each cohort after the health checks above; there is no automatic ramp.
+
+### Tester audiences
+
+Two optional keys in the same block offer a release to named testers whatever
+its `rollout_percent`, so a release published at 0% can reach only them. Neither
+needs a DIS serial, so they also reach units on 3.0.21 and earlier.
+
+- `allow_uid_sha256:<hex>,<hex>`: hex SHA-256 of each tester's Firebase uid
+  (`printf %s "$UID" | shasum -a 256`). Hashes, because release bodies are
+  public. The server verifies the app's token only when some release carries
+  this key; a missing or invalid token just isn't on the list.
+- `channels:beta`: callers whose `X-Omi-App-Channel` is listed (`beta` is
+  TestFlight and non-production builds; `store` is everything else). While
+  `channels` is set, nobody outside those channels or the allowlist gets the
+  release, whatever the percentage. Remove it to start the device ramp.
+
+A malformed value in either key excludes the release. `blocked:true` still wins.
+Stable discovery has no token or channel, so an audience never admits a release there.
 
 Set `blocked:true` in the same block to stop all new offers, even at 100%.
 The stable and exact-version endpoints also honor the block. Stable discovery

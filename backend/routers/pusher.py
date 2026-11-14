@@ -589,45 +589,44 @@ async def _run_websocket_util_trigger(
 
             try:
                 chunks: List[Dict[str, Any]] = []
-                for ref in refs:
-                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
-                    pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
-                    if len(pcm) != ref.samples * 2:
-                        raise ValueError('durable projection sample range is incomplete')
-                    chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
-                    if ref.frames:
-                        chunk['custody_receipt'] = ref.receipt.to_dict()
-                    if audio_timeline_v2:
-                        chunk['span'] = {
-                            'start': ref.start,
-                            'samples': ref.samples,
-                            'sample_rate': ref.sample_rate,
-                        }
-                    chunks.append(chunk)
+                with observe_work('drain_readback'):
+                    for ref in refs:
+                        pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
+                        pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
+                        if len(pcm) != ref.samples * 2:
+                            raise ValueError('durable projection sample range is incomplete')
+                        chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
+                        if ref.frames:
+                            chunk['custody_receipt'] = ref.receipt.to_dict()
+                        if audio_timeline_v2:
+                            chunk['span'] = {'start': ref.start, 'samples': ref.samples, 'sample_rate': ref.sample_rate}
+                        chunks.append(chunk)
                 if not audio_timeline_v2:
                     # Legacy headers are last-arrival-minus-duration estimates,
                     # not capture positions. Preserve the old continuous batch
                     # and its first timestamp; jitter cannot create v2 spans.
                     chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
-                uploaded_paths = await run_blocking(
-                    storage_executor,
-                    upload_audio_chunks_batch,
-                    chunks,
-                    uid,
-                    conv_id,
-                    cached_protection_level,
-                    sample_rate=sample_rate,
-                )
+                with observe_work('drain_upload'):
+                    uploaded_paths = await run_blocking(
+                        storage_executor,
+                        upload_audio_chunks_batch,
+                        chunks,
+                        uid,
+                        conv_id,
+                        cached_protection_level,
+                        sample_rate=sample_rate,
+                    )
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if audio_timeline_v2 else 'without_spans'
                 ).inc()
-                applied = await run_blocking(
-                    storage_executor,
-                    audio_projection.refresh,
-                    conv_id,
-                    uploaded_paths,
-                    force=not websocket_active or conv_id in record_close_requests,
-                )
+                with observe_work('drain_refresh'):
+                    applied = await run_blocking(
+                        storage_executor,
+                        audio_projection.refresh,
+                        conv_id,
+                        uploaded_paths,
+                        force=not websocket_active or conv_id in record_close_requests,
+                    )
                 if applied:
                     schedule_person_voice_learning_retry(uid, conv_id)
                     if len(identity_refreshed) < 128:
@@ -965,11 +964,21 @@ async def _run_websocket_util_trigger(
                 batch['data'] = bytearray()
                 return
             conv_id = batch['conversation_id']
+            if not await record_barrier.renew_recording(conv_id):
+                # Metadata refusal is not a storage attempt. Retain the batch
+                # and its audio-budget reservation without spending retries.
+                batch['retry_at'] = time.monotonic() + PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                ready_batches.append(batch)
+                if not websocket_active:
+                    # The shutdown event is already set; pace the bounded drain.
+                    await wait_for_event(asyncio.Event(), PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+                return
             chunk_data = bytes(batch['data'])
             del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
+                late_append = conv_id in record_barrier.late_appends
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
                     upload_chunk['span'] = {**batch['span'], 'start': timestamp}
@@ -996,6 +1005,8 @@ async def _run_websocket_util_trigger(
                     sample_rate=sample_rate,
                     reconcile_prefix=reconcile_prefix,
                 )
+                if uploaded_paths:
+                    record_barrier.append_committed(conv_id, observed=late_append)
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'
                 ).inc()
@@ -1326,14 +1337,20 @@ async def _run_websocket_util_trigger(
             nonlocal durable_tail_has_receipt
             nonlocal durable_commit_unresolved
             durable_tail_has_receipt = False
+            late_append = False
 
             def committed():
                 nonlocal durable_tail_has_receipt
                 durable_tail_has_receipt = True
+                record_barrier.append_committed(window.conversation_id, observed=late_append)
                 refused_windows.popleft()
                 window.payload.clear()
                 window.frames.clear()
 
+            if window.conversation_id and window.payload:
+                if not await record_barrier.renew_recording(window.conversation_id):
+                    return None  # Keep this window and its WAL unacknowledged.
+                late_append = window.conversation_id in record_barrier.late_appends
             try:
                 return await _commit_durable_audio_window(
                     uid=uid,
@@ -1803,6 +1820,7 @@ async def _run_websocket_util_trigger(
                     if current_conversation_id:
                         with observe_work('record_begin'):
                             await record_barrier.begin_recording(current_conversation_id)
+                            await record_barrier.renew_recording(current_conversation_id)
                     if private_cloud_chunk_start_time is None:
                         # Use timestamp from first buffer of this 5-second chunk
                         private_cloud_chunk_start_time = buffer_start_timestamp

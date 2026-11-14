@@ -30,6 +30,7 @@ from config.episodes import (
     f_join_enabled,
     f_join_env_admitted,
     EPISODE_F_JOIN_PERCENT_ENV,
+    F_JOIN_NEW_CHARS,
     F_JOIN_PREVIOUS_CHARS,
     F_JOIN_PEOPLE_READ_LIMIT,
 )
@@ -46,6 +47,8 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 ARM_FIELD = 'f_join_arm'
+# Marking a join re-reads the live episode after a lost compare-and-swap: one try plus two retries.
+MARK_PENDING_ATTEMPTS = 3
 
 
 def admitted(uid: str) -> bool:
@@ -144,22 +147,56 @@ def mark_pending(
         'variant': F_JOIN_VARIANT,
         'previous': latest_member(owner, conversation_id),
     }
-    try:
-        episodes_db.commit_moment(
-            uid,
-            expected_episode_id=str(placed['id']),
-            expected_version=placed.get('state_version'),
-            updates={'pending_boundary': {**pending, conversation_id: marker}},
-            firestore_client=firestore_client,
-        )
-        metrics.record_boundary('f_pending')
-    except EpisodeConflict:
-        metrics.record_boundary('f_pending_conflict')
-        _fallback('other')
-    except Exception as error:
-        metrics.record_boundary('f_pending_error')
-        _fallback('other')
-        logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+    episode_id = str(placed['id'])
+    version = placed.get('state_version')
+    for attempt in range(MARK_PENDING_ATTEMPTS):
+        try:
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=episode_id,
+                expected_version=version,
+                updates={'pending_boundary': {**pending, conversation_id: marker}},
+                firestore_client=firestore_client,
+            )
+            metrics.record_boundary('f_pending')
+            return
+        except EpisodeConflict as conflict:
+            # A live episode takes a write on every moment, so the version read at attach is often stale
+            # by now. Re-read and retry while the join still stands; otherwise today's join is kept.
+            reason = str(conflict) or 'conflict'
+            fresh = None
+            if attempt + 1 < MARK_PENDING_ATTEMPTS:
+                try:
+                    fresh = episodes_db.get_episode(
+                        uid, episode_id, firestore_client=firestore_client, follow_redirects=False
+                    )
+                except Exception:
+                    fresh = None
+            if (
+                fresh is None
+                or not policy.is_live(fresh)
+                or conversation_id not in (fresh.get('conversation_ids') or [])
+                or conversation_id in (fresh.get('pending_boundary') or {})
+            ):
+                metrics.record_boundary('f_pending_conflict')
+                _fallback('other', site='pending_conflict')
+                logger.warning(
+                    'event=episode_f_join outcome=pending_conflict reason=%s attempts=%d', reason, attempt + 1
+                )
+                return
+            version = fresh.get('state_version')
+            pending = fresh.get('pending_boundary') or {}
+        except Exception as error:
+            metrics.record_boundary('f_pending_error')
+            _fallback('other', site='pending_error')
+            logger.warning('event=episode_f_join outcome=pending_failed exception_type=%s', type(error).__name__)
+            return
+
+
+def synced_failed(error: BaseException) -> None:
+    """A sync or late join's F decision raised: today's time-only join stands and the fallback is reported."""
+    _fallback('other', site='synced_failed')
+    logger.warning('event=episode_f_join outcome=synced_failed exception_type=%s', type(error).__name__)
 
 
 def previous_transcript(
@@ -168,6 +205,8 @@ def previous_transcript(
     conversation_id: str,
     pending: Mapping[str, Any],
     c: Any,
+    *,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> str:
     """Read one retained predecessor, rechecking processing visibility before decoding or naming.
 
@@ -193,7 +232,7 @@ def previous_transcript(
     selected = _transcript_tail(segments)
     person_ids = list(
         dict.fromkeys(str(s['person_id']) for s in selected if s.get('person_id') and not s.get('is_user'))
-    )[:F_JOIN_PEOPLE_READ_LIMIT]
+    )[:people_read_limit]
     names = {}
     if person_ids:
         if c.people_names is not None:
@@ -207,31 +246,51 @@ def previous_transcript(
     return incremental.render_f_transcript(moment_render.name_segments(selected, names))
 
 
-def _may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+def may_feed_llm(uid: str, row: Mapping[str, Any]) -> bool:
+    """The privacy gate for any conversation whose speech F may send to Jev, as predecessor or candidate.
+
+    Fail-closed: a missing required field is not permission (``is_locked`` and ``discarded`` must be False).
+    """
+    return gate_refusal_reason(uid, row) is None
+
+
+def gate_refusal_reason(uid: str, row: Mapping[str, Any]) -> Optional[str]:
+    """First refusal in the privacy gate's evaluation order; no additional reads."""
     # Reuse the episode composer/build visibility predicates. Missing required processing metadata
     # is unknown, not permission; optional tombstone/redirect fields retain their schema defaults.
     if row.get('owner_uid', uid) != uid or row.get('uid', uid) != uid:
-        return False
+        return 'owner'
     if row.get('data_protection_level') not in {'standard', 'enhanced'}:
-        return False
+        return 'row_consent'
+    # Private cloud sync is the user's retention consent. Only an explicit True permits speech to reach Jev;
+    # an absent or false value keeps today's join (the same explicit-opt-in rule as the batch attach gate).
+    if row.get('private_cloud_sync_enabled') is not True:
+        return 'row_consent'
     if row.get('is_locked') is not False or row.get('discarded') is not False:
-        return False
+        return 'locked_discarded'
     if any(row.get(key, False) is not False for key in ('deleted', 'deferred', 'processing_deferred')):
-        return False
+        return 'deferred'
     if row.get('status') not in {'completed', 'processing', 'in_progress'}:
-        return False
-    if (
-        row.get('processing_state') == 'local_pending'
-        or row.get('terminal_no_derived_effects')
-        or row.get('client_processing')
-    ):
-        return False
+        return 'status'
+    if row.get('processing_state') == 'local_pending':
+        return 'local_pending'
+    if row.get('terminal_no_derived_effects'):
+        return 'other'
+    if row.get('client_processing'):
+        return 'client_processing'
     if row.get('summary_blocked_reason') == 'local_only':
-        return False
+        return 'local_only'
     hold = row.get(HOLD_FIELD, {})
     if not isinstance(hold, Mapping) or hold.get('held', False) is not False:
-        return False
-    return not hidden_member(dict(row)) and conversations_db.is_visible_conversation(row)
+        return 'held'
+    if hidden_member(dict(row)) or not conversations_db.is_visible_conversation(row):
+        return 'hidden'
+    return None
+
+
+# ``previous_transcript`` is a pinned People-reader body (backend/docs/people-generation-writers.json), so it keeps
+# calling the private name. Changing that call would invalidate the audit without changing what is checked.
+_may_feed_llm = may_feed_llm
 
 
 def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
@@ -251,7 +310,58 @@ def _transcript_tail(segments: Sequence[Any]) -> list[dict[str, Any]]:
     return list(reversed(selected))
 
 
-def _fallback(reason: str) -> None:
+def candidate_head(segments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The candidate's first ``F_JOIN_NEW_CHARS`` of speech, naming at most ``F_JOIN_PEOPLE_READ_LIMIT`` voices.
+
+    Bounded before any name lookup, so a long transcript costs the spec's reads and not one per voice.
+    Only the head reaches Jev (``f_boundary_state``), so the rest is never needed for naming.
+    """
+    rows = sorted(
+        (s for s in segments if str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    head: list[dict[str, Any]] = []
+    remaining = F_JOIN_NEW_CHARS
+    for segment in rows:
+        if remaining <= 0:
+            break
+        text = str(segment['text']).strip()[:remaining]
+        head.append({**segment, 'text': text})
+        remaining -= len(text) + 1
+    named_ids = list(dict.fromkeys(str(s['person_id']) for s in head if s.get('person_id')))
+    allowed = set(named_ids[:F_JOIN_PEOPLE_READ_LIMIT])
+    capped: list[dict[str, Any]] = []
+    for segment in head:
+        person = str(segment.get('person_id') or '')
+        if person and person not in allowed:
+            segment = {key: value for key, value in segment.items() if key != 'person_id'}
+        capped.append(segment)
+    return capped
+
+
+def _candidate_refusal_reason(
+    uid: str, conversation_id: str, row: Optional[Mapping[str, Any]], c: Any
+) -> Optional[str]:
+    """The candidate's own privacy gate. A caller that holds the row passes it; otherwise one snapshot read."""
+    if row is None:
+        row = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+    return gate_refusal_reason(uid, row) if row else 'other'
+
+
+def _user_consent_allows(uid: str, c: Any) -> bool:
+    """The user's current private cloud sync consent, checked just before Jev.
+
+    The conversation row carries a snapshot of the consent, so a toggle after the row was written is seen here.
+    A missing user document or field is not permission (fail closed).
+    """
+    client = c.firestore_client if c.firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).get(field_paths=['private_cloud_sync_enabled'])
+    data = snapshot.to_dict() or {}
+    return data.get('private_cloud_sync_enabled') is True
+
+
+def _fallback(reason: str, *, site: str) -> None:
+    metrics.record_f_fallback(site)
     record_fallback(
         component='episode_f_join',
         from_mode='jev_f',
@@ -279,7 +389,7 @@ def later_member(episode: Mapping[str, Any], conversation_id: str, started_at: d
 
 
 def _split_still_clear(
-    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any
+    uid: str, episode: Mapping[str, Any], conversation_id: str, started_at: datetime, c: Any, *, member: bool = True
 ) -> bool:
     """Re-reads the episode after Jev answered: a split is clear only while the episode is live and no
     member recorded past the candidate's start. An unreadable episode keeps today's join."""
@@ -289,7 +399,7 @@ def _split_still_clear(
         )
     except Exception as error:
         logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
-        _fallback('other')
+        _fallback('other', site='recheck_failed')
         return False
     if fresh is None:
         return False
@@ -297,7 +407,7 @@ def _split_still_clear(
         fresh
         and not fresh.get('recorded_merged_into')
         and isinstance(fresh.get('conversation_ids'), list)
-        and conversation_id in fresh['conversation_ids']
+        and (not member or conversation_id in fresh['conversation_ids'])
         and isinstance(fresh.get('member_activity'), Mapping)
         and policy.is_live(fresh)
         and not later_member(fresh, conversation_id, started_at)
@@ -313,8 +423,15 @@ def settle(
     c: Any,
     *,
     started_at: datetime,
+    member: bool = True,
+    candidate_row: Optional[Mapping[str, Any]] = None,
+    people_read_limit: int = F_JOIN_PEOPLE_READ_LIMIT,
 ) -> policy.Boundary:
-    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join."""
+    """F's answer for a marked join. Killed, no answer, an error or a timeout keeps today's join.
+
+    ``member=False`` answers for a candidate not yet in the episode (a sync or late conversation placed
+    after the answer); the split then needs only the episode still live and no later member.
+    """
     gap = float(pending.get('gap_seconds') or 0.0)
     source_changed = bool(pending.get('source_changed'))
     keep = policy.Boundary(policy.CONTINUE, gap_seconds=gap, source_changed=source_changed)
@@ -326,23 +443,56 @@ def settle(
         metrics.record_boundary('f_later_member')
         return keep
     try:
-        previous = previous_transcript(uid, episode, conversation_id, pending, c)
+        # Predecessor and name reads come first. The candidate's stored privacy is checked just before Jev,
+        # so a lock, deletion, discard or consent change during those reads still keeps today's join.
+        previous = previous_transcript(uid, episode, conversation_id, pending, c, people_read_limit=people_read_limit)
     except Exception as error:
         logger.warning('event=episode_f_join outcome=previous_failed exception_type=%s', type(error).__name__)
         metrics.record_boundary('f_no_answer')
-        _fallback('other')
+        _fallback('other', site='previous_failed')
+        return keep
+    try:
+        # The candidate's stored privacy, then the user's current consent, before the ownership recheck.
+        refusal = _candidate_refusal_reason(uid, conversation_id, candidate_row, c)
+        if refusal is None and not _user_consent_allows(uid, c):
+            refusal = 'user_consent'
+        allowed = refusal is None
+    except Exception as error:
+        logger.warning('event=episode_f_join outcome=gate_failed exception_type=%s', type(error).__name__)
+        metrics.record_boundary('f_no_answer')
+        _fallback('other', site='gate_failed')
+        return keep
+    if not allowed:
+        # Locked, deferred, local-only, held, opted out or another owner's conversation: its speech never reaches Jev.
+        metrics.record_f_gate(refusal or 'other')
+        metrics.record_boundary('f_no_answer')
         return keep
     if not previous:
         metrics.record_boundary('f_no_answer')
-        _fallback('unknown')
+        _fallback('unknown', site='unknown_previous')
         return keep
     state = incremental.f_boundary_state(previous, incremental.render_f_transcript(named))
+    if not member:
+        # Sync/late candidates must still be unplaced after predecessor, name and privacy reads.
+        # This narrows the race window; another request can still attach after this snapshot.
+        try:
+            owner = episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+        except Exception as error:
+            logger.warning('event=episode_f_join outcome=recheck_failed exception_type=%s', type(error).__name__)
+            metrics.record_boundary('f_no_answer')
+            _fallback('other', site='recheck_failed_settle')
+            return keep
+        if owner is not None:
+            metrics.record_boundary('f_no_answer')
+            return keep
     p_same = incremental.ask_same_occasion_f(state, ask=c.ask)
     if p_same is None:
         metrics.record_boundary('f_no_answer')
-        _fallback('unknown')
+        _fallback('unknown', site='unknown_jev')
         return keep
-    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(uid, episode, conversation_id, started_at, c):
+    if p_same < MOVED_ON_THRESHOLD and not _split_still_clear(
+        uid, episode, conversation_id, started_at, c, member=member
+    ):
         # A member attached while Jev was answering; the split would now overlap it.
         metrics.record_boundary('f_later_member')
         return keep

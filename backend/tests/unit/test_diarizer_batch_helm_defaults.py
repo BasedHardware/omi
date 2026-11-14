@@ -76,7 +76,8 @@ def test_batch_values_pin_queue_depth_target_and_floor():
     values = _load(BATCH_VALUES)["autoscaling"]
     assert values["enabled"] is True
     assert values["minReplicas"] == 1, "floor is David-only at 1; see file header"
-    assert values["maxReplicas"] == 18
+    assert values["maxReplicas"] == 5
+    assert _load(BATCH_VALUES)["warmFallback"]["maxTotalReplicas"] == values["maxReplicas"] + 1 == 6
     target = values["queueDepthAverageValue"]
     assert target == 2, (
         "target 1 provisions one T4 node per queued item (2026-11-01 measurement: "
@@ -98,7 +99,7 @@ def test_batch_queue_depth_target_stays_below_metric_ceiling():
 def test_batch_hpa_renders_single_queue_depth_metric():
     spec = _render()["spec"]
     assert spec["minReplicas"] == 1
-    assert spec["maxReplicas"] == 18
+    assert spec["maxReplicas"] == 5
     metrics = spec["metrics"]
     assert len(metrics) == 1, f"expected only the queue-depth metric, got {metrics}"
     pods = metrics[0]["pods"]

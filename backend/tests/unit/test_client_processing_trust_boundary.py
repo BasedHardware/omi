@@ -515,6 +515,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
+        # FolderEntity serialization for the Developer API folder response;
+        # this path neither reads a Conversation nor feeds intelligence.
+        DumpSite('routers/developer.py', 'get_user_folders', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).
@@ -569,8 +572,17 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/llm/goals.py', 'suggest_goal', 'dict'),
         DumpSite('database/goals.py', 'normalize_goal_storage', 'model_dump'),
         DumpSite('database/goals.py', '_new_goal_payload', 'model_dump'),
-        DumpSite('database/goals.py', 'update_goal', 'model_dump'),
+        DumpSite('database/goals.py', 'update_document', 'model_dump'),
         DumpSite('database/goals.py', 'apply', 'model_dump'),
+        # A2a repository serialization: the task list's key only extracts sort
+        # fields from ActionItemEntity; goal CAS maps GoalEntity's stored fields,
+        # and progress methods map GoalProgressEvent storage/wire values. None
+        # serializes a Conversation or supplies conversation content to intelligence.
+        DumpSite('database/action_items.py', 'key', 'model_dump'),
+        DumpSite('database/goals.py', 'update', 'model_dump'),
+        DumpSite('database/goals.py', 'update_progress_document', 'model_dump'),
+        DumpSite('database/goals.py', 'append_progress_event', 'model_dump'),
+        DumpSite('database/goals.py', 'list_progress_events', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_intervention', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'publish', 'model_dump'),
         DumpSite('database/task_recommendations.py', 'create_feedback', 'model_dump'),

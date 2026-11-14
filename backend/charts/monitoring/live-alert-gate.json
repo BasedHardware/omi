@@ -49,6 +49,7 @@
     "omi-batch-timeliness-sample-stale",
     "omi-batch-timeliness-scan-blind",
     "omi-batch-queue-safety-blind",
+    "omi-backlog-held-redrive-unit-looping",
     "omi-record-pending-dwell",
     "omi-record-pending-dwell-stale",
     "omi-record-pending-dwell-blind",
@@ -73,6 +74,8 @@
     "omi-enrichment-queue-depth-page",
     "omi-stt-vendor-benched-page",
     "omi-incluster-guard-unsafe-page",
-    "omi-modulate-credit-page"
+    "omi-modulate-credit-page",
+    "omi-firestore-unattributed-reads",
+    "omi-firestore-unattributed-reads-blind"
   ]
 }

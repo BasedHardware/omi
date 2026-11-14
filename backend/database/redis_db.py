@@ -990,6 +990,28 @@ def release_byok_llm_error_notification_lock(uid: str, provider: str, reason: st
     r.delete(f'users:{uid}:byok_llm_error:{provider}:{reason}')
 
 
+PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS = 90 * 24 * 60 * 60
+
+
+def claim_payment_recovery_notification(uid: str, invoice_id: str) -> bool:
+    """Atomically claim one recovery push per owner and current Stripe invoice.
+
+    The 90-day bound comfortably covers Stripe webhook retries and dunning while
+    allowing a distinct later invoice its own notification. Unlike the optional
+    webhook event ledger, this marker also dedupes different event IDs for the
+    same invoice. Redis errors deliberately propagate so the webhook remains
+    retryable and cannot send without a confirmed claim.
+    """
+    return bool(
+        r.set(
+            f'users:{uid}:payment_recovery_notification:{invoice_id}',
+            '1',
+            nx=True,
+            ex=PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS,
+        )
+    )
+
+
 # ******************************************************
 # ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
 # ******************************************************

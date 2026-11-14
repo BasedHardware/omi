@@ -9213,6 +9213,24 @@ class AppLocalizationsHu extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'A jelenlegi firmware verziója nem határozható meg';
 
   @override
+  String get applyCodeToCurrentPlan => 'Alkalmazás a jelenlegi csomagra';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'A kódot alkalmaztuk a jelenlegi csomagodra.',
+        'refused': 'Ez a kód nem alkalmazható. Ellenőrizd a kódot és a szükséges csomagot.',
+        'conflict': 'A kódot már felhasználták, vagy a csomagod már kedvezményes.',
+        'rateLimited': 'Túl sok próbálkozás. Várj, és próbáld újra később.',
+        'other': 'Nem sikerült alkalmazni a kódot. Próbáld újra.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Promóciós kód';
 
   @override
@@ -13703,6 +13721,9 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Jegyzetek újragenerálása';
 
   @override
   String get attentionSummaryFailed => 'Ezt a beszélgetést nem sikerült összefoglalni';

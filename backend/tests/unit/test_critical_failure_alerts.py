@@ -12,6 +12,8 @@ import subprocess
 import pytest
 import yaml
 
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
+
 from config.batch_timeliness import timeliness_interval_seconds
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -74,15 +76,12 @@ def test_batch_alarm_requires_freshness_and_keeps_the_two_hour_contract():
 
     assert hit(7201, 30) == 1
     assert hit(7200, 30) == 0
-    assert hit(7201, 900) == 0
+    assert hit(7201, 1200) == 0
 
 
 def test_held_backlog_growth_or_saturation_contract_and_mirrors():
     rule = RULES['omi-batch-held-backlog-growing']
-    stock = (
-        'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} '
-        'and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900))'
-    )
+    stock = 'max(omi_batch_timeliness_backlog_units{leg="assignment_held"} ' f'and ignoring(leg) {FRESH_NEWEST})'
     assert rule['data'][0]['model']['expr'] == (
         f'((({stock} > 1000) and on() (delta(({stock})[1h:5m]) > 50)) ' f'or ({stock} >= 10000) or on() vector(0))'
     )
@@ -161,7 +160,7 @@ def test_held_backlog_saturation_promql_and_pending_window(tmp_path, monkeypatch
         case('below cap growing stock still pages', '2000+2x90', 2180, firing=True),
         case('lever zero exact stock above cap pages', '10123x90', 10123, firing=True),
         case('saturated but stale sample is quiet', '10000x90', 0, observed='0x90'),
-        case('freshness boundary excludes saturation', '10000x90', 0, observed='0+60x75 4500x14'),
+        case('freshness boundary excludes saturation', '10000x90', 0, observed='0+60x70 4200x19'),
         case('draining below cap resolves without requiring measured growth', '10000x70 9999x19', 0),
     ]
     for configured in (600, 3600):
@@ -200,11 +199,11 @@ def test_held_backlog_saturation_promql_and_pending_window(tmp_path, monkeypatch
                 checkpoints=[('14m', 10000, False), ('15m', 10000, True), ('90m', 10000, True)],
             ),
             case(
-                'stale 10000 cannot borrow fresh 9999 peer timestamp at the 900s boundary',
+                'stale 10000 cannot borrow fresh 9999 peer timestamp before the 1200s freshness boundary',
                 None,
                 0,
                 inputs=replica('10000x90', '0x90', identity) + healthy_peer,
-                checkpoints=[('899s', 10000, False), ('900s', 0, False), ('30m', 0, False), ('90m', 0, False)],
+                checkpoints=[('899s', 0, False), ('900s', 0, False), ('30m', 0, False), ('90m', 0, False)],
             ),
             case(
                 'stale high stock does not mask fresh below-cap growth',

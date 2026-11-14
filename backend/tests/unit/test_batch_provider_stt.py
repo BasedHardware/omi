@@ -300,6 +300,104 @@ def test_unfunded_owner_is_deferred_without_download_or_spend(world, monkeypatch
     assert job(store, 'p1')['state'] == PENDING
 
 
+@pytest.mark.parametrize('reason', ['allowance_exhausted', 'budget_exhausted'])
+def test_exhausted_allowance_parks_for_the_hold_window_not_a_minute(world, monkeypatch, reason):
+    """A durable denial must not re-wake every minute: those loops starved entitled owners (2026-11-12)."""
+    _, store = world
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '1800')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    artifacts, vendor = Artifacts(), Vendor()
+    outcome = stage(store, artifacts, vendor, allowed=lambda *_: (False, reason)).run('p1')
+    assert (outcome.outcome, outcome.reason, outcome.available_at) == ('deferred', 'not_due', 2000.0)
+    assert artifacts.fetches == 0 and vendor.calls == 0
+    assert job(store, 'p1')['state'] == PENDING
+
+
+_DAY = 86400.0
+_STAGED = 'gs://based-hardware-batch-pipeline-staging/x'
+_DENIED = (False, 'allowance_exhausted')
+
+
+@pytest.mark.parametrize(
+    'age_days, expected',
+    [
+        (1.0, _DAY),  # far from expiry: the configured 24 h window
+        (27.5, 0.5 * _DAY),  # cut so the next re-check lands at the start of the last day (28 d)
+        (28.0, 7200.0),  # inside the last day before the 29-day end: the 2 h re-check
+        (28.9, 7200.0),
+        (40.0, 7200.0),  # past the end: never longer than the 2 h re-check
+    ],
+)
+def test_long_allowance_hold_rechecks_before_the_staged_audio_expires(monkeypatch, age_days, expected):
+    """A 24 h hold must not carry a unit past its audio: a renewal in the last day is seen within 2 h."""
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
+    now = 100 * _DAY
+    row = {'audio_uri': _STAGED, 'enqueued_at': now - age_days * _DAY}
+    assert provider_stt.funding_retry_seconds(_DENIED, job=row, now=now) == pytest.approx(expected)
+
+
+def test_restaged_audio_clock_is_the_one_the_hold_respects(monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
+    now = 100 * _DAY
+    row = {'audio_uri': _STAGED, 'enqueued_at': now - 28.5 * _DAY, 'audio_staged_at': now - 2 * _DAY}
+    assert provider_stt.funding_retry_seconds(_DENIED, job=row, now=now) == _DAY
+
+
+def test_hold_window_is_unchanged_without_a_staged_clock_or_when_already_short(monkeypatch):
+    now = 100 * _DAY
+    old = {'audio_uri': _STAGED, 'enqueued_at': now - 28.5 * _DAY}
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
+    assert provider_stt.funding_retry_seconds(_DENIED, job={'audio_uri': 'gs://other/x'}, now=now) == _DAY
+    assert provider_stt.funding_retry_seconds(_DENIED) == _DAY
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '1800')
+    assert provider_stt.funding_retry_seconds(_DENIED, job=old, now=now) == 1800.0
+    assert provider_stt.funding_retry_seconds((False, 'allowance_unavailable'), job=old, now=now) == (
+        provider_stt.FUNDING_RETRY_SECONDS
+    )
+
+
+def test_stage_passes_the_unit_and_clock_to_the_hold(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    seen = {}
+    real = provider_stt.funding_retry_seconds
+
+    def spy(decision, *, job=None, now=None):
+        seen.update(job=job, now=now)
+        return real(decision, job=job, now=now)
+
+    monkeypatch.setattr(provider_stt, 'funding_retry_seconds', spy)
+    stage(store, Artifacts(), Vendor(), allowed=lambda *_: _DENIED).run('p1')
+    assert seen['now'] == 200.0 and seen['job']['segment_id'] == 'p1'
+
+
+def test_transient_denial_keeps_the_short_funding_retry(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    outcome = stage(store, Artifacts(), Vendor(), allowed=lambda *_: (False, 'allowance_unavailable')).run('p1')
+    assert (outcome.outcome, outcome.available_at) == ('deferred', 200.0 + provider_stt.FUNDING_RETRY_SECONDS)
+
+
+def test_exhausted_allowance_after_inspection_also_parks(world, monkeypatch):
+    _, store = world
+    monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '1800')
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    allowed = Mock(side_effect=[(True, 'entitled'), (False, 'allowance_exhausted')])
+    outcome = stage(store, Artifacts(), vendor, allowed=allowed).run('p1')
+    assert (outcome.outcome, outcome.available_at) == ('deferred', 2000.0)
+    assert vendor.calls == 0 and 'provider_intent' not in job(store, 'p1')
+
+
+def test_funded_tuple_decision_proceeds_to_the_vendor(world, monkeypatch):
+    _, store = world
+    admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)
+    vendor = Vendor()
+    assert stage(store, Artifacts(), vendor, allowed=lambda *_: (True, 'entitled')).run('p1').reason == 'processed'
+    assert vendor.calls == 1
+
+
 def test_crash_after_paid_call_reconciles_without_a_second_call(world, monkeypatch):
     _, store = world
     admit(monkeypatch, store, [item('p1', 10)], 'content-p', JA)

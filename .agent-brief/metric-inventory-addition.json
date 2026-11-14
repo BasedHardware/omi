@@ -1,0 +1,14 @@
+{
+  "target": "backend/charts/monitoring/metric-inventory.prod.json",
+  "append_to": "declared_metrics",
+  "metrics": [
+    "omi_record_seal_oldest_age_seconds",
+    "omi_record_token_late_append_total",
+    "omi_record_token_lease_expired_sealed_total"
+  ],
+  "source_evidence": [
+    "backend/database/record_token_lease_metrics.py",
+    "backend/utils/observability/firestore_probe_export.py"
+  ],
+  "note": "Source declarations only. Preserve the observed metrics array, captured_at, and legacy debt. Target belongs to #24893; apply only through its owner."
+}

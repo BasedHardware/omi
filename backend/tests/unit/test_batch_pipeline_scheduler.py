@@ -54,6 +54,24 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def fresh_first_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key, *, ready):
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -139,6 +157,23 @@ class MemoryStore:
 
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
+
+    def cancel_fenced_recovery(self, segment_id):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
+    # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
+    def defer_privacy_blocked_record(self, segment_id, until, now):
+        with self.lock:
+            job = self.rows.get(('jobs', segment_id))
+            if (
+                not job
+                or job['state'] != 'record_pending'
+                or job['available_at'] > now
+                or not job.get('privacy_fenced')
+            ):
+                return False
+            job['available_at'] = float(until)
+            return True
 
     def longest_ready_pending(self, owner_key):
         jobs = [
@@ -344,6 +379,10 @@ def test_attempt_charged_re_lease_records_relet_true():
 def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
     # Shadow idle admission must follow this actual scheduler behavior, rather
     # than treating an attempt count as an authoritative terminal state.
+    # This is the CAPTURE_RETRY_CAP_ENFORCED rollback; the enforcing default is
+    # the next test. Either way a due retry is still promoted: the cap applies
+    # only at lease expiry, so the shadow busy estimator stays correct.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'false')
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
     store = MemoryStore()
     queue = Scheduler(store)
@@ -360,6 +399,24 @@ def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
     next_lease = queue.pull(due)[0]
     assert next_lease.attempt == cap + 1
     assert next_lease.token != lease.token
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
+    # CAPTURE_RETRY_CAP_ENFORCED=true (default off): the at-cap expiry is a
+    # retained hold. The unset default keeps retrying, as the test above shows.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'true')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    queue.pull(0)
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    held = store.rows['jobs', 'at-cap']
+    assert held['state'] == 'quarantined' and held['recovery_state'] == 'held'
+    assert held['audio_uri']
 
 
 def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
@@ -563,7 +620,10 @@ def test_admission_classifies_fresh_capture_by_capture_end():
     assert store.rows['jobs', 'catch_up']['fresh_capture'] is False
 
 
-def test_expired_leases_never_terminal_state_ordered_head():
+def test_expired_leases_never_terminal_state_ordered_head(monkeypatch):
+    # CAPTURE_RETRY_CAP_ENFORCED rollback. The enforcing default quarantines at
+    # the cap: test_enforced_cap_quarantines_at_cap_lease_expiry.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'false')
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), 0)

@@ -45,8 +45,12 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+        QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+        BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -73,8 +77,6 @@ overlay:
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         BATCH_PIPELINE_ENABLED:
           value: "true"
           category: rollout
@@ -92,11 +94,8 @@ overlay:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -183,12 +182,6 @@ overlay:
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
-        SPEAKER_GROUPING_MODE:
-          value: incumbent
-          category: rollout
-        SPEAKER_MATCH_SCORES_ENABLED:
-          value: 'true'
-          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -203,9 +196,6 @@ overlay:
           category: rollout
         MOBILE_STANDARD_BATCH_PERCENT:
           value: '0'
-          category: rollout
-        MOBILE_STANDARD_BATCH_UIDS:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
         STT_NO_TEXT_RESCUE_ENABLED:
           value: 'true'
@@ -277,8 +267,11 @@ overlay:
           category: rollout
     pusher:
       env:
+        # Mirrors backend-listen (co-host env parity); evaluated on backend-sync. Kill switch: false.
+        QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
           category: ops_kill
@@ -293,17 +286,12 @@ overlay:
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-        FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-        FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'true'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -397,12 +385,6 @@ overlay:
         SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
           category: rollout
-        SPEAKER_GROUPING_MODE:
-          value: incumbent
-          category: rollout
-        SPEAKER_MATCH_SCORES_ENABLED:
-          value: 'true'
-          category: rollout
         OMI_SHAPED_AGENT_MODE:
           value: 'on'
           category: rollout
@@ -460,6 +442,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -550,8 +535,14 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+          QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
@@ -576,12 +567,13 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -590,15 +582,7 @@ overlay:
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -612,7 +596,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'
@@ -740,12 +723,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
             category: rollout
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
@@ -888,9 +865,6 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
-            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -903,6 +877,8 @@ overlay:
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       backend-sync:
+        flags:
+          --timeout: 3600s
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
@@ -922,8 +898,16 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
+          BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
+          # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+          QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -959,10 +943,13 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Restore monthly usage reads only for compute admission on backend-sync (admitscope 2026-11-01).
-          # Writers maintain totals and cache invalidation while reader levers are off.
-          # Preserve the existing epoch and every other service/lever (#24194 guard).
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=100; usage_month_total=100 (backend-sync only; the other three stay 0/0).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -970,15 +957,8 @@ overlay:
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1103,12 +1083,6 @@ overlay:
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
             category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
-            category: rollout
           LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED:
             value: 'true'
             category: rollout
@@ -1231,14 +1205,8 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
@@ -1246,9 +1214,6 @@ overlay:
           # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
@@ -1325,8 +1290,17 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+          QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
@@ -1354,26 +1328,20 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=100; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
           # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1473,12 +1441,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1591,14 +1553,8 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_BACKFILL_ENABLED:
             value: 'true'
@@ -1606,9 +1562,6 @@ overlay:
           # Binds only when SYNC_BACKFILL_ADMISSION_LIMITS=true; queue concurrency paces uploads.
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
-            category: rollout
-          SYNC_BACKFILL_INFLIGHT_LIMIT:
-            value: 'false'
             category: rollout
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
@@ -1684,21 +1637,42 @@ overlay:
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        - HOSTED_DIARIZATION_API_URL
         env:
+          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
+          BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
+          # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+          QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
+          OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
+          OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
+          OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
-          BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
+          # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
+          # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
+          BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
           # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
           BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
-          # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
-          # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
-          # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
-          # restores the 1800 s default.
-          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '7200', category: ops_kill}
+          # Allowance-exhausted provider-STT units park 24 h between admission re-checks on this service
+          # (David 2026-11-13; interim until a plan change or renewal wakes held units). At 2 h, 83% of
+          # provider-stt queue wakes were re-checks of units still refused. 86400 is the code's maximum;
+          # a higher value falls back to the 1800 s default. GPU-lane admission runs on backend-sync and
+          # keeps 7200. Kill switch: '7200' restores the previous cycle.
+          BATCH_ALLOWANCE_HOLD_RETRY_SECONDS: {value: '86400', category: ops_kill}
+          # The outbox sweep repairs a lost wake only for rows younger than this. At the 14-day default a
+          # held row whose 24 h due time crossed day 14 could lose its last wake with no repair. 30 days is
+          # the staging bucket's lifecycle: repair stays available for as long as the audio can still be
+          # fetched (a renewal on day 29 is still served), and an older row is never re-woken to fetch audio
+          # that is gone (David 2026-11-13, D5). Removing the line restores 14.
+          BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS: {value: '30', category: reliability}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -1719,19 +1693,23 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Monthly-total scope is TEMPORARILY 0 on these four prod services (WQ31 backend-sync 5xx guard
-          # flag-off, PR #24194): usage_month_total is itself guard-flagged; epoch stays c2fs_20261026_r1
-          # for re-enable (#23739 precedent). base/GKE/jobs/desktop/dev stay 0/v1. Full literal also
-          # carries people=5, memory=0, privacy=0 (finjob=5).
-          # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}', category: rollout}
+          # Pinned per-service Cloud Run literal (ec191a row 3):
+          # privacy_negative_lookup_cache=100; privacy_checks_shadow=10; batch_timeliness_leader=0.
+          # usage_month_cache=0; usage_month_total=0 (only backend-sync has 100/100).
+          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
+          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
+          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
           # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
           # 0/200; rollback is setting this back to 0.
           BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
-          FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
+          # 2026-11-09 David (relay 3e764e): enable the scheduled repair owner until the long-term fix.
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          # lead2 8b9c8f (2026-11-10): 8/tick spend cap; rollback 10.
+          SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT: {value: '8', category: config}
           # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
           # loop; declared here so a train carries the serving value instead of resetting it to false.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'true', category: ops_kill}
@@ -1750,12 +1728,6 @@ overlay:
             value: '64'
             category: reliability
           # Explicit shared-speech rollback; GKE hosts remain off.
-          CAPTURE_SHARED_SPEECH_MODE:
-            value: 'off'
-            category: rollout
-          CAPTURE_SHARED_SPEECH_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_ENABLED:
             value: 'true'
             category: rollout
@@ -1780,7 +1752,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '5'
@@ -1826,12 +1797,6 @@ overlay:
             category: rollout
           SPEAKER_GROUPING_SHADOW_PERCENT:
             value: '10'
-            category: rollout
-          SPEAKER_GROUPING_MODE:
-            value: incumbent
-            category: rollout
-          SPEAKER_MATCH_SCORES_ENABLED:
-            value: 'true'
             category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
@@ -1924,14 +1889,8 @@ overlay:
           DEMAND_PROCESSING_TOOL_ENABLED:
             value: 'false'
             category: rollout
-          FIRST_SUMMARY_DEADLINE_ENABLED:
-            value: 'true'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
-            category: rollout
-          REPEAT_WORK_LLM_VERSION:
-            value: '2026-10-16-v1'
             category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'

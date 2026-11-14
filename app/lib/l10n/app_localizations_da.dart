@@ -9163,6 +9163,24 @@ class AppLocalizationsDa extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Kan ikke fastslå den aktuelle firmware-version';
 
   @override
+  String get applyCodeToCurrentPlan => 'Anvend på nuværende abonnement';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koden er anvendt på dit nuværende abonnement.',
+        'refused': 'Koden kan ikke anvendes. Kontroller koden og det krævede abonnement.',
+        'conflict': 'Koden er allerede brugt, eller dit abonnement har allerede rabat.',
+        'rateLimited': 'For mange forsøg. Vent og prøv igen senere.',
+        'other': 'Koden kunne ikke anvendes. Prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Kampagnekode';
 
   @override
@@ -13638,6 +13656,9 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Generér noter igen';
 
   @override
   String get attentionSummaryFailed => 'Samtalen kunne ikke opsummeres';

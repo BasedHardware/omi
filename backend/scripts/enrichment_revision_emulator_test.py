@@ -39,7 +39,6 @@ LEASE = 120.0
 @pytest.fixture
 def ob(outbox_backend, monkeypatch):  # noqa: F811
     outbox_backend.store_harness.seed_user('o')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     # Exercise the ship-on default, independently of the caller's environment.
     monkeypatch.delenv('ENRICHMENT_REVISION_RACE_RETRY_ENABLED', raising=False)

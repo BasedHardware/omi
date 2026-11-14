@@ -18,6 +18,7 @@ overlay:
       env:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -31,11 +32,8 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -107,8 +105,11 @@ overlay:
           value: '0'
     pusher:
       env:
+        # Dev-only canary (lead2 2afa3e): byte-budgeted custody admission. Prod stays '0'. Rollback: '0'.
+        PUSHER_STORAGE_PCM_BUDGET_MB: {value: '512', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -116,11 +117,8 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -230,6 +228,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          value: 'true'
+          category: rollout
         STT_SERVICE_MODELS:
           value: modulate-velma-2,soniox
           category: stt_policy
@@ -307,6 +308,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -352,6 +356,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -364,7 +369,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
@@ -429,6 +433,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -445,7 +450,6 @@ overlay:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -519,6 +523,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -531,7 +536,6 @@ overlay:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
-            value: '0'
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -587,6 +591,7 @@ overlay:
         env:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -606,7 +611,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'

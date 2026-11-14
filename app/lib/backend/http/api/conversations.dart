@@ -27,6 +27,7 @@ import 'package:omi/utils/wal_sync_upload.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
+part 'conversation_search_decode.dart';
 
 /// Whether a non-200 response from POST /v1/conversations (process in-progress
 /// conversation) is a benign race rather than a failure worth crash-reporting.
@@ -131,7 +132,10 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     if (pairs.length == 50) break;
   }
   var response = await makeApiCall(
-      url: url, headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')}, method: 'GET', body: '');
+      url: url,
+      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      method: 'GET',
+      body: '');
   if (response == null) return (items: <ServerConversation>[], ok: false, truncated: false);
   if (response.statusCode == 200) {
     final bodyBytes = response.bodyBytes;
@@ -290,16 +294,46 @@ String? _detailCode(String body) {
   }
 }
 
-Future<bool> deleteConversationServer(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('deleteConversation: ${response.statusCode}');
-  return response.statusCode == 204;
+/// How long a delete keeps retrying while another delete on the same account holds the server's
+/// gate (409 `account_gate_busy`).
+const conversationDeleteRetryBudget = Duration(seconds: 30);
+
+/// The pause before retrying a busy delete: the server's `Retry-After`, kept within 1–10 s, or 2 s
+/// when it is missing or unreadable.
+@visibleForTesting
+Duration conversationDeleteRetryDelay(http.Response response, DateTime Function() now) {
+  final delay = parseApiRetryAfter(response, now) ?? const Duration(seconds: 2);
+  if (delay < const Duration(seconds: 1)) return const Duration(seconds: 1);
+  if (delay > const Duration(seconds: 10)) return const Duration(seconds: 10);
+  return delay;
+}
+
+/// Deletes a conversation with everything derived from it; true only on 204. A 409 is retried
+/// after its Retry-After within [conversationDeleteRetryBudget]; any other answer fails at once.
+/// [send], [wait] and [now] are test seams.
+Future<bool> deleteConversationServer(
+  String conversationId, {
+  Future<http.Response?> Function()? send,
+  Future<void> Function(Duration)? wait,
+  DateTime Function()? now,
+}) async {
+  final clock = now ?? DateTime.now;
+  final deadline = clock().add(conversationDeleteRetryBudget);
+  while (true) {
+    final response = await (send?.call() ??
+        makeApiCall(
+          url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
+          headers: {},
+          method: 'DELETE',
+          body: '',
+        ));
+    if (response == null) return false;
+    Logger.debug('deleteConversation: ${response.statusCode}');
+    if (response.statusCode != 409) return response.statusCode == 204;
+    final delay = conversationDeleteRetryDelay(response, clock);
+    if (clock().add(delay).isAfter(deadline)) return false;
+    await (wait?.call(delay) ?? Future<void>.delayed(delay));
+  }
 }
 
 Future<bool> unlinkCalendarEvent(String conversationId) async {
@@ -400,10 +434,11 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
   return [];
 }
 
-Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId) async {
+Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String conversationId,
+    {bool userInitiated = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
-    headers: {},
+    headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'},
     method: 'GET',
     body: '',
   );
@@ -458,8 +493,8 @@ extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
 }
 
-Future<ServerConversation?> getConversationById(String conversationId) async {
-  return (await getConversationByIdResult(conversationId)).item;
+Future<ServerConversation?> getConversationById(String conversationId, {bool userInitiated = false}) async {
+  return (await getConversationByIdResult(conversationId, userInitiated: userInitiated)).item;
 }
 
 String conversationCollectionUrl(
@@ -547,9 +582,12 @@ class ConversationApi {
         debugName: 'conversation_parse',
       );
 
-  Future<ApiResult<ServerConversation>> byId(String id) async {
+  Future<ApiResult<ServerConversation>> byId(String id, {bool userInitiated = false}) async {
     final sent = await executeApi<String>(
-      request: ApiRequest(url: '${_baseUrl}v1/conversations/$id', method: 'GET'),
+      request: ApiRequest(
+          url: '${_baseUrl}v1/conversations/$id',
+          method: 'GET',
+          headers: {if (userInitiated) 'X-Omi-Recording-Detail': '1'}),
       send: _send,
       decode: (body) => body,
     );
@@ -840,7 +878,11 @@ class SyncUploadHttpException implements Exception {
   /// server gave no pacing guidance (e.g. platform-generated 503s).
   final int? retryAfterSeconds;
 
-  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
+  /// Body pacing for one recording's wait; never an account cooldown.
+  final int? recordingWaitSeconds;
+
+  const SyncUploadHttpException(this.statusCode, this.message,
+      {this.retryAfterSeconds, this.reasonCode, this.recordingWaitSeconds});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -1144,6 +1186,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         response.statusCode,
         'Server is temporarily unavailable',
         retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncUploadServerWaitReasonCode(response),
+        recordingWaitSeconds: syncUploadServerWaitSeconds(response),
       );
     }
     throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
@@ -1294,19 +1338,9 @@ Future<ConversationSearchResult> searchConversationsServerResult(
   if (response == null) return const ConversationSearchResult.failure();
   if (response.statusCode == 200) {
     try {
-      final data = wire.GeneratedSearchConversationsResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>,
-      );
-      // Search items are ConversationSearchItem (includes match_snippets); parse via JSON so
-      // ServerConversation keeps seek-to-moment evidence without widening GeneratedConversation.
-      final convos = data.items.map((conversation) => ServerConversation.fromJson(conversation.toJson())).toList();
-      return ConversationSearchResult(
-        items: convos,
-        currentPage: data.currentPage,
-        totalPages: data.totalPages,
-        outcome: ConversationSearchResultOutcome.success,
-        statusCode: response.statusCode,
-      );
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final generated = wire.GeneratedSearchConversationsResponse.fromJson(json);
+      return decodeConversationSearchResponse(json, generated: generated, statusCode: response.statusCode);
     } catch (e) {
       Logger.debug('searchConversationsServer parse error: $e');
       return ConversationSearchResult.failure(statusCode: response.statusCode);

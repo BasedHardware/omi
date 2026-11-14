@@ -123,25 +123,6 @@ def owned(capture: Mapping) -> bool:
     )
 
 
-def visible_restore_selected(host) -> bool:
-    """New paid preview cohort is nested in durable mobile batch custody."""
-    percent = parse_percent(os.getenv('SERVER_BATCH_ONLY_VISIBLE_RESTORE_PERCENT', '0'))
-    return bool(
-        (
-            getattr(host, 'server_batch_only', False) is True
-            or getattr(host, '_local_preview_engine_rescinded', False) is True
-        )
-        and owned(getattr(host, 'batch_record_capture', None) or {})
-        and getattr(getattr(host, 'client_device_context', None), 'platform', None) in {'ios', 'android'}
-        and not getattr(host, 'local_preview_batch', False)
-        and not getattr(host, 'use_custom_stt', False)
-        and not getattr(host, 'is_multi_channel', False)
-        and host.request.uid
-        and percent > 0
-        and cohort_bucket(host.request.uid, '') < percent
-    )
-
-
 def has_audio(capture: Mapping) -> bool:
     start, end = capture.get('server_batch_audio_start'), capture.get('server_batch_audio_end')
     return bool(
@@ -151,6 +132,18 @@ def has_audio(capture: Mapping) -> bool:
         and math.isfinite(start)
         and math.isfinite(end)
         and start < end
+    )
+
+
+def proven_empty(capture: Mapping) -> bool:
+    """A closed, received-empty server archive owes no recording obligation."""
+    return (
+        owned(capture)
+        and capture.get('server_batch_audio_closed') is True
+        and capture.get('server_batch_audio_received') is False
+        and not capture.get('record_upload_failed')
+        and not capture.get('record_upload_sessions')
+        and not has_audio(capture)
     )
 
 

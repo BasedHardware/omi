@@ -27,7 +27,6 @@ from testing.parity_pack_v0.schema import RequestFingerprint
 def environment(monkeypatch):
     for key in (
         'FIRST_SUMMARY_DEADLINE_ENABLED',
-        'FIRST_SUMMARY_UID_ALLOWLIST',
         'FIRST_SUMMARY_DEADLINE_PERCENT',
         'BATCH_PIPELINE_ENABLED',
         'BATCH_PIPELINE_PERCENT',
@@ -69,17 +68,14 @@ def host():
     )
 
 
-def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback(monkeypatch):
+def test_batch_cohorts_share_bucket_and_universal_summary_survives_admission_rollback(monkeypatch):
     enable(monkeypatch, '5')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '5')
     results = []
     for index in range(1000):
         owner = f'synthetic-{index}'
         expected = batch_pipeline.enabled_for(owner)
         assert batch_live_preview.selected(owner) == expected
-        assert summary_guarantee.enabled(owner) == expected
+        assert summary_guarantee.first_summary_pending({'uid': owner})
         results.append(expected)
     assert 20 < sum(results) < 80
     # The kill switch is all-or-nothing and the summary guarantee is independent of it, so a
@@ -87,27 +83,15 @@ def test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rol
     # statistically meaningful; each policy resolution copies the whole process environment.
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'false')
     assert not any(batch_pipeline.enabled_for(f'synthetic-{i}') for i in range(100))
-    assert [summary_guarantee.enabled(f'synthetic-{i}') for i in range(100)] == results[:100]
+    assert all(summary_guarantee.first_summary_pending({'uid': f'synthetic-{i}'}) for i in range(100))
 
 
-def test_summary_kill_allowlist_legacy_global_and_invalid(monkeypatch):
-    assert not summary_guarantee.enabled('synthetic')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    assert not summary_guarantee.enabled('synthetic')  # fail-safe at zero percent with no allowlist
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
-    assert summary_guarantee.enabled('synthetic')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
-    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', ' synthetic-allowed ')
-    assert summary_guarantee.enabled('synthetic-allowed')
-    assert not summary_guarantee.enabled('synthetic')
+def test_summary_is_universal_and_batch_preview_rejects_invalid_percent(monkeypatch):
+    assert summary_guarantee.first_summary_pending({'uid': 'synthetic'})
     for invalid in ('nan', 'inf', '-1', '101', 'bad'):
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', invalid)
-        assert not summary_guarantee.enabled('synthetic')
-        assert summary_guarantee.enabled('synthetic-allowed')
         monkeypatch.setenv('BATCH_LIVE_STT_RETIRE_PERCENT', invalid)
         assert not batch_live_preview.selected('synthetic')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
-    assert not summary_guarantee.enabled('synthetic-allowed')
+        assert summary_guarantee.first_summary_pending({'uid': 'synthetic'})
 
 
 @pytest.mark.parametrize(

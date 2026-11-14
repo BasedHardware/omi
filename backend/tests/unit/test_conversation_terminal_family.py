@@ -10,6 +10,7 @@ from google.cloud.firestore_v1 import _helpers
 from database import conversations as db
 from models.conversation_enums import ConversationStatus as Status
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.conversations.relevance_rules import RULES_VERSION
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
 
 PATH = ('users', 'synthetic', 'conversations', 'capture')
@@ -19,10 +20,14 @@ KEEP = dict(
     decided_by='policy',
     reason='lifecycle_terminal_default',
     trigger='lifecycle_terminal',
-    rules_version=4,
+    rules_version=RULES_VERSION,
 )
 DISCARD = dict(
-    verdict='discard', decided_by='policy', reason='already_discarded', trigger='lifecycle_terminal', rules_version=4
+    verdict='discard',
+    decided_by='policy',
+    reason='already_discarded',
+    trigger='lifecycle_terminal',
+    rules_version=RULES_VERSION,
 )
 
 
@@ -331,7 +336,7 @@ def test_refusal_counter_is_not_emitted_on_failed_commit(store, monkeypatch, rea
         callback(client.transaction())
         raise RuntimeError('synthetic commit failure')
 
-    monkeypatch.setattr(db, 'run_transactional', failed_commit)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', failed_commit)
     with pytest.raises(RuntimeError, match='synthetic commit failure'):
         persist({'status': requested, 'title': 'late'})
     assert metric._value.get() == before
@@ -348,7 +353,7 @@ def test_transaction_retry_resets_refusal_outcome(store, monkeypatch):
         client.rows[PATH] = {'status': 'processing'}
         return callback(client.transaction())
 
-    monkeypatch.setattr(db, 'run_transactional', retry)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', retry)
     assert persist({'status': 'completed', 'title': 'recovered'})
     assert metric._value.get() == before
     assert store.rows[PATH]['status'] == 'completed'

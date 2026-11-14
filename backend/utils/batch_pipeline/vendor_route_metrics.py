@@ -44,7 +44,10 @@ PAID_INTENT_VIOLATIONS = Counter(
 )
 HOLD_TRANSITIONS = Counter(contracts.METRIC_HOLD_TRANSITIONS, 'vendor_held transitions', ['outcome'])
 HELD_UNITS = Gauge(contracts.METRIC_HELD_UNITS, 'Units parked in vendor_held', ['reason'])
-HELD_OLDEST_AGE = Gauge(contracts.METRIC_HELD_OLDEST_AGE, 'Oldest vendor_held unit age; alert above 2h')
+# Literal for the alert emitter scan; frozen-name equality is covered by the contract test.
+HELD_OLDEST_AGE = Gauge(
+    'omi_batch_pipeline_vendor_held_oldest_age_seconds', 'Oldest vendor_held unit age; alert above 2h'
+)
 HEALTH_DECISIONS = Counter(contracts.METRIC_HEALTH_DECISIONS, 'VendorHealth.allows answers', ['provider', 'reason'])
 BREAKER_STATE = Gauge(
     contracts.METRIC_BREAKER_STATE, 'Vendor breaker state, 1 for the current one', ['provider', 'state']

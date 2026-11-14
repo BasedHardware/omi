@@ -18,6 +18,7 @@ from tests.support.lifecycle_state_table import (
     ABANDON_RECORD_PRODUCER,
     CLAUSES,
     FIELD_BUILDERS,
+    IMPORT_PAUSED_DWELL_ROWS,
     ORDERING_RULES,
     PATCH_CONTRACTS,
     STATES,
@@ -29,6 +30,7 @@ from utils.conversations.phase import ConversationPhase, EpisodePhase
 BACKEND = Path(__file__).resolve().parents[2]
 METRIC_MODULES = (
     'utils/metrics.py',
+    'database/record_token_lease_metrics.py',
     'utils/batch_pipeline/metrics.py',
     'utils/conversations/summary_delivery.py',
     'utils/observability/fair_use.py',
@@ -143,6 +145,15 @@ def module_source(module):
     return source, ast.parse(source)
 
 
+def scope_definitions(nodes):
+    """Find definitions through control flow without entering another scope."""
+    for node in nodes:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node
+        else:
+            yield from scope_definitions(ast.iter_child_nodes(node))
+
+
 @lru_cache(maxsize=None)
 def function_source(cite):
     module, _, function = cite.partition(':')
@@ -151,16 +162,23 @@ def function_source(cite):
         return source
     for part in function.split('.'):
         node = next(
-            (
-                child
-                for child in node.body
-                if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == part
-            ),
+            (child for child in scope_definitions(node.body) if child.name == part),
             None,
         )
         if node is None:
             return ''
     return ast.get_source_segment(source, node) or ''
+
+
+def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(monkeypatch):
+    source = 'def outer():\n    for item in []:\n        def commit(tx):\n            return item\ndef other():\n    def hidden():\n        pass\n'
+    monkeypatch.setitem(
+        function_source.__wrapped__.__globals__, 'module_source', lambda path: (source, ast.parse(source))
+    )
+    read = function_source.__wrapped__
+    assert 'return item' in read('synthetic.py:outer.commit')
+    assert read('synthetic.py:outer.hidden') == ''
+    assert read('synthetic.py:commit') == ''
 
 
 def assigned_fields(source):
@@ -244,8 +262,37 @@ def assert_patch_contract(entry, deadline):
 
 def assert_clause(row, clause):
     if row.derived:
-        # Compatibility reader vocabulary has no state entry side effect.
-        assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
+        if row.machine == 'record_token':
+            # Per-token views derive from nested clocks, not a persisted phase.
+            # Their process-local stock and custody-invariant page do not claim
+            # an independent persisted-state deadline or backlog dwell alarm.
+            assert row.state in {'capturing', 'lease_lapsed'}
+            assert row.fields == ('record_upload_sessions',)
+            assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+            assert row.deadline_exemption
+            assert function_source(row.exit.cite), row.exit.cite
+            if clause == 'automatic_exit':
+                assert row.exit.kind in {'lease', 'sweeper'}
+                for writer in row.exit.automatic_writers:
+                    assert function_source(f'{writer.module}:{writer.function}'), writer
+                    assert writer.function in FIELD_BUILDERS.get(writer.module, {}).get('record_upload_sessions', ())
+            elif clause == 'entry_deadline':
+                assert function_source('config/record_seal_rules.py:token_lease_lapsed')
+            elif clause == 'dwell_metric':
+                assert row.dwell_metric == 'omi_record_token_lease_active' and row.dwell_metric in gauge_names()
+            elif clause == 'dwell_alert':
+                assert row.alert.uid == 'omi-record-token-lease-late-append' and row.alert.tier == 'page'
+                rule = alerts()[row.alert.uid]
+                assert rule.get('labels', {}).get('tier') == row.alert.tier and not rule.get('isPaused', False)
+                assert any(
+                    'omi_record_token_late_append_total' in item.get('model', {}).get('expr', '')
+                    for item in rule['data']
+                )
+            else:
+                raise AssertionError(clause)
+        else:
+            # Compatibility reader vocabulary has no state entry side effect.
+            assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
         return
     if row.quiescent:
         assert (row.machine, row.state) == ('fair_use', 'none')
@@ -504,6 +551,21 @@ KNOWN_GAPS = {
 }
 
 
+# Ruling699300 reviewed the coverage loss explicitly. Never derive these gaps
+# from isPaused or from assertion failures: only the fixed reviewed table may enter.
+# Real unpause makes test_latch_clause XPASS strictly, forcing debt cleanup.
+KNOWN_GAPS.update(
+    {
+        (key, 'dwell_alert'): (
+            f'Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938: {uid} paused for known '
+            'backlog until #24731/#24893 ships and its written clean24h unpause criteria hold; '
+            'active dwell protection is absent, not repaired. Owner: omi-pipeline/two-lane-lead.'
+        )
+        for key, uid in IMPORT_PAUSED_DWELL_ROWS.items()
+    }
+)
+
+
 def parameters():
     for row in STATES:
         for clause in CLAUSES:
@@ -515,6 +577,14 @@ def parameters():
 @pytest.mark.parametrize('row,clause', list(parameters()))
 def test_latch_clause(row, clause):
     assert_clause(row, clause)
+
+
+@pytest.mark.parametrize('clause', CLAUSES)
+def test_derived_record_token_view_rejects_unknown_states_and_fields(clause):
+    view = next(row for row in STATES if row.key == 'record_token:capturing')
+    for changed in (replace(view, state='invented'), replace(view, fields=('status',))):
+        with pytest.raises(AssertionError):
+            assert_clause(changed, clause)
 
 
 def test_declared_phase_vocabulary_matches_compatibility_reader():
@@ -568,7 +638,7 @@ def test_resolved_plan_gaps_do_not_regress():
         ('finalization:blocked_byok', 'dwell_alert'),
         ('finalization:blocked_byok', 'dwell_metric'),
         ('batch:record_pending', 'dwell_metric'),
-        ('batch:record_pending', 'dwell_alert'),
+        # record_pending dwell-alert coverage is now explicit reviewed import debt.
         ('finalization:dead_letter', 'dwell_alert'),
         ('batch:leased', 'entry_deadline'),
         ('visibility:bridge_pending', 'entry_deadline'),
@@ -577,6 +647,33 @@ def test_resolved_plan_gaps_do_not_regress():
     ):
         assert (key, clause) not in KNOWN_GAPS
         assert_clause(rows[key], clause)
+
+
+@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
+def test_reviewed_import_pauses_remain_real_dwell_coverage_gaps(key, uid):
+    row = next(row for row in STATES if row.key == key)
+    assert row.alert.uid == uid
+    assert (key, 'dwell_alert') in KNOWN_GAPS
+    rule = alerts()[uid]
+    assert rule['isPaused'] is True
+    assert '24h' in rule['annotations']['unpause_criteria']
+    with pytest.raises(AssertionError):
+        assert_clause(row, 'dwell_alert')
+
+
+@pytest.mark.parametrize('key,uid', IMPORT_PAUSED_DWELL_ROWS.items())
+def test_real_unpause_will_require_removing_the_strict_gap(key, uid, monkeypatch):
+    row = next(row for row in STATES if row.key == key)
+    monkeypatch.setitem(alerts(), uid, {**alerts()[uid], 'isPaused': False})
+    assert_clause(row, 'dwell_alert')  # Real source unpause would make the strict xfail XPASS.
+
+
+def test_unreviewed_pause_still_fails_the_active_dwell_contract(monkeypatch):
+    row = next(row for row in STATES if row.key == 'finalization:queued')
+    assert row.key not in IMPORT_PAUSED_DWELL_ROWS
+    monkeypatch.setitem(alerts(), row.alert.uid, {**alerts()[row.alert.uid], 'isPaused': True})
+    with pytest.raises(AssertionError):
+        assert_clause(row, 'dwell_alert')
 
 
 @pytest.mark.parametrize('key', ['record_audio:capturing', 'record_audio_orphan:capturing'])

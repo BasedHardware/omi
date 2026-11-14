@@ -1,0 +1,87 @@
+version: 2
+name: failed-conversations-activity
+tier: manual
+description: >-
+  Failed conversations belong only in Activity with retry when pending-work
+  explicitly confirms placement. Use synthetic data and a loopback backend.
+  HomeFailurePlacementTests covers the same placement, retry and account fences
+  without a signed app session; this flow verifies the mounted destinations.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/AttentionLedgerSection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/FailedConversationsActivitySection.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/HomeFailurePlacement.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+HomeFailurePlacement.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+preconditions:
+  - named_non_production_bundle_ui_lane
+  - loopback_backend_and_auth_firestore_emulators_with_synthetic_data_only
+  - synthetic_failed_projected_failed_and_completed_conversations
+steps:
+  - id: S1
+    name: Failed conversations stay off Conversations
+    do: >-
+      Return enabled=true and home_processing_today=true from pending-work.
+      Open Conversations. Verify neither failed-status nor failed-projection
+      fixture appears in the list, search, Starred or folder views. A completed
+      fixture remains visible. With only failed fixtures loaded, the empty state
+      has an Activity button; press it and verify the existing Activity opens.
+    expect:
+      text_visible:
+        - Activity
+  - id: S2
+    name: Activity owns the failure and its existing detail link
+    do: >-
+      Open Activity. Verify each failed fixture appears once under Needs attention
+      with Processing failed and Try Again, and is absent from the spine below.
+      Click its title and verify the existing conversation detail opens, then
+      return to Activity. A locked fixture uses a generic title. Search for a
+      failed fixture outside the loaded Home page and verify it is reachable here.
+    expect:
+      text_visible:
+        - Needs attention
+        - Processing failed
+        - Try Again
+  - id: S3
+    name: Retry errors and completion preserve reachability
+    do: >-
+      Delay reprocess, press Try Again twice and verify one request and a disabled
+      Retrying action. Fail the response and verify the row remains with an error
+      and an enabled Try Again. Retry successfully with the completed fixture;
+      verify it leaves Activity and returns as a normal Conversations row.
+    expect:
+      text_visible:
+        - Conversations
+  - id: S4
+    name: Kill switch and failed reads restore previous Home
+    do: >-
+      With a failed fixture, return home_processing_today=false and refocus the
+      app. Verify previous Home placement returns. Repeat with a missing field,
+      404 and an offline read. Suspend an enabled response, switch synthetic
+      accounts, release it and verify it cannot enable placement or expose the
+      previous account's search-only failure. No production endpoint is used.
+    expect:
+      text_visible:
+        - Conversations
+  - id: S5
+    name: Notes-only attention preserves saved outputs
+    do: >-
+      Return conversation_notes_failed_with_outputs items for the 010/011/012
+      synthetic cases from attention-items, plus an unknown retryable kind.
+      Verify each conversation appears once in Needs attention and noise stays
+      off Home. Re-run notes uses the item retry endpoint, never conversation
+      reprocess. Every item retry sends an Idempotency-Key. A transport failure
+      keeps that key for replay; a confirmed operation or 409 not_retryable clears
+      it before the next attempt. A 409 or transport failure keeps the row with an error; success
+      removes it even if an old ledger/list read arrives late. Unknown kinds
+      show no retry. Tasks and calendar events are unchanged. Disable placement
+      and verify the new section disappears. Switch accounts during a delayed
+      retry and verify no previous-account row or callback lands.
+    expect:
+      text_visible:
+        - Re-run notes

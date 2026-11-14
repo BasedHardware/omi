@@ -45,6 +45,7 @@ import {
   fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
+  fetchMeterTile,
   fetchVendorBalanceHistory,
   FinopsHistory,
   HEALTH_COST_DAYS,
@@ -52,6 +53,7 @@ import {
   ModulateModelledDay,
   PlanCostHistory,
   StripeFeeHistory,
+  MeterTile,
   VendorBalanceHistory,
 } from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
@@ -188,6 +190,8 @@ export interface SeriesSources {
   infra?: (today: string) => Promise<InfraHistory>;
   /** The live metered document the health series splices in (health only). */
   live?: () => Promise<LiveDoc | null>;
+  /** The margin meter's newest hourly row: the Variable margin headline (health only). */
+  meter?: () => Promise<MeterTile | null>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -211,6 +215,7 @@ export const defaultSeriesSources: SeriesSources = {
   modulate: fetchModulateModelled,
   infra: fetchInfraHistory,
   live: readLiveDoc,
+  meter: fetchMeterTile,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -221,6 +226,8 @@ export const defaultSeriesSources: SeriesSources = {
 export interface Legs {
   /** The producer's metered live days (health only; absent = no live days). */
   live?: LiveDoc | null;
+  /** The margin meter's newest hourly row (health only; absent = unavailable). */
+  meter?: MeterTile | null;
   growth?: AggregateRows;
   activationHistory?: AggregateRows;
   captureSource?: AggregateRows;
@@ -258,7 +265,10 @@ export interface Legs {
   }[];
 }
 /** The live document is read directly for health, not as a lazily filled leg. */
-type LegName = Exclude<keyof Legs, "live">;
+type LegName = Exclude<keyof Legs, "live" | "meter">;
+/** The meter headline is shown only while its newest hourly row is this fresh. */
+export const METER_FRESH_MS = 3 * 3_600_000;
+
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
   // The headline's Cost / user is the health series' cost-per-user point, so it
   // reads the same vendor and plan legs the health chart does (David 2026-11-02).
@@ -591,17 +601,23 @@ export function growthFrames(
     for (const r of rows)
       if (Number(r[0]) === p && String(r[1]).startsWith(DAYS_ROW_PREFIX))
         lcurve[p][String(r[1]).slice(DAYS_ROW_PREFIX.length)] = Number(r[2]);
+    // Growth accounting compares against the prior period. When that period
+    // starts before full telemetry, its users are undercounted: "lost" shrinks
+    // and "back after a break" swells (the 2026-05-14 quick ratio read 3.9).
+    const accounted =
+      isoDay(shiftDay(end, -7 * (p + 2))) >= QUALIFIED_TELEMETRY_START;
     points.set(isoDay(shiftDay(end, -7 * p - 1)), {
       total,
       macos: a.split.macos,
       mobile: a.split.mobile,
       other: a.split.other,
       mcp: a.split.mcp ?? null,
-      new: fresh,
-      resurrected,
-      retained,
-      churned: -churned,
-      quickRatio: churned ? round((fresh + resurrected) / churned) : null,
+      new: accounted ? fresh : null,
+      resurrected: accounted ? resurrected : null,
+      retained: accounted ? retained : null,
+      churned: accounted ? -churned : null,
+      quickRatio:
+        accounted && churned ? round((fresh + resurrected) / churned) : null,
       stickiness: total ? round((100 * sum(3)) / (7 * total), 1) : null,
     });
   }
@@ -690,12 +706,12 @@ export function funnelFrames(legs: Legs, now: Date) {
   const funnel: Row[] = people
     ? [
         {
-          step: "Share of new users",
+          step: "New users",
           Device: percent(count(device(latest), PEOPLE), people),
           Organic: percent(count(organic(latest), PEOPLE), people),
         },
         split(
-          "Onboarded (phone and Mac)",
+          "Onboarded",
           latest.filter((r) => ONBOARDING_PLATFORMS.includes(r[1])),
           ONBOARDED
         ),
@@ -704,7 +720,7 @@ export function funnelFrames(legs: Legs, now: Date) {
     : [];
   const older = week(FUNNEL_KEPT_PERIOD);
   if (people && count(older, PEOPLE))
-    funnel.push(split("Kept, weeks 2–5 (older cohort)", older, KEPT));
+    funnel.push(split("Kept, weeks 2–5", older, KEPT));
 
   // Users ride in the label, largest platform first, as on Activation by capture.
   const funnelPlatforms: Row[] = Object.entries(FUNNEL_PLATFORMS)
@@ -1132,6 +1148,27 @@ export function healthFrames(
   const liveEstimated = Array.from(
     new Set(liveStates.flatMap((s) => s.estimated))
   );
+  // The headline is the margin meter's newest hourly row while it is fresh
+  // (David 2026-11-13). A stale or missing row never shows as a number: the
+  // headline falls back to the metered live day when there is one, else no
+  // value, and the disclosure names the meter's age.
+  const meter = legs.meter ?? null;
+  const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
+  const meterFresh =
+    meter != null && meterAgeMs != null && meterAgeMs < METER_FRESH_MS;
+  const meterStatus = meterFresh
+    ? `Headline: margin meter hour ${meter!.asOf
+        .slice(0, 16)
+        .replace("T", " ")}Z${
+        meter!.basisVersion ? ` (basis ${meter!.basisVersion})` : ""
+      }`
+    : meter
+    ? `Margin meter stale since ${meter.asOf
+        .slice(0, 16)
+        .replace("T", " ")}Z (over ${
+        METER_FRESH_MS / 3_600_000
+      } h old): no meter headline`
+    : "Margin meter row unavailable";
   const marginLiveStatus =
     (liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
@@ -1146,7 +1183,8 @@ export function healthFrames(
       ? ` · Cloud Run estimated (default size or request-billed, no request metrics): ${liveEstimated.join(
           ", "
         )}`
-      : "");
+      : "") +
+    ` · ${meterStatus}`;
   return {
     cost,
     costPerMau,
@@ -1174,11 +1212,13 @@ export function healthFrames(
     variableMargin: variable.map((p, i, all) => ({
       date: ts(p.date),
       marginPct:
-        i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
+        i === all.length - 1 && meterFresh
+          ? round(meter!.variableMarginPct, 1)
+          : i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
           ? null
           : round(p.marginPct, 1),
-      // 1 for a live (metered, estimated) day; settled days are 0.
-      live: p.date > settledEnd ? 1 : 0,
+      // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
+      live: p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
       costPerMonth: round(p.costPerMonth, 0),
       mrr: p.mrr == null ? null : round(p.mrr, 0),
       goalCost: round(p.goalCost, 0),
@@ -1248,7 +1288,11 @@ export function marginFrames(legs: Legs, allInDays: CostDay[], now: Date) {
   const allIn = new Map(allInDays.map((d) => [d.date, d.total]));
   const known = new Set<string>(MARGIN_PLANS);
   const rows: Row[] = [];
-  for (let k = MARGIN_DAYS; k >= 1; k--) {
+  // The panel window is now − MARGIN_DAYS (`timeFrom` 35d), so the day
+  // MARGIN_DAYS back starts at 00:00Z before it and can never render. When
+  // that was the only row, Grafana said "Data outside time range" instead of
+  // the board's empty-state message (2026-11-10).
+  for (let k = MARGIN_DAYS - 1; k >= 1; k--) {
     const day = isoDay(shiftDay(utcDay(now), -k));
     const plans = legs.planCost?.plans[day];
     const book = legs.finops?.mrr[day];
@@ -2109,6 +2153,12 @@ export async function seriesPayload(
     // filled leg), bounded by the store wait; any failure is no live days.
     legs.live = await withTimeout(
       sources.live ? sources.live() : Promise.resolve(null),
+      COLD_STORE_WAIT
+    ).catch(() => null);
+    // The margin meter's hourly row is the Variable margin headline; read
+    // directly for the same reason (hourly, not a per-day leg).
+    legs.meter = await withTimeout(
+      sources.meter ? sources.meter() : Promise.resolve(null),
       COLD_STORE_WAIT
     ).catch(() => null);
   }

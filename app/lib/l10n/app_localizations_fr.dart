@@ -9256,6 +9256,24 @@ class AppLocalizationsFr extends AppLocalizations {
   String get unableToDetermineFirmwareVersion => 'Impossible de déterminer la version actuelle du firmware';
 
   @override
+  String get applyCodeToCurrentPlan => 'Appliquer à l\'offre actuelle';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code appliqué à votre offre actuelle.',
+        'refused': 'Ce code ne peut pas être appliqué. Vérifiez le code et l\'offre requise.',
+        'conflict': 'Code déjà utilisé, ou votre offre bénéficie déjà d\'une réduction.',
+        'rateLimited': 'Trop de tentatives. Patientez et réessayez plus tard.',
+        'other': 'Impossible d\'appliquer ce code. Réessayez.',
+      },
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get promoCode => 'Code promo';
 
   @override
@@ -13760,6 +13778,9 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Régénérer les notes';
 
   @override
   String get attentionSummaryFailed => 'Impossible de résumer cette conversation';

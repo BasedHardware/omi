@@ -2,12 +2,14 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/backend/schema/connector_access.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/env/env.dart';
 
 class McpApi {
   static String get _baseUrl => '${Env.apiBaseUrl}v1/mcp';
 
-  /// Default read-only scopes for newly minted MCP API keys (`backend/config/mcp_scopes.py`).
+  /// Offline fallback for older/unavailable scope-contract endpoints.
   static const List<String> readOnlyScopes = [
     'memories.read',
     'conversations.read',
@@ -28,12 +30,12 @@ class McpApi {
 
   static Future<McpApiKeyCreated> createMcpApiKey(
     String name, {
-    List<String> scopes = readOnlyScopes,
+    List<String>? scopes,
   }) async {
     final response = await makeApiCall(
       url: '$_baseUrl/keys',
       headers: {},
-      body: jsonEncode({'name': name, 'scopes': scopes}),
+      body: jsonEncode({'name': name, 'scopes': scopes ?? await _defaultKeyScopes()}),
       method: 'POST',
     );
 
@@ -44,6 +46,25 @@ class McpApi {
     }
   }
 
+  static Future<List<String>> _defaultKeyScopes() async {
+    try {
+      final response = await makeApiCall(
+        url: '$_baseUrl/keys/scopes',
+        headers: {},
+        body: '',
+        method: 'GET',
+        timeout: const Duration(seconds: 5),
+        retries: 0,
+      );
+      final contract = response?.statusCode == 200 ? ConnectorAccess.fromJson(jsonDecode(response!.body)) : null;
+      if (contract != null && contract.defaultScopes.isNotEmpty) return contract.defaultScopes;
+    } catch (_) {
+      // Older/offline backends retain the existing explicit read-only request.
+    }
+    Logger.debug('MCP scope contract unavailable; using read-only fallback');
+    return readOnlyScopes;
+  }
+
   /// OAuth grants live on the identity plane, which stays production even when mobile Beta serves
   /// product traffic from the development API (`Env.authApiBaseUrl`); ChatGPT's directory app
   /// grants there.
@@ -51,17 +72,11 @@ class McpApi {
 
   /// The OAuth grants apps such as ChatGPT hold on this account, newest first. Each is a raw map
   /// (`id`, `client_id`, `scopes`, `revoked_at`, `status`, ...), revoked ones included.
-  static Future<List<Map<String, dynamic>>> getOauthGrants() async {
+  static Future<McpOauthGrants> getOauthGrants() async {
     final response = await makeApiCall(url: _grantsUrl, headers: {}, body: '', method: 'GET');
 
     if (response != null && response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      final grants = body is Map ? body['grants'] : null;
-      if (grants is! List) return const [];
-      return [
-        for (final grant in grants)
-          if (grant is Map<String, dynamic>) grant
-      ];
+      return McpOauthGrants.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     } else {
       throw Exception('Failed to load OAuth grants: ${response?.statusCode}');
     }
