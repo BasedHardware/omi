@@ -31,7 +31,7 @@ def capture(overdue=False):
         'has_content': True,
         'has_photos': False,
         'record_lane_owner': 'batch_live_v1',
-        'home_transcription_pending_at': now,
+        'home_transcription_pending_at': now - timedelta(hours=25 if overdue else 0),
         'home_transcription_deadline_at': now + timedelta(seconds=-1 if overdue else 7200),
         'transcript_segments': [],
         'structured': {'title': '', 'overview': '', 'category': 'other'},

@@ -6,6 +6,11 @@ as an observed transcription failure. Existing rows heal at their next read;
 there is no backfill, lifecycle write, job lookup, or extra Firestore document
 read. The same projection covers episode member steps and all-pending episode
 titles. Explicit failure receipts still win; expired waits belong to Activity.
+The wait starts at the server's pending stamp, never capture end. If only the
+deadline survived, subtract the configured deadline interval; use creation only
+without either stamp. New upload revisions may start a new bounded wait, while
+reads and same-generation retries cannot renew it. Offline capture age therefore
+cannot make a newly arrived recording fail immediately.
 
 `HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED=true` and
 `HOME_TRANSCRIPTION_MAX_AGE_SECONDS=86400` are pinned for backend-listen, pusher,
