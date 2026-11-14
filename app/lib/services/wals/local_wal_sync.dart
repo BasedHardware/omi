@@ -152,6 +152,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   IWalSyncListener listener;
 
+  /// Called after the server accepts an upload, with that upload's recording.
+  /// The end-of-recording reporter uses it to say when nothing is left to send.
+  void Function(String? recordingSessionId)? onRecordingUploadAccepted;
+
+  /// Sealed files of [recordingSessionId] the server has not accepted yet.
+  int pendingWalsForRecording(String recordingSessionId) => _wals
+      .where((wal) =>
+          wal.recordingSessionId == recordingSessionId &&
+          (wal.status == WalStatus.inProgress || wal.status == WalStatus.miss))
+      .length;
+
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
   BleAudioCodec get currentCodec => _codec;
@@ -2279,6 +2290,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
 
         _clearRecoveryMarkers(batchWals, generation);
+        onRecordingUploadAccepted?.call(batchWals.first.recordingSessionId);
         batchesCompleted++;
         serverUnavailableStreak = 0;
         reportUploadProgress();
@@ -2579,6 +2591,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
         _notifyUpdated(generation);
       }
+      onRecordingUploadAccepted?.call(walToSync.recordingSessionId);
     } on SyncRateLimitedException {
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.

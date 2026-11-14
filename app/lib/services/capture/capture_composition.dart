@@ -37,6 +37,10 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/experiments/capture_end_marker.dart';
+import 'package:omi/services/capture/capture_end.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
@@ -251,6 +255,20 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       ownerUid: () => SharedPreferencesUtil().uid,
       now: DateTime.now,
     );
+    final reporter = CaptureEndReporter(
+      post: (signal, {required pendingWals, required sentAt}) => postSyncCaptureEnd(
+        recordingSessionId: signal.recordingSessionId,
+        endType: signal.type.wire,
+        lastSpeechAt: signal.lastSpeechAt,
+        endDecidedAt: signal.decidedAt,
+        sentAt: sentAt,
+        pendingWals: pendingWals,
+      ),
+      pendingWals: (id) => phone is LocalWalSyncImpl ? phone.pendingWalsForRecording(id) : 0,
+      disabled: CaptureEndMarkerPolicy.disabled,
+    );
+    provider.captureEndReporter = reporter;
+    if (phone is LocalWalSyncImpl) phone.onRecordingUploadAccepted = reporter.uploadAccepted;
     provider.installMobileStandardBatch(lane);
   } catch (_) {
     // Directory/plugin availability cannot interrupt the existing live path.

@@ -197,6 +197,22 @@ void main() {
     ]);
   });
 
+  test('speech is reported with its capture time, and the two-second seal does not un-report it', () async {
+    final heard = <(String?, DateTime)>[];
+    lane.onSpeech = (recording, at) => heard.add((recording, at));
+    lane.authorize(true);
+    await lane.pendingInitialization;
+    vad.value = 0.9;
+    final spoke = clock;
+    expect(lane.route([1], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    vad.value = 0;
+    clock = clock.add(const Duration(seconds: 3));
+    expect(lane.route([2], codec: BleAudioCodec.opus, realtimeConsumer: false, recordingSessionId: 'rec'), true);
+    await lane.pendingInference;
+    expect(heard, [('rec', spoke)]);
+  });
+
   test('bounded capacity preserves backlog and refuses new batch admission', () async {
     final tiny = MobileBatchBuffer(directory: directory, maxBytes: 5, publish: (wal) async => published.add(wal));
     await tiny.initialize();
