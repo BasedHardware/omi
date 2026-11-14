@@ -1,3 +1,7 @@
+/**
+ * Owns the bridge's live ACP instance across worker retirement and shutdown.
+ * Retired exits cannot invalidate its replacement; stop failures stay contained.
+ */
 interface ManagedAcpAdapter {
   onProcessExit?: () => void;
   stop(): Promise<void>;
