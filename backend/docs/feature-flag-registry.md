@@ -861,6 +861,7 @@ and an explicit empty literal renders as `''`.
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
+| `cancel_flow_parity` | Default off; web and macOS cancellations ask why and show the existing retention offer before confirming | web-app, macos | posthog | closed | — | — | — | absent (enable) | keep | keep | — | Goal: Churn / SCA-2171 |
 | `mobile-chat-apps-all-channels` | Omi store only: private chat channel endpoints for David; prevents the public Telegram rule from exposing iMessage/WhatsApp. Default off, explicit allowlist only; backend channel admission remains authoritative | mobile | posthog | closed | — | — | — | absent (enable) | keep | keep | — | auditfix |
 | `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | uicleanup |
 
