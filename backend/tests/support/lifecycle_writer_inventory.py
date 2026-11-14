@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Census response metadata only; no lifecycle document writes.
+    'utils/sync/batch_census.py': [
+        (
+            'snapshot',
+            'status',
+            "OUTCOME_DISABLED; literal aliases=[('OUTCOME_DISABLED', ('disabled',))]",
+            ('failed', 'status', 'stocks', 'units'),
+        ),
+        ('snapshot', 'status', 'outcome', ('failed', 'status', 'stocks', 'units')),
+    ],
     'database/batch_pipeline_allowance_hold.py': [
         (
             'park',

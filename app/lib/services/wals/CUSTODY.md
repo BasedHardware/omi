@@ -195,3 +195,16 @@ another upload. Recovery does not change automatic-upload or local-only choices.
 - [x] Regression suites exercise real WAL persistence, retained bytes and repeated intake.
 - [x] Native iOS simulator persistence/reauthentication verification with disposable PCM audio, real preferences and index.
 - [ ] Store release and original-customer recording recovery, tracked separately from source verification.
+
+## End-of-recording marker
+
+`CaptureEndDetector` (`app/lib/services/capture/capture_end.dart`) keeps the last time the on-phone VAD heard
+speech and reports an end on an explicit stop (`user_initiated`), a lost or removed pendant (`disconnect`), or
+when the server-provided silence timer runs out (`silence_backstop`). `CaptureEndReporter` posts it to
+`/v2/sync-capture-end` and again when the recording's last sealed file is accepted, so the final copy says no
+file is pending. The reporter is an observer: audio up to the end that is still being written or published counts as
+pending (`MobileBatchBuffer.unregisteredStarts`), so it waits for the capture lifecycle and never drives it.
+The marker is latency information only. It never seals, uploads, deletes or releases a WAL,
+and no custody rule above reads it: a marker that is lost, refused or switched off (PostHog
+`upload_end_marker_off`) leaves the server's ordinary wait in place. It is held in memory, so an app killed
+before the resend simply takes that wait.

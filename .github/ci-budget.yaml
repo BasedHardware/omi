@@ -1423,13 +1423,31 @@
       "budget_p50_minutes": 45,
       "display_name": "deploy",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 0,
-      "if": null,
+      "expected_runs_per_day": 1,
+      "if": "inputs.operation != 'margin_scheduler'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual or one-branch prod deploy of the finops unit-cost job, including one producer execution. Not a pull-request check.",
+      "rationale": "Retain the 45-minute producer deployment budget. Forecast one manual maintenance invocation per day during the margin migration; the deploy job is excluded for margin_scheduler, which performs no ledger build or deploy.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_finops_unit_cost_job.yml/margin-scheduler": {
+      "budget_p50_minutes": 5,
+      "display_name": "margin-scheduler",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "inputs.operation == 'margin_scheduler'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "FinOps maintainers",
+      "rationale": "Manual approved margin cutover only; provisions the hourly trigger through existing CI authority after validating the active source-pinned job. No PR or recurring CI trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4998,7 +5016,7 @@
     "gcp_finops_unit_cost_job.yml": {
       "name": "Deploy FinOps Unit Cost Job to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Manual workflow_dispatch deploy of the finops unit-cost Cloud Run job. Not a pull-request check.",
+      "rationale": "Manual FinOps operations: default settled-ledger deployment, plus a disjoint margin-scheduler-only operation after approved cutover. Never a pull-request or periodic CI trigger.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5006,6 +5024,11 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true",
+              "type": "string"
+            },
+            "cutover_ref": {
+              "description": "Stopped legacy writer and accepted active margin execution record (margin_scheduler only)",
+              "required": "false",
               "type": "string"
             },
             "environment": {
@@ -5016,6 +5039,15 @@
                 "prod"
               ],
               "required": "true",
+              "type": "choice"
+            },
+            "operation": {
+              "default": "deploy",
+              "description": "Deploy the settled ledger job, or provision only the approved margin schedule",
+              "options": [
+                "deploy",
+                "margin_scheduler"
+              ],
               "type": "choice"
             },
             "provision_scheduler": {
