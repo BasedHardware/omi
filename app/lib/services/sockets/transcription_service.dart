@@ -90,6 +90,13 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   /// Access to the underlying socket (for composite service creation)
   IPureSocket get socket => _socket;
 
+  /// Sends a control message to the user's Custom live STT service, if that is what this socket
+  /// talks to (CompositeTranscriptionSocket.sendProviderControl). False otherwise.
+  bool sendProviderControl(Map<String, dynamic> message) {
+    final socket = _socket;
+    return socket is CompositeTranscriptionSocket && socket.sendProviderControl(message);
+  }
+
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
 

@@ -16,6 +16,8 @@ import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -82,6 +84,52 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
     sendCount++;
     return const VoiceQuestionResult.answered("Test answer");
   }
+}
+
+class _ControlSocket implements IPureSocket, ProviderControlSocket {
+  final List<Map<String, dynamic>> controls = [];
+  PureSocketStatus _status = PureSocketStatus.notConnected;
+  IPureSocketListener? _listener;
+
+  @override
+  PureSocketStatus get status => _status;
+
+  @override
+  bool sendControl(Map<String, dynamic> message) {
+    controls.add(message);
+    return true;
+  }
+
+  @override
+  Future<bool> connect() async {
+    _status = PureSocketStatus.connected;
+    _listener?.onConnected();
+    return true;
+  }
+
+  @override
+  Future<void> disconnect() async => _status = PureSocketStatus.disconnected;
+
+  @override
+  Future<void> stop() => disconnect();
+
+  @override
+  void send(dynamic message) {}
+
+  @override
+  void setListener(IPureSocketListener listener) => _listener = listener;
+
+  @override
+  void onClosed() => _listener?.onClosed();
+
+  @override
+  void onConnected() => _listener?.onConnected();
+
+  @override
+  void onError(Object err, StackTrace trace) => _listener?.onError(err, trace);
+
+  @override
+  void onMessage(dynamic message) => _listener?.onMessage(message);
 }
 
 BtDevice _device(DeviceType type) => BtDevice(name: 'test-device', id: 'test-id', type: type, rssi: -40);
@@ -160,6 +208,31 @@ void main() {
         Map.fromEntries(e.entries.where((entry) => entry.key != 'timestamp' && entry.key != 'level')),
     ], expected);
     expect(actions.sendCount, 1);
+    provider.dispose();
+  });
+
+  test('a Custom live STT service gets every press, even with Omi button actions off', () async {
+    final provider = _NoSocketCaptureProvider(speakerHaptic: (_, __) async => true);
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+    SharedPreferencesUtil().omiButtonActionsEnabled = false;
+    final primary = _ControlSocket();
+    final composite = CompositeTranscriptionSocket(
+        primarySocket: primary, secondarySocket: _ControlSocket(), sttProvider: SttProvider.customLive.name);
+    await composite.connect();
+    provider.transcriptSocketForTesting =
+        TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.opus, 'en', composite, customSttMode: true);
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.handleButtonEventForTesting('test-id', 2);
+
+    expect(primary.controls.map((message) => message['state']), [1, 1, 2]);
+    expect(
+        primary.controls.every((message) => message['type'] == 'ButtonEvent' && message['timestamp'] is int), isTrue);
+    // Omi's own action stayed off: no voice question was started.
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    provider.transcriptSocketForTesting = null;
     provider.dispose();
   });
 

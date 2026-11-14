@@ -14,6 +14,11 @@ import 'package:omi/utils/audio/audio_transcoder.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
+/// A streaming STT socket that can carry JSON control messages between audio frames.
+abstract interface class ProviderControlSocket {
+  bool sendControl(Map<String, dynamic> message);
+}
+
 /// Configuration for streaming STT WebSocket connections
 class StreamingSttConfig {
   final String url;
@@ -452,7 +457,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 }
 
 /// Streaming STT socket that sends audio immediately and receives transcripts in real-time
-class PureStreamingSttSocket implements IPureSocket {
+class PureStreamingSttSocket implements IPureSocket, ProviderControlSocket {
   Timer? _keepAliveTimer;
 
   WebSocketChannel? _channel;
@@ -658,6 +663,22 @@ class PureStreamingSttSocket implements IPureSocket {
       _channel!.sink.add(audioData);
     } catch (e) {
       CustomSttLogService.instance.error(config.serviceId, 'Send error: $e');
+    }
+  }
+
+  /// Sends [message] to the provider as a JSON text frame, in order with the audio frames
+  /// already sent (see custom-stt.mdx). Returns false when the socket is not connected.
+  @override
+  bool sendControl(Map<String, dynamic> message) {
+    if (_status != PureSocketStatus.connected || _channel == null) {
+      return false;
+    }
+    try {
+      _channel!.sink.add(jsonEncode(message));
+      return true;
+    } catch (e) {
+      CustomSttLogService.instance.warning(config.serviceId, 'Control message error: $e');
+      return false;
     }
   }
 
