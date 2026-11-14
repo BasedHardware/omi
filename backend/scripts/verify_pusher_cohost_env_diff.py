@@ -306,6 +306,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
+            # Conversation purge/erasure dispatch runs in main.py's reconciler; pusher never enqueues it.
+            "CONVERSATION_ERASURE_TASKS_QUEUE",
             "BETA_PROMOTION_TOKEN",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",

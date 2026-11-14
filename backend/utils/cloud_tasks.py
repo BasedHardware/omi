@@ -257,11 +257,24 @@ def _conversation_batch_purge_handler_url() -> str:
     return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
 
 
+def conversation_erasure_queues() -> tuple[str, ...]:
+    """Queues that may hold a batch-purge or erasure task, dispatch target first.
+
+    These units run on their own queue (``CONVERSATION_ERASURE_TASKS_QUEUE``) so a
+    cleanup burst cannot queue in front of account wipes. Unset, they stay on
+    ``ACCOUNT_DELETION_TASKS_QUEUE``, where revisions predating the split also
+    sent them; those tasks run there, so that queue is always the second place to look.
+    """
+    dedicated = os.getenv('CONVERSATION_ERASURE_TASKS_QUEUE', '').strip()
+    shared = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+    return tuple(dict.fromkeys(queue for queue in (dedicated, shared) if queue))
+
+
 def is_conversation_batch_purge_dispatch_configured() -> bool:
-    """Conversation batch purges ride the account-deletion queue and invoker identity."""
+    """Conversation batch purges use the account-deletion handler host and invoker identity."""
     return bool(
         is_account_deletion_dispatch_enabled()
-        and os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+        and conversation_erasure_queues()
         and _conversation_batch_purge_handler_url()
         and _invoker_sa()
     )
@@ -277,24 +290,40 @@ def conversation_erasure_task_id(job_id: str, generation: int) -> str:
     return f'conversation-erasure-{job_id}-g{int(generation)}'
 
 
-def enqueue_conversation_batch_purge(job_id: str, generation: int, *, erasure: bool = False) -> None:
+def _conversation_batch_purge_task_name(job_id: str, generation: int, erasure: bool) -> str:
+    return (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation)
+
+
+def enqueue_conversation_batch_purge(
+    job_id: str, generation: int, *, erasure: bool = False, queue: Optional[str] = None
+) -> None:
     """Dispatch one generation of a durable purge (or accepted-delete erasure) obligation to backend-sync.
 
     The payload stays opaque. An erasure carries ``kind``; a consumer that predates
     it looks the id up among purge obligations, answers ``missing``, and the
-    erasure is redriven.
+    erasure is redriven. ``queue`` defaults to the first of ``conversation_erasure_queues``.
     """
     payload: dict = {'job_id': job_id, 'generation': int(generation)}
     if erasure:
         payload['kind'] = 'erasure'
     enqueue_named_task(
-        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip(),
+        queue or next(iter(conversation_erasure_queues()), ''),
         _conversation_batch_purge_handler_url(),
-        (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation),
+        _conversation_batch_purge_task_name(job_id, generation, erasure),
         payload,
         audience=_conversation_batch_purge_handler_url(),
         invoker_sa=_invoker_sa(),
     )
+
+
+def conversation_batch_purge_task_pending(job_id: str, generation: int, *, erasure: bool = False) -> bool:
+    """Whether this generation's task is still in a queue (waiting, delivering, or between retries).
+
+    Only an authoritative NotFound in every queue that may hold it proves it gone;
+    any other probe failure raises.
+    """
+    name = _conversation_batch_purge_task_name(job_id, generation, erasure)
+    return any(named_task_exists(queue, name) for queue in conversation_erasure_queues())
 
 
 def conversation_batch_purge_consumer_ready() -> Optional[bool]:

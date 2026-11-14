@@ -11,6 +11,8 @@ _ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend
 _ACCOUNT_DELETION_LITERAL_ENV = {
     'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks',
     'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
+    # Conversation batch purges and erasures, kept off the account-wipe queue.
+    'CONVERSATION_ERASURE_TASKS_QUEUE': 'conversation-erasure',
     'SYNC_TASKS_PROJECT': 'based-hardware',
     'SYNC_TASKS_LOCATION': 'us-central1',
 }
