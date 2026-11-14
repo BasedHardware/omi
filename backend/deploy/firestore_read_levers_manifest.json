@@ -1,7 +1,7 @@
 {
   "generated_by": "python3 backend/deploy/generate_read_lever_manifest.py",
   "notes": [
-    "RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100 on the worker and all four Cloud Run services (SCA-2173).",
+    "RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100 on the worker, backend, backend-sync and backend-integration, and 0 on backend-sync-backfill (SCA-2173).",
     "UNRESOLVED: README-vs-base triple: memory_list_index_window/people_scan_dedupe/finjob_candidate_queries are documented as 0 in runtime_env/README.md but _base.yaml carries 100. Neither source is selected as authority; human ruling required."
   ],
   "schema_version": 1,

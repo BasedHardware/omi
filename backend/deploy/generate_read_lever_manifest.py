@@ -46,7 +46,8 @@ REVIEWED_INHERITANCE = {
     },
 }
 RESOLVED_NOTES = [
-    'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100 on the worker and all four Cloud Run services (SCA-2173).',
+    'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100 on the worker, backend, backend-sync and '
+    'backend-integration, and 0 on backend-sync-backfill (SCA-2173).',
 ]
 UNRESOLVED_NOTES = [
     'UNRESOLVED: README-vs-base triple: memory_list_index_window/people_scan_dedupe/finjob_candidate_queries are '
