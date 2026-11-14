@@ -12,7 +12,10 @@ import math
 import os
 from typing import Any
 
-from utils.stt.allowance_metrics import DECISIONS, LEASE_DECISIONS, SECONDS, SETTLED_SECONDS  # noqa: F401
+from utils.stt.allowance_metrics import DECISIONS as DECISIONS
+from utils.stt.allowance_metrics import LEASE_DECISIONS as LEASE_DECISIONS
+from utils.stt.allowance_metrics import SECONDS as SECONDS
+from utils.stt.allowance_metrics import SETTLED_SECONDS as SETTLED_SECONDS  # re-exported for allowance_session
 
 logger = logging.getLogger(__name__)
 PATHS = frozenset(
