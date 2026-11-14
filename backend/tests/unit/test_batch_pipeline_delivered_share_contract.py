@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+
+import pytest
 from database.batch_pipeline_delivered_share import TARGET_SECONDS
 from scripts import batch_pipeline_delivered_share_report as report
 from utils.batch_pipeline import delivered_share as module
@@ -138,6 +140,7 @@ def test_backfill_falls_back_to_the_result_receipt_for_unstamped_rows(monkeypatc
     }
 
 
+@pytest.mark.slow
 def test_drill_shows_the_japanese_dip_and_fires_the_alarm(capsys):
     """The done-true for SCA-2117 exercised hermetically: a Japanese provider
     outage drops that language's row to zero and the baseline rule fires."""
