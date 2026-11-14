@@ -793,7 +793,7 @@ def create_checkout_session_endpoint(
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
     if request.trial_days and existing_customer_id:
         raise HTTPException(status_code=400, detail="trial_unavailable")
-    trial_period_days = request.trial_days or None
+    trial_period_days = None if resolved_checkout_promo_id else (request.trial_days or None)
     try:
         checkout_options = {
             'customer_id': existing_customer_id,
