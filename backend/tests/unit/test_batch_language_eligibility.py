@@ -79,18 +79,15 @@ async def upload(
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
 
     def authorize(store, seed, snapshots):
-        # The probe guard asks for a decision only (snapshots=None); intake asks
-        # for the row export it consumes.
-        if snapshots is not None:
-            snapshots['user'] = {
-                'language': user_language,
-                'transcription_preferences': {'single_language_mode': single},
-            }
-            if conversation_id:
-                row = {'language': conversation_language}
-                if owner:
-                    row['record_lane_owner'] = owner
-                snapshots['conversations'] = {conversation_id: row}
+        snapshots['user'] = {
+            'language': user_language,
+            'transcription_preferences': {'single_language_mode': single},
+        }
+        if conversation_id:
+            row = {'language': conversation_language}
+            if owner:
+                row['record_lane_owner'] = owner
+            snapshots['conversations'] = {conversation_id: row}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):

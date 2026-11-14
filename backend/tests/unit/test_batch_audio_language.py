@@ -455,8 +455,7 @@ async def test_cpu_intake_freezes_detection_proof_with_inheritance_disabled(monk
     captured = []
 
     def authorize(store, seed, snapshots):
-        if snapshots is not None:
-            snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
+        snapshots['user'] = {'language': 'en', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -517,8 +516,7 @@ async def test_self_lid_intake_context_roundtrips_through_real_batch_worker(monk
     staged = []
 
     def authorize(store, seed, snapshots):
-        if snapshots is not None:
-            snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
+        snapshots['user'] = {'language': 'multi', 'transcription_preferences': {'single_language_mode': False}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -599,11 +597,7 @@ async def test_legacy_off_keeps_language_probe_and_never_parakeet_for_unsupporte
         return routes[-1]
 
     def authorize(store, seed, snapshots):
-        if snapshots is not None:
-            snapshots['user'] = {
-                'language': user_language,
-                'transcription_preferences': {'single_language_mode': single},
-            }
+        snapshots['user'] = {'language': user_language, 'transcription_preferences': {'single_language_mode': single}}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):

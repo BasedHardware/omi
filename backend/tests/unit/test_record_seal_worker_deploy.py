@@ -117,3 +117,29 @@ def test_fresh_switch_controls_both_repair_cron_and_continuous_worker(enabled):
     for pod in (worker, repair):
         env = {entry['name']: entry.get('value') for entry in pod['containers'][0]['env']}
         assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == enabled
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod', 'staging'])
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_fresh_switch_reaches_every_gpu_worker_without_changing_the_image(environment, enabled):
+    result = render(
+        '-f',
+        str(CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'),
+        '--set',
+        f'recordSealRepair.freshEnabled={enabled}',
+        namespace='staging' if environment == 'staging' else f'{environment}-omi-backend',
+    )
+    assert result.returncode == 0, result.stderr
+    workers = [
+        container
+        for doc in yaml.safe_load_all(result.stdout)
+        if doc and doc['kind'] == 'Deployment'
+        for container in doc['spec']['template']['spec']['containers']
+        if container['name'] == 'worker'
+    ]
+    assert workers
+    for worker in workers:
+        env = {entry['name']: entry.get('value') for entry in worker['env']}
+        assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == enabled
+        assert env['BATCH_HELD_DEAD_LETTER_ENABLED'] == 'true'
+        assert worker['image'].endswith('@sha256:' + 'a' * 64)

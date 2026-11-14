@@ -644,6 +644,11 @@ projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
 are audio receipts; `capture_committed` remains transcript coverage.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED` defaults to `true`; only literal `true`
+enables optional lossless FLAC for new mono PCM16 custody writes. Other values
+retain PCM. Both formats retain the same decoded samples and frame positions;
+media hashes pin stored plaintext, while `pcm_sha256` pins original samples.
+Existing FLAC readers remain available with this writer switch off.
 `AUDIO_CUSTODY_FRAMED_PERCENT` defaults to `0`, independently of archive percent.
 Admitted v2 16 kHz pusher windows retain frame starts, sample counts and gap
 markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
@@ -9260,7 +9265,9 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 `sync_processing_hold.pending_since` and `last_content_at` in the existing
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
-rechecks the current row before any full notes/title/memory/task work. The
+rechecks the current row before any full notes/title/memory/task work.
+`SYNC_PROCESSING_QUIET_SECONDS` tunes that quiet window per call (default 600, clamped to 120 to 600; a
+malformed value keeps the default), so clients that send no end-of-recording proof can be moved without a release. The
 shared outbox remains production/emulator-only; dev hosts keep local eager
 processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account

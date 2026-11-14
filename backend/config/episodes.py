@@ -150,7 +150,10 @@ def home_transcription_queue_hold_enabled() -> bool:
 
 
 def home_transcription_max_age_seconds() -> int:
-    """24h from capture end; invalid/nonpositive values cannot remove the lost-capture bound."""
+    """24h per revision from pending, else deadline minus its interval, else creation.
+
+    Reads never renew it; invalid/nonpositive values keep the default bound.
+    """
     try:
         seconds = int(os.getenv('HOME_TRANSCRIPTION_MAX_AGE_SECONDS', str(DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS)))
     except ValueError:
