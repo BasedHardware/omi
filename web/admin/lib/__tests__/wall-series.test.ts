@@ -1979,6 +1979,58 @@ describe("variable margin frames (David 2026-10-23)", () => {
     );
   });
 
+  it.each([null, 4, 1])(
+    "does not borrow a book for a live day (meter age: %s hours)",
+    async (meterAgeHours) => {
+      const cutoff = isoDay(shiftDay(end, -2));
+      const s = sources();
+      s.billing = vi.fn(async () => ({
+        ...(await billing()),
+        daily: billingDays.filter((d) => d.date < cutoff),
+      }));
+      s.live = vi.fn(async () => ({
+        runAt: now.toISOString(),
+        days: {
+          [cutoff]: {
+            date: cutoff,
+            queryEnd: `${isoDay(shiftDay(end, -1))}T00:00:00.000Z`,
+            fraction: 1,
+            metered: { cloudRun: 5, firestore: 0, gcs: 0, logging: 0 },
+            producedAt: now.toISOString(),
+          },
+        },
+      }));
+      const mrr = { ...finopsHistory.mrr };
+      delete mrr[cutoff];
+      s.finops = vi.fn(async () => ({ ...finopsHistory, mrr }));
+      s.meter = vi.fn(async () =>
+        meterAgeHours == null
+          ? null
+          : {
+              asOf: new Date(
+                now.getTime() - meterAgeHours * 3_600_000
+              ).toISOString(),
+              variableMarginPct: 12.34,
+              basisVersion: null,
+            }
+      );
+
+      const f = await all(null, s);
+      const live = f.health.marginLive.at(-1)!;
+      expect(live.date).toBe(`${cutoff}T00:00:00Z`);
+      expect(live.live).toBe(1);
+      expect(live.mrr).toBeNull();
+      expect(live.marginPct).toBeNull();
+      expect(live.costPerMonth).not.toBeNull();
+      expect(f.health.variableMargin.at(-1)!.marginPct).toBe(
+        meterAgeHours === 1 ? 12.3 : null
+      );
+      expect(f.health.variableMarginSource[0].text).toMatch(
+        meterAgeHours === 1 ? /^Hourly meter · / : /^No MRR book · /
+      );
+    }
+  );
+
   it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
     const s = sources();
     const cutoff = isoDay(shiftDay(end, -2));

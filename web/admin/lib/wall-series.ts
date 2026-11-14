@@ -1112,16 +1112,11 @@ export function healthFrames(
   }
   const marginByPlan = marginFrames(legs, days, now);
   // Variable margin over the spliced days: settled through D−2, live (est.)
-  // for D−1 and today. A live day with no book snapshot takes the latest book
-  // on or before now, labelled est.; a settled day never borrows a book.
-  let latestBook: number | null = null;
-  for (let k = 0; k < 7 && latestBook == null; k++)
-    latestBook = finopsMrr(legs.finops, shiftDay(utcDay(now), -k));
+  // for D−1 and today. Every day needs its own book snapshot; a missing book
+  // stays unavailable. The independent fresh hourly meter can still headline.
   const variable = variableMarginSeries(
     spliced,
-    (d) =>
-      finopsMrr(legs.finops, new Date(ts(d))) ??
-      (d > settledEnd ? latestBook : null),
+    (d) => finopsMrr(legs.finops, new Date(ts(d))),
     { feesCash: vendor.infraStripeFeesCash }
   );
   const liveSeries = variable;
