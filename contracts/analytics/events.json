@@ -3,6 +3,37 @@
   "adopted_files": [],
   "events": [
     {
+      "id": "onDeviceTranscriptionUsed",
+      "wire_name": "On Device Transcription Used",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "route": {
+          "type": "enum",
+          "wire_name": "route",
+          "values": [
+            "allowance",
+            "custom",
+            "offline_batch"
+          ]
+        },
+        "audioMs": {
+          "type": "int",
+          "wire_name": "audio_ms"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        }
+      },
+      "consumers": [
+        "on-device-transcription-usage"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",

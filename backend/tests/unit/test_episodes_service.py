@@ -905,6 +905,7 @@ def test_reads_close_idle_episodes_lazily_and_wire_projection_hides_internals():
         'title',
         'bullets',
         'lede',
+        'compose_deferred',
         'follow_ups',
         'people',
         'provisional_items',
@@ -1701,76 +1702,6 @@ def test_a_user_wrap_up_or_boundary_close_is_never_rejoined_by_a_late_sync_clip(
     assert episodes_db.get_episode(UID, bounded['id'], firestore_client=store)['conversation_ids'] == ['c-live2']
 
 
-def test_intake_attach_to_a_composed_closed_episode_rearms_its_compose(monkeypatch):
-    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
-    store = StrictFirestore()
-    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
-    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
-    first = episodes_db.get_current_episode(UID, firestore_client=store)
-    _close_on_gap(store)
-    # A compose already ran on the members the episode had when it closed.
-    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
-    episodes_db.update_episode(
-        UID,
-        first['id'],
-        expected_version=closed['state_version'],
-        updates={
-            'composed_at': T0 + timedelta(minutes=20),
-            'composed_fingerprint': 'fp',
-            'composed_evidence': {'c-live': 'e-live'},
-            'composed_membership': ['c-live'],
-            'composed_member_ids': ['c-live'],
-            'composed_notes': service.composer.notes_hash(closed),
-        },
-        firestore_client=store,
-    )
-    # New live words open the next episode; the late clip belongs to the closed one.
-    _attach(store, 'c-new', minutes=45)
-    scheduled = []
-    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
-    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
-    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
-    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
-    # The member joined a composed closed episode: its notes are stale until the next compose.
-    assert after['conversation_ids'] == ['c-live', 'c-wal']
-    assert after.get('compose_pending_since') is not None
-    assert scheduled
-
-
-def test_intake_attach_to_a_composed_closed_episode_respects_the_kill_switch(monkeypatch):
-    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
-    store = StrictFirestore()
-    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
-    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
-    first = episodes_db.get_current_episode(UID, firestore_client=store)
-    _close_on_gap(store)
-    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
-    episodes_db.update_episode(
-        UID,
-        first['id'],
-        expected_version=closed['state_version'],
-        updates={
-            'composed_at': T0 + timedelta(minutes=20),
-            'composed_fingerprint': 'fp',
-            'composed_evidence': {'c-live': 'e-live'},
-            'composed_membership': ['c-live'],
-            'composed_member_ids': ['c-live'],
-            'composed_notes': service.composer.notes_hash(closed),
-        },
-        firestore_client=store,
-    )
-    _attach(store, 'c-new', minutes=45)
-    monkeypatch.setenv(config.EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV, 'off')
-    scheduled = []
-    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
-    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
-    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
-    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
-    assert after['conversation_ids'] == ['c-live', 'c-wal']
-    assert after.get('compose_pending_since') is None
-    assert not scheduled
-
-
 def test_sync_speech_extends_the_live_episodes_activity_and_defers_the_idle_close():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
@@ -2303,6 +2234,8 @@ def test_a_stored_section_seconds_long_runs_to_the_next_on_its_recording():
 
 @pytest.mark.parametrize('read', ['live', 'lookup'])
 def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     store = StrictFirestore()
     _attach(store, 'c1', minutes=0)
     first = episodes_db.get_current_episode(UID, firestore_client=store)
@@ -2321,6 +2254,8 @@ def test_idle_closing_read_schedules_compose_immediately(monkeypatch, read):
 def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     from utils.episodes import home_read
 
+    # This fixture's capture is old enough to be "late"; keep today's close-time compose.
+    monkeypatch.setenv(config.EPISODE_COMPOSER_THRIFT_ENV, 'off')
     store = StrictFirestore()
     _attach(store, 'c1', minutes=0)
     first = episodes_db.get_current_episode(UID, firestore_client=store)
@@ -2341,3 +2276,73 @@ def test_idle_closing_list_read_schedules_compose_in_the_same_call(monkeypatch):
     wires = home_read.project_episodes(UID, [first], firestore_client=store)
     assert wires[0]['status'] == 'closed'
     assert scheduled == [(UID, first['id'])]
+
+
+def test_intake_attach_to_a_composed_closed_episode_rearms_its_compose(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    # A compose already ran on the members the episode had when it closed.
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    episodes_db.update_episode(
+        UID,
+        first['id'],
+        expected_version=closed['state_version'],
+        updates={
+            'composed_at': T0 + timedelta(minutes=20),
+            'composed_fingerprint': 'fp',
+            'composed_evidence': {'c-live': 'e-live'},
+            'composed_membership': ['c-live'],
+            'composed_member_ids': ['c-live'],
+            'composed_notes': service.composer.notes_hash(closed),
+        },
+        firestore_client=store,
+    )
+    # New live words open the next episode; the late clip belongs to the closed one.
+    _attach(store, 'c-new', minutes=45)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
+    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    # The member joined a composed closed episode: its notes are stale until the next compose.
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert after.get('compose_deferred_at') is not None
+    assert not scheduled
+
+
+def test_intake_attach_to_a_composed_closed_episode_respects_the_kill_switch(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_COMPOSER_ENV, 'on')
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _close_on_gap(store)
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    episodes_db.update_episode(
+        UID,
+        first['id'],
+        expected_version=closed['state_version'],
+        updates={
+            'composed_at': T0 + timedelta(minutes=20),
+            'composed_fingerprint': 'fp',
+            'composed_evidence': {'c-live': 'e-live'},
+            'composed_membership': ['c-live'],
+            'composed_member_ids': ['c-live'],
+            'composed_notes': service.composer.notes_hash(closed),
+        },
+        firestore_client=store,
+    )
+    _attach(store, 'c-new', minutes=45)
+    monkeypatch.setenv(config.EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV, 'off')
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    c = _collaborators(model, now=T0 + timedelta(minutes=46), store=store)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(minutes=15), collaborators=c) == 'rejoined_member'
+    after = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert after.get('compose_pending_since') is None
+    assert not scheduled

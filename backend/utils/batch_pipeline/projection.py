@@ -35,6 +35,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_finish_backoff import FinishBackoff
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
@@ -45,6 +46,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projecti
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
+from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from utils.batch_pipeline.projection_hold_policy import quarantines_assignment_conflict, log_conflict_hold
 from database.batch_pipeline_projection_claim import projection_claim
@@ -431,9 +433,10 @@ class Projector:
         # position cannot strand them and other owners are not starved.
         self.chain_followups: list[str] = []
         self.discovery = ProjectionDiscovery(store)
+        self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
-        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
+        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES, recent=True)
         self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
@@ -1694,22 +1697,31 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
+        The dark finish backoff owns page selection and deferral; see
+        utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         contention = False
-        for segment_id in self.finish_discovery.next(limit=size):
+        for segment_id in self.finish_backoff.page(size):
             if segment_id in touched:
                 continue
+            PROJECTION_FINISH_READS.inc()
+            entry = None
+            result = None
+            defer = True
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
                     self.has_async_followups = True
+                    defer = False
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
+                if result is not None:
+                    PROJECTION_FINISH_COMPLETED.inc()
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
             except Exception as error:
@@ -1719,4 +1731,15 @@ class Projector:
                     error_type(error),
                     error_site_field(error),
                 )
+            finally:
+                if defer:
+                    # A failed deferral leaves the row due for the next page.
+                    try:
+                        self.finish_backoff.settled(segment_id, entry, result)
+                    except Exception as error:
+                        logger.error(
+                            'event=batch_projection action=sweep outcome=defer_error exception_type=%s%s',
+                            error_type(error),
+                            error_site_field(error),
+                        )
         return contention

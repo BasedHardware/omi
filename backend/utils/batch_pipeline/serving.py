@@ -128,6 +128,20 @@ class Serving:
                 break
 
     @with_batch_privacy_attempt
+    async def drain_settled_async(self, owner_id: str) -> None:
+        """A provider unit of ``owner_id`` settled: commit the owner's ready rows and walk its chain.
+
+        The owner-only half of a recovery wake without a recovered unit, so no row skips the head
+        wait or the catch-up depth hold. Global maintenance stays with the periodic owner.
+        """
+        priority = await run_blocking(sync_executor, self._reconcile_owner, owner_id, None)
+        if self.projector:
+            if priority:
+                await self.projector.start_followups(priority, discover=False)
+            if getattr(self.projector, 'owes_index', False) is True:
+                self.projector.schedule_index_flush(owner_id)
+
+    @with_batch_privacy_attempt
     async def reconcile_async(
         self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
     ):
@@ -188,6 +202,8 @@ class Serving:
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
             self._maintain(recover_quarantine=recover_quarantine)
+        elif self.metrics:
+            self.metrics.fresh_guard.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -278,6 +294,12 @@ class Serving:
 
     def _maintain(self, *, recover_quarantine: bool):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
+        if self.metrics:
+            # Explicit reconcile bypasses the periodic lease; the guard never does.
+            if self._leads(True):
+                self.metrics.fresh_guard.refresh(self.store)
+            else:
+                self.metrics.fresh_guard.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -497,6 +519,22 @@ def start_serving_from_env():
             except asyncio.TimeoutError:
                 pass
 
+    async def drain_upload_holds():
+        from utils.batch_pipeline.upload_coalescing import drain as drain_uploads
+
+        while not stop.is_set():
+            try:
+                service = await run_blocking(sync_executor, serving_for_stage, current_stage())
+                await drain_uploads(service.store)
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'event=batch_coalescing outcome=scan_retry exception_type=%s', type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=2)
+            except asyncio.TimeoutError:
+                pass
+
     async def run():
         from utils.batch_pipeline.projection_drain import set_recurring_sweep
 
@@ -505,9 +543,9 @@ def start_serving_from_env():
         set_recurring_sweep('pump' if pump_enabled else 'serving')
         try:
             if pump_enabled:
-                await projection_pump()
+                await asyncio.gather(projection_pump(), drain_upload_holds())
             else:
-                await asyncio.gather(supervise(), drain(), dispatch_recovery())
+                await asyncio.gather(supervise(), drain(), dispatch_recovery(), drain_upload_holds())
         finally:
             set_recurring_sweep(None)
 

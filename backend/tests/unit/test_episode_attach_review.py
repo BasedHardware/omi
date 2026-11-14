@@ -191,52 +191,6 @@ def test_umbrella_overrides_all_individual_switches(monkeypatch):
         assert all(not getattr(flags, name + '_enabled')() for name in names)
 
 
-def test_recorded_attach_to_a_composed_closed_episode_rearms_its_compose(lane, monkeypatch):
-    store, c, _ = lane
-    monkeypatch.setenv(episode_config.EPISODE_COMPOSER_ENV, 'on')
-    service.attach_conversation('u', 'c1', 'omi', started_at=T0, collaborators=c)
-    episode = episodes.get_current_episode('u', firestore_client=store)
-    # A silence close is rejoinable by a late clip; a user wrap-up is not.
-    episodes.close_episode('u', episode['id'], 'gap', closed_at=T0 + timedelta(minutes=5), firestore_client=store)
-    closed = episodes.get_episode('u', episode['id'], firestore_client=store)
-    # A compose already ran on the members the episode had when it closed.
-    episodes.update_episode(
-        'u',
-        episode['id'],
-        expected_version=closed['state_version'],
-        updates={
-            'composed_at': T0 + timedelta(minutes=5),
-            'composed_fingerprint': 'fp',
-            'composed_evidence': {'c1': 'e1'},
-            'composed_membership': ['c1'],
-            'composed_member_ids': ['c1'],
-            'composed_notes': service.composer.notes_hash(closed),
-        },
-        firestore_client=store,
-    )
-    scheduled = []
-    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
-    late = row('late', start=T0 + timedelta(minutes=1), seconds=30)
-    assert service._attach_synced('u', 'late', late, c) == 'recorded'
-    after = episodes.get_episode('u', episode['id'], firestore_client=store)
-    assert 'late' in after['conversation_ids']
-    # The late member makes the composed notes stale until the next compose.
-    assert after.get('compose_pending_since') is not None
-    assert scheduled
-
-
-def test_recorded_attach_to_a_live_episode_does_not_rearm_a_compose(lane, monkeypatch):
-    store, c, _ = lane
-    monkeypatch.setenv(episode_config.EPISODE_COMPOSER_ENV, 'on')
-    service.attach_conversation('u', 'c1', 'omi', started_at=T0, collaborators=c)
-    scheduled = []
-    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
-    late = row('late', start=T0 + timedelta(minutes=1), seconds=30)
-    assert service._attach_synced('u', 'late', late, c) == 'recorded'
-    # A live episode composes on close; the attach path must not schedule a paid call.
-    assert not scheduled
-
-
 def test_umbrella_off_repartitions_and_rewrites_even_with_completed_proof(lane, monkeypatch):
     store, c, _ = lane
     service._attach_synced('u', 'same', seed(store), c)
@@ -268,3 +222,49 @@ def test_umbrella_restores_candidate_queries_at_fixed_boundary(lane, monkeypatch
     # issue separate queries. The umbrella restores all three reads.
     assert query.call_count == (1 if enabled else 3)
     assert_timeline(store)
+
+
+def test_recorded_attach_to_a_composed_closed_episode_rearms_its_compose(lane, monkeypatch):
+    store, c, _ = lane
+    monkeypatch.setenv(episode_config.EPISODE_COMPOSER_ENV, 'on')
+    service.attach_conversation('u', 'c1', 'omi', started_at=T0, collaborators=c)
+    episode = episodes.get_current_episode('u', firestore_client=store)
+    # A silence close is rejoinable by a late clip; a user wrap-up is not.
+    episodes.close_episode('u', episode['id'], 'gap', closed_at=T0 + timedelta(minutes=5), firestore_client=store)
+    closed = episodes.get_episode('u', episode['id'], firestore_client=store)
+    # A compose already ran on the members the episode had when it closed.
+    episodes.update_episode(
+        'u',
+        episode['id'],
+        expected_version=closed['state_version'],
+        updates={
+            'composed_at': T0 + timedelta(minutes=5),
+            'composed_fingerprint': 'fp',
+            'composed_evidence': {'c1': 'e1'},
+            'composed_membership': ['c1'],
+            'composed_member_ids': ['c1'],
+            'composed_notes': service.composer.notes_hash(closed),
+        },
+        firestore_client=store,
+    )
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    late = row('late', start=T0 + timedelta(minutes=1), seconds=30)
+    assert service._attach_synced('u', 'late', late, c) == 'recorded'
+    after = episodes.get_episode('u', episode['id'], firestore_client=store)
+    assert 'late' in after['conversation_ids']
+    # The late member makes the composed notes stale until the next compose.
+    assert after.get('compose_deferred_at') is not None
+    assert not scheduled
+
+
+def test_recorded_attach_to_a_live_episode_does_not_rearm_a_compose(lane, monkeypatch):
+    store, c, _ = lane
+    monkeypatch.setenv(episode_config.EPISODE_COMPOSER_ENV, 'on')
+    service.attach_conversation('u', 'c1', 'omi', started_at=T0, collaborators=c)
+    scheduled = []
+    monkeypatch.setattr(service.composer, 'schedule', lambda *a, **kw: scheduled.append(a) or True)
+    late = row('late', start=T0 + timedelta(minutes=1), seconds=30)
+    assert service._attach_synced('u', 'late', late, c) == 'recorded'
+    # A live episode composes on close; the attach path must not schedule a paid call.
+    assert not scheduled

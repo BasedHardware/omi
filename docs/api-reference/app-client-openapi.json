@@ -16318,6 +16318,11 @@
             ],
             "title": "Closed At"
           },
+          "compose_deferred": {
+            "default": false,
+            "title": "Compose Deferred",
+            "type": "boolean"
+          },
           "conversation_ids": {
             "items": {
               "type": "string"
@@ -16545,6 +16550,22 @@
               }
             ],
             "title": "Finished At"
+          },
+          "gist": {
+            "default": "",
+            "title": "Gist",
+            "type": "string"
+          },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
           },
           "id": {
             "title": "Id",
@@ -25682,6 +25703,17 @@
             "title": "Duration Seconds",
             "type": "number"
           },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -25753,6 +25785,11 @@
           },
           "enabled": {
             "title": "Enabled",
+            "type": "boolean"
+          },
+          "home_processing_today": {
+            "default": false,
+            "title": "Home Processing Today",
             "type": "boolean"
           },
           "items": {
@@ -34608,6 +34645,12 @@
             "title": "Events",
             "type": "array"
           },
+          "gist": {
+            "default": "",
+            "description": "One line of at most 12 words saying what this conversation was about",
+            "title": "Gist",
+            "type": "string"
+          },
           "insights": {
             "description": "Insights connecting supplied background context to this conversation; empty without background",
             "items": {
@@ -35407,6 +35450,19 @@
           "detail"
         ],
         "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
+      "SyncUploadHoldReleaseResponse": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SyncUploadHoldReleaseResponse",
         "type": "object"
       },
       "SyncUserTimeZoneRequest": {
@@ -87613,6 +87669,90 @@
           }
         ],
         "summary": "Get Sync Job Status"
+      }
+    },
+    "/v2/sync-local-files/{job_id}/release-hold": {
+      "post": {
+        "description": "Precise owner-authenticated user-open hint; no priority promotion.\n\nGeneric polling, Home refresh and app foreground never call this operation.\nThe normal per-owner limiter bounds repeated hints; wrong-owner and unknown\nhandles have the same response. The producer kill switch does not gate it.",
+        "operationId": "release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncUploadHoldReleaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Release Sync Upload Hold"
       }
     },
     "/v2/tts/synthesize": {

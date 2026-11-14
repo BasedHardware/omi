@@ -20,9 +20,46 @@ def _repair_age_orders(client):
     return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
 
 
+def _poll_skip_modes(client):
+    from database import batch_pipeline_store
+
+    return patch.object(batch_pipeline_store, 'held_poll_skip_enabled', side_effect=cycle((False, True)))
+
+
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'database.batch_pipeline_fresh_guard.fresh_committed_counts',
+            domains={'namespace': namespaces},
+            neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_coalescing.due',
+            domains={
+                'namespace': namespaces,
+                'producer_enabled': [False, True],
+                'after': [None, {'scan_at': 1.0, 'id': 'synthetic-cursor'}],
+            },
+            neutrals={'now': (3000000.0, 'immutable release/lease deadline operand only')},
+        ),
+        CoveredByEntry(
+            'database.record_custody_receipts.prune',
+            covered_by=('database.record_custody_receipts.expired_page',),
+            reason='bounded cleanup delegates its only query to expired_page; deletes use document batches',
+            expect_observed=False,
+            body_digest='a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
+        ),
+        DriverEntry(
+            'database.record_custody_receipts.expired_page',
+            neutrals={
+                'now': (2000000000.0, 'expiry cutoff only'),
+                'budget': (
+                    SimpleNamespace(check=lambda: None, timeout=lambda maximum=10: maximum),
+                    'RPC deadline only',
+                ),
+            },
+        ),
         DriverEntry(
             'database.batch_pipeline_record_dead_letter.record_dead_letter_stock',
             domains={'namespace': namespaces},
@@ -65,6 +102,7 @@ def entries():
             trials=2,
             patchers=(_repair_age_orders,),
             domains={
+                'urgent': [False, True],
                 'after': [
                     None,
                     {
@@ -76,14 +114,16 @@ def entries():
                         'enqueued_at': 1.0,
                         'horizon': datetime(2026, 10, 1, tzinfo=timezone.utc),
                     },
-                ]
+                ],
             },
             neutrals={
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
+                'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
+                'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
             },
         ),
         DriverEntry(
@@ -257,13 +297,14 @@ def entries():
             'database.batch_pipeline_store.projection_page',
             domains={
                 'namespace': namespaces,
-                'after': [None, (2.0, 'result-100')],
+                'after': [None, (2.0, 'result-100'), (2.0, 3.0, 'result-100')],
                 'states': [
                     ('pending', 'persisted', 'ready'),
                     ('pending',),
                     ('persisted', 'ready'),
                     ('pending', 'persisted', 'ready', 'quarantine_held'),
                 ],
+                'due_before': [None, 3000000.0],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),
@@ -289,9 +330,12 @@ def entries():
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_page',
             covered_by=('database.batch_pipeline_store.projection_page',),
-            reason='store adapter forwards namespace, limit, keyset cursor and drain states unchanged',
+            reason='store adapter forwards namespace, limit, keyset cursor, drain states and the optional finish clock unchanged',
             expect_observed=False,
-            body_digest='bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
+            # Re-reviewed 2026-11-11: the adapter gained the optional `due_before` finish clock and
+            # forwards it unchanged; the cursor is now typed `tuple | None`. No query, read or bound
+            # changed, and the forwarded shape is still the recorded `projection_page` driver.
+            body_digest='93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.projection_pending',
@@ -393,8 +437,10 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces},
+            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
@@ -430,7 +476,29 @@ def entries():
             body_digest='d9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
         ),
         DriverEntry(
+            'database.batch_pipeline_store.fresh_first_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'ready': [False, True]},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
+            trials=2,
+            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
@@ -447,11 +515,18 @@ def entries():
             domains={'namespace': namespaces, 'after': [None, 'owner-hash']},
             neutrals={'limit': (50, 'bounded page size')},
         ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.promote_record_recoveries',
+            covered_by=('database.batch_pipeline_store.due',),
+            reason='bounded promotion delegates its waiting-state query to due; promotion uses document transactions',
+            expect_observed=False,
+            body_digest='ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
+        ),
         DriverEntry(
             'database.batch_pipeline_store.due',
             domains={
                 'namespace': namespaces,
-                'state': ['leased', 'retry', 'result_ready', 'record_pending'],
+                'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},

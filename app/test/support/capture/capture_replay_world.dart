@@ -282,6 +282,7 @@ class CaptureReplayWorld {
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+  bool autoUploadAllowed = true;
 
   /// The local_preview declaration of each socket the controller opened.
   final List<bool> localPreviewRequests = [];
@@ -473,7 +474,7 @@ class CaptureReplayWorld {
           needsReconciliation: needsReconciliation,
         );
       },
-      autoUploadEnabled: () => true,
+      autoUploadEnabled: () => autoUploadAllowed,
       connectivityChanges: connectivityStream.stream,
       networkChanges: networkChangeStream.stream,
       initiallyConnected: connected,
@@ -684,6 +685,7 @@ class _ReplayCaptureController extends CaptureController {
       transport,
       source: source,
       clientConversationId: clientConversationId,
+      customSttMode: customSttConfig?.isEnabled ?? false,
       localPreview: localPreview,
     );
     await service.start();

@@ -1,0 +1,17 @@
+{
+  "id": "on-device-transcription-usage",
+  "kind": "question",
+  "owner": "Goal: Conversion",
+  "question": "How many completed on-device transcription sessions, transcribed audio milliseconds and non-empty transcript segments occur by route, namespace and build? The allowance route counts live on-device sessions selected after the plan allowance is exhausted; custom counts an explicitly selected local engine; offline_batch counts a finished phone-held WAL. Use these events to identify users with actual on-device use before comparing subsequent paid conversion.",
+  "query": "contracts/analytics/consumers/on-device-transcription-usage.sql",
+  "events": [
+    "onDeviceTranscriptionUsed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number",
+    "route"
+  ],
+  "zero_policy": "Zero events means no completed non-empty on-device transcription was observed for the selected namespace and build. Live failures, silence, discarded output and sessions that have not disconnected do not emit. Live polling sockets aggregate successful chunks and emit once per disconnect; offline transcript upload retries do not emit again after the conversation is persisted locally. Presence proves client-observed use, not transcript quality, and analytics consent and delivery can undercount it.",
+  "outcomes_query": "contracts/analytics/consumers/on-device-transcription-usage-by-route.sql"
+}
