@@ -226,6 +226,29 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "backend-slow-timing-tests.yml/slow-timing-tests": {
+      "budget_p50_minutes": 3,
+      "display_name": "Slow timing / ${{ matrix.test_file }}",
+      "expected_runs_class": "main-push-forecast",
+      "expected_runs_per_day": 120,
+      "if": null,
+      "matrix": {
+        "test_file": [
+          "test_soniox_recovery_retry.py",
+          "test_live_replay_provider_pairs.py"
+        ]
+      },
+      "matrix_size": 2,
+      "needs": [],
+      "owner": "Backend CI maintainers",
+      "rationale": "SCA-1994: two isolated standard Linux jobs per main commit; local calls take 2s and 19s, with a conservative 3-minute p50 including setup and 120 main commits/day forecast. No PR runner minutes; SCA-1998/SCA-1999 track restoration.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 2
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "backend-unit-tests.yml/backend-unit-guardrails": {
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
@@ -1379,7 +1402,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 21,
+      "budget_p50_minutes": 23,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1388,7 +1411,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3537,6 +3560,19 @@
         "workflow_dispatch": ""
       }
     },
+    "backend-slow-timing-tests.yml": {
+      "name": "Backend slow timing tests",
+      "owner": "Backend CI maintainers",
+      "rationale": "SCA-1994: run the two existing slow-marked timing files independently on every main push; no PR trigger, path filter, or concurrency coalescing.",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ]
+        },
+        "workflow_dispatch": ""
+      }
+    },
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
@@ -4892,7 +4928,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4922,6 +4958,12 @@
               "description": "batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree",
               "required": "false"
             },
+            "preserve_live_worker": {
+              "default": "false",
+              "description": "Prod batch-pipeline-worker only: CAS image-only update, preserving the entire live runtime spec; siblings are verified but never rolled",
+              "required": "false",
+              "type": "boolean"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
@@ -4937,6 +4979,16 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "worker_live_baseline": {
+              "default": "",
+              "description": "Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)",
+              "required": "false"
+            },
+            "worker_rollback_receipt": {
+              "default": "",
+              "description": "Preserve-live rollback only: saved safe receipt; requires its exact prior digest and full merged source SHA at or above f3902ec",
+              "required": "false"
             }
           }
         }

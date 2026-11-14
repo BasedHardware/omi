@@ -240,6 +240,45 @@ def test_unstamped_ready_row_passes_an_unready_head_once_its_settle_is_a_head_wa
     assert job(store, 'head')['merge_pending'] is True and merge.commit_next(OWNER, 262.0) is None
 
 
+def test_ready_fresh_rows_without_ready_at_pass_an_unready_fresh_row_behind_a_held_backlog(world, monkeypatch):
+    """2026-11-13 prod shape: held backlog at the head, then a fresh unit the vendor holds,
+    then ready fresh units whose ready_at is missing (settled while the stamp was off, or
+    removed). Before, the fresh pick measured the wait only from ready_at: nothing committed."""
+    store, names = _legacy_backlog(world, monkeypatch, 2)
+    admit(monkeypatch, store, [item('stuck', 80)], 'content-stuck', JA)  # fresh, never settles
+    for name, capture in (('ready-a', 85), ('ready-b', 90)):
+        admit(monkeypatch, store, [item(name, capture)], f'content-{name}', JA)
+    monkeypatch.setenv(SWITCH, 'false')
+    for name in ('ready-a', 'ready-b'):
+        settle(store, name, now=200.0)
+    monkeypatch.delenv(SWITCH)
+    assert all(
+        job(store, n)['fresh_capture'] is True and 'ready_at' not in job(store, n) for n in ('ready-a', 'ready-b')
+    )
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    assert merge.commit_next(OWNER, 230.0) is None  # settled 30 s ago: inside the wait
+    entries = drain(merge, 261.0)
+    assert [e['segment_id'] for e in entries] == ['ready-a', 'ready-b']
+    assert all(e['fresh_first'] is True for e in entries)
+    # The held unit and the backlog stay pending; nothing non-fresh committed.
+    assert job(store, 'stuck')['merge_pending'] is True
+    assert [job(store, name)['state'] for name in names] == ['result_ready', 'result_ready']
+
+
+def test_a_full_probe_page_with_no_ready_row_is_logged(world, monkeypatch, caplog):
+    """The probe sees 32 rows. A full page of unready fresh rows can hide ready ones: say so."""
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
+    store, _ = _legacy_backlog(world, monkeypatch, 1)
+    for n in range(32):
+        admit(monkeypatch, store, [item(f'stuck{n:02d}', 40 + n)], f'content-stuck{n}', JA)
+    admit(monkeypatch, store, [item('ready', 90)], 'content-ready', JA)
+    settle(store, 'ready', now=200.0)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+    with caplog.at_level(logging.WARNING):
+        assert merge.commit_next(OWNER, 261.0) is None
+    assert 'outcome=fresh_probe_full_no_ready' in caplog.text
+
+
 def _project_through(store, segment):
     key = owner_key(OWNER)
     store.run(lambda tx: tx.put('owners', key, {**tx.get('owners', key), 'projection_watermark': segment}))
@@ -373,6 +412,7 @@ def test_a_fresh_row_passes_an_unready_backlog_head_with_the_depth_hold_off(worl
 def test_an_unavailable_fresh_query_keeps_the_backlog_held_and_asks_once(world, monkeypatch):
     from google.api_core.exceptions import FailedPrecondition
 
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
     store, names = _legacy_backlog(world, monkeypatch, 3)
     admit(monkeypatch, store, [item('new', 90)], 'content-new', JA)
     settle(store, 'new', now=200.0)
@@ -396,6 +436,7 @@ def test_a_backlog_only_probe_failure_leaves_the_depth_hold_on(world, monkeypatc
     probe. Its failure must not switch the depth hold off for the whole merge instance."""
     from google.api_core.exceptions import FailedPrecondition
 
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
     store, names = _legacy_backlog(world, monkeypatch, 2)
     monkeypatch.setenv(SWITCH, 'false')
 
