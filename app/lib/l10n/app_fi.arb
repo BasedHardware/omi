@@ -352,6 +352,7 @@
     "enterYourName": "Syötä nimesi",
     "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
     "nameUpdatedSuccessfully": "Nimi päivitetty onnistuneesti!",
+    "calendarReadSelectionHelp": "Lue valitut kalenterit. Uudet tapahtumat käyttävät kalenteria {calendar}.",
     "calendarSettings": "Kalenteriasetukset",
     "calendarProviders": "Kalenteripalvelut",
     "macOsCalendar": "macOS-kalenteri",

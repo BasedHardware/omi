@@ -352,6 +352,7 @@
     "enterYourName": "Ange ditt namn",
     "nameCannotBeEmpty": "Namnet kan inte vara tomt",
     "nameUpdatedSuccessfully": "Namnet har uppdaterats!",
+    "calendarReadSelectionHelp": "Läs valda kalendrar. Nya händelser använder {calendar}.",
     "calendarSettings": "Kalenderinställningar",
     "calendarProviders": "Kalenderleverantörer",
     "macOsCalendar": "macOS Kalender",

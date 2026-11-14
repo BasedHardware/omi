@@ -1225,6 +1225,7 @@
     "enterYourName": "உங்கள் பெயரை உள்ளிடவும்",
     "nameCannotBeEmpty": "பெயர் வெற்றிடமாக இருக்க முடியாது",
     "nameUpdatedSuccessfully": "பெயர் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!",
+    "calendarReadSelectionHelp": "தேர்ந்தெடுத்த நாட்காட்டிகளைப் படிக்கவும். புதிய நிகழ்வுகள் {calendar} ஐப் பயன்படுத்தும்.",
     "calendarSettings": "நாட்காட்டி அமைப்புகள்",
     "calendarProviders": "நாட்காட்டி வழங்குநர்கள்",
     "macOsCalendar": "macOS நாட்காட்டி",

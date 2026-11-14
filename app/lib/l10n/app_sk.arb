@@ -352,6 +352,7 @@
     "enterYourName": "Zadajte svoje meno",
     "nameCannotBeEmpty": "Meno nemôže byť prázdne",
     "nameUpdatedSuccessfully": "Meno bolo úspešne aktualizované!",
+    "calendarReadSelectionHelp": "Čítať vybrané kalendáre. Nové udalosti používajú {calendar}.",
     "calendarSettings": "Nastavenia kalendára",
     "calendarProviders": "Poskytovatelia kalendára",
     "macOsCalendar": "macOS kalendár",

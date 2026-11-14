@@ -18,21 +18,52 @@ import Foundation
 private let googleCalendarAppKey = "google_calendar"
 
 extension APIClient {
+  func googleCalendarSelection(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> GoogleCalendarSelection {
+    try await get("v1/calendar/google/calendars", authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func saveGoogleCalendarSelection(
+    accountID: String,
+    selectedIDs: Set<String>,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> GoogleCalendarSelection {
+    let policy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: authorizationSnapshot)
+    try validateExpectedOwner(policy)
+    guard let url = URL(string: baseURL + "v1/calendar/google/calendars") else { throw APIError.invalidResponse }
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.httpBody = try JSONSerialization.data(withJSONObject: [
+      "account_id": accountID, "selected_ids": selectedIDs.sorted(),
+    ])
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: true, expectedAuthOwnerId: authorizationSnapshot.ownerID)
+    try validateExpectedOwner(policy)
+    return try await performRequest(request, authPolicy: policy)
+  }
   /// Whether this account holds a live Google Calendar grant.
   func googleCalendarGrantConnected(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Bool {
-    let response: IntegrationConnectionResponse = try await get(
+    try await googleCalendarGrantStatus(authorizationSnapshot: authorizationSnapshot).connected
+  }
+
+  func googleCalendarGrantStatus(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> IntegrationConnectionResponse {
+    try await get(
       "v1/integrations/\(googleCalendarAppKey)",
       authorizationSnapshot: authorizationSnapshot)
-    return response.connected
   }
 
   /// Google's consent URL for the Calendar grant. The backend owns the redirect
   /// and the CSRF state, so the desktop only has to open what it returns.
-  func googleCalendarOAuthURL() async throws -> URL {
+  func googleCalendarOAuthURL(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> URL {
     let response: IntegrationOAuthURLResponse = try await get(
-      "v1/integrations/\(googleCalendarAppKey)/oauth-url")
+      "v1/integrations/\(googleCalendarAppKey)/oauth-url", authorizationSnapshot: authorizationSnapshot)
     guard let url = URL(string: response.authUrl) else { throw APIError.invalidResponse }
     return url
   }
@@ -52,7 +83,8 @@ extension APIClient {
   func googleCalendarGrantEvents(
     daysBack: Int,
     daysForward: Int,
-    maxResults: Int
+    maxResults: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [CalendarEvent] {
     let formatter = ISO8601DateFormatter()
     let now = Date()
@@ -66,19 +98,40 @@ extension APIClient {
     // The endpoint's ceiling is 500; asking for more is a 422, not a clamp.
     let capped = min(max(maxResults, 1), 500)
     let events: [GoogleCalendarGrantEvent] = try await get(
-      "v1/calendar/google/events?time_min=\(encoded(timeMin))&time_max=\(encoded(timeMax))&max_results=\(capped)"
+      "v1/calendar/google/events?time_min=\(encoded(timeMin))&time_max=\(encoded(timeMax))&max_results=\(capped)",
+      authorizationSnapshot: authorizationSnapshot
     )
     return events.map(\.asCalendarEvent)
   }
 }
 
+struct GoogleCalendarSelection: Decodable {
+  let accountID: String
+  let calendars: [ReadableGoogleCalendar]
+  let selectedIDs: Set<String>
+  enum CodingKeys: String, CodingKey {
+    case accountID = "account_id"
+    case calendars
+    case selectedIDs = "selected_ids"
+  }
+}
+
+struct ReadableGoogleCalendar: Decodable, Identifiable {
+  let id: String
+  let name: String
+  let primary: Bool
+  let available: Bool
+}
+
 struct IntegrationConnectionResponse: Decodable {
   let connected: Bool
   let appKey: String?
+  let readSelectionConfigured: Bool?
 
   enum CodingKeys: String, CodingKey {
     case connected
     case appKey = "app_key"
+    case readSelectionConfigured = "read_selection_configured"
   }
 }
 

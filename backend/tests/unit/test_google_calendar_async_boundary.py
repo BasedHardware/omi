@@ -23,7 +23,14 @@ def _module(name: str, **attributes) -> ModuleType:
 def calendar_route_harness() -> Iterator[SimpleNamespace]:
     """Load the import-bound route during fixture setup, outside test CPU timing."""
     users_db = _module("database.users", get_integration=MagicMock())
-    endpoints = _module("utils.other.endpoints", get_current_user_uid=lambda: "uid")
+    # The route wraps auth with the per-UID calendar-selection limiter; the stub
+    # returns the auth dependency unchanged so this harness still observes the
+    # route's own async boundaries rather than the limiter's Redis call.
+    endpoints = _module(
+        "utils.other.endpoints",
+        get_current_user_uid=lambda: "uid",
+        with_rate_limit=lambda dependency, _policy_name, **_kwargs: dependency,
+    )
 
     async def get_events(**_kwargs):
         return [
@@ -39,7 +46,9 @@ def calendar_route_harness() -> Iterator[SimpleNamespace]:
 
     calendar_tools = _module("utils.retrieval.tools.calendar_tools", get_google_calendar_events=get_events)
     calendar_linking = _module("utils.conversations.calendar_linking", select_capture_gaps=MagicMock())
-    google_utils = _module("utils.retrieval.tools.google_utils", refresh_google_token=refresh_token)
+    google_utils = _module(
+        "utils.retrieval.tools.google_utils", refresh_google_token=refresh_token, GoogleAPIError=Exception
+    )
     calendar_utils = _module(
         "utils.conversations.calendar_utils",
         extract_attendees=lambda _event: (["Ada"], ["ada@example.com"]),

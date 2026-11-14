@@ -7,6 +7,12 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 class GoogleCalendarService extends BaseIntegrationService {
   static const String _appKey = 'google_calendar';
   static const String _prefKey = 'google_calendar_connected';
+  static int _selectionEpoch = 0;
+
+  static void invalidateMeetings() {
+    _selectionEpoch++;
+    knownMeetings.value = const CalendarMeetingSnapshot(owner: '', windows: []);
+  }
 
   // Populated only by calendar-list reads the user already requested. No
   // network discovery, permissions prompts, titles, or attendee data here.
@@ -14,8 +20,9 @@ class GoogleCalendarService extends BaseIntegrationService {
     const CalendarMeetingSnapshot(owner: '', windows: []),
   );
 
-  static String get meetingCacheOwner =>
-      SharedPreferencesUtil().uid.isEmpty ? '' : '${SharedPreferencesUtil().uid}:${AnalyticsManager.identityEpoch}';
+  static String get meetingCacheOwner => SharedPreferencesUtil().uid.isEmpty
+      ? ''
+      : '${SharedPreferencesUtil().uid}:${AnalyticsManager.identityEpoch}:$_selectionEpoch';
 
   static void rememberMeetings(String owner, Iterable<CalendarCaptureWindow> windows, {required DateTime now}) {
     if (owner.isEmpty) return;

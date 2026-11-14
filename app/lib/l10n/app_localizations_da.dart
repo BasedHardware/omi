@@ -1126,6 +1126,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Navn opdateret!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Læs de valgte kalendere. Nye begivenheder bruger $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenderindstillinger';
 
   @override

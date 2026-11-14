@@ -305,7 +305,7 @@ enum ConnectorImportOperations {
   private static func failureClass(for error: CalendarReaderError) -> IntegrationConnectTelemetry.ErrorClass {
     switch error {
     case .noBrowserFound: return .noBrowser
-    case .notSignedIn: return .notSignedIn
+    case .notSignedIn, .savedSelectionNeedsGrant: return .notSignedIn
     case .sessionExpired: return .sessionExpired
     case .cookieDecryptionFailed: return .decryptFailed
     case .configurationError: return .configuration
@@ -325,10 +325,9 @@ enum ConnectorImportOperations {
       )
       return await saveCalendarEvents(events, progress: progress)
     } catch let error as CalendarReaderError {
-      // Every `CalendarReaderError` means the browser-cookie reader found no
-      // usable Google session on this machine, and `readEvents` only reaches it
-      // when the account has no OAuth grant either. Both sources are exhausted,
-      // so "try again" is not advice — nothing about the machine has changed.
+      // These failures have no usable authorized read route. An explicit saved
+      // selection also forbids browser fallback after grant disconnection.
+      // Reconnecting is the recovery path, rather than repeating the same read.
       // Google's own consent screen is the one path that does not depend on
       // which browser is installed or whether its cookies can be decrypted.
       return await connectCalendarViaOAuth(progress: progress, cookieFailure: error)

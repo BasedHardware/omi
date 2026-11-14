@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 import routers.integrations as integrations_router
+from database import google_calendar_preferences
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 from utils.retrieval.tools import gmail_tools
 from utils.retrieval.tools.google_utils import (
@@ -42,6 +43,9 @@ def stored_grants(monkeypatch):
         return grants.get(app_key)
 
     monkeypatch.setattr(integrations_router.users_db, 'get_integration', fake_get_integration)
+    # This grant/scope fixture represents a user without a saved calendar
+    # preference. Keep the new status read hermetic as well as the grant read.
+    monkeypatch.setattr(google_calendar_preferences, 'get_selections', lambda _uid: {})
     return grants
 
 

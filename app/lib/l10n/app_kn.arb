@@ -1225,6 +1225,7 @@
     "enterYourName": "ನಿಮ್ಮ ಹೆಸರನ್ನು ನಮೂದಿಸಿ",
     "nameCannotBeEmpty": "ಹೆಸರು ಖಾಲಿ ಇರುವಿಕೆ ಸಾಧ್ಯವಿಲ್ಲ",
     "nameUpdatedSuccessfully": "ಹೆಸರನ್ನು ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಣ ಮಾಡಲಾಗಿದೆ!",
+    "calendarReadSelectionHelp": "ಆಯ್ಕೆಮಾಡಿದ ಕ್ಯಾಲೆಂಡರ್‌ಗಳನ್ನು ಓದಿ. ಹೊಸ ಈವೆಂಟ್‌ಗಳು {calendar} ಅನ್ನು ಬಳಸುತ್ತವೆ.",
     "calendarSettings": "ಕ್ಯಾಲೆಂಡರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
     "calendarProviders": "ಕ್ಯಾಲೆಂಡರ್ ಪ್ರದಾನಕಾರಕಗಳು",
     "macOsCalendar": "macOS ಕ್ಯಾಲೆಂಡರ್",

@@ -1123,6 +1123,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Nimi edukalt uuendatud!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Loe valitud kalendreid. Uued sündmused kasutavad kalendrit $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendri seaded';
 
   @override

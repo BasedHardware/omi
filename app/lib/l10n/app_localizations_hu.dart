@@ -1132,6 +1132,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Név sikeresen frissítve!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Kijelölt naptárak olvasása. Az új események naptára: $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Naptár beállítások';
 
   @override

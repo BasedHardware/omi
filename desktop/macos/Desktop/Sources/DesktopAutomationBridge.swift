@@ -3097,7 +3097,7 @@ final class DesktopAutomationActionRegistry {
         switch error {
         case .noBrowserFound:
           classification = "no_browser"
-        case .notSignedIn:
+        case .notSignedIn, .savedSelectionNeedsGrant:
           classification = "not_signed_in"
         case .sessionExpired:
           classification = "session_expired"

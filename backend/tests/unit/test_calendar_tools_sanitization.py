@@ -117,6 +117,9 @@ def _calendar_module():
         emit_sync_succeeded=MagicMock(),
     )
     stubs = {
+        "database.google_calendar_preferences": _module(
+            "database.google_calendar_preferences", get_selections=lambda _uid: {}
+        ),
         "httpx": httpx,
         "langchain_core": _package("langchain_core"),
         "langchain_core.tools": langchain_tools,
@@ -137,6 +140,15 @@ def _calendar_module():
     }
 
     with stub_modules(stubs):
+        load_module_fresh("utils.google_calendar_identity", str(BACKEND_DIR / "utils/google_calendar_identity.py"))
+        load_module_fresh(
+            "utils.retrieval.google_calendar_catalog_cache",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_catalog_cache.py"),
+        )
+        load_module_fresh(
+            "utils.retrieval.google_calendar_selection",
+            str(BACKEND_DIR / "utils/retrieval/google_calendar_selection.py"),
+        )
         load_module_fresh("utils.log_sanitizer", str(BACKEND_DIR / "utils" / "log_sanitizer.py"))
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
         load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))

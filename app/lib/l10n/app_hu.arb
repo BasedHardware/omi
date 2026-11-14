@@ -352,6 +352,7 @@
     "enterYourName": "Adja meg a nevét",
     "nameCannotBeEmpty": "A név nem lehet üres",
     "nameUpdatedSuccessfully": "Név sikeresen frissítve!",
+    "calendarReadSelectionHelp": "Kijelölt naptárak olvasása. Az új események naptára: {calendar}.",
     "calendarSettings": "Naptár beállítások",
     "calendarProviders": "Naptár szolgáltatók",
     "macOsCalendar": "macOS naptár",

@@ -352,6 +352,7 @@
     "enterYourName": "Ievadiet savu vārdu",
     "nameCannotBeEmpty": "Vārds nevar būt tukšs",
     "nameUpdatedSuccessfully": "Vārds veiksmīgi atjaunināts!",
+    "calendarReadSelectionHelp": "Lasīt atlasītos kalendārus. Jauniem notikumiem tiek izmantots {calendar}.",
     "calendarSettings": "Kalendāra iestatījumi",
     "calendarProviders": "Kalendāra pakalpojumu sniedzēji",
     "macOsCalendar": "macOS kalendārs",

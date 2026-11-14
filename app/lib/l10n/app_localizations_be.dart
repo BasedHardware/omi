@@ -1125,6 +1125,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Імя паспяхова абноўлена!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Чытаць выбраныя календары. Новыя падзеі выкарыстоўваюць $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Налады календара';
 
   @override
