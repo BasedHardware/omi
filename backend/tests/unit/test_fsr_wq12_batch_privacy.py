@@ -111,7 +111,7 @@ def projection_session(db):
     binding = ProjectionBinding(UID, 'job', 'content', ('segment',), target_conversation_id='source')
     store = SimpleNamespace(client=db, store=SimpleNamespace(namespace=NAMESPACE))
     store.ref = lambda table, key: db.collection(f'{NAMESPACE}_{table}').document(key)
-    session = ProjectionSession(store, 'segment', binding, 0, policy=SimpleNamespace())
+    session = ProjectionSession(store, 'segment', binding, 0, policy=SimpleNamespace(async_projection=False))
     db.rows[store.ref('jobs', 'segment').path] = {
         'projection_binding': asdict(binding),
         'owner_id': UID,

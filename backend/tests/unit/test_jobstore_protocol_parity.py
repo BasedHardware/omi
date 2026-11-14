@@ -65,7 +65,9 @@ def test_pg_sim_forwards_the_due_page_cursor():
     store.pg = Mock()
     store.pg.projection_page.return_value = (['a'], (10.0, 3.0, 'a'))
     assert store.projection_page(1, after=(5.0,), states=('ready',), due_before=10.0) == (['a'], (10.0, 3.0, 'a'))
-    store.pg.projection_page.assert_called_once_with(1, after=(5.0,), states=('ready',), due_before=10.0)
+    store.pg.projection_page.assert_called_once_with(
+        1, after=(5.0,), states=('ready',), due_before=10.0, exclude_async=False
+    )
 
 
 @pytest.mark.parametrize('backend', [PostgresStore, SimStore])
