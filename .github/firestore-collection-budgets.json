@@ -87,7 +87,7 @@
       "reviewed": "2026-11-13"
     },
     {
-      "site": "backend/database/jobstore/retained_copies.py",
+      "site": "backend/database/jobstore/retained_manifest.py",
       "expression": "ns + '_intakes'",
       "collection_pattern": "batch_pipeline_*_intakes",
       "owner": "pgfoundation / SCA-1959 dark retained-copy custody",
@@ -95,7 +95,7 @@
       "reads_per_unit_budget": 1,
       "reads_per_day_budget": 1,
       "basis": "planning-bound",
-      "source": "Reference census only; this phase does not read or delete the original intake. One read is a conservative sentinel per attempt, not a new serving grant. Private view erasure reads at most 2n+1 private documents plus one queue authority, n<=128, within the existing 1000 handoff-family bound. Hold/gate/deletion-intent reads stay with their original families. Retries/redeliveries are separately counted. Production selection remains absent, expected volume 0/day, sentinel 1/day. Fleet and daily volume remain a reviewed activation gate; no savings booked.",
+      "source": "Reference census only; this phase does not read or delete the original intake. One read is a conservative sentinel per attempt, not a new serving grant. Private view erasure reads at most 2n+1 private documents plus one queue authority, n<=128, within the existing 1000 handoff-family bound. Hold/gate/deletion-intent reads stay with their original families. Retries/redeliveries are separately counted. Production selection remains absent, expected volume 0/day, sentinel 1/day. Fleet and daily volume remain a reviewed activation gate; no savings booked. Census reference construction moved to the pure retained_manifest helper; construction itself performs no Firestore read. Existing numeric budget and original unique intake custody are unchanged.",
       "reviewed": "2026-11-13"
     }
   ],
