@@ -40,7 +40,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/experiments/capture_end_marker.dart';
 import 'package:omi/services/capture/capture_end.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/capture_end.dart';
 
 /// Aggregate of existing CaptureSeams types plus missing I/O boundaries.
 /// All fields required; supplying some fakes can never select production defaults.
