@@ -194,6 +194,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
@@ -3978,3 +3979,15 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         (config['gke']['pusher'], 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
     ]:
         assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    hosts = [config['gke']['backend-listen']]
+    hosts.extend(
+        config['cloud_run']['services'][name]
+        for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+    )
+    for host in hosts:
+        for key in ('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'BATCH_HELD_DEAD_LETTER_ENABLED'):
+            assert key in classification['kinds']['config']
+            assert host['env'][key] == expected
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in config['gke']['pusher']['env']
