@@ -223,7 +223,7 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
-    is_early_capture_time,
+    is_receipt_clock_capture_time,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -869,7 +869,11 @@ async def sync_local_files_v2(
             )
 
         early_capture_received_at = (
-            capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
+            capture_received_at
+            if any(
+                is_receipt_clock_capture_time(get_timestamp_from_path(path), now=capture_received_at) for path in paths
+            )
+            else None
         )
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
@@ -890,7 +894,7 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                if any(is_early_capture_time(value) for value in admitted_file_starts):
+                if early_capture_received_at is not None:
                     # Reset clocks prove no server-clock interval. Do not use
                     # a possibly years-wide client claim for session lookup;
                     # explicit targets and source-frame evidence stay intact.

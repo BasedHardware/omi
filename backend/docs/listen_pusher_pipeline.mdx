@@ -6743,10 +6743,22 @@ unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
 jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
 
+V2 also recovers capture stamps strictly more than 24 hours ahead of server
+receive time under `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` (default on; `false`,
+`0`, `off`, or `no` stops new admissions). This reuses the reset-clock packing
+and frozen receive anchor above; it does not increase the 600-second skew
+allowance. Future stamps between that allowance and 24 hours remain refused.
+Recovered batch units and conversation rows retain `capture_time_trust=untrusted`:
+receipt placement cannot bind distinct conversations or cover other audio by
+time. Explicit identity and committed source-frame proofs retain their checks.
+Already admitted tasks and holds retain the receipt policy when admission is
+off or the worker clock later catches up. Deploy processing roles before
+admission services. See [future-clock recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
+
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final fresh-gate decision. Reasons include `recent_legacy_capture`,
 `legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
-capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`,
+capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`, `accepted_future_clamped`,
 `rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
 `omi_sync_capture_time_total{outcome}` with an `event=sync_capture_time` log for
 every non-plain-accepted outcome. No account

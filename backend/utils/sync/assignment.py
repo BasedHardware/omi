@@ -685,6 +685,8 @@ def assign_in_transaction(
             raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        if incoming.get('capture_time_trust') == 'untrusted':
+            result['capture_time_trust'] = 'untrusted'
         try:
             contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
             if contributions:

@@ -5,6 +5,7 @@ Vietnamese; repadding cannot make Parakeet TDT v3 transcribe a language it lacks
 """
 
 import logging
+from dataclasses import replace
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -143,6 +144,7 @@ def test_staged_audio_reads_the_intake_language():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('receipt_clock', [False, True])
 @pytest.mark.parametrize(
     'inherit,user_language,expected',
     [
@@ -154,13 +156,14 @@ def test_staged_audio_reads_the_intake_language():
         (False, None, ''),
     ],
 )
-async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected):
+async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected, receipt_clock):
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true' if inherit else 'false')
     store = MemoryStore()
     frozen = []
+    frozen_work = []
 
     class Captured(Exception):
         pass
@@ -172,6 +175,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
 
     def stage_audio(work, body):
         frozen.append(read_context(body))
+        frozen_work.append(work)
         raise Captured
 
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
@@ -182,7 +186,8 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
     )
 
     def decode_units(paths, max_seconds):
-        yield audio_unit(100, b'\x00\x00' * 1600)
+        unit = audio_unit(100, b'\x00\x00' * 1600)
+        yield replace(unit, stored_capture_at=1800000000) if receipt_clock else unit
 
     monkeypatch.setattr(intake, 'decode_units', decode_units)
     monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=stage_audio))
@@ -209,3 +214,5 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
     except Captured:
         pass
     assert len(frozen) == 1 and frozen[0]['stt_language'] == expected
+    assert frozen_work[0].capture_time_trust == ('untrusted' if receipt_clock else None)
+    assert frozen_work[0].capture_at == (1800000000 if receipt_clock else 100)

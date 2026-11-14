@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 285,
+  "count": 286,
   "names": {
     "BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_DELIVERED_SHARE_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-13", "registry": "config/feature-flags.yaml"},
@@ -288,6 +288,7 @@
     "SYNC_BACKFILL_USER_DAILY_HOURS": {"seeded": "2026-10-25"},
     "SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS": {"seeded": "2026-10-25"},
     "SYNC_EARLY_CAPTURE_CLAMP_ENABLED": {"owner": "earlyclamp / two-lane transcription", "review_by": "2026-11-17"},
+    "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {"owner": "Q12-H / sync capture recovery", "review_by": "2026-11-29"},
     "SYNC_CLOCK_RUN_PARTITION_ENABLED": {"seeded": "2026-10-25"},
     "SYNC_CONTENT_ID_SECRET": {"seeded": "2026-10-25"},
     "SYNC_DURABLE_REDRIVE_GUARD": {"seeded": "2026-10-25"},

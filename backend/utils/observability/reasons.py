@@ -305,13 +305,16 @@ class SyncCaptureTimeReason(StrEnum):
     capture whose phone clock runs ahead of the server within tolerance;
     `accepted_early_clamped` is a reset-clock stamp normalized to receipt time.
     `rejected_early` remains available when its kill switch is off;
-    malformed stamps and beyond-tolerance future clocks stay refused.
+    ``accepted_future_clamped`` uses the same recovery for a clearly broken
+    future clock. Malformed stamps and futures between skew and recovery
+    margins stay refused; ``rejected_future`` also covers the switch-off path.
     """
 
     UNKNOWN = 'unknown'
     ACCEPTED = 'accepted'
     ACCEPTED_FUTURE_SKEW = 'accepted_future_skew'
     ACCEPTED_EARLY_CLAMPED = 'accepted_early_clamped'
+    ACCEPTED_FUTURE_CLAMPED = 'accepted_future_clamped'
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'

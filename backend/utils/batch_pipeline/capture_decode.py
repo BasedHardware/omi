@@ -9,7 +9,7 @@ from collections.abc import Generator
 
 from utils.batch_pipeline.audio import RATE, AudioUnit, audio_unit
 from utils.sync.files import MAX_SYNC_FRAME_BYTES, decode_files_to_wav, get_timestamp_from_path
-from utils.sync.capture_clock import is_early_capture_time
+from utils.sync.capture_clock import is_receipt_clock_capture_time
 
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
@@ -76,8 +76,8 @@ def decode_units(
             path
             for path in wavs
             if received_at is not None
-            and is_early_capture_time(
-                (source_maps.get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
+            and is_receipt_clock_capture_time(
+                (source_maps.get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path)), now=received_at
             )
         }
         # Count canonical samples before streaming the units. Untrusted clock

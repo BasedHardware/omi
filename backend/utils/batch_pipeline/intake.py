@@ -836,6 +836,7 @@ async def accept_upload(
                 # The built-in decoder times WAL PCM from sync filenames.
                 # Alternate adapters (for example held WAV) have no such proof.
                 timing_store='sync' if decode is None else None,
+                capture_time_trust='untrusted' if getattr(unit, 'stored_capture_at', None) is not None else None,
             )
 
         from utils.stt.batch_language import resolve_language

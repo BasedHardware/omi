@@ -84,6 +84,8 @@ class WorkItem:
     # CPU admission provenance, never inferred from record-origin speaker scopes.
     timing_store: str | None = None
     language_receipt_enabled: bool | None = None
+    # Frozen admission provenance; a receipt-clock span cannot bind by time.
+    capture_time_trust: str | None = None
 
     def to_dict(self):
         """Serialize optional receipt state without widening legacy job documents."""
@@ -92,6 +94,8 @@ class WorkItem:
         value = asdict(self)
         if self.language_receipt_enabled is None:
             value.pop('language_receipt_enabled')
+        if self.capture_time_trust is None:
+            value.pop('capture_time_trust')
         return value
 
     def __post_init__(self):
@@ -121,6 +125,8 @@ class WorkItem:
             raise ValueError('shadow must be boolean')
         if self.language_receipt_enabled is not None and self.language_receipt_enabled is not True:
             raise ValueError('language_receipt_enabled must be true or absent')
+        if self.capture_time_trust not in (None, 'untrusted'):
+            raise ValueError('capture_time_trust must be untrusted or absent')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')

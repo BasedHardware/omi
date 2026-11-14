@@ -319,6 +319,8 @@ def build_incoming(
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    if item.capture_time_trust is not None:
+        incoming['capture_time_trust'] = item.capture_time_trust
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)
@@ -985,7 +987,12 @@ class Projector:
                     hint is not None and hint.successor and not entry.get('projection') and str(index) not in receipts
                 ):
                     self.store.check(session)
-                if hint is not None and hint.parallel_candidate and not binding.target_conversation_id:
+                if (
+                    hint is not None
+                    and hint.parallel_candidate
+                    and not binding.target_conversation_id
+                    and item.capture_time_trust != 'untrusted'
+                ):
                     pending_candidate = self._start_candidate(binding, part, part_payload)
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None and item.requires_compute_admission:
@@ -1036,7 +1043,11 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None and incoming['transcript_segments']:
+                    if (
+                        context.target_id is None
+                        and incoming['transcript_segments']
+                        and item.capture_time_trust != 'untrusted'
+                    ):
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
