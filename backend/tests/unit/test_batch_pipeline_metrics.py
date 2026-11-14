@@ -526,7 +526,8 @@ def test_incomplete_age_sample_preserves_nan_without_blocking_other_queue_signal
     )
 
 
-def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy():
+def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy(monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     # 2026-10-27: the proxy flapped to ~54h when a held job's re-evaluation came
     # back unevaluated: defer pops compute_decision (BLIND, never a false hold)
     # and the job read as a decisionless commitment until the next re-hold.
@@ -547,7 +548,8 @@ def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_pr
     assert _deep_oldest_age(registry) == 0
 
 
-def test_lease_that_bypasses_admission_ends_the_parked_hold():
+def test_lease_that_bypasses_admission_ends_the_parked_hold(monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy recovery under rollback.
     # Review (Luna): with offline enforcement off, a unit that does not require
     # compute admission dispatches without authorize(); its lease is a real
     # commitment, so a stale hold marker must not hide it from the proxy.

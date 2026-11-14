@@ -322,6 +322,11 @@ def assert_clause(row, clause):
     elif clause == 'entry_deadline':
         if not row.terminal:
             if row.deadline_exemption:
+                if row.key == 'batch:allowance_held':
+                    assert 'SCA-2195' in row.deadline_exemption and 'no recording expiry' in row.deadline_exemption
+                    assert row.deadline_field is None and not row.deadline_stamped_at_entry
+                    assert row.exit.cite == 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'
+                    return
                 assert row.key in {'record_audio:capturing', 'record_audio_orphan:capturing'}
                 assert row.fields == ('record_upload_sessions',)
                 assert 'No producer TTL' in row.deadline_exemption and '9d457c' in row.deadline_exemption
@@ -346,6 +351,10 @@ def assert_clause(row, clause):
         assert row.dwell_metric in gauge_names(), 'authoritative age/stock Gauge missing (a counter is insufficient)'
     elif clause == 'dwell_alert':
         if not row.alert_required:
+            if row.key == 'batch:allowance_held':
+                assert row.deadline_exemption and row.dwell_metric == 'omi_batch_allowance_held_units'
+                assert not row.terminal  # A held recording still owes an eventual result.
+                return
             assert row.terminal and row.state in {'completed', 'committed', 'erased', 'composed', 'redirected'}
             return  # Success stock needs an owner/gauge, not a debt alarm.
         rule = alerts().get(row.alert.uid)

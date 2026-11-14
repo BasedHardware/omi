@@ -79,6 +79,66 @@
       "reviewed": "2026-11-13"
     },
     {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "historical current allowance-hold row migrated",
+      "reads_per_unit_budget": 64,
+      "reads_per_day_budget": 64000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195 round-1 correction: production FirestoreTransaction/flush tests measure 6 reads per migrated row without conversation, 8 with a conversation and 12 with two redirects, including discovery. Reserve 64/row for one retry (two attempts), short conversation redirects and shadow refresh; <=1M initial candidates gives 64M for one migration pass. Pages <=100, <=10000/operator invocation. Planning envelope, not a hard cap: >2 redirects, >2 attempts or repeated passes require remeasurement/rebudgeting before rollout go. Not a recurring scan.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_allowance_migration.py",
+      "expression": "f'{store.namespace}_migrations'",
+      "collection_pattern": "batch_pipeline_*_migrations",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "migration page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 40000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one checkpoint read and one checkpoint CAS read/page; <=10000 pages/invocation with room for one replay. Dry run reads only COUNTs, never this collection.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{self.namespace}_allowance_holds'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "owner-index metadata poll or release-state page of at most 100 rows",
+      "reads_per_unit_budget": 6406,
+      "reads_per_day_budget": 65000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195 round-1 correction: <=6 metadata reads/owner poll; 20 owners/30s = <=57600/day/environment, <=691200/day across prod/dev. Production FirestoreTransaction/flush tests measure release at 9 reads/row without conversation, 16 for distinct held/tail conversations, 24 for two redirects each, including discovery. Reserve 64/row for one retry (two attempts), short redirects and shadow refresh: a 100-row page plans 6400+6, a one-1M-row generation burst plus metadata polls <65M/day. Initial parking belongs to the separate migration budget. Planning envelope, not a hard cap; >2 redirects, >2 attempts, repeated bursts require remeasurement/rebudgeting before rollout go. Unchanged generations never fetch held rows; empty owners retire. This state-transition budget excludes existing funded-allowance usage-ledger reads and subsequent normal admission/projection work; measure those separately on SCA-2173, never treat them as zero.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "hourly leader-only allowance-held COUNT at <=1M held rows",
+      "reads_per_unit_budget": 1000,
+      "reads_per_day_budget": 48000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: COUNT only, no row fetches, <=24 samples/day/environment = <=48000 index-read units/day for two environments; no per-scrape query. Revisit planning envelope above 1M stock.",
+      "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/batch_pipeline_purge.py",
+      "expression": "f'{namespace}_{ALLOWANCE_OWNERS}'",
+      "collection_pattern": "batch_pipeline_*_allowance_holds",
+      "owner": "Pipeline allowance parking (SCA-2195)",
+      "unit": "parked job erased by an authorized conversation/account purge",
+      "reads_per_unit_budget": 8,
+      "reads_per_day_budget": 8000000,
+      "basis": "planning-bound",
+      "source": "SCA-2195: one hold-counter read in the existing job-erasure transaction plus its shadow refresh. Reserve eight incremental reads/job for two attempts and counter refresh overhead; one 1M-job purge/day plans 8M reads. Other job/queue/control/privacy reads retain their existing family budgets. No recurring scan; only allowance_held jobs read this counter. More retries, repeated bulk purges or over 1M/day require remeasurement before accepting this planning envelope.",
+      "reviewed": "2026-11-14"
+    },
+    {
       "site": "backend/database/batch_pipeline_delivered_share.py",
       "expression": "f'{namespace}_jobs'",
       "collection_pattern": "batch_pipeline_*_jobs",
