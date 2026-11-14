@@ -4105,8 +4105,13 @@ elapsed axis and retains strict observed-send containment. Unknown text persists
 without an audio window. OFF retains the admission-time ledger exactly.
 
 `SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
-with the wire ledger, production Soniox endpoint/model (`stt-rt-v5`) and mono
-pcm_s16le at 16 kHz. Controlled synthetic probes covered sub-boundary offsets,
+with the wire ledger, production Soniox endpoint and either `stt-rt-v6` (default) or `stt-rt-v5` (rollback) and mono
+pcm_s16le at 16 kHz. `SONIOX_MODEL=stt-rt-v5` restores the previous live model
+and ordered-clock selection, subject to the same existing switches. Soniox's
+[v6 changelog](https://docs.soniox.com/stt/models) declares API compatibility;
+the 120 ms quantum below was measured on v5, not live-probed on v6. Predictions
+still require matching progress fields before capture placement; mismatches
+invalidate capture. Controlled v5 synthetic probes covered sub-boundary offsets,
 back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
 reports and 18 post-finalize speech starts matched the ordered padding model.
 For local provider cursor P, sending a finalize reserves the provider-only hole
@@ -7808,7 +7813,7 @@ Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
 The worker's `unsupported_language` handoff covers unsupported and unknown
 language routes; Parakeet never runs on those windows. CPU quarantine recovery
-uses Modulate, then at most one independent Soniox async `stt-async-v5` attempt
+uses Modulate, then at most one independent Soniox async `stt-async-v6` attempt
 when Modulate returns valid empty or fails. Shadow recovery preserves the typed
 worker reason and uses the same independent route and measured disposition,
 without writing transcripts or user usage. This does not change general
