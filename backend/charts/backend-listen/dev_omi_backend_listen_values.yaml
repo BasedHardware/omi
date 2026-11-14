@@ -131,6 +131,8 @@ env:
     value: "7200"
   - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
     value: "true"
+  - name: SYNC_COLLISION_SUFFIX_ENABLED
+    value: "true"
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS

@@ -107,3 +107,13 @@ def test_other_stages_never_create_workers():
         assert result.returncode == 0, result.stderr
         docs = {(doc['kind'], doc['metadata']['name']): doc for doc in yaml.safe_load_all(result.stdout) if doc}
         assert ('Deployment', 'record-seal-worker') not in docs
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_fresh_switch_controls_both_repair_cron_and_continuous_worker(enabled):
+    docs = documents('--set', f'recordSealRepair.freshEnabled={enabled}')
+    worker = docs[('Deployment', 'record-seal-worker')]['spec']['template']['spec']
+    repair = docs[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    for pod in (worker, repair):
+        env = {entry['name']: entry.get('value') for entry in pod['containers'][0]['env']}
+        assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == enabled

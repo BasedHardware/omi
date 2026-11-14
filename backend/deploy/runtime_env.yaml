@@ -379,6 +379,9 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_COLLISION_SUFFIX_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
             value: '86400'
             category: config
@@ -545,6 +548,9 @@ environments:
             value: '7200'
             category: config
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
@@ -1172,6 +1178,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1510,6 +1519,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1833,6 +1845,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -2117,6 +2132,9 @@ environments:
               value: '7200'
               category: config
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
@@ -2816,6 +2834,9 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_COLLISION_SUFFIX_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
             value: '86400'
             category: config
@@ -3090,6 +3111,9 @@ environments:
             value: '7200'
             category: config
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
@@ -3741,6 +3765,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4216,6 +4243,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4683,6 +4713,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -5093,6 +5126,9 @@ environments:
               value: '7200'
               category: config
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_COLLISION_SUFFIX_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:

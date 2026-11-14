@@ -147,12 +147,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
         # A capture whose speech has not landed. Unstamped legacy rows get the same
         # bound the stamped ones have, so none can stay Processing forever.
-        seconds = (
-            home_transcription_max_age_seconds()
-            if home_transcription_queue_hold_enabled()
-            else LEGACY_TRANSCRIPTION_SECONDS
-        )
-        anchor = row.get('finished_at') or row.get('created_at')
+        if home_transcription_queue_hold_enabled():
+            seconds = home_transcription_max_age_seconds()
+            anchor = row.get('finished_at') or row.get('created_at')
+        else:
+            seconds = LEGACY_TRANSCRIPTION_SECONDS
+            anchor = row.get('finished_at')
         return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 

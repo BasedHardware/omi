@@ -434,3 +434,29 @@ def test_capture_end_wins_over_pending_clock_and_recent_update():
 def test_episode_iso_stamp_remains_supported():
     row = {'episode_transcription_deadline_at': (NOW + timedelta(hours=2)).isoformat()}
     assert transcribing_hold.deadline(row, prefix='episode_transcription') == NOW + timedelta(hours=24)
+
+
+@pytest.mark.parametrize('prefix', ['home_transcription', 'episode_transcription'])
+@pytest.mark.parametrize('key', ['finished_at', 'pending_at', 'created_at'])
+def test_iso_clock_is_parsed_before_selecting_the_first_valid_anchor(prefix, key):
+    row = {f'{prefix}_deadline_at': NOW - timedelta(hours=1), 'updated_at': NOW}
+    field = f'{prefix}_pending_at' if key == 'pending_at' else key
+    row[field] = (NOW - timedelta(hours=25)).isoformat()
+    if key == 'finished_at':
+        row[f'{prefix}_pending_at'] = NOW - timedelta(hours=3)
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW - timedelta(hours=1)
+
+
+def test_iso_capture_end_does_not_renew_a_lost_recording_from_its_pending_clock():
+    row = capture(
+        finished_at=(NOW - timedelta(hours=25)).isoformat(),
+        home_transcription_pending_at=NOW - timedelta(hours=3),
+        home_transcription_deadline_at=NOW - timedelta(hours=1),
+    )
+    assert transcribing_hold.project(row, now=NOW)['structured']['title'] == "Couldn't transcribe"
+
+
+@pytest.mark.parametrize('invalid', [None, 'invalid', '', 123])
+def test_invalid_clock_falls_through_to_a_valid_iso_pending_clock(invalid):
+    row = capture(finished_at=invalid, home_transcription_pending_at=(NOW - timedelta(hours=3)).isoformat())
+    assert transcribing_hold.deadline(row) == NOW + timedelta(hours=21)

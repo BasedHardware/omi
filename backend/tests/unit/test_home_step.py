@@ -365,3 +365,10 @@ def test_legacy_capture_heals_without_presentation_gate(monkeypatch, presentatio
 def test_terminal_batch_row_still_fails():
     empty = row(status='failed', structured={'title': '', 'overview': ''}, finished_at=NOW)
     assert home_step.classify(empty) == 'failed'
+
+
+@pytest.mark.parametrize('finished', [None, 'invalid'])
+def test_queue_hold_off_keeps_the_original_finished_at_only_legacy_bound(monkeypatch, finished):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', 'false')
+    empty = row(structured={'title': '', 'overview': ''}, finished_at=finished, created_at=NOW - timedelta(hours=3))
+    assert home_step.classify(empty) == 'transcribing'

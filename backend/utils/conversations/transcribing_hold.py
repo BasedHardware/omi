@@ -77,14 +77,17 @@ def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> d
     stamped = _utc(row[f'{prefix}_deadline_at'])
     if not home_transcription_queue_hold_enabled():
         return stamped
-    anchor = next(
-        (
-            row[key]
-            for key in ('finished_at', f'{prefix}_pending_at', 'created_at')
-            if isinstance(row.get(key), datetime)
-        ),
-        stamped - timedelta(seconds=home_transcription_deadline_seconds()),
-    )
+    for key in ('finished_at', f'{prefix}_pending_at', 'created_at'):
+        value = row.get(key)
+        if not isinstance(value, (datetime, str)):
+            continue
+        try:
+            anchor = _utc(value)
+        except ValueError:
+            continue
+        break
+    else:
+        anchor = stamped - timedelta(seconds=home_transcription_deadline_seconds())
     return _utc(anchor) + timedelta(seconds=home_transcription_max_age_seconds())
 
 

@@ -194,6 +194,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "SYNC_COLLISION_SUFFIX_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
@@ -3966,3 +3967,19 @@ def test_home_transcription_queue_hold_is_pinned_on_every_existing_host(env):
         chart_env = {entry['name']: entry.get('value') for entry in values['env']}
         assert chart_env['HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'] == 'true'
         assert chart_env['HOME_TRANSCRIPTION_MAX_AGE_SECONDS'] == '86400'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_quality_push_switches_are_bound_on_every_owning_backend_host(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    assert config['gke']['pusher']['env']['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] == expected
+    sync_hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    for host in sync_hosts:
+        assert host['env']['SYNC_COLLISION_SUFFIX_ENABLED'] == expected
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='quality_push_switch_renderer')
+    for host, key in [
+        (config['gke']['pusher'], 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+        *((host, 'SYNC_COLLISION_SUFFIX_ENABLED') for host in sync_hosts),
+    ]:
+        assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
