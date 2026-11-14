@@ -71,6 +71,7 @@ email or conversation id is read or exported.
   because it waits on credits. Those stocks are measured (and the deep-backlog
   stock is banded at 7 days) but not paged.
 - **A few stocks are visibility-only.** `batch:deep_backlog`, `batch:allowance_held`,
+  `batch:allowance_refused`,
   `batch:leased`, `batch:dead`, `batch:partial_retired`, `cap_hold:held` /
   `retained` / `batch_admitted` and the terminal projection states have a count
   and an age but no rule: they are terminal, actively owned, or durable by
@@ -83,7 +84,7 @@ generator renders one rule per stock that sets `age_alarm_seconds`.
 
 | machine | stocks |
 |---|---|
-| `batch` | every job state (`record_pending` … `dead`, provider trio, `record_recovery_waiting`) plus `committed_hidden`, `ready_parked`, `allowance_held`, `deep_backlog` |
+| `batch` | every job state (`record_pending` … `dead`, provider trio, `record_recovery_waiting`, `allowance_held`) plus `committed_hidden`, `ready_parked`, `allowance_refused`, `deep_backlog` |
 | `batch_projection` | result projection states (`pending`, `persisted`, `ready`, `quarantine_held`, `completed`, `erased`, `claimed`) |
 | `batch_recovery` | recovery intents (`held`, `prepared`, `running`, `failed_held`, `recovered`, `cancelled`) |
 | `provider_outbox` | `open`, `closed` |
@@ -98,8 +99,13 @@ single Firestore query cannot exclude a field and still order by the acceptance
 clock. The split is published beside it: `batch:ready_runnable` is the
 admissible stock (`compute_decision.outcome` unattempted or allowed),
 `batch:ready_parked` is the policy/capacity-refused stock aged from its refusal
-clock, and `batch:allowance_held` is the spend-gate subset (durable until the
-plan changes, so measured and not paged).
+clock. `batch:allowance_refused` counts spend-gate refusals across job states
+from `compute_decision.at`, preserving visibility of allowance/budget refusals
+that have not been parked. `batch:allowance_held` counts the explicit job state
+introduced by allowance parking, from `enqueued_at`. Both are durable until
+the plan changes, so measured and not paged; they overlap and must not be summed.
+The registry now contains 55 stocks; acceptance always compares fresh-stock
+count with the deployed registered-stock count.
 
 Job and projection thresholds, all on dwell from acceptance: `ready_runnable` /
 `result_ready` / `committed_hidden` / projection `ready` 2 h; `retry` 6 h;

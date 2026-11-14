@@ -232,6 +232,20 @@ AUDIT_STOCKS = (
 )
 
 
+def test_allowance_parked_jobs_and_policy_refusals_remain_distinct_stocks():
+    parked = BY_KEY['batch:allowance_held']
+    refused = BY_KEY['batch:allowance_refused']
+    assert parked.filters == (('state', '==', 'allowance_held'),)
+    assert parked.clock == 'enqueued_at'
+    assert refused.filters == (
+        ('compute_decision.outcome', '==', 'held'),
+        ('compute_decision.reason', 'in', ('allowance_exhausted', 'allowance_unavailable', 'budget_exhausted')),
+    )
+    assert refused.clock == 'compute_decision.at'
+    assert parked.age_alarm_seconds is None
+    assert refused.age_alarm_seconds is None
+
+
 @pytest.mark.parametrize('key', AUDIT_STOCKS)
 def test_every_stock_the_audit_named_is_registered_with_a_clock(key):
     entry = BY_KEY[key]

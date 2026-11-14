@@ -356,6 +356,7 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_timeliness_',
+    'prometheus.googleapis.com/omi_batch_allowance_held_units/',
     'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',

@@ -24,8 +24,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 284,
+  "count": 285,
   "names": {
+    "BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_DELIVERED_SHARE_ENABLED": {"owner": "Goal: Pipeline", "review_by": "2026-12-13", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED": {"owner": "provider-stt-drain", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},

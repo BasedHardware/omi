@@ -4151,6 +4151,7 @@ environments:
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -5010,6 +5011,7 @@ environments:
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware

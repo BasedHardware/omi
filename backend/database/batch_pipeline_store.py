@@ -90,6 +90,8 @@ class Store(Protocol):
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
+    def allowance_owners(self, now: float, limit: int) -> list[str]: ...
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]: ...
 
 
 # Reads that bypass the view cache and go through the raw transaction, by kind.
@@ -269,6 +271,26 @@ class FirestoreTransaction:
 
 
 class FirestoreStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        return [
+            doc.id
+            for doc in self.client.collection(f'{self.namespace}_allowance_holds')
+            .where('active', '==', True)
+            .where('check_at', '<=', now)
+            .order_by('check_at')
+            .limit(max(1, min(limit, 100)))
+            .stream()
+        ]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        query = self.client.collection(f'{self.namespace}_jobs').where('state', '==', 'allowance_held')
+        if owner_key is not None:
+            query = query.where('owner_key', '==', owner_key)
+        query = query.order_by('capture_at').order_by('segment_id')
+        if after is not None:
+            query = query.start_after({'capture_at': after[0], 'segment_id': after[1]})
+        return [doc.id for doc in query.limit(max(1, min(limit, 100))).stream()]
+
     def __init__(self, namespace: str, *, firestore_client: Any = None):
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(
@@ -768,6 +790,11 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
 # beyond the bound. The observer and pager report that incomplete scan as
 # blindness; retiring holds themselves stays with the custody track.
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def allowance_held_count(client: Any, namespace: str) -> int:
+    """Hourly leader census, outside the pending-work sample and never a row walk."""
+    return int(client.collection(f'{namespace}_jobs').where('state', '==', 'allowance_held').count().get()[0][0].value)
 
 
 def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
