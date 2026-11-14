@@ -391,3 +391,47 @@ def test_pg_recovery_lock_timeout_is_unresolved_not_rollback_proof(retained):
                 (r.handoff.ticket.namespace,),
             ).fetchone() == ('prepared',)
         assert operations.resolve(r.uid, target)
+
+
+def test_slow_object_proof_cannot_clear_new_pg_target_under_same_unit_token(retained):
+    from datetime import datetime, timedelta, timezone
+    from database import legal_holds
+    from database.conversation_batch_purge_jobs import RunProgress, GATE_KIND
+
+    r = retained
+    with unit(r) as authority:
+        operations, target = prepared(r, authority)
+        old_target = f'gs://synthetic/syncing/{r.uid}/audio/one#1'
+        legal_holds.mark_remote_erasure(
+            r.uid,
+            kind=GATE_KIND,
+            token=authority.token,
+            inflight=True,
+            firestore_client=r.handoff.client,
+            target=old_target,
+        )
+        gate = r.handoff.client.collection(legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION).document(r.uid)
+        age = datetime.now(timezone.utc) - timedelta(seconds=legal_holds.UNIT_REMOTE_STUCK_SECONDS + 1)
+        gate.update({'remote_inflight_at': age})
+
+        def slow_object_proof(observed):
+            assert observed == old_target
+            # The old worker advances while the resolver obtains its object
+            # proof. The PG operation now has its own unresolved outcome.
+            legal_holds.mark_remote_erasure(
+                r.uid,
+                kind=GATE_KIND,
+                token=authority.token,
+                inflight=True,
+                firestore_client=r.handoff.client,
+                target=target,
+            )
+            return True
+
+        RunProgress.settle_stuck(SimpleNamespace(uid=r.uid), slow_object_proof)
+        value = gate.get().to_dict()
+        assert value['state'] == 'running' and value['remote_inflight'] and value['remote_target'] == target
+        gate.update({'remote_inflight_at': age})
+        RunProgress.settle_stuck(SimpleNamespace(uid=r.uid), lambda observed: operations.resolve(r.uid, observed))
+        value = gate.get().to_dict()
+        assert value['state'] == 'failed' and not value['remote_inflight']

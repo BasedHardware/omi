@@ -126,6 +126,11 @@ The actual conversation progress resolver routes the durable operation target
 before acquiring the next unit. Account orchestration/recovery injection remains
 a runtime gate.
 
+Gate settlement compares the observed target as well as the token. Otherwise a
+slow object proof could clear a newer unknown PG operation under the same unit
+token. The real FS/PG regression advances those targets during resolution and
+proves the newer request remains held until its own durable cancellation.
+
 Successful phase records let bounded redelivery skip completed original
 versions. A replacement generation is never selected by lookup. No successful
 phase removes the last PG custodian, attempt/effect metadata, journal or census.

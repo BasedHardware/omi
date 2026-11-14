@@ -8,8 +8,9 @@ Missing rows, lock timeouts and transport failures never prove rollback.
 
 from uuid import uuid4
 
+from psycopg import Error as PostgresError  # pyright: ignore[reportMissingImports]
+
 from database.jobstore.authority import AuthorityRefused
-from database.jobstore.connection import _psycopg
 from database.jobstore.postgres_store import jsonb
 from database.privacy_fence.protocol import lock, owner_key, row_dict
 
@@ -124,7 +125,7 @@ class ErasureOperations:
                         "UPDATE queue_original_erasure_operations SET state='committed' WHERE namespace=%s AND operation_id=%s",
                         (row['namespace'], row['operation_id']),
                     )
-        except _psycopg().Error as error:
+        except PostgresError as error:
             raise ConnectionError('original erasure PG outcome unresolved') from error
 
     def resolve(self, uid, target):
@@ -145,5 +146,5 @@ class ErasureOperations:
                         (row['namespace'], row['operation_id']),
                     )
             return True
-        except _psycopg().Error as error:
+        except PostgresError as error:
             raise ConnectionError('original erasure recovery PG outcome unresolved') from error

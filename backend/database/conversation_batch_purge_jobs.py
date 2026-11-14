@@ -382,7 +382,9 @@ class RunProgress:
         token, target = stuck
         # Re-issuing the same generation-pinned delete: a definitive answer settles the old request too.
         if resolve(target):
-            legal_holds.settle_stuck_remote_erasure(self.uid, kind=GATE_KIND, token=token, firestore_client=client)
+            legal_holds.settle_stuck_remote_erasure(
+                self.uid, kind=GATE_KIND, token=token, target=target, firestore_client=client
+            )
 
     def expired(self) -> bool:
         return self._checkpointed and self._clock() - self._started >= self._budget
