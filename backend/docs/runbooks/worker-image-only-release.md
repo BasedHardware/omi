@@ -82,22 +82,34 @@ does not clear canary gates. Release still performs the previously approved
 `repair-flags-apply.sh` reapply and drain/record-seal/source/consumer verification
 in the existing order. This mode supplies no new repair flags or policy.
 
-An exact reverse image patch can be prepared read-only from the receipt. After
-the existing release owner has admitted rollback, with its source floor,
-hold/lock/approval and consumer gates satisfied, generate and immediately apply:
+A rollback uses the **same canonical workflow and writer** as a forward release.
+After Release admits rollback under the existing hold/eligibility/approval rules,
+capture a fresh inventory and dispatch the recorded prior digest with its full
+merged source SHA and the saved receipt:
 
 ```bash
-python3 .github/scripts/worker_image_only.py rollback-plan \
-  --receipt worker-image-receipt.json --patch-file worker-rollback.json
-kubectl -n prod-omi-backend patch deployment prod-omi-batch-pipeline-worker \
-  --type=json --patch-file worker-rollback.json --request-timeout=30s
-kubectl -n prod-omi-backend rollout status deployment/prod-omi-batch-pipeline-worker --timeout=2400s
+python3 .github/scripts/worker_image_only.py inventory > worker-rollback-baseline.json
+gh workflow run gcp_diarizer.yml --ref main \
+  -f environment=prod -f service=batch-pipeline-worker \
+  -f branch="$PRIOR_MERGED_SOURCE_SHA" -f image_digest="$RECORDED_PRIOR_DIGEST" \
+  -F preserve_live_worker=true \
+  -f worker_live_baseline="$(cat worker-rollback-baseline.json)" \
+  -f worker_rollback_receipt="$(cat worker-image-receipt.json)"
 ```
 
-Planning requires the same UID, exact candidate spec and admitted siblings;
-it uses a freshly read resourceVersion so ordinary rollout status updates do
-not invalidate the receipt. The patch atomically tests UID/resourceVersion/image
-before restoring only the recorded prior digest. If runtime config has changed,
+Both directions mechanically require source ancestry at or above
+`f3902ec5435809d95ac7c15f6be7e9f056564d3d`. Rollback also requires an explicit
+digest and full merged source SHA, and the existing image-tree check binds that
+digest to the admitted source. It enters the same prod environment approval,
+prod-train concurrency group, index gate, server dry-run, consumer checks,
+CAS writer and rollout verifier. Rollback rejects `break_glass_lock=true`.
+The prior digest must equal the saved receipt, the current baseline must equal
+its `after` identity, and the resulting spec
+must equal its `before` identity. The standalone reverse-patch command has been
+removed; there is no documented direct `kubectl patch` write path.
+
+The writer uses a freshly read resourceVersion so ordinary rollout status
+updates do not invalidate the receipt. If runtime config has changed,
 stop for owner reconciliation; do not overwrite it with an old full snapshot.
 There is no automatic rollback, bypass or rollback below the release's source
 floor. Helm history is unchanged; future chart deployments still require their

@@ -45,6 +45,10 @@ on:
         description: 'Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)'
         required: false
         default: ''
+      worker_rollback_receipt:
+        description: 'Preserve-live rollback only: saved safe receipt; requires its exact prior digest and full merged source SHA at or above f3902ec'
+        required: false
+        default: ''
       break_glass_lock:
         description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
         required: false
@@ -84,6 +88,10 @@ jobs:
         env:
           PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
           LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          SOURCE_REF: ${{ inputs.branch }}
+          CANDIDATE_DIGEST: ${{ inputs.image_digest }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
@@ -97,6 +105,12 @@ jobs:
           elif [[ -n "$LIVE_BASELINE" ]]; then
             echo "worker_live_baseline requires preserve_live_worker" >&2
             exit 1
+          fi
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            [[ "$PRESERVE_LIVE" == true && "$BREAK_GLASS_LOCK" != true && "$SOURCE_REF" =~ ^[abcdef0-9]{40}$ && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
+              echo "Rollback requires preserve-live, the shared lock, a full merged source SHA and an explicit prior digest" >&2
+              exit 1
+            }
           fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
@@ -114,6 +128,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_REF: ${{ github.event.inputs.branch }}
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
         run: |
           set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
@@ -124,6 +139,10 @@ jobs:
               source_sha="$DEPLOY_REF"
             fi
             git merge-base --is-ancestor "$source_sha" origin/main
+            if [[ "$PRESERVE_LIVE" == true ]]; then
+              # Apply the same immutable source floor to forward and reverse image moves.
+              git merge-base --is-ancestor f3902ec5435809d95ac7c15f6be7e9f056564d3d "$source_sha"
+            fi
             git checkout --detach "$source_sha"
           fi
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
@@ -138,9 +157,19 @@ jobs:
           fetch-depth: 1
           sparse-checkout: |
             .github/actions/firestore-readiness
-            .github/scripts
             backend/scripts
             backend/database
+
+      - name: Checkout immutable worker image-only control
+        if: inputs.preserve_live_worker == true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/worker-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: /.github/scripts/worker_image_only.py
 
       - name: Verify serving Firestore indexes
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
@@ -321,15 +350,22 @@ jobs:
         if: inputs.preserve_live_worker == true
         env:
           LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           IMAGE_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
         run: |
           set -euo pipefail
           umask 077
           echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
-          python3 .github/firestore-workflow/.github/scripts/worker_image_only.py deploy \
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py deploy \
             --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
             --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
             --receipt "$RUNNER_TEMP/worker-image-receipt.json" | tee "$RUNNER_TEMP/worker-image-diff.json"
           {
             echo '### Worker image-only diff and rollback identity'
@@ -408,7 +444,7 @@ jobs:
       - name: Verify preserved worker runtime and sibling bindings
         if: inputs.preserve_live_worker == true
         run: |
-          python3 .github/firestore-workflow/.github/scripts/worker_image_only.py verify \
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py verify \
             --receipt "$RUNNER_TEMP/worker-image-receipt.json"
 
       - name: Generate deployment summary

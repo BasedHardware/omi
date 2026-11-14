@@ -120,7 +120,13 @@ def private_json(path, data):
         handle.write("\n")
 
 
-def deploy(baseline, image, receipt_path, run=kubectl):
+def deploy(baseline, image, receipt_path, run=kubectl, rollback_receipt=None):
+    if rollback_receipt is not None:
+        require(
+            baseline == {"target": rollback_receipt["after"], "consumers": rollback_receipt["consumers"]},
+            "rollback baseline must match the saved release receipt",
+        )
+        require(image == rollback_receipt["before"]["image"], "rollback must restore the recorded prior image")
     obj, actual = snapshot(run)
     require(actual == baseline, "target or shared-consumer drift from admitted baseline")
     patch = patch_for(obj, image)
@@ -147,6 +153,8 @@ def deploy(baseline, image, receipt_path, run=kubectl):
     _, index = target_state(obj)
     expected["spec"]["template"]["spec"]["containers"][index]["image"] = image
     after, _ = target_state(expected)
+    if rollback_receipt is not None:
+        require(after == rollback_receipt["before"], "rollback must restore the exact recorded prior runtime spec")
     receipt = {"before": actual["target"], "after": after, "consumers": actual["consumers"]}
     private_json(receipt_path, receipt)
     # Safe, reviewable image diff and exact reverse identity; never print the full spec.
@@ -165,34 +173,26 @@ def verify(receipt, run=kubectl):
     require(actual == {"target": receipt["after"], "consumers": receipt["consumers"]}, "post-roll runtime/consumer drift")
 
 
-def rollback_plan(receipt, path, run=kubectl):
-    obj, actual = snapshot(run)
-    require(actual == {"target": receipt["after"], "consumers": receipt["consumers"]}, "rollback baseline drift")
-    private_json(path, patch_for(obj, receipt["before"]["image"]))
-    # No write: Release must first satisfy its existing rollback approval/hold/lock controls.
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["inventory", "deploy", "verify", "rollback-plan"])
+    parser.add_argument("command", choices=["inventory", "deploy", "verify"])
     parser.add_argument("--baseline")
     parser.add_argument("--image")
     parser.add_argument("--receipt")
-    parser.add_argument("--patch-file")
+    parser.add_argument("--rollback-receipt")
     args = parser.parse_args()
     if args.command == "inventory":
         print(json.dumps(snapshot()[1], indent=2))
     elif args.command == "deploy":
         require(args.baseline and args.image and args.receipt, "deploy needs baseline, image and receipt")
-        deploy(json.loads(Path(args.baseline).read_text()), args.image, args.receipt)
+        rollback = json.loads(Path(args.rollback_receipt).read_text()) if args.rollback_receipt else None
+        if args.rollback_receipt:
+            require(isinstance(rollback, dict), "rollback receipt must be an object")
+        deploy(json.loads(Path(args.baseline).read_text()), args.image, args.receipt, rollback_receipt=rollback)
     else:
         require(args.receipt, "receipt required")
         receipt = json.loads(Path(args.receipt).read_text())
-        if args.command == "verify":
-            verify(receipt)
-        else:
-            require(args.patch_file, "patch-file required")
-            rollback_plan(receipt, args.patch_file)
+        verify(receipt)
 
 
 if __name__ == "__main__":

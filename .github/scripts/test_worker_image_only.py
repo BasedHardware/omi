@@ -130,10 +130,11 @@ class PreservationTests(unittest.TestCase):
         before = copy.deepcopy(self.cluster.target["spec"])
         receipt = self.deploy()
         self.cluster.target["metadata"]["resourceVersion"] = "99"  # rollout status updates are normal
-        patch_path = Path(self.tmp.name) / "rollback.json"
-        worker.rollback_plan(receipt, patch_path, self.cluster)
-        self.assertEqual(self.cluster.writes, 1)  # planning is read-only
-        self.cluster("patch", "deployment", worker.TARGET, "-p", patch_path.read_text())
+        baseline = worker.snapshot(self.cluster)[1]
+        with contextlib.redirect_stdout(io.StringIO()):
+            reverse = worker.deploy(baseline, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+        worker.verify(reverse, self.cluster)
+        self.assertEqual(self.cluster.writes, 2)
         self.assertEqual(self.cluster.target["spec"], before)
 
     def test_target_spec_drift_refuses_before_write(self):
@@ -207,7 +208,31 @@ class PreservationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "drift"):
             worker.verify(receipt, self.cluster)
         with self.assertRaisesRegex(ValueError, "drift"):
-            worker.rollback_plan(receipt, Path(self.tmp.name) / "patch.json", self.cluster)
+            worker.deploy({"target": receipt["after"], "consumers": receipt["consumers"]}, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+
+    def test_rollback_refuses_forged_image_baseline_and_prior_spec(self):
+        receipt = self.deploy()
+        baseline = worker.snapshot(self.cluster)[1]
+        for changed_receipt, image, changed_baseline in (
+            (receipt, NEW, baseline),
+            ({**receipt, "before": {**receipt["before"], "spec_sha256": "forged"}}, OLD, baseline),
+            (receipt, OLD, {**baseline, "consumers": []}),
+        ):
+            with self.subTest(image=image), self.assertRaises(ValueError):
+                worker.deploy(changed_baseline, image, self.receipt_path, self.cluster, rollback_receipt=changed_receipt)
+        self.assertEqual(self.cluster.writes, 1)
+
+    def test_rollback_uses_the_same_dry_run_and_cas_guards(self):
+        receipt = self.deploy()
+        baseline = worker.snapshot(self.cluster)[1]
+        self.cluster.admission_mutates = True
+        with self.assertRaisesRegex(ValueError, "dry-run"), contextlib.redirect_stdout(io.StringIO()):
+            worker.deploy(baseline, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+        self.cluster.admission_mutates = False
+        self.cluster.drift_on_patch = True
+        with self.assertRaisesRegex(ValueError, "API conflict"), contextlib.redirect_stdout(io.StringIO()):
+            worker.deploy(baseline, OLD, self.receipt_path, self.cluster, rollback_receipt=receipt)
+        self.assertEqual(self.cluster.writes, 1)
 
     def test_cronjob_job_and_init_container_bindings_are_accounted_for(self):
         obj = deployment("record-seal-repair")
@@ -249,9 +274,12 @@ class WorkflowTests(unittest.TestCase):
         # No always(), continue-on-error, or second job can route around a failed gate.
         self.assertNotIn("continue-on-error", writer)
         self.assertEqual(list(self.workflow["jobs"]), ["deploy"])
-        immutable = self.step("Checkout immutable Firestore gate controls")
+        immutable = self.step("Checkout immutable worker image-only control")
         self.assertEqual(immutable["with"]["ref"], "${{ github.workflow_sha }}")
-        self.assertIn(".github/scripts", immutable["with"]["sparse-checkout"])
+        self.assertEqual(immutable["with"]["sparse-checkout"], "/.github/scripts/worker_image_only.py")
+        self.assertFalse(immutable["with"]["sparse-checkout-cone-mode"])
+        self.assertNotIn(".github/scripts", self.step("Checkout immutable Firestore gate controls")["with"]["sparse-checkout"])
+        self.assertIn("--rollback-receipt", writer["run"])
 
     def test_input_validation_executes_and_refuses_wrong_scope(self):
         step = self.step("Validate Environment Input")
@@ -267,7 +295,7 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(environment=environment, service=service, preserve=preserve):
                 result = subprocess.run(
                     ["bash", "-e", "-c", script],
-                    env={"SERVICE": service, "PRESERVE_LIVE": preserve, "LIVE_BASELINE": baseline},
+                    env={"SERVICE": service, "PRESERVE_LIVE": preserve, "LIVE_BASELINE": baseline, "ROLLBACK_RECEIPT": ""},
                     capture_output=True,
                 )
                 self.assertEqual(result.returncode, expected)
@@ -291,6 +319,7 @@ class WorkflowTests(unittest.TestCase):
                         "PATH": str(root) + os.pathsep + os.defpath,
                         "DEPLOY_ENVIRONMENT": "prod",
                         "DEPLOY_REF": ref,
+                        "PRESERVE_LIVE": "true",
                         "GITHUB_OUTPUT": str(root / "output"),
                         "WRITE_MARKER": str(marker),
                     },
@@ -298,6 +327,45 @@ class WorkflowTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertFalse(marker.exists())
+
+    def test_source_floor_refusal_precedes_forward_and_reverse_writer(self):
+        script = self.step("Select merged production source and image tag")["run"]
+        floor = "f3902ec5435809d95ac7c15f6be7e9f056564d3d"
+        self.assertIn(f"git merge-base --is-ancestor {floor}", script)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            git = root / "git"
+            git.write_text(
+                '#!/bin/bash\n'
+                f'if [[ "$1" == merge-base && "$3" == {floor} ]]; then exit 1; fi\n'
+                'if [[ "$1" == rev-parse ]]; then echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; fi\n'
+            )
+            git.chmod(0o755)
+            marker = root / "writer-reached"
+            result = subprocess.run(
+                ["bash", "-e", "-c", script + '\nprintf writer > "$WRITE_MARKER"\n'],
+                env={"PATH": str(root) + os.pathsep + os.defpath, "DEPLOY_ENVIRONMENT": "prod", "DEPLOY_REF": "b" * 40,
+                     "PRESERVE_LIVE": "true", "GITHUB_OUTPUT": str(root / "output"), "WRITE_MARKER": str(marker)},
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(marker.exists())
+
+    def test_rollback_input_requires_same_preserve_path_and_explicit_source_digest(self):
+        step = self.step("Validate Environment Input")
+        script = step["run"].replace("${{ github.event.inputs.environment }}", "prod").replace("${{ inputs.environment }}", "prod")
+        for preserve, ref, image, break_glass, expected in (
+            ("true", "a" * 40, "sha256:" + "1" * 64, "false", 0),
+            ("false", "a" * 40, "sha256:" + "1" * 64, "false", 1),
+            ("true", "main", "sha256:" + "1" * 64, "false", 1),
+            ("true", "a" * 40, "", "false", 1),
+            ("true", "a" * 40, "sha256:" + "1" * 64, "true", 1),
+        ):
+            with self.subTest(preserve=preserve, ref=ref, image=image):
+                result = subprocess.run(["bash", "-e", "-c", script],
+                    env={"SERVICE": "batch-pipeline-worker", "PRESERVE_LIVE": preserve, "LIVE_BASELINE": "{}",
+                         "ROLLBACK_RECEIPT": "{}", "SOURCE_REF": ref, "CANDIDATE_DIGEST": image, "BREAK_GLASS_LOCK": break_glass}, capture_output=True)
+                self.assertEqual(result.returncode, expected)
 
 
 if __name__ == "__main__":
