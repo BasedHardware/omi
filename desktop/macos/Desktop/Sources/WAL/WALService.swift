@@ -72,6 +72,7 @@ final class WALService: ObservableObject {
       _ mode: MetadataWriteMode
     ) throws -> Void
   typealias TimestampProvider = @Sendable () -> Int
+  typealias FrameWriteOverride = @Sendable (Data, URL) async throws -> Void
 
   private struct ActiveFrameBuffer {
     let device: String
@@ -150,6 +151,10 @@ final class WALService: ObservableObject {
   private let frameWriter: FrameWriter
   private let metadataWriter: MetadataWriter
   private let timestampProvider: TimestampProvider
+
+  /// Test seam: replaces the off-main frame-file write so a test can hold the
+  /// write open and prove the main actor stays responsive. `nil` in production.
+  private let frameWriteOverride: FrameWriteOverride?
   private let walMetadataWriteQueue = DispatchQueue(label: "me.omi.desktop.wal.metadata.write")
   private let walMetadataWriteState = WALMetadataWriteState()
   private var walMetadataRevision = 0
@@ -241,10 +246,12 @@ final class WALService: ObservableObject {
     metadataWriter: MetadataWriter? = nil,
     walDirectoryForTesting: URL? = nil,
     walDirectoryUnavailableForTesting: Bool = false,
-    timestampProvider: TimestampProvider? = nil
+    timestampProvider: TimestampProvider? = nil,
+    frameWriteOverride: FrameWriteOverride? = nil
   ) {
     self.apiClient = apiClient
     self.reconciler = reconciler ?? .shared
+    self.frameWriteOverride = frameWriteOverride
     self.frameWriter =
       frameWriter ?? { request in
         try await Self.writeFrameTransaction(request)
@@ -908,10 +915,14 @@ final class WALService: ObservableObject {
     }
   }
 
-  /// Synchronous variant that writes off-main but blocks the caller until the
-  /// file is on disk and filePath is set. Returns false when persistence fails.
+  /// Async variant that writes off-main and suspends the caller until the file
+  /// is on disk and `filePath` is set. Returns false when persistence fails.
+  ///
+  /// Suspends instead of blocking: the SD-card sync callers are `@MainActor`,
+  /// so a synchronous wait here froze the whole UI for the duration of a large
+  /// (hundreds of MB) download's disk write.
   @discardableResult
-  private func writeFramesToDiskAndWait(frames: [Data], wal: WALEntry) -> Bool {
+  private func writeFramesToDiskAndWait(frames: [Data], wal: WALEntry) async -> Bool {
     guard let walDir = walDirectory else {
       recordFrameWriteFailure(walId: wal.id, reason: "wal_directory_unavailable")
       return false
@@ -920,30 +931,15 @@ final class WALService: ObservableObject {
     let fileName = wal.generateFileName()
     let fileUrl = walDir.appendingPathComponent(fileName)
     let walId = wal.id
-
-    var fileData = Data()
-    for frame in frames {
-      var length = UInt32(frame.count).littleEndian
-      fileData.append(Data(bytes: &length, count: 4))
-      fileData.append(frame)
-    }
-    let fileDataPayload = fileData
-
+    let fileDataPayload = Self.encodeFrames(frames)
     let frameCount = frames.count
-    let writeSucceeded: Bool = DispatchQueue.global(qos: .utility).sync {
-      do {
-        try fileDataPayload.write(to: fileUrl, options: .atomic)
-        log("WALService: Wrote \(frameCount) frames to \(fileName)")
-        return true
-      } catch {
-        let reason = error.localizedDescription
-        log(
-          "WALService: Failed to write frames to disk "
-            + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
-            + reason)
-        return false
-      }
-    }
+
+    let writeSucceeded = await Self.writeFramesOffMain(
+      fileDataPayload,
+      to: fileUrl,
+      frameCount: frameCount,
+      override: frameWriteOverride
+    )
 
     if writeSucceeded, let index = wals.firstIndex(where: { $0.id == walId }) {
       wals[index].storage = .disk
@@ -955,6 +951,47 @@ final class WALService: ObservableObject {
       recordFrameWriteFailure(walId: walId, reason: "frame_write_failed")
     }
     return false
+  }
+
+  /// Performs the frame-file write on a background queue and resumes when it
+  /// finishes. `nonisolated` so the disk I/O never runs on the main actor.
+  nonisolated private static func writeFramesOffMain(
+    _ data: Data,
+    to fileUrl: URL,
+    frameCount: Int,
+    override: FrameWriteOverride? = nil
+  ) async -> Bool {
+    if let override {
+      do {
+        try await override(data, fileUrl)
+        log("WALService: Wrote \(frameCount) frames to \(fileUrl.lastPathComponent)")
+        return true
+      } catch {
+        let reason = error.localizedDescription
+        log(
+          "WALService: Failed to write frames to disk "
+            + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+            + reason)
+        return false
+      }
+    }
+
+    return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+      DispatchQueue.global(qos: .utility).async {
+        do {
+          try data.write(to: fileUrl, options: .atomic)
+          log("WALService: Wrote \(frameCount) frames to \(fileUrl.lastPathComponent)")
+          continuation.resume(returning: true)
+        } catch {
+          let reason = error.localizedDescription
+          log(
+            "WALService: Failed to write frames to disk "
+              + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+              + reason)
+          continuation.resume(returning: false)
+        }
+      }
+    }
   }
 
   private func recordFrameWriteFailure(walId: String, reason: String) {
@@ -1038,8 +1075,12 @@ final class WALService: ObservableObject {
     logger.info("Removed empty SD card WAL after failed/aborted sync: \(walId)")
   }
 
-  /// Update WAL with downloaded data
-  func updateWalWithDownloadedData(walId: String, downloadedBytes: Int, frames: [Data]) {
+  /// Update WAL with downloaded data.
+  ///
+  /// `async` because the frame write is awaited off-main: the SD-card sync
+  /// callers are `@MainActor`, so blocking here froze the UI for the duration
+  /// of a large download's disk write.
+  func updateWalWithDownloadedData(walId: String, downloadedBytes: Int, frames: [Data]) async {
     guard let index = wals.firstIndex(where: { $0.id == walId }) else {
       logger.warning("WAL not found for update: \(walId)")
       return
@@ -1048,14 +1089,16 @@ final class WALService: ObservableObject {
     wals[index].storageOffset += downloadedBytes
     wals[index].totalFrames = frames.count
 
-    // Write frames to disk and wait for completion so filePath is set before
-    // the caller (finishSync → syncToCloud) reads it. The write itself runs
-    // off-main; the BLE download path that calls this is already off-main.
-    writeFramesToDiskAndWait(frames: frames, wal: wals[index])
+    // Await the off-main write so `filePath` is set before the caller
+    // (finishSync → syncToCloud) reads it, without blocking the main actor.
+    await writeFramesToDiskAndWait(frames: frames, wal: wals[index])
+
+    // Re-resolve the index: the await may have let other WAL mutations land.
+    guard let updatedIndex = wals.firstIndex(where: { $0.id == walId }) else { return }
 
     // Check if download complete
-    if wals[index].storageOffset >= wals[index].storageTotalBytes {
-      wals[index].storage = .disk
+    if wals[updatedIndex].storageOffset >= wals[updatedIndex].storageTotalBytes {
+      wals[updatedIndex].storage = .disk
       logger.info("SD card download complete for WAL: \(walId)")
     }
 
