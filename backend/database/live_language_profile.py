@@ -39,7 +39,7 @@ def _clean_sessions(value: Any) -> list[dict[str, int]]:
 
 
 def get_live_language_sessions(uid: str, *, firestore_client: Any = None) -> list[dict[str, int]]:
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         return []
     clean_uid = uid.strip()
 
@@ -71,7 +71,7 @@ def _append_transaction(transaction: Any, user_ref: Any, counts: dict[str, int])
 
 
 def append_live_language_session(uid: str, counts: dict[str, int], *, firestore_client: Any = None) -> bool:
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         return False
     clean = _clean_counts(counts)
     if not clean:
