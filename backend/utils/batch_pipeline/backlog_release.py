@@ -1,6 +1,7 @@
 """Uncached, fail-closed hourly provider backlog budget; called inside merge's transaction."""
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 
@@ -14,28 +15,55 @@ COMMITTED = Counter('omi_batch_pipeline_backlog_committed_total', 'Observed mete
 REFUSED = Counter('omi_batch_pipeline_backlog_refused_total', 'Backlog gate refusals', ['reason'])
 
 
+FIELDS = ('state', 'rate_per_hour', 'reach_seconds', 'window', 'tokens_used', 'updated_at')
+
+
+def _number(value) -> bool:
+    return type(value) in (int, float) and math.isfinite(value)
+
+
 @dataclass(frozen=True)
 class Gate:
-    state: str = 'closed'
-    rate_per_hour: int = 0
-    reach_seconds: int = 0
-    window: int = 0
-    tokens_used: int = 0
-    updated_at: float = 0.0
+    state: str
+    rate_per_hour: int
+    reach_seconds: int  # 0 means no reach limit.
+    window: int
+    tokens_used: int
+    updated_at: float
+
+    @classmethod
+    def parse(cls, row: dict) -> 'Gate | None':
+        """Every field is required and nothing else is allowed: a partial document must not reset the budget."""
+        if set(row) != set(FIELDS):
+            return None
+        gate = cls(**row)
+        counts = (gate.rate_per_hour, gate.reach_seconds, gate.window, gate.tokens_used)
+        if any(type(value) is not int or value < 0 for value in counts):
+            return None
+        if gate.state not in ('open', 'closed') or not _number(gate.updated_at):
+            return None
+        return gate
 
     def refusal(self, job: dict, now: float) -> str | None:
         if self.state != 'open':
             return 'closed'
         if not 0 <= now - self.updated_at < 180:
             return 'stale'
-        if self.reach_seconds and now - job['capture_at'] - job['duration_seconds'] > self.reach_seconds:
+        capture, duration = job.get('capture_at'), job.get('duration_seconds')
+        if not (_number(capture) and _number(duration) and duration >= 0):
+            return 'job'
+        if self.reach_seconds and now - capture - duration > self.reach_seconds:
             return 'reach'
         if self.used(now) >= self.rate_per_hour:
             return 'rate'
         return None
 
+    def hour(self, now: float) -> int:
+        """The budget hour never moves backward: a retried body or a slow clock spends from the stored hour."""
+        return max(self.window, int(now // 3600))
+
     def used(self, now: float) -> int:
-        return self.tokens_used if self.window == int(now // 3600) else 0
+        return self.tokens_used if self.hour(now) == self.window else 0
 
 
 def read(tx, job: dict, now: float, source: str) -> tuple[dict | None, str | None]:
@@ -63,17 +91,10 @@ def read(tx, job: dict, now: float, source: str) -> tuple[dict | None, str | Non
         return None, 'error'
     if not row:
         return None, 'missing'
-    try:
-        gate = Gate(**{name: row[name] for name in Gate.__dataclass_fields__ if name in row})
-        if any(
-            type(getattr(gate, name)) is not int for name in ('rate_per_hour', 'reach_seconds', 'window', 'tokens_used')
-        ):
-            return None, 'closed'
-        reason = gate.refusal(job, now)
-        if gate.reach_seconds < 0 or gate.tokens_used < 0:
-            reason = 'closed'
-    except (TypeError, ValueError):
+    gate = Gate.parse(row)
+    if gate is None:
         return None, 'closed'
+    reason = gate.refusal(job, now)
     if reason:
         return None, reason
-    return {**row, 'window': int(now // 3600), 'tokens_used': gate.used(now) + 1}, None
+    return {**row, 'window': gate.hour(now), 'tokens_used': gate.used(now) + 1}, None
