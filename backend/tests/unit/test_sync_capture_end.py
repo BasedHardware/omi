@@ -9,6 +9,10 @@ import pytest
 from database import capture_end as store
 from database import pipeline_ledger as ledger
 from tests.unit.test_pipeline_ledger import _FakeClient, _FakeTransaction
+from models.message_event import MessageServiceStatusEvent
+from utils.conversations import lifecycle
+from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.enrichment import callback
 from utils.sync import capture_end
 from utils.sync import processing_hold as hold
 
@@ -217,9 +221,6 @@ def test_record_end_is_fail_open_and_never_creates_a_row(monkeypatch):
 
 
 def test_only_real_ends_are_typed_from_finalization_triggers(monkeypatch):
-    from utils.conversations import lifecycle
-    from utils.conversations.processing_trigger import ProcessingTrigger
-
     spy = Mock(return_value=True)
     monkeypatch.setattr(lifecycle.pipeline_ledger, 'record_end', spy)
     lifecycle._record_ledger_end('u', 'c', ProcessingTrigger.CLIENT_FINALIZE, None)
@@ -239,8 +240,6 @@ def test_kill_switch_disables_the_feature(monkeypatch):
 
 
 def test_callback_reads_the_marker_only_for_a_row_with_a_recording_session(monkeypatch):
-    from utils.enrichment import callback
-
     load = Mock(return_value=marker())
     monkeypatch.setattr(callback.capture_end_db, 'load', load)
     assert callback._end_proven('u', {'finished_at': 999.0}) is False
@@ -273,8 +272,6 @@ def test_phone_silence_timer_is_bounded_and_can_be_withdrawn(monkeypatch, raw, e
 
 
 def test_status_event_carries_the_silence_timer_only_when_set():
-    from models.message_event import MessageServiceStatusEvent
-
     assert 'end_silence_seconds' not in MessageServiceStatusEvent(status='mobile_batch_admission').to_json()
     sent = MessageServiceStatusEvent(status='mobile_batch_admission', end_silence_seconds=120).to_json()
     assert sent['end_silence_seconds'] == 120
