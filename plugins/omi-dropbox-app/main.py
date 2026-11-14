@@ -22,6 +22,7 @@ from typing import Dict, Optional
 from urllib.parse import quote, urlencode
 
 import requests
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -481,17 +482,18 @@ async def auth_callback(
 
     # Exchange code for tokens
     try:
-        response = requests.post(
-            DROPBOX_TOKEN_URL,
-            data={
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": DROPBOX_REDIRECT_URI,
-                "client_id": DROPBOX_APP_KEY,
-                "client_secret": DROPBOX_APP_SECRET,
-            },
-            timeout=REQUEST_TIMEOUT,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                DROPBOX_TOKEN_URL,
+                data={
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": DROPBOX_REDIRECT_URI,
+                    "client_id": DROPBOX_APP_KEY,
+                    "client_secret": DROPBOX_APP_SECRET,
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
 
         if response.status_code != 200:
             return HTMLResponse(
