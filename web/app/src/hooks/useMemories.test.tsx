@@ -280,6 +280,53 @@ describe('useMemories unfinished (truncated) reads', () => {
     expect(result.current.truncated).toBe(true);
   });
 
+  it("drops another category's rows when a category switch comes back truncated and empty", async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page('Every category memory'));
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() =>
+      expect(result.current.memories[0]?.content).toBe('Every category memory'),
+    );
+
+    mocks.getMemoriesPage.mockResolvedValueOnce(truncatedEmptyPage);
+    act(() => result.current.setCategories(['manual']));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.truncated).toBe(true));
+
+    expect(result.current.memories).toEqual([]);
+    expect(result.current.hasMore).toBe(false);
+    expect(result.current.loading).toBe(false);
+    // Nothing is cached for the new category, so its next visit fetches again.
+    expect(mocks.cacheEntries.has('memories:owner-a|https://backend-a:manual')).toBe(
+      false,
+    );
+  });
+
+  it("keeps a category's own cached rows when its refresh comes back truncated and empty", async () => {
+    mocks.getMemoriesPage.mockResolvedValueOnce(page('Every category memory'));
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    mocks.cacheEntries.set('memories:owner-a|https://backend-a:manual', {
+      data: {
+        memories: page('Manual memory').memories,
+        offset: 1,
+        nextCursor: null,
+        hasMore: false,
+        truncated: false,
+      },
+      isStale: true,
+    });
+
+    mocks.getMemoriesPage.mockResolvedValueOnce(truncatedEmptyPage);
+    act(() => result.current.setCategories(['manual']));
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.truncated).toBe(true));
+
+    expect(result.current.memories.map((memory) => memory.content)).toEqual([
+      'Manual memory',
+    ]);
+    expect(result.current.hasMore).toBe(false);
+  });
+
   it('lets a complete first page replace the browser cache', async () => {
     mocks.getMemoriesPage.mockResolvedValueOnce(page());
     renderHook(() => useMemories({ limit: 25 }));

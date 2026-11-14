@@ -227,16 +227,26 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
    * account: the server stopped before it reached anything. Keep whatever is
    * already on screen and only flag the incompleteness, so the list cannot
    * claim "No memories yet" and the cache is not overwritten with nothing (#24722).
+   *
+   * The rows on screen are only worth keeping when they answer the same query.
+   * After a category switch with nothing cached for the new category they are
+   * another category's rows, so they go and the unfinished state shows instead.
    */
   const adoptFirstPage = useCallback(
-    (key: string, page: MemoriesPageResult) => {
+    (
+      key: string,
+      page: MemoriesPageResult,
+      { rowsAnswerThisQuery = true }: { rowsAnswerThisQuery?: boolean } = {},
+    ) => {
       const pageHasMore =
         Boolean(page.nextCursor) || (!page.truncated && page.memories.length >= limit);
       const unfinishedAndEmpty = page.truncated && page.memories.length === 0;
-      if (!unfinishedAndEmpty) {
+      if (!unfinishedAndEmpty || !rowsAnswerThisQuery) {
         setMemories(page.memories);
         offsetRef.current = page.memories.length;
         cursorRef.current = page.nextCursor;
+      }
+      if (!unfinishedAndEmpty) {
         setToCache(
           key,
           page.memories,
@@ -447,7 +457,9 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       try {
         const page = await doFetch(activeCategories, 0);
         if (!isCurrentRequest() || !isQueryCurrent()) return;
-        adoptFirstPage(key, page);
+        // Without a cache for this category the list still shows the previous
+        // category's rows, which no unfinished read may keep under this filter.
+        adoptFirstPage(key, page, { rowsAnswerThisQuery: Boolean(cached) });
       } catch (err) {
         if (isCurrentRequest() && isQueryCurrent() && !cached) {
           setError(err instanceof Error ? err.message : 'Failed to load memories');
