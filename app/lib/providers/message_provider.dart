@@ -606,6 +606,19 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     notifyListeners();
   }
 
+  /// Replaces a streamed reply placeholder by identity so concurrent history merges or row
+  /// insertions never cause the completed reply to overwrite a different row.
+  void _replaceMessage(List<ServerMessage> target, ServerMessage placeholder, ServerMessage reply) {
+    final index = target.indexWhere((m) => identical(m, placeholder));
+    if (index >= 0) target[index] = reply;
+  }
+
+  /// Inserts [message] immediately before [anchor] (found by identity), or at the end if absent.
+  void _insertBefore(List<ServerMessage> target, ServerMessage anchor, ServerMessage message) {
+    final index = target.indexWhere((m) => identical(m, anchor));
+    target.insert(index >= 0 ? index : target.length, message);
+  }
+
   Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
     if (!await setMessageResponseRating(message.id, value, reason: reason)) return false;
     if (value == -1) unawaited(AppReviewService().recordBadExperience(AppReviewBadExperience.negativeChatRating));
@@ -763,7 +776,6 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     if (visibleVoice) setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     voiceMessages.add(message);
-    var aiIndex = voiceMessages.length - 1;
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
@@ -834,8 +846,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
         if (chunk.type == MessageChunkType.done) {
           chunk.message!.memoryAction = message.memoryAction;
+          final placeholder = message;
           message = chunk.message!;
-          voiceMessages[aiIndex] = message;
+          _replaceMessage(voiceMessages, placeholder, message);
           _transferChatTelemetryAttempt(responseMessageId, message.id);
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
           chatAttemptCompleted = true;
@@ -857,8 +870,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
         if (chunk.type == MessageChunkType.message) {
           if (chunk.message?.sender == MessageSender.human) question = chunk.message!.text;
-          voiceMessages.insert(aiIndex, chunk.message!);
-          aiIndex++;
+          _insertBefore(voiceMessages, message, chunk.message!);
           notifyListeners();
           continue;
         }
@@ -965,7 +977,6 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     _replyDone = done;
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
-    final aiIndex = messages.length - 1;
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
@@ -1042,8 +1053,9 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
           if (chunk.type == MessageChunkType.done) {
             chunk.message!.memoryAction = message.memoryAction;
+            final placeholder = message;
             message = chunk.message!;
-            messages[aiIndex] = message;
+            _replaceMessage(messages, placeholder, message);
             _transferChatTelemetryAttempt(responseMessageId, message.id);
             _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
             nameChatSession();
