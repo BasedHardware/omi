@@ -5719,6 +5719,20 @@ export interface SyncBatchRequest {
   items: Array<SyncBatchItem>;
 }
 
+export interface SyncCaptureEndRequest {
+  end_decided_at: number;
+  end_type: "user_initiated" | "silence_backstop" | "disconnect";
+  last_speech_at: number;
+  pending_wals: number;
+  recording_session_id: string;
+  sent_at: number;
+}
+
+export interface SyncCaptureEndResponse {
+  accepted: boolean;
+  retry?: boolean;
+}
+
 export interface SyncCaptureManifestFile {
   name: string;
   sha256: string;
@@ -7421,6 +7435,8 @@ export interface OmiApiSchemas {
   "SurfaceStateRequest": SurfaceStateRequest;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
+  "SyncCaptureEndRequest": SyncCaptureEndRequest;
+  "SyncCaptureEndResponse": SyncCaptureEndResponse;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
   "SyncCaptureManifestRequest": SyncCaptureManifestRequest;
   "SyncCaptureManifestResponse": SyncCaptureManifestResponse;
@@ -12712,6 +12728,16 @@ export interface OmiApiPaths {
       operationId: "answer_review_item_v2_v2_review_items__item_id__answer_post";
       responses: {
         "200": ReviewAnswerReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/sync-capture-end": {
+    post: {
+      operationId: "record_sync_capture_end_v2_sync_capture_end_post";
+      responses: {
+        "200": SyncCaptureEndResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -23290,6 +23316,27 @@ export async function answer_review_item_v2_v2_review_items__item_id__answer_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function record_sync_capture_end_v2_sync_capture_end_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SyncCaptureEndRequest, init?: OmiApiClientInit): Promise<SyncCaptureEndResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-capture-end`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_sync_capture_manifest_v2_sync_capture_manifest_post(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, authorization?: string }, body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<SyncCaptureManifestResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-capture-manifest`;
@@ -23956,4 +24003,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 547 client methods generated.
+// Total: 548 client methods generated.

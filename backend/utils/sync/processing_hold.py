@@ -5,7 +5,7 @@ Lifecycle: ops kill switch, default on; owner rollout-meetings; review 2026-11-2
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from functools import cache
 import hashlib
@@ -149,11 +149,20 @@ def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
     return state
 
 
-def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: float) -> tuple[str, float | None]:
+def admission(
+    row: Mapping[str, Any],
+    obligation: Mapping[str, Any],
+    *,
+    now: float,
+    end_proven: Callable[[], bool] | None = None,
+) -> tuple[str, float | None]:
     """A missing watermark is unknown, never inferred from one uploaded file.
 
-    No existing WAL producer supplies a contiguous device upload watermark. If
-    one is attached to this row in future, it must be past finished_at + quiet.
+    ``end_proven`` is asked only when this call would otherwise wait. A true
+    answer means the phone has proven the recording ended and its speech has
+    landed (``utils.sync.capture_end.proof``), so the wait is skipped and the
+    outcome is ``end_proof``. The unchanged, immaterial and late-cap rules still
+    apply. No answer, or a false one, leaves the quiet rule exactly as it was.
     """
     state = row.get(FIELD) or {}
     first = timestamp(state.get('pending_since')) or float(obligation['first_pending_at'])
@@ -163,11 +172,14 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     due = min(last + quiet, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
     gap = timestamp(row.get('finished_at')) + quiet
+    waiting: tuple[str, float | None] | None = None
     if now < first + MAX_HOLD_SECONDS:
         if now < due:
-            return 'quiet_wait', due
-        if watermark is not None and timestamp(watermark) < gap:
-            return 'watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS)
+            waiting = ('quiet_wait', due)
+        elif watermark is not None and timestamp(watermark) < gap:
+            waiting = ('watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS))
+    if waiting is not None and not (end_proven is not None and end_proven()):
+        return waiting
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)
@@ -182,6 +194,8 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
             and current['words'] - int(previous.get('words') or 0) < 80
         ):
             return 'immaterial', None
+    if waiting is not None:
+        return 'end_proof', None
     return ('max_hold' if now >= first + MAX_HOLD_SECONDS else 'ready'), None
 
 

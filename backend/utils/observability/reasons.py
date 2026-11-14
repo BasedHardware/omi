@@ -168,6 +168,7 @@ class SyncProcessingHoldOutcome(StrEnum):
     QUIET_WAIT = 'quiet_wait'
     WATERMARK_WAIT = 'watermark_wait'
     READY = 'ready'
+    END_PROOF = 'end_proof'
     MAX_HOLD = 'max_hold'
     UNCHANGED = 'unchanged'
     IMMATERIAL = 'immaterial'
@@ -867,6 +868,7 @@ class PipelineLedgerOutcome(StrEnum):
     ILLEGAL = 'illegal'
     TERMINAL = 'terminal'
     DELETED = 'deleted'
+    MISSING = 'missing'
 
 
 class PipelineLedgerFailureReason(StrEnum):

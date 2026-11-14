@@ -1216,6 +1216,7 @@ def request_finalization(
     # The outbox transaction is the authoritative acceptance boundary. Count
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
+        _record_ledger_end(uid, conversation_id, trigger, firestore_client)
         record_journey_accepted('capture_finalization')
         record_client_journey_accepted(
             'conversation_finalization',
@@ -1308,6 +1309,27 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'terminal_outcome': terminal_outcome,
         'fanout_status': fanout_status,
     }
+
+
+# The end that fired, typed for the ledger. A bare capture end (a socket
+# closing) is not user intent and stays unknown; only an explicit client
+# finalize is the user's, and server recovery is the silence backstop.
+_TRIGGER_END_TYPES = {
+    ProcessingTrigger.CLIENT_FINALIZE: 'user_initiated',
+    ProcessingTrigger.SERVER_RECOVERY: 'silence_backstop',
+    ProcessingTrigger.CAPTURE_END: 'unknown',
+}
+
+
+def _record_ledger_end(uid: str, conversation_id: str, trigger: Any, firestore_client: Any) -> None:
+    """Stamp the ledger with the server-known end at the instant its intent is accepted."""
+    end_type = _TRIGGER_END_TYPES.get(trigger)
+    if end_type is None:
+        return  # Reprocess, merge and backfill triggers are not ends of a recording.
+    now = datetime.now(timezone.utc).timestamp()
+    pipeline_ledger.record_end(
+        uid, conversation_id, end_type=end_type, end_at=now, end_observed_at=now, firestore_client=firestore_client
+    )
 
 
 def _ledger_terminal(

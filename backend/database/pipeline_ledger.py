@@ -102,6 +102,7 @@ _TRANSITION = _metric(
 _UNKNOWN_END = _metric(
     'omi_pipeline_ledger_unknown_end_type_total', Counter, 'Terminal ledger rows whose end type is unknown.'
 )
+_END = _metric('omi_pipeline_ledger_end_total', Counter, 'Capture ends recorded on the ledger.', ('end_type',))
 _STAGE_SECONDS = _metric(
     'omi_pipeline_ledger_stage_seconds',
     Histogram,
@@ -275,6 +276,7 @@ def plan_advance(
         'end_type': _bounded_end_type(_pick(end_type, existing, 'end_type')),
         'end_at': _epoch(_pick(end_at, existing, 'end_at')),
         'last_speech_at': _epoch(_pick(last_speech_at, existing, 'last_speech_at')),
+        'end_observed_at': _epoch((existing or {}).get('end_observed_at')),
         'quiet_due_at': _epoch(_pick(quiet_due_at, existing, 'quiet_due_at')),
         'admitted_at': (existing or {}).get('admitted_at') or current,
         'created_at': (existing or {}).get('created_at') or current,
@@ -419,6 +421,101 @@ def _commit(
     return outcome
 
 
+# A known end is never replaced by a weaker one: the user's stop outranks a
+# model's or the timer's, and any of them outranks ``unknown``.
+END_TYPE_RANK = {'unknown': 0, 'silence_backstop': 1, 'jev_initiated': 2, 'user_initiated': 3}
+
+
+def plan_end(
+    existing: Mapping[str, Any] | None,
+    *,
+    end_type: str,
+    end_at: Any,
+    end_observed_at: Any = None,
+    last_speech_at: Any = None,
+    now: float | None = None,
+) -> Plan:
+    """Set the end fields on an existing row without moving its stage.
+
+    ``end_at`` is when the end condition became true on the decider's clock,
+    mapped to server time; ``end_observed_at`` is when the server learned of it.
+    A row that does not exist is not created: the stage writers own admission.
+    A later end replaces an earlier one of the same or lower rank, which is how
+    a resumed recording's new end supersedes the old.
+    """
+    if not existing:
+        return Plan(None, 'missing')
+    kind, at = _bounded_end_type(end_type), _epoch(end_at)
+    if at is None:
+        return Plan(None, 'illegal')
+    current_kind, current_at = existing.get('end_type') or 'unknown', _epoch(existing.get('end_at'))
+    if current_at is not None:
+        if END_TYPE_RANK[kind] < END_TYPE_RANK.get(current_kind, 0) and at <= current_at + 1:
+            return Plan(None, 'stale')
+        if kind == current_kind and abs(at - current_at) < 1:
+            return Plan(None, 'duplicate')
+    current = time.time() if now is None else now
+    doc = dict(existing)
+    doc.update(
+        end_type=kind,
+        end_at=at,
+        end_observed_at=_epoch(end_observed_at) if end_observed_at is not None else current,
+        updated_at=current,
+    )
+    speech = _epoch(last_speech_at)
+    if speech is not None:
+        doc['last_speech_at'] = speech
+    return Plan(doc, 'written')
+
+
+def record_end(
+    uid: str,
+    capture_id: str,
+    *,
+    end_type: str,
+    end_at: Any,
+    end_observed_at: Any = None,
+    last_speech_at: Any = None,
+    firestore_client: Any = None,
+) -> bool:
+    """Best-effort, fail-open write of the end fields in the ledger's own transaction."""
+    if not pipeline_ledger_enabled():
+        _observe_write('disabled')
+        return False
+    try:
+        client = firestore_client if firestore_client is not None else get_firestore_client()
+        ref = ledger_ref(client, uid, capture_id)
+
+        @firestore.transactional
+        def commit(transaction: Any) -> str:
+            snapshot = ref.get(transaction=transaction)
+            existing = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+            plan = plan_end(
+                existing,
+                end_type=end_type,
+                end_at=end_at,
+                end_observed_at=end_observed_at,
+                last_speech_at=last_speech_at,
+            )
+            if plan.doc is not None:
+                transaction.set(ref, plan.doc)
+            return plan.outcome
+
+        outcome = run_transactional(client, commit, transient=True)
+        _observe_write('ok' if outcome == 'written' else outcome)
+        try:
+            if outcome == 'written':
+                _END.labels(end_type=_bounded_end_type(end_type)).inc()
+        except Exception:  # Metrics must never break a transition.
+            pass
+        return outcome == 'written'
+    except Exception as error:  # Fail open: the real end already happened.
+        _observe_write('error')
+        _observe_failure(error)
+        logger.warning('event=pipeline_ledger outcome=error stage=end exception_type=%s', type(error).__name__)
+        return False
+
+
 SUMMARY_RECEIPT_REASONS = frozenset({'summary', 'accept_unknown'})
 
 
@@ -519,6 +616,8 @@ CENSUS_FIELDS = (
     'reason',
     'end_type',
     'end_at',
+    'end_observed_at',
+    'last_speech_at',
     'admitted_at',
     'created_at',
     'updated_at',
