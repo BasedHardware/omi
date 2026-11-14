@@ -296,6 +296,35 @@ def test_cli_dry_run_outputs_only_counts_digest_and_checkpoint(source, monkeypat
     assert no_writes(source)
 
 
+def test_cli_apply_honors_a_digest_from_an_earlier_dry_run(source, monkeypatch, capsys):
+    module = cli()
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
+    monkeypatch.delenv('ENRICHMENT_AGE_GATE_UNPARK_ENABLED', raising=False)
+    monkeypatch.setattr(module, 'get_firestore_client', lambda: source)
+    monkeypatch.setattr(module, 'discover', lambda *args, **kwargs: ([KEY], None))
+    monkeypatch.setattr(module, 'write_cursor', Mock())
+    wake = Mock()
+    real_apply = unpark.apply_unpark
+
+    def apply_with_fake_wake(client, plan, digest, **kwargs):
+        return real_apply(client, plan, digest, wake=wake, **kwargs)
+
+    monkeypatch.setattr(module, 'apply_unpark', apply_with_fake_wake)
+    module.main(['--next-file', '/private/cursor'])
+    digest = json.loads(capsys.readouterr().out)['plan_sha256']
+    assert no_writes(source)
+    # The apply runs on a later clock than the dry-run; the approved digest must survive it.
+    monkeypatch.setattr(unpark.time, 'time', lambda: NOW + 600)
+    module.main(['--next-file', '/private/cursor', '--apply', '--approve-plan-sha256', digest])
+    report = json.loads(capsys.readouterr().out)
+    assert report['apply'] is True and report['outcomes'] == {'unparked': 1}
+    assert source.rows[ROW_PATH]['age_gate_parked'] is False
+    assert source.rows[ROW_PATH]['due_at'] == NOW + 600
+    assert wake.call_count == 1
+
+
 def test_cli_invalid_arguments_do_not_echo_sensitive_values(capsys):
     with pytest.raises(SystemExit):
         cli().main(['--limit', 'synthetic-private-path'])

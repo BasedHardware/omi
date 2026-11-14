@@ -171,10 +171,13 @@ def plan_unpark(client: Any, document_ids: list[str], *, now: float, max_age_sec
             entries[-1]['disposition'] = disposition
         except Exception:
             entries.append({'document_id': document_id, 'disposition': 'read_error'})
+    # ``now`` is deliberately absent from the approved body: the digest must be
+    # reproducible by a later apply of the same page. Each eligible entry carries
+    # the exact ``task_token`` the write transaction re-checks, so approving the
+    # plan still pins the row state that justified it.
     body = {
         'operation': OPERATION,
         'entries': entries,
-        'now': now,
         'max_age_seconds': max_age_seconds,
     }
     return {**body, 'plan_sha256': _digest(body)}
