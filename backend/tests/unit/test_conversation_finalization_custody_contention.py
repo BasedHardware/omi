@@ -51,6 +51,7 @@ from google.api_core.exceptions import Aborted, InvalidArgument
 from google.cloud import firestore as firestore_sdk
 
 from database import conversation_finalization_jobs as jobs
+from database import firestore_transaction_retry
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
 EXPIRED_MESSAGE = '400 The referenced transaction has expired or is no longer valid.'
@@ -159,10 +160,10 @@ class _CollectionRef:
 
 
 class _FakeTransaction:
-    _max_attempts = 5
     _read_only = False
 
-    def __init__(self, client: '_CustodyFakeClient', index: int):
+    def __init__(self, client: '_CustodyFakeClient', index: int, max_attempts: int = 5):
+        self._max_attempts = max_attempts
         self._client = client
         self._id = f'txn-{index}'.encode()
         self.writes: List[Tuple[Tuple[str, ...], Dict[str, Any], bool]] = []
@@ -217,12 +218,14 @@ class _CustodyFakeClient:
         self.commit_errors = list(commit_errors or [])
         self.commits: List[List[Tuple[Tuple[str, ...], Dict[str, Any], bool]]] = []
         self.transactions: List[_FakeTransaction] = []
+        self.transaction_attempts: List[Any] = []
 
     def collection(self, collection_id: str) -> _CollectionRef:
         return _CollectionRef(self, (collection_id,))
 
-    def transaction(self) -> _FakeTransaction:
-        transaction = _FakeTransaction(self, len(self.transactions))
+    def transaction(self, max_attempts=None) -> _FakeTransaction:
+        self.transaction_attempts.append(max_attempts)
+        transaction = _FakeTransaction(self, len(self.transactions), max_attempts=max_attempts or 5)
         self.transactions.append(transaction)
         return transaction
 
@@ -262,7 +265,9 @@ def no_sleep(monkeypatch: pytest.MonkeyPatch) -> List[float]:
         kwargs.pop('random_value', None)
         return real_budget(transaction_factory, operation, sleep=delays.append, random_value=lambda: 0.0, **kwargs)
 
-    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', instant_budget)
+    # The joined lanes import the engine at call time; patching the engine
+    # attr keeps the instant budget on the chain's boundary.
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', instant_budget)
     return delays
 
 
@@ -1017,8 +1022,15 @@ def test_replay_claim_redecides_after_contention_and_stays_fenced(no_sleep: List
     assert commit_payloads(client) == [], 'the fenced decision must not write on the replay'
 
 
-def test_commit_abort_replays_inside_the_sdk_wrapper_on_the_same_id():
-    """Commit-time aborts are the SDK's own job; the budget is not involved."""
+def test_commit_abort_replays_on_a_fresh_single_commit_transaction():
+    """A commit-time abort no longer replays the same id: the bounded chain owns it.
+
+    Every joined finalization entry mints single-commit-attempt transactions,
+    so the SDK's same-id commit loop is out of the picture: the aborting
+    commit surfaces to the bounded chain, which replays the body on a fresh
+    transaction (the fake's second commit succeeds). One SDK commit attempt
+    per mint, and the claim still lands.
+    """
     from database.firestore_transaction_retry import run_with_transaction_contention_retry as real_budget
 
     client = _CustodyFakeClient(_queued_job(), commit_errors=[Aborted('409 commit contention; aborted transaction')])
@@ -1027,16 +1039,17 @@ def test_commit_abort_replays_inside_the_sdk_wrapper_on_the_same_id():
         kwargs.pop('random_value', None)
         return real_budget(transaction_factory, operation, sleep=lambda _d: None, random_value=lambda: 0.0, **kwargs)
 
-    original = jobs.run_with_transaction_contention_retry
-    jobs.run_with_transaction_contention_retry = budget
+    original = firestore_transaction_retry.run_with_transaction_contention_retry
+    firestore_transaction_retry.run_with_transaction_contention_retry = budget
     try:
         claim = jobs.claim_finalization_job(JOB_ID, 1, count_worker_claim=True, firestore_client=client)
     finally:
-        jobs.run_with_transaction_contention_retry = original
+        firestore_transaction_retry.run_with_transaction_contention_retry = original
 
     assert claim['status'] == 'claimed'
-    assert len(client.transactions) == 1, 'the SDK wrapper replayed the commit abort on the same transaction'
-    assert len(client.commits) == 1
+    assert len(client.transactions) == 2, 'the bounded chain replayed the commit abort on a fresh transaction'
+    assert client.transaction_attempts == [1, 1], 'every mint carries exactly one SDK commit attempt'
+    assert len(client.commits) == 1, 'exactly one commit landed, on the fresh transaction'
 
 
 def test_non_contention_failures_keep_their_loud_path(no_sleep: List[float]):

@@ -3,6 +3,24 @@
 Cloud Tasks is deliberately only a wake-up mechanism.  The durable source of
 truth is one Firestore job per ``(uid, conversation_id, finalization_revision)``.
 No transcript, credential, request header, or raw exception is stored here.
+
+Every transactional entry here (intent creation, worker and fanout claims,
+completion/fence/defer/dead-letter marks, meeting receipts, replay and sweep
+cursor advances, admission stamps, orphan terminals, deferred-processing
+recovery, BYOK abandonment) rode the bounded engine while still handing it the
+SDK's default transaction factory: every outer attempt minted a transaction
+whose own commit loop replays the SAME transaction id up to five times against
+the exact collision that aborted it, multiplying the contention window and
+spending the chain's wall-clock budget inside one wave. Each entry now rides
+the shared bounded lane runner (``database.bounded_lane_transaction``): five
+fresh single-commit transactions, equal-jitter rungs, replayed aborts and
+expiries, and a typed, per-entry-labeled exhaustion. The two lambda-bodied
+cursor entries also pin their inner ``run_transactional`` restart to
+``attempts=1`` so the outer chain owns every attempt. Aborted or expired
+chains wrote nothing and every body re-reads its documents inside its
+transaction, so the replay is safe.
+
+Failure-Class: FC-finalization-transaction-attempts-replay-one-retired-id-five-times
 """
 
 from __future__ import annotations
@@ -37,7 +55,7 @@ from database.conversation_terminal_title import (
     kept_row_terminal_update,
     user_time_zone,
 )
-from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.bounded_lane_transaction import run_bounded_lane_transaction
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     FINALIZATION_DEAD_LETTER_STOCK_QUERY,
@@ -852,8 +870,8 @@ def create_or_get_finalization_intent(
             require_expired_recording_lease=require_expired_recording_lease,
         )
 
-    intent = run_with_transaction_contention_retry(
-        client.transaction,
+    intent = run_bounded_lane_transaction(
+        client,
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
@@ -913,8 +931,8 @@ def resume_blocked_byok_job_for_live_session(job_id: str, *, firestore_client: A
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='byok_resume_for_live_session',
     )
@@ -1045,8 +1063,8 @@ def claim_finalization_job(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_worker_claim',
     )
@@ -1109,8 +1127,8 @@ def mark_finalization_completed(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_complete',
     )
@@ -1222,8 +1240,8 @@ def defer_sync_revision_fence(
             client.collection(FINALIZATION_PROJECTION_COLLECTION),
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_sync_revision_defer',
     )
@@ -1281,8 +1299,8 @@ def mark_finalization_fenced(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_fence',
     )
@@ -1410,8 +1428,8 @@ def claim_finalization_fanout(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_fanout_claim',
     )
@@ -1469,8 +1487,8 @@ def mark_finalization_fanout_completed(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_fanout_complete',
     )
@@ -1542,8 +1560,8 @@ def mark_finalization_retryable(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_retryable_mark',
     )
@@ -1686,8 +1704,8 @@ def mark_finalization_dead_letter(
             initial_transaction=transaction,
         )
 
-    closed = run_with_transaction_contention_retry(
-        client.transaction,
+    closed = run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_dead_letter',
     )
@@ -1842,8 +1860,8 @@ def record_meeting_receipt(
             initial_transaction=transaction,
         )
 
-    result = run_with_transaction_contention_retry(
-        client.transaction,
+    result = run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='meeting_receipt_record',
     )
@@ -1881,8 +1899,8 @@ def mark_meeting_receipt_intent_persisted(job_id: str, intent_id: str, *, firest
 
         return apply(transaction)
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         apply_once,
         operation_name='meeting_receipt_intent_persisted',
     )
@@ -1929,8 +1947,8 @@ def mark_meeting_receipt_materialized(
 
         return apply(transaction)
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         apply_once,
         operation_name='meeting_receipt_materialized',
     )
@@ -2251,8 +2269,8 @@ def claim_finalization_replay(
             initial_transaction=transaction,
         )
 
-    intent = run_with_transaction_contention_retry(
-        client.transaction,
+    intent = run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_replay_claim',
     )
@@ -2308,12 +2326,13 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
                 result['errors'] += 1
         next_path = snapshots[-1].reference.path if len(snapshots) == page_size else None
         # The cursor advance rides the same shared contention budget as the
-        # custody writers: ``run_with_transaction_contention_retry`` replays a
-        # read-time ``Aborted`` on a fresh transaction, and
-        # ``run_transactional`` inside it still restarts a retired-id commit;
-        # the sweep keeps its cursor instead of rescanning the window.
-        run_with_transaction_contention_retry(
-            client.transaction,
+        # custody writers: the bounded lane runner replays a read-time
+        # ``Aborted`` on a fresh single-commit transaction, and the inner
+        # ``run_transactional`` restart stays pinned to ``attempts=1`` so the
+        # outer chain owns every attempt; the sweep keeps its cursor instead
+        # of rescanning the window.
+        run_bounded_lane_transaction(
+            client,
             lambda transaction: run_transactional(
                 client,
                 firestore.transactional(_advance_stale_processing_sweep_cursor_txn),
@@ -2322,6 +2341,7 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
                 next_path,
                 _now(),
                 initial_transaction=transaction,
+                attempts=1,
             ),
             operation_name='byok_reclaim_sweep_cursor',
         )
@@ -2395,8 +2415,8 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     # ``FirestoreContentionExhausted`` the reconcile caller already bounds.
     #
     # Failure-Class: FC-replay-sweep-cursor-and-backoff-run-outside-the-shared-contention-budget
-    run_with_transaction_contention_retry(
-        client.transaction,
+    run_bounded_lane_transaction(
+        client,
         lambda transaction: firestore.transactional(_advance_finalization_replay_cursor_txn)(
             transaction, state_ref, int(state.get('generation', 0)), next_cursor
         ),
@@ -2465,8 +2485,8 @@ def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: An
     def run_once(transaction: Any) -> bool:
         return defer(transaction)
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='finalization_replay_defer',
     )
@@ -2807,8 +2827,8 @@ def advance_in_progress_content_sweep_cursor(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='in_progress_content_sweep_cursor',
     )
@@ -2890,8 +2910,8 @@ def advance_stale_processing_sweep_cursor(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='stale_processing_sweep_cursor',
     )
@@ -2933,8 +2953,8 @@ def advance_meeting_receipt_backfill_cursor(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='meeting_receipt_backfill_cursor',
     )
@@ -2978,8 +2998,8 @@ def stamp_processing_admission_if_absent(uid: str, conversation_id: str, *, fire
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='processing_admission_stamp',
     )
@@ -3037,8 +3057,8 @@ def complete_unstampable_orphan_conversation(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='unstampable_orphan_terminal',
     )
@@ -3111,8 +3131,8 @@ def complete_orphan_conversation(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='orphan_conversation_terminal',
     )
@@ -3188,8 +3208,8 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='deferred_processing_reacquire',
     )
@@ -3223,8 +3243,8 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str, *, fires
             initial_transaction=transaction,
         )
 
-    completed = run_with_transaction_contention_retry(
-        client.transaction,
+    completed = run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='recover_deferred_processing_failure',
     )
@@ -3516,8 +3536,8 @@ def abandon_byok_finalization_job(
             initial_transaction=transaction,
         )
 
-    result = run_with_transaction_contention_retry(
-        client.transaction,
+    result = run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='abandon_byok_finalization_job',
     )
@@ -3563,8 +3583,8 @@ def advance_byok_abandonment_sweep_cursor(
             initial_transaction=transaction,
         )
 
-    return run_with_transaction_contention_retry(
-        client.transaction,
+    return run_bounded_lane_transaction(
+        client,
         run_once,
         operation_name='byok_abandonment_sweep_cursor',
     )

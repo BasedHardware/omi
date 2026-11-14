@@ -176,7 +176,7 @@ class _FinalizationFakeClient:
             return _FakeCollectionReference(self, kind='account_deletions')
         return _FakeCollectionReference(self)
 
-    def transaction(self) -> _FakeTransaction:
+    def transaction(self, max_attempts=None) -> _FakeTransaction:
         transaction = _FakeTransaction(self, len(self.transactions))
         self.transactions.append(transaction)
         return transaction
@@ -394,7 +394,7 @@ class _RenewingContentionClient(_FinalizationFakeClient):
             return _ContendedUsersRoot(self)
         return super().collection(_collection_id)
 
-    def transaction(self) -> Any:
+    def transaction(self, max_attempts=None) -> Any:
         return super().transaction()
 
 

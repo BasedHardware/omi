@@ -38,6 +38,7 @@ from typing import Any
 from google.api_core.exceptions import Aborted, InvalidArgument
 
 from database import conversation_finalization_jobs as jobs
+from database import firestore_transaction_retry as retry_mod
 from database.firestore_transaction_retry import (
     equal_jitter_delay,
     run_with_transaction_contention_retry as _REAL_BUDGET,
@@ -270,7 +271,7 @@ class _GridStore:
     def collection(self, name: str) -> _CollectionRef:
         return _CollectionRef(self, (name,))
 
-    def transaction(self) -> _Transaction:
+    def transaction(self, max_attempts=None) -> _Transaction:
         transaction = _Transaction(self)
         self.transactions.append(transaction)
         return transaction
@@ -317,7 +318,9 @@ class _CellPatch:
         def budget_retry(*args, **kwargs):
             kwargs.setdefault('sleep', record_sleep)
             kwargs.setdefault('random_value', lambda: RNG_PIN)
-            kwargs.setdefault('max_attempts', self.max_attempts)
+            kwargs['max_attempts'] = self.max_attempts
+            # Override: the joined lane runner always passes its own default-5
+            # max_attempts kwarg, and this knob IS the chain's attempt budget.
             if self.deadline is not None:
                 kwargs.setdefault('deadline', self.deadline)
                 kwargs.setdefault('monotonic', lambda: self.clock['now'])
@@ -334,11 +337,14 @@ class _CellPatch:
 
         self._originals = [
             ('firestore', jobs.firestore),
-            ('run_with_transaction_contention_retry', jobs.run_with_transaction_contention_retry),
+            ('run_with_transaction_contention_retry', retry_mod.run_with_transaction_contention_retry),
             ('_now', jobs._now),
         ]
         jobs.firestore = _Shim(self._originals[0][1])
-        jobs.run_with_transaction_contention_retry = budget_retry
+        # The joined lanes import the engine at call time from the retry
+        # module, so the budget wrapper patches the engine attr and keeps
+        # intercepting every lane chain.
+        retry_mod.run_with_transaction_contention_retry = budget_retry
         jobs._now = lambda: NOW
         return self
 

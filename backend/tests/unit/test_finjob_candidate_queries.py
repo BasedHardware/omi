@@ -106,7 +106,7 @@ class Client:
         found = next((s for s in self.snapshots if s.path == path), None)
         return found or Snapshot(path, self.documents.get(path, {}), path in self.documents)
 
-    def transaction(self):
+    def transaction(self, max_attempts=None):
         # Query tests stub the existing transactional cursor writer; no writes
         # or ownership operations are implemented by this query fake.
         return object()

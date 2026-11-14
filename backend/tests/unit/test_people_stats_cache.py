@@ -32,6 +32,7 @@ import database.proactivity as proactivity_db
 import database.recording_sessions as recording_sessions_db
 import database.redis_db as redis_db
 import database.smart_merge as smart_merge_db
+from database import firestore_transaction_retry
 from database.people_stats_cache import invalidate_people_stats_cache
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestore,
@@ -600,7 +601,7 @@ class _TestStore(StrictFirestore):
         parts = tuple(part for part in path.split('/') if part)
         return _TestDocument(self, parts)
 
-    def transaction(self):
+    def transaction(self, max_attempts=None):
         transaction = _TestTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
         self.transactions.append(transaction)
         return transaction
@@ -961,7 +962,7 @@ def test_finalization_intent_retries_contention_and_invalidates_only_on_creation
         return invoke
 
     monkeypatch.setattr(finalization_jobs.firestore, 'transactional', fail_first_transactional_attempt)
-    original_retry = finalization_jobs.run_with_transaction_contention_retry
+    original_retry = firestore_transaction_retry.run_with_transaction_contention_retry
 
     def retry_without_wait(transaction_factory, operation, **kwargs):
         return original_retry(
@@ -972,7 +973,9 @@ def test_finalization_intent_retries_contention_and_invalidates_only_on_creation
             random_value=lambda: 0.0,
         )
 
-    monkeypatch.setattr(finalization_jobs, 'run_with_transaction_contention_retry', retry_without_wait)
+    # The joined lane imports the engine at call time; patching the engine
+    # attr keeps the sleepless wrapper on the chain's boundary.
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', retry_without_wait)
 
     intent = finalization_jobs.create_or_get_finalization_intent(
         'u1',

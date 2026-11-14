@@ -66,6 +66,11 @@ DEADLINE_MODES = {
     'floor_block_35': (35.0, 20.0),
     'reserve_block_100': (100.0, 30.0),
     'overspend_25': (25.0, 30.0),
+    # A budget that the FIRST abort's jitter wait already overspends: the
+    # never-past-deadline sleep cut fires on attempt 1's failure, before any
+    # reserve gate (the deadline_exhausted line carries delay_ms, not
+    # reserve_ms).
+    'sleepcut_01': (0.1, 0.0),
 }
 
 
@@ -128,6 +133,12 @@ def pin_bounded_chain(monkeypatch, sleep_recorder, clock):
 
 def _fault(event, abort_form):
     if event == 'abort':
+        if abort_form == 'aborted_expired':
+            # The documented second expiry shape: an ``Aborted`` whose message
+            # carries the retired-transaction marker. Classification counts it
+            # as an expired chain (so the no-deadline three-fresh-chain ceiling
+            # applies), while the raised fault's type stays ``Aborted``.
+            return FirestoreAborted(EXPIRED_TRANSACTION_MESSAGE)
         inner = FirestoreAborted(ABORT_MESSAGE)
         if abort_form == 'chained_cause':
             wrapper = LaneFaultWrapper(DOMAIN_REFUSAL_MESSAGE)
@@ -183,7 +194,7 @@ def drive_cell(
 
     assert deadline_mode in DEADLINE_MODES
     assert terminal in {'ok', 'foreign', 'forever'}
-    assert abort_form in {'bare', 'chained_cause'}
+    assert abort_form in {'bare', 'chained_cause', 'aborted_expired'}
     scope_delta, cost = DEADLINE_MODES[deadline_mode]
     plan = _body_plan(aborts, expiries, terminal)
     client = _CellClient()

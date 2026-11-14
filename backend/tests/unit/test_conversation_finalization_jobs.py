@@ -181,7 +181,7 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
     transactions: list[_Transaction] = []
 
     class _Client:
-        def transaction(self):
+        def transaction(self, max_attempts=None):
             transaction = _Transaction()
             transactions.append(transaction)
             return transaction
@@ -206,8 +206,10 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
 
         return invoke
 
+    real_retry = firestore_transaction_retry.run_with_transaction_contention_retry
+
     def fast_contention_retry(transaction_factory, operation, **kwargs):
-        return firestore_transaction_retry.run_with_transaction_contention_retry(
+        return real_retry(
             transaction_factory,
             operation,
             **kwargs,
@@ -217,7 +219,9 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
 
     monkeypatch.setattr(jobs, '_conversation_ref', lambda *_args: conversation_ref)
     monkeypatch.setattr(jobs.firestore, 'transactional', transaction_wrapper)
-    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', fast_contention_retry)
+    # The joined lane imports the engine at call time; patching the engine
+    # attr keeps the sleepless wrapper on the chain's boundary.
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', fast_contention_retry)
 
     intent = jobs.create_or_get_finalization_intent(
         'uid-1',
@@ -1408,7 +1412,7 @@ def test_replay_candidates_use_a_server_side_bounded_due_query(monkeypatch):
     state_collection = SimpleNamespace(document=lambda name: state_ref)
     client = SimpleNamespace(
         collection=lambda name: collection if name == jobs.FINALIZATION_JOBS_COLLECTION else state_collection,
-        transaction=lambda: object(),
+        transaction=lambda max_attempts=None: object(),
     )
     monkeypatch.setattr(jobs, '_advance_finalization_replay_cursor_txn', lambda *args: True)
     monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)

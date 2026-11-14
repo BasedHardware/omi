@@ -21,6 +21,7 @@ import pytest
 from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
+from database import firestore_transaction_retry
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     run_with_transaction_contention_retry as _REAL_BUDGET,
@@ -165,7 +166,8 @@ def _seed(row_overrides=None, *, page_rows=3):
 @pytest.fixture()
 def budget(monkeypatch):
     probe = _BudgetProbe()
-    monkeypatch.setattr(jobs, 'run_with_transaction_contention_retry', probe)
+    # The joined lane imports the engine at call time from the retry module.
+    monkeypatch.setattr(firestore_transaction_retry, 'run_with_transaction_contention_retry', probe)
     return probe
 
 
