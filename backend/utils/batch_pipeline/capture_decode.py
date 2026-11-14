@@ -14,6 +14,32 @@ from utils.sync.capture_clock import is_early_capture_time
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
 
+# Closed vocabulary of faults that mean these uploaded bytes cannot decode with
+# this server's decoder, however often they are retried. Membership is by exact
+# message: a config, Firestore, storage or privacy failure is never a member,
+# even though it can be raised from the same phase.
+DETERMINISTIC_DECODE_MESSAGES = frozenset(
+    {
+        'truncated sync audio frame',
+        'invalid sync audio frame',
+        'empty sync audio',
+        'unsupported sync PCM format',
+        'empty decoded sync audio',
+        'sync decode did not preserve every uploaded frame',
+        'capture bundle exceeds bounded conversation-unit limit',
+    }
+)
+# ``utils.sync.files`` answers this 400 detail for the same class of fault.
+AUDIO_DECODE_FAILED_DETAIL = 'Audio decode failed'
+
+
+def is_deterministic_decode_failure(error: BaseException) -> bool:
+    """Only a closed set of uploaded-bytes faults; never a config or IO failure."""
+    # Duck-typed so this module keeps no FastAPI import (it runs in CPU workers).
+    if getattr(error, 'status_code', None) == 400 and getattr(error, 'detail', None) == AUDIO_DECODE_FAILED_DETAIL:
+        return True
+    return isinstance(error, ValueError) and str(error) in DETERMINISTIC_DECODE_MESSAGES
+
 
 def _frame_count(path: str) -> int:
     count = 0

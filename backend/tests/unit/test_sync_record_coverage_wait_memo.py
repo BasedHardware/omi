@@ -19,6 +19,7 @@ class ExpiringRedis:
         self.rows = {}
         self.reads = 0
         self.writes = 0
+        self.expiries = []
 
     def get(self, key):
         self.reads += 1
@@ -26,10 +27,11 @@ class ExpiringRedis:
         return value if self.now < deadline else None
 
     def set(self, key, value, *, ex, nx):
-        assert nx and ex == 30
+        assert nx and ex in (30, 300)
         if key in self.rows and self.now < self.rows[key][1]:
             return False
         self.rows[key] = (value, self.now + ex)
+        self.expiries.append(ex)
         self.writes += 1
         return True
 
@@ -173,14 +175,16 @@ async def test_errors_are_never_memoized(world, monkeypatch, where):
 
 async def test_ttl_boundary_and_hits_never_extend_expiry(world):
     assert (await world.upload()).status_code == 503
-    world.redis.now = 29.999
+    world.redis.now = 299.999
     assert (await world.upload()).status_code == 503
     assert world.counts['decode'] == 1
     assert world.redis.writes == 1
-    world.redis.now = 30
+    world.redis.now = 300
     assert (await world.upload()).status_code == 503
     assert world.counts['decode'] == 2
     assert world.redis.writes == 2
+    # The coverage memo owns its 300 s window; the conversation memo keeps 30 s.
+    assert world.redis.expiries == [300, 300]
 
 
 def test_concurrent_negative_writes_keep_first_expiry(world):
@@ -188,7 +192,7 @@ def test_concurrent_negative_writes_keep_first_expiry(world):
     world.redis.now = 5
     cache.remember_coverage_wait('synthetic-key')
     assert world.redis.writes == 1
-    world.redis.now = 30
+    world.redis.now = 300
     assert not cache.cached_coverage_wait('synthetic-key')
 
 
@@ -203,18 +207,104 @@ async def test_cache_outage_falls_through_to_original_response(world, monkeypatc
     assert world.counts['decode'] == 2
 
 
-def test_key_isolates_owner_conversation_and_wal_and_tracks_jobs():
+def test_key_isolates_owner_conversation_upload_and_wal_and_tracks_jobs():
     key = live_upload._coverage_wait_key
-    baseline = key('u', 'c', 'wal', [{'segment_id': 's'}])
+    identity = (1, 32000)
+    baseline = key('u', 'c', 'wal', [{'segment_id': 's'}], identity)
     assert (
         len(
             {
                 baseline,
-                key('v', 'c', 'wal', [{'segment_id': 's'}]),
-                key('u', 'd', 'wal', [{'segment_id': 's'}]),
-                key('u', 'c', 'other', [{'segment_id': 's'}]),
-                key('u', 'c', 'wal', [{'segment_id': 't'}]),
+                key('v', 'c', 'wal', [{'segment_id': 's'}], identity),
+                key('u', 'd', 'wal', [{'segment_id': 's'}], identity),
+                key('u', 'c', 'other', [{'segment_id': 's'}], identity),
+                key('u', 'c', 'wal', [{'segment_id': 't'}], identity),
+                # A different upload for the same record and jobs must not share a miss.
+                key('u', 'c', 'wal', [{'segment_id': 's'}], (1, 32001)),
+                key('u', 'c', 'wal', [{'segment_id': 's'}], (2, 32000)),
             }
         )
-        == 5
+        == 7
     )
+
+
+def spy_lease(monkeypatch):
+    """Count retained copies and partial wakes without touching storage."""
+    from utils.batch_pipeline import record_lease_append
+
+    calls = {'retain': 0, 'rearm': 0}
+
+    async def retain(uid, cid, row, paths, store):
+        calls['retain'] += 1
+
+    async def rearm(uid, cid, row, store):
+        calls['rearm'] += 1
+
+    monkeypatch.setattr(record_lease_append, 'retain_upload', retain)
+    monkeypatch.setattr(record_lease_append, 'rearm_partial', rearm)
+    return calls
+
+
+async def test_memo_hit_answers_before_the_retained_copy_and_keeps_the_partial_wake(world, monkeypatch):
+    calls = spy_lease(monkeypatch)
+    assert (await world.upload()).status_code == 503
+    assert calls == {'retain': 1, 'rearm': 0}
+
+    repeat = await world.upload()
+    assert repeat.status_code == 503
+    # The copy that the memo stands in for is skipped; the wake that moves the
+    # record forward still runs.
+    assert calls == {'retain': 1, 'rearm': 1}
+    assert world.counts == {'decode': 1, 'fetch': 1, 'artifacts': 1}
+    assert world.redis.writes == 1
+
+
+async def test_a_different_wal_for_the_same_record_is_still_retained(world, monkeypatch):
+    calls = spy_lease(monkeypatch)
+    other = world.bad.parent / '101.0_pcm16_16000_1.bin'
+    other.write_bytes(b'\x03\x00' * 16000)
+    assert (await world.upload()).status_code == 503
+    assert (await world.upload(other)).status_code == 503
+    # Same record, same jobs, same owner: the upload identity is what keeps the
+    # second file from inheriting the first one's negative result.
+    assert calls['retain'] == 2
+    assert world.counts['decode'] == 2
+    assert world.redis.writes == 2
+
+
+async def test_memo_first_kill_switch_keeps_the_memo_after_the_copy(world, monkeypatch):
+    calls = spy_lease(monkeypatch)
+    assert (await world.upload()).status_code == 503
+    monkeypatch.setenv('SYNC_RECORD_WAIT_MEMO_FIRST', 'off')
+    assert (await world.upload()).status_code == 503
+    # Off restores the pre-change order: the copy runs, then the memo answers.
+    assert calls['retain'] == 2
+    assert calls['rearm'] == 0
+    assert world.counts['decode'] == 1
+    assert world.redis.writes == 1
+
+
+def test_upload_identity_is_the_count_and_total_bytes(world):
+    assert live_upload._upload_identity([world.bad]) == (1, 32000)
+    assert live_upload._upload_identity([world.bad, world.good]) == (2, 64000)
+
+
+def test_missing_upload_file_has_no_identity(world, tmp_path):
+    # An unreadable upload cannot carry a memo key: the caller checks in full
+    # instead of trusting another upload's result.
+    assert live_upload._upload_identity([tmp_path / 'gone.bin']) is None
+
+
+async def test_a_content_receipt_is_answered_before_the_memo(world):
+    assert (await world.upload()).status_code == 503  # Writes the negative memo.
+    content_id = compute_sync_content_id('synthetic-owner', [world.bad])
+    content, _ = live_upload.record_identity('synthetic-owner', 'synthetic-conversation')
+    world.store.rows['content', f'synthetic-owner/{content_id}'] = {
+        'dispatch_protocol': 'batch_v1',
+        'job_id': 'bp_' + content,
+    }
+    response = await world.upload()
+    # A receipt for this exact upload owns the answer; a cached negative for the
+    # same record must never turn an admitted upload back into a wait.
+    assert response.status_code == 200
+    assert world.counts['decode'] == 1
