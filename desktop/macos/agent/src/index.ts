@@ -103,7 +103,7 @@ import { nextJournalPumpDelayMs } from "./runtime/journal-pump-backoff.js";
 import { pumpJournalOutboxDeliveries } from "./runtime/journal-outbox-pump.js";
 import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
-import { OMI_TOOLS_MCP_SERVER_NAME } from "./runtime/kernel-support.js";
+import { OMI_TOOLS_MCP_SERVER_NAME, configuredRunTimeoutMs } from "./runtime/kernel-support.js";
 import {
   adapterActivationError,
   adapterIdForHarnessMode,
@@ -1687,6 +1687,7 @@ async function main(): Promise<void> {
     registry,
     artifactStorage,
     recoverRunInput,
+    runTimeoutMs: configuredRunTimeoutMs(),
     onToolCapabilityRejected: (code) => {
       const count = (capabilityRejectionCounts.get(code) ?? 0) + 1;
       capabilityRejectionCounts.set(code, count);
