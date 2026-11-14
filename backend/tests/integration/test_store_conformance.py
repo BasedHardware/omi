@@ -71,6 +71,48 @@ def need(harness, *names):
         pytest.skip(f'not applicable to the {harness.name} backend')
 
 
+def test_shared_ready_cursor_rejects_stale_progress_and_reaches_fresh_owner(h, monkeypatch):
+    from utils.batch_pipeline.ready_discovery import ReadyDiscovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', '2')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '60')
+    put_all(
+        h,
+        [
+            (
+                'jobs',
+                key,
+                job(
+                    h,
+                    key,
+                    owner_key=key,
+                    state='result_ready',
+                    merge_pending=True,
+                    fresh_capture=key == 'z',
+                    stt_route={'stt_route': 'provider'},
+                ),
+            )
+            for key in ('b', 'd', 'f', 'h', 'z')
+        ],
+    )
+    serving, pump = ReadyDiscovery(h.store, 'serving'), ReadyDiscovery(h.store, 'pump')
+    stale = serving.page()
+    for expected in (['b', 'd'], ['f', 'h']):
+        page = pump.page()
+        assert [key for key, _ in pump.owners(page)] == expected
+        assert pump.finish(page)
+    progress = h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    assert progress['after_owner_key'] == 'h' and progress['revision'] == 2
+    assert [key for key, _ in serving.owners(stale)] == ['b', 'd']
+    assert serving.finish(stale)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    page = pump.page()
+    assert [key for key, _ in pump.owners(page)] == ['z']
+    assert pump.finish(page)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))['revision'] == 3
+
+
 # -- document semantics ------------------------------------------------------------------------------
 def test_missing_document_reads_as_empty_dict(h):
     assert h.store.run(lambda tx: tx.get('jobs', 'nope')) == {}
