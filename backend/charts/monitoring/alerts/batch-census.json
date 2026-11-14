@@ -512,9 +512,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -644,9 +644,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -776,9 +776,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -908,9 +908,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -1040,9 +1040,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -1172,9 +1172,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -1694,9 +1694,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -1826,9 +1826,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -1958,9 +1958,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2090,9 +2090,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2222,9 +2222,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2354,9 +2354,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2486,9 +2486,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2618,9 +2618,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2750,9 +2750,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -2882,9 +2882,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -3014,9 +3014,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -3146,9 +3146,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -3278,9 +3278,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]
@@ -3410,9 +3410,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
       "mute_time_intervals": [
         "omi-tier-silent"
       ]

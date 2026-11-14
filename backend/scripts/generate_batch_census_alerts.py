@@ -204,9 +204,9 @@ def _rule(entry: CensusEntry) -> dict:
         'notification_settings': {
             'receiver': 'Omi - Services Alerting (Telegram)',
             'group_by': ['alertname'],
-            'group_wait': '30s',
-            'group_interval': '5m',
-            'repeat_interval': '4h',
+            'group_wait': '30s' if severity == 'critical' else '5m',
+            'group_interval': '5m' if severity == 'critical' else '1h',
+            'repeat_interval': '4h' if severity == 'critical' else '24h',
             'mute_time_intervals': [] if tier == 'page' else ['omi-tier-silent'],
         },
         'record': None,

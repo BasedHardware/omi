@@ -158,6 +158,481 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch record_pending: oldest row older than 1123200s",
+      "owner_uid": "omi-census-age-b-record_pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"retry\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"retry\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch retry: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-b-retry",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"result_ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"result_ready\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch result_ready: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-result_ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"vendor_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"vendor_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch vendor_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-vendor_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"quarantined\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"quarantined\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch quarantined: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-quarantined",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"privacy_blocked\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"privacy_blocked\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch privacy_blocked: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-privacy_blocked",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch provider_pending: oldest row older than 604800s",
+      "owner_uid": "omi-census-age-b-provider_pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"provider_running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"provider_running\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch provider_running: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-b-provider_running",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"record_recovery_waiting\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch record_recovery_waiting: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-b-record_recovery_waiting",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection pending: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-p-pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"persisted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"persisted\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection persisted: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-p-persisted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"ready\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"ready\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection ready: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-p-ready",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_projection\",state=\"quarantine_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_projection quarantine_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-p-quarantine_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-r-held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"prepared\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"prepared\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery prepared: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-r-prepared",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"running\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"running\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery running: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-r-running",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch_recovery\",state=\"failed_held\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch_recovery\",state=\"failed_held\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch_recovery failed_held: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-r-failed_held",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"provider_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"provider_outbox\",state=\"open\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch provider_outbox open: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-po-open",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch memory_outbox pending: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-mo-pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"processing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"processing\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch memory_outbox processing: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-mo-processing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"memory_outbox\",state=\"retryable_failure\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch memory_outbox retryable_failure: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-mo-retryable_failure",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"enrichment_outbox\",state=\"pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"enrichment_outbox\",state=\"pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch enrichment_outbox pending: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-eo-pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"open\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"open\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch speaker_outbox open: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-so-open",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"speaker_outbox\",state=\"terminal_pending\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch speaker_outbox terminal_pending: oldest row older than 86400s",
+      "owner_uid": "omi-census-age-so-terminal_pending",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"staging\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"staging\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch cap_hold staging: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-ch-staging",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"cap_hold\",state=\"sealing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"cap_hold\",state=\"sealing\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch cap_hold sealing: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-ch-sealing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"capturing\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger capturing: oldest row older than 21600s",
+      "owner_uid": "omi-census-age-pl-capturing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"sealed\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger sealed: oldest row older than 3600s",
+      "owner_uid": "omi-census-age-pl-sealed",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"transcribed\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger transcribed: oldest row older than 1800s",
+      "owner_uid": "omi-census-age-pl-transcribed",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"pipeline_ledger\",state=\"noted\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"pipeline_ledger\",state=\"noted\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch pipeline_ledger noted: oldest row older than 1800s",
+      "owner_uid": "omi-census-age-pl-noted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"committed_hidden\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"committed_hidden\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch committed_hidden: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-committed_hidden",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((omi_batch_pipeline_census_state_oldest_age_seconds{machine=\"batch\",state=\"ready_runnable\"}) and (omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} == scalar(max(omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"}))) and (time() - omi_batch_pipeline_census_state_observed_at_seconds{machine=\"batch\",state=\"ready_runnable\"} < 1800)) or vector(0)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds",
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch batch ready_runnable: oldest row older than 7200s",
+      "owner_uid": "omi-census-age-b-ready_runnable",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(time() - max(omi_batch_pipeline_census_snapshot_timestamp_seconds)) or vector(1e9)",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Batch stuck-state census has not completed",
+      "owner_uid": "omi-census-snapshot-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(omi_batch_pipeline_census_registered_stocks or vector(0)) - count(count by (machine, state) (omi_batch_pipeline_census_state_observed_at_seconds > (time() - 1800)))",
+      "file": "alerts/batch-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_registered_stocks",
+        "omi_batch_pipeline_census_state_observed_at_seconds"
+      ],
+      "owner_title": "Batch stuck-state census is missing stocks",
+      "owner_uid": "omi-census-stocks-blind",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "max(omi_batch_held_expired_units and (time() - omi_batch_held_expired_observed_at_seconds < 900)) or vector(0)",
       "file": "alerts/batch-held-dead-letter.json",
       "issues": [],
@@ -2362,6 +2837,121 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "label_values(omi_batch_pipeline_census_state_units, machine)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_units"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": null,
+      "pointer": "/templating/list/0/query",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "count(count by (machine, state) (omi_batch_pipeline_census_state_observed_at_seconds > (time() - 1800)))",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_state_observed_at_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 2,
+        "title": "Stocks with a fresh sample"
+      },
+      "pointer": "/panels/1/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max(omi_batch_pipeline_census_registered_stocks)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_registered_stocks"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 2,
+        "title": "Stocks with a fresh sample"
+      },
+      "pointer": "/panels/1/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "time() - max(omi_batch_pipeline_census_snapshot_timestamp_seconds)",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [],
+      "metrics": [
+        "omi_batch_pipeline_census_snapshot_timestamp_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 3,
+        "title": "Last completed census pass"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_units{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_units"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 4,
+        "title": "Count by stock"
+      },
+      "pointer": "/panels/3/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_oldest_age_seconds{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 5,
+        "title": "Oldest age by stock"
+      },
+      "pointer": "/panels/4/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "omi_batch_pipeline_census_state_oldest_age_seconds{machine=~\"$machine\"}",
+      "file": "dashboards/general/batch-stuck-census.json",
+      "issues": [
+        "dashboard variables/macros require explicit expansion before shadow"
+      ],
+      "metrics": [
+        "omi_batch_pipeline_census_state_oldest_age_seconds"
+      ],
+      "owner_title": "Batch stuck-state census",
+      "owner_uid": "omi-batch-stuck-census",
+      "panel": {
+        "id": 6,
+        "title": "Oldest age trend (top states)"
+      },
+      "pointer": "/panels/5/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "100 * (sum(increase(omi_listen_audio_outcome_total{transcription_source=\"omi\",outcome=\"first_audio\"}[$__range])) or 0 * sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))) / sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -4168,7 +4758,7 @@
   ],
   "counts": {
     "explicit_bridge": 42,
-    "query_consumers": 280
+    "query_consumers": 321
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

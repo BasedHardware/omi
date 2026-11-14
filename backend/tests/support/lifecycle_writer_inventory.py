@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Census response metadata only; no lifecycle document writes.
+    'utils/sync/batch_census.py': [
+        (
+            'snapshot',
+            'status',
+            "OUTCOME_DISABLED; literal aliases=[('OUTCOME_DISABLED', ('disabled',))]",
+            ('failed', 'status', 'stocks', 'units'),
+        ),
+        ('snapshot', 'status', 'outcome', ('failed', 'status', 'stocks', 'units')),
+    ],
     # Shadow allowance operation lifecycle, separate from audio custody.
     'database/free_allowance_leases.py': [
         ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),

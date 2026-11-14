@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 
 from config.batch_census import COLLECTION_GROUP, COLLECTIONS, AgeCutoff, CensusEntry
 
