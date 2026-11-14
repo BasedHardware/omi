@@ -23,6 +23,7 @@ from database.batch_pipeline_store import (
     PROJECTION_OBLIGATION_STATES,
     timeliness_all_time_counts,
     timeliness_sample,
+    allowance_held_count,
 )
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
@@ -239,6 +240,13 @@ class QueueMetrics:
             ['leg'],
             registry=registry,
             fresh=self._timeliness_sample_visible,
+        )
+        self._allowance_due = self._allowance_expires = 0.0
+        self.allowance_held = _FreshQueueGauge(
+            'omi_batch_allowance_held_units',
+            'Policy parked stock, separate from lateness; hourly leader-only aggregate, no job reads',
+            registry=registry,
+            fresh=lambda: self._timeliness_sample_visible() and time.monotonic() < self._allowance_expires,
         )
         self.timeliness_all_time = _FreshQueueGauge(
             'omi_batch_timeliness_all_time_units',
@@ -626,6 +634,17 @@ class QueueMetrics:
         self._timeliness_expires = sample_expires
         self._timeliness_visible = True
         self.timeliness_samples.labels('ok').inc()
+        if elected and now >= self._allowance_due:
+            self._allowance_due = now + 3600
+            try:
+                self.allowance_held.set(allowance_held_count(store.client, store.namespace))
+                self._allowance_expires = time.monotonic() + 3600 + interval
+            except Exception as error:
+                self._allowance_expires = 0.0
+                self._allowance_due = now + 300
+                logging.getLogger(__name__).warning(
+                    'event=batch_allowance_count outcome=unavailable exception_type=%s', type(error).__name__
+                )
         # Companion counts run only after the epoch gauges above are published,
         # so a slow or failed COUNT can never delay or stale the epoch series.
         if all_time_counts:
@@ -674,6 +693,7 @@ class QueueMetrics:
             'completed',
             'retry',
             'requeued',
+            'allowance_parked',
             'lease_expired',
             'dead',
             'committed',
