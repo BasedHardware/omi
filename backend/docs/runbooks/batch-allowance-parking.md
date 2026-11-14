@@ -57,7 +57,9 @@ branch is changed.
 ## Migration and mixed versions
 
 The release owner creates the registered Firestore indexes as step 0 and
-verifies READY. Deploy the backend release controller first, then every GPU
+verifies READY. Obtain rollout go before the first default-on deployment: new recovery
+already parks old retries incrementally. Deploy the backend release controller
+first, then every GPU
 worker that writes refusals. Old workers still write retry and new recovery
 parks them. Old stores/readers ignore the new state and see
 `merge_pending=false`; they cannot accidentally lease, publish or expire it.
