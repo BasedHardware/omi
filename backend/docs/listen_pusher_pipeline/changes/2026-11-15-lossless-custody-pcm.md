@@ -29,3 +29,10 @@ writer rollback and fallback on unavailable/busy/timed-out/corrupt encoding.
 The existing durable-outbox, custody-frames and gapped-pack suites guard receipt
 failure boundaries and existing original-format readers. Local evidence is
 not a production cost or silence-accuracy estimate.
+
+The margin-owner follow-up adds a histogram for the optional codec delay,
+zero-initialized outcome counters, real child-process timeout and busy-capacity
+custody-commit tests, and quantitative canary queries/rollback thresholds in
+the runbook. This makes the added delay measurable while leaving the existing
+representation and custody decision unchanged. Credit net savings only after
+eligible production byte savings and compute cost have been measured.

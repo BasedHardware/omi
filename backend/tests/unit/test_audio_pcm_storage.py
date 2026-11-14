@@ -6,6 +6,8 @@ import math
 import random
 import struct
 import subprocess
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -77,6 +79,31 @@ def test_busy_encoder_keeps_pcm(monkeypatch):
     monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('encoder must not run'))
     pcm = bytes(64000)
     assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+
+
+def test_real_subprocess_timeout_still_commits_original_custody(remote, monkeypatch):
+    real_run = subprocess.run
+    monkeypatch.setattr(audio_pcm_storage, '_TIMEOUT_SECONDS', 0.05)
+
+    def hung_encoder(*args, **kwargs):
+        return real_run([sys.executable, '-c', 'import time; time.sleep(10)'], **kwargs)
+
+    monkeypatch.setattr(subprocess, 'run', hung_encoder)
+    pcm = bytes(64000)
+    started = time.monotonic()
+    receipt = audio_outbox.commit_pcm('owner', pcm, 'conversation', 1000, 16000, 'root', 0)
+    assert time.monotonic() - started < 5
+    assert remote.blob(receipt.path).data == pcm
+    assert audio_outbox.read_pcm('owner', receipt) == pcm
+
+
+def test_busy_encoder_still_commits_original_custody(remote, monkeypatch):
+    monkeypatch.setattr(audio_pcm_storage, '_ENCODERS', SimpleNamespace(acquire=lambda **k: False))
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('encoder must not run'))
+    pcm = bytes(64000)
+    receipt = audio_outbox.commit_pcm('owner', pcm, 'conversation', 1000, 16000, 'root', 0)
+    assert remote.blob(receipt.path).data == pcm
+    assert audio_outbox.read_pcm('owner', receipt) == pcm
 
 
 @pytest.mark.parametrize('size,channels', [(2, 1), (16 * 1024 * 1024 + 2, 1), (64000, 2), (64001, 1)])

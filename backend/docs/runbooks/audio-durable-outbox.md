@@ -44,6 +44,50 @@ savings. Use committed `omi_audio_archive_bytes_total{codec="flac"}` and
 bucket growth to corroborate savings; an absent eligible PCM cohort is UNKNOWN,
 not a successful savings measurement. No >90% silence claim follows from this.
 
+The `omi_audio_pcm_storage_seconds` histogram times the optional representation
+step, including fallback. Outcome counters initialize at zero. Check absolute
+mismatch/over-budget counts as well as deltas to catch a first event before
+the first scrape. The two subprocess timeouts add at most
+four seconds of configured optional waiting, plus process startup/cleanup;
+busy capacity falls back immediately rather than queueing another encoder.
+
+Release reads the following PromQL through the project's managed Prometheus
+API with `ro-prod`, separately for `job="prod-omi-backend-listen"` and
+`job="prod-omi-pusher"`, always with `namespace="prod-omi-backend"`. Pin the
+evaluation time and use windows entirely after the serving readback. Replace
+`JOB` with that one job, never a fleet-wide sum:
+
+```promql
+sum(increase(omi_audio_pcm_storage_total{namespace="prod-omi-backend",job="JOB",result="flac"}[30m]))
+sum(increase(omi_audio_archive_bytes_total{namespace="prod-omi-backend",job="JOB",source="live",codec="flac"}[30m]))
+sum(omi_audio_pcm_storage_total{namespace="prod-omi-backend",job="JOB",result="mismatch"})
+sum(increase(omi_audio_raw_read_total{namespace="prod-omi-backend",job="JOB",result=~"checksum_mismatch|decode_error|coverage_mismatch|decrypt_error"}[5m]))
+sum(increase(omi_audio_custody_failures_total{namespace="prod-omi-backend",job="JOB"}[5m])) / clamp_min(sum(increase(omi_audio_custody_commits_total{namespace="prod-omi-backend",job="JOB"}[5m])), 1)
+histogram_quantile(0.99, sum by (le) (rate(omi_audio_pcm_storage_seconds_bucket{namespace="prod-omi-backend",job="JOB"}[5m])))
+sum(omi_audio_pcm_storage_seconds_count{namespace="prod-omi-backend",job="JOB"}) - sum(omi_audio_pcm_storage_seconds_bucket{namespace="prod-omi-backend",job="JOB",le="5.0"})
+```
+
+Before rollout, record the same custody-failure fraction over the immediately
+preceding 30-minute window as `baseline_failure_fraction`. Wait for one full
+five-minute window of the new serving state before evaluating guards. Disable
+compression on that surface for any new sample mismatch or raw integrity
+failure, or any observed optional step over five seconds. After at least 100
+timed calls, disable it if optional-step p99 exceeds 0.5 seconds in two
+consecutive complete five-minute windows. Also disable for a custody-failure
+fraction above `min(0.01, baseline_failure_fraction + 0.001)` in two consecutive
+complete windows. These are conservative compression rollback triggers; keep
+custody itself on. Release records the actual observations and trigger.
+
+The full 30-minute acceptance window must have at least 100 representation
+calls, ten verified FLAC outcomes and positive committed FLAC bytes per surface,
+with no rollback trigger. Insufficient traffic/metric coverage is UNKNOWN.
+Verified FLAC outcomes prove actual byte-exact decode checks before write;
+zero raw-read errors without successful read traffic cannot certify a separate
+playback exercise. Record that distinction. The histogram measures the added
+codec step, not total custody-commit latency. Existing custody failure and
+backpressure meters guard the downstream barrier. Net dollar savings remain
+uncredited until actual eligible byte savings and compute cost are measured.
+
 This switch is the sole custody kill switch. `AUDIO_ARCHIVE_LIVE_ENABLED`
 controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`

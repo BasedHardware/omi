@@ -4,17 +4,27 @@ import os
 import subprocess
 import threading
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 
 DECISIONS = Counter('omi_audio_pcm_storage_total', 'New PCM representation attempts', ['result'])
 INPUT_BYTES = Counter('omi_audio_pcm_storage_input_bytes_total', 'PCM bytes considered for new writes')
 SAVED_BYTES = Counter('omi_audio_pcm_storage_saved_bytes_total', 'Bytes saved by verified encoding attempts')
+STORAGE_SECONDS = Histogram(
+    'omi_audio_pcm_storage_seconds',
+    'Optional PCM representation time before immutable custody commit, including fallback',
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 5),
+)
+for _result in ('disabled', 'ineligible', 'busy', 'not_smaller', 'encoder_error', 'mismatch', 'flac'):
+    # Expose the bounded outcome children for baseline scrapes. The canary
+    # also checks absolute mismatch counts to catch errors before first scrape.
+    DECISIONS.labels(_result).inc(0)
 _ENCODERS = threading.BoundedSemaphore(2)
 _TIMEOUT_SECONDS = 2
 _MIN_BYTES = 32000
 _MAX_BYTES = 16 * 1024 * 1024
 
 
+@STORAGE_SECONDS.time()
 def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str]:
     """Return FLAC only when smaller and independently decoded byte-for-byte.
 
