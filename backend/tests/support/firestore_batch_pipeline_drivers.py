@@ -476,6 +476,26 @@ def entries():
             body_digest='d9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
         ),
         DriverEntry(
+            'database.batch_pipeline_store.fresh_first_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'ready': [False, True]},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
             trials=2,
             patchers=(_poll_skip_modes,),
