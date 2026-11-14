@@ -4,7 +4,7 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
-from utils.batch_pipeline.projection_writers import customer_writer, persist_playback
+from utils.batch_pipeline.projection_writers import customer_writer, persist_playback, writer_scope
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
@@ -841,7 +841,7 @@ class Projector:
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
         try:
-            with self.store.writer_scope():
+            with writer_scope(self.store):
                 conversations_db.assign_sync_conversation(
                     binding.owner_id,
                     incoming,
@@ -1047,7 +1047,7 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            with self.store.writer_scope():
+                            with writer_scope(self.store):
                                 assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                     binding.owner_id,
                                     incoming,

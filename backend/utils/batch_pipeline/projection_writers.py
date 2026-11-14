@@ -5,6 +5,7 @@ across bridge, audio or Firestore I/O; legacy stores retain their no-op scope.
 Audio publication policy is unchanged and is not a G2 C4 sink qualification.
 """
 
+from contextlib import nullcontext
 from functools import wraps
 
 from google.api_core.exceptions import NotFound
@@ -14,11 +15,22 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.contracts import WorkItem
 
 
+def writer_scope(store):
+    """Legacy structural stores have no binding; explicit class bindings prevail.
+
+    Inspect the class protocol so dynamic metadata/Mock attributes cannot be
+    mistaken for an installed coordinator. An installed scope never falls back
+    when its construction or body fails.
+    """
+    factory = getattr(type(store), 'writer_scope', None)
+    return factory(store) if factory is not None else nullcontext()
+
+
 def customer_writer(method):
     @wraps(method)
     def scoped(self, *args, **kwargs):
         # Context only: no SQL pool slot or owner lock spans follow-up I/O.
-        with self.store.writer_scope():
+        with writer_scope(self.store):
             return method(self, *args, **kwargs)
 
     return scoped

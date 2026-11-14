@@ -295,3 +295,30 @@ writer/runner/cohort bindings remain uninstalled. Original result publication,
 per-record retained-copy cleanup/purge, GCS/reverse certificates, scheduling and
 the complete matrix/fleet/budget qualification still block the first P1.
 No new review round, merge, activation or savings claim is requested.
+
+
+## Retained-copy erasure first phase
+
+Migration 0014 persists an immutable original-record census and keeps the last
+PG custodian while any copy family remains unresolved. The actual account and
+resumable conversation erasure entrypoints accept the explicit dark adapter.
+Real FS transactions retire private jobs/results/cursors under the existing
+legal-hold/unit token, queue epoch and deletion intent; unknown responses and
+process exits replay the original census. No SQL slot/owner guard spans FS I/O.
+Original deadlines are copied exactly, with no new TTL or lifetime extension.
+
+This phase deliberately stops legacy erasure before original metadata removal
+or completion acknowledgement. Original objects, attempts, handoffs, grouped
+recording/custody/outbox, journal and cold copies still need their real remote
+proofs and final per-record retirement. Account P-to-purging/drain orchestration,
+production paging/injection and remote PG destructive-unit cancellation barriers
+remain gates. See `d-retained-copy-lifetimes.md`; private retirement alone does
+not close P23, A4/A9 qualification or the first-review P1. No review/activation
+or savings are requested.
+
+Exact ea9884 CI also exposed the new writer-scope interface breaking structural
+legacy stores and the missing private-publication inventory entry. The repair
+uses the explicit class protocol when installed and a no-op only when absent;
+an installed scope failure still propagates. The actual provider coordinator
+binding remains mandatory. The lifecycle inventory now records the real
+private publication, preserving its existing field/state assertions.

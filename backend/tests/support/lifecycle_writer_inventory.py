@@ -1,6 +1,10 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Typed private publication joins all original siblings in one FS COMMIT.
+    'database/jobstore/provider_projection.py': [
+        ('ProviderProjection.prepare.publish', 'projection_state', "'pending'", ('projection_state',)),
+    ],
     # Shadow allowance operation lifecycle, separate from audio custody.
     'database/free_allowance_leases.py': [
         ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),

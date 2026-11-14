@@ -163,6 +163,7 @@ def purge_conversation(
     firestore_client: Any = None,
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    retained_copies: Any = None,
 ) -> int:
     """Erase ``conversation_id``'s batch rows from ``progress.position`` onward; returns rows erased."""
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
@@ -170,6 +171,10 @@ def purge_conversation(
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
+    if retained_copies is not None:
+        _ensure_budget(progress)
+        with progress.unit() as authority:
+            retained_copies.before_legacy(uid, conversation_id, authority)
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
         from utils.other.local_storage import create_storage_client

@@ -513,7 +513,7 @@ def _mint_worker() -> None:
             metrics.memo_result('batch', 'mint_error')
 
 
-def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
+def advance_privacy_generation(client: Any, uid: str, *, blocked: bool, fence: Any = None) -> int:
     """Invalidate in-flight references before account/protection cleanup."""
     from google.cloud import firestore
 
@@ -521,6 +521,8 @@ def advance_privacy_generation(client: Any, uid: str, *, blocked: bool) -> int:
 
     @firestore.transactional
     def advance(transaction):
+        if fence is not None:
+            fence(transaction)
         previous = reference.get(transaction=transaction).to_dict() or {}
         generation = int(previous.get('generation', 0)) + 1
         transaction.set(

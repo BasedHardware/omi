@@ -85,6 +85,18 @@
       "basis": "planning-bound",
       "source": "Reuses the original intake receipt, never creates another intake family: one read per guard, at most two guards per customer transaction plus one accounting/preflight read. Retries/redeliveries counted separately. Synthetic two-sibling direct-read counter is in test_jobstore_provider_projection.py. No runtime selection or activation: 0 expected production reads/day, 1/day sentinel. Actual fleet/recording transaction volume and reviewed daily budget are gates before activation.",
       "reviewed": "2026-11-13"
+    },
+    {
+      "site": "backend/database/jobstore/retained_copies.py",
+      "expression": "ns + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "pgfoundation / SCA-1959 dark retained-copy custody",
+      "unit": "one explicit recording erasure transaction attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Reference census only; this phase does not read or delete the original intake. One read is a conservative sentinel per attempt, not a new serving grant. Private view erasure reads at most 2n+1 private documents plus one queue authority, n<=128, within the existing 1000 handoff-family bound. Hold/gate/deletion-intent reads stay with their original families. Retries/redeliveries are separately counted. Production selection remains absent, expected volume 0/day, sentinel 1/day. Fleet and daily volume remain a reviewed activation gate; no savings booked.",
+      "reviewed": "2026-11-13"
     }
   ],
   "exempt": []
