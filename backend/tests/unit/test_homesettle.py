@@ -609,6 +609,9 @@ def test_live_snapshot_failure_or_disagreement_keeps_recordings_visible(monkeypa
     )
     rows = [floor(episode_id='e'), floor(id='outside', episode_id='closed')]
     # Snapshot-fetch failure sends no echo; stale or missing echoes fail visible.
+    assert home_membership.project_list('u', rows, request, None, filtered=False) == (
+        rows[1:] if echo == 'e:a' else rows
+    )
     response = SimpleNamespace(headers={})
     assert home_membership.project_list('u', rows, request, response, filtered=False) == (
         rows[1:] if echo == 'e:a' else rows
