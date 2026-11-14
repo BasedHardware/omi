@@ -127,14 +127,19 @@ observers.
 
 ## Day-1 import disposition, 2026-11-08
 
-Lead2 ruling 699300 (15:13Z) keeps thresholds intact while suppressing known
-backlog pages at import. `omi-record-pending-dwell` lands paused until #24893
+Superseded on 2026-11-14 by SCA-2116: the five paused page alarms are active
+again with thresholds unchanged and a 24h repeat cap, and each carries a written
+`page_disposition` and `review_by` in its annotations. The history below is kept
+so the reversal is explicit.
+
+Lead2 ruling 699300 (15:13Z) kept thresholds intact while suppressing known
+backlog pages at import. `omi-record-pending-dwell` landed paused until #24893
 drain work ships and fresh, untruncated cohort age remains below 7200s for 24h.
-`omi-enrichment-fresh-dwell` lands paused until its #24893 drain ships and fresh,
+`omi-enrichment-fresh-dwell` landed paused until its #24893 drain ships and fresh,
 untruncated fresh-cohort age remains below 3600s for 24h. Missing or stale samples
-do not count as healthy. Each needs a separate lifecycle-owner-approved unpause.
+did not count as healthy. Each needed a separate lifecycle-owner-approved unpause.
 The full five-rule pause list and criteria are in
-[the pipeline alert runbook](batch-projection/pipeline-alerts.md#production-import-disposition-lead2-ruling-699300-2026-11-08t1513z).
+[the pipeline alert runbook](batch-projection/pipeline-alerts.md#2026-11-14-disposition-sca-2116-pauses-retired-page-duty-kept-one-page-a-day).
 
 `omi-finalization-byok-dwell-page` remains active with the same UID, strict
 259200s/1h threshold and freshness gate. It now routes as an agent-tier warning
@@ -143,9 +148,7 @@ import. The blocked-state triage owner still tracks the debt; the threshold
 does not authorize lifecycle changes. Read back pause flags and BYOK mute/tier
 after the separately authorized prod provisioning dispatch.
 
-The reviewed lifecycle source inventory records BYOK's agent tier. Eleven table
-rows that borrow the paused record/unpublished/held pages are explicit strict
-known gaps under ruling699300, not claimed active coverage. The invariant still
-rejects every paused dwell rule; unpause produces a strict XPASS until the owner
-removes that row's debt record. All runtime states, exits and deadlines are
-unchanged. Unreviewed pauses still fail normally.
+The reviewed lifecycle source inventory records BYOK's agent tier. The eleven
+table rows that borrow the record/unpublished/held pages are active coverage
+again as of 2026-11-14 (SCA-2116); the invariant rejects every paused dwell rule,
+so a new pause fails the contract.

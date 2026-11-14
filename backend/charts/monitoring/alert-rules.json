@@ -25047,12 +25047,14 @@
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
       "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
-      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
       "threshold": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
       "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
-      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: new-cohort legs 10.9-12.2 d old and the all-epoch compute proxy 25.5 d, all sources fresh, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the drain lands; the rule stays page tier because it is the page the Japanese provider-STT failure should have triggered. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
@@ -25064,7 +25066,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -25072,7 +25074,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null
@@ -25469,14 +25471,16 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "record_pending entered via enqueued_at within the last 24h; legacy 8-72h stock is excluded from this page. Up to 1000 cohort rows, capped stock COUNT 5001. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) > 7200 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">7200 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 7200 continuously for 10m.",
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
-      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the 24h new-cohort oldest age is 86,400 s (the cohort cap) against a 7,200 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the record-admission drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "severity": "critical",
@@ -25488,7 +25492,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -25496,7 +25500,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null
@@ -26422,14 +26426,16 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active obligations entered via first_pending_at within the last 24h; fresh includes non-backfill and pending first summaries. Dormant receipts and legacy stock are excluded. Cohort page cap 1000. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) > 3600 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">3600 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 3600 continuously for 10m.",
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
-      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the fresh-enrichment oldest age is 86,334 s against a 3,600 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the enrichment drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "severity": "critical",
@@ -26441,7 +26447,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -26449,7 +26455,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null
@@ -28658,13 +28664,15 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "Completed owner_drain turns, fleet-weighted over 5m; only fresh all-epoch projection debt enables the alert. No turn samples while debt exists count as zero progress. Alert-only; no scheduler, ramp, rollback or autoscaling consumer. Log windows end 10m ago to allow ingestion; pending duration is unchanged.",
       "verification": "Compare turn count, stop=claim_busy count and sum(advanced) from the exact owner_drain turn log. Verify the timeliness observation is under 1200 seconds old; inspect existing stale/blind alerts if absent. Compare the window ending 10 minutes ago, not the current incomplete bucket.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "($A > 0.5 || $B < 10) && $C > 0 for 15m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
       "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
-      "unpause_criteria": "After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24731 projection drain work reaches production, require fresh projection-debt samples and complete delayed turn metrics continuously for 24h: either no pending projection debt, or claim_busy share <=0.5 and progress >=10 rows/s. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: pending projection debt is 27 d old, so the stall condition is red and the existing 24h repeat is one page per day at most. Kept at 24h; no threshold change. Owner: omi-pipeline. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "alert_identity": "omi-pipeline-projection-drain-stall",
@@ -28676,7 +28684,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -28765,13 +28773,15 @@
       "user_impact": "Batch audio may wait longer for admission or publication.",
       "scope": "All-epoch stock age by leg, including rows before the timeliness epoch and older than 24h. Fresh sample required; no capped lifecycle cohort gauge. Alert-only; no scheduler, ramp, rollback or autoscaling consumer.",
       "verification": "Read the leg label and compare the oldest indexed row timestamp: committed_at for quarantine_held, enqueued_at for assignment_held and record_pending. Check the existing sample-stale alert.",
-      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Confirm source freshness and the serving release, then notify the drain coordinator. This alert authorizes no runtime changes. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
       "threshold": "$A > 21600 for 10m",
       "review_by": "2026-11-07",
       "evaluated_bad": "Synthetic threshold breach sustained through the pending period.",
       "evaluated_good": "Synthetic recovery below the strict threshold; no held rows or no projection debt.",
-      "unpause_criteria": "After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy."
+      "unpause_criteria": "After #24731/#24893 drain work and the N5 invalid-clock sampler guard reach production, require fresh samples of every held leg below 21600s continuously for 24h. The drain owner must approve a separate unpause change; missing, stale or undated samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: held legs are 15.7-27.1 d old against the 6h threshold, so the stall condition is red and the existing 24h repeat is one page per day at most. Kept at 24h; no threshold change. Owner: omi-pipeline. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "alert_identity": "omi-pipeline-held-row-age",
@@ -28783,7 +28793,7 @@
       "audience": "human",
       "owner": "omi-pipeline"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -33562,9 +33572,314 @@
     },
     "record": null
   },
-{"uid":"omi-pipeline-ledger-stuck","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger rows are stuck past their stage deadline","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"max by (stage) (omi_pipeline_ledger_stuck_rows)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A > 0"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"10m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"A ledger row is past its stage deadline for 10 minutes.","user_impact":"A capture is not reaching Home; the stage label names where it stopped.","scope":"Owner-scoped ledger census gauges refreshed on the operator read. Stage is a bounded enum; no uid or conversation id is a label.","verification":"Run the operator explain read for one affected conversation, then the stage runbook. A missing sample is covered by the sample-stale rule, not a healthy zero.","safe_next_action":"Redrive or settle the row through the stage runbook. This alert authorizes no runtime change.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A > 0 for 10m"},"labels":{"alert_identity":"omi-pipeline-ledger-stuck","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
-{"uid":"omi-pipeline-ledger-sample-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline ledger census sample is stale or never taken","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 900"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The ledger census has not refreshed for 15 minutes.","user_impact":"Stuck gauges may be blind; a missing sample is not a healthy zero.","scope":"The operator census route sets refreshed_at on every successful read. A failed or skipped read leaves the old timestamp.","verification":"Check the operator census route and its service-OIDC audience/invoker configuration. Do not read a stale gauge as zero.","safe_next_action":"Restore the census read; the gate fails closed while the sample is stale.","runbook":"backend/charts/monitoring/batch-projection/pipeline-alerts.md","threshold":"$A >= 900 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-sample-stale","component":"pipeline-ledger","impact":"product","severity":"critical","instatus_component":"speech-processing","tier":"page","audience":"human","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"30s","group_interval":"5m","repeat_interval":"4h","mute_time_intervals":[]},"record":null},
-{"uid":"omi-pipeline-ledger-gate-receipt-stale","orgID":1,"folderUID":"betdycdziadc0e","ruleGroup":"Pipeline ledger","title":"Pipeline census gate receipt is older than one hour","condition":"E","data":[{"refId":"A","queryType":"","relativeTimeRange":{"from":900,"to":0},"datasourceUid":"prometheus","model":{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)","instant":true,"intervalMs":1000,"maxDataPoints":43200,"refId":"A"}},{"refId":"D","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"D","type":"math","expression":"$A >= 3600"}},{"refId":"E","relativeTimeRange":{"from":0,"to":0},"datasourceUid":"__expr__","model":{"datasource":{"type":"__expr__","uid":"__expr__"},"refId":"E","type":"reduce","expression":"D","reducer":"last"}}],"updated":"2026-11-11T00:00:00Z","noDataState":"Alerting","execErrState":"KeepLast","for":"5m","keep_firing_for":"0s","annotations":{"dashboard_url":"https://monitor.omi.me/d/omi-core-features","summary":"The versioned census gate receipt is more than one hour old.","user_impact":"The ramp decision is using a stale receipt; G2 requires a fresh receipt.","scope":"The workspace gate runner writes the receipt timestamp as a Prometheus textfile. A missing file is Alerting, never a pass.","verification":"Run the gate runner for the current ramp profile and attach the new receipt. Do not advance on a stale receipt.","safe_next_action":"Re-run the gate; a PENDING/UNKNOWN receipt is not a pass.","runbook":"infra/metrics/pipeline-census/README.md","threshold":"$A >= 3600 for 5m"},"labels":{"alert_identity":"omi-pipeline-ledger-gate-receipt-stale","component":"pipeline-ledger","impact":"product","severity":"warning","instatus_component":"speech-processing","tier":"agent","audience":"agent","owner":"pipeline-driver"},"isPaused":false,"notification_settings":{"receiver":"Omi - Services Alerting (Telegram)","group_by":["alertname"],"group_wait":"5m","group_interval":"1h","repeat_interval":"24h","mute_time_intervals":["omi-tier-silent"]},"record":null},
+  {
+    "uid": "omi-pipeline-ledger-stuck",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline ledger",
+    "title": "Pipeline ledger rows are stuck past their stage deadline",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (stage) (omi_pipeline_ledger_stuck_rows)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A > 0"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-11T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A ledger row is past its stage deadline for 10 minutes.",
+      "user_impact": "A capture is not reaching Home; the stage label names where it stopped.",
+      "scope": "Owner-scoped ledger census gauges refreshed on the operator read. Stage is a bounded enum; no uid or conversation id is a label.",
+      "verification": "Run the operator explain read for one affected conversation, then the stage runbook. A missing sample is covered by the sample-stale rule, not a healthy zero.",
+      "safe_next_action": "Redrive or settle the row through the stage runbook. This alert authorizes no runtime change.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A > 0 for 10m"
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-ledger-stuck",
+      "component": "pipeline-ledger",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "pipeline-driver"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-pipeline-ledger-sample-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline ledger",
+    "title": "Pipeline ledger census sample is stale or never taken",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_pipeline_ledger_refreshed_at_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A >= 900"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-11T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The ledger census has not refreshed for 15 minutes.",
+      "user_impact": "Stuck gauges may be blind; a missing sample is not a healthy zero.",
+      "scope": "The operator census route sets refreshed_at on every successful read. A failed or skipped read leaves the old timestamp.",
+      "verification": "Check the operator census route and its service-OIDC audience/invoker configuration. Do not read a stale gauge as zero.",
+      "safe_next_action": "Restore the census read; the gate fails closed while the sample is stale.",
+      "runbook": "backend/charts/monitoring/batch-projection/pipeline-alerts.md",
+      "threshold": "$A >= 900 for 5m"
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-ledger-sample-stale",
+      "component": "pipeline-ledger",
+      "impact": "product",
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "pipeline-driver"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": []
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-pipeline-ledger-gate-receipt-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline ledger",
+    "title": "Pipeline census gate receipt is older than one hour",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_pipeline_ledger_gate_receipt_generated_at_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A >= 3600"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-11T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The versioned census gate receipt is more than one hour old.",
+      "user_impact": "The ramp decision is using a stale receipt; G2 requires a fresh receipt.",
+      "scope": "The workspace gate runner writes the receipt timestamp as a Prometheus textfile. A missing file is Alerting, never a pass.",
+      "verification": "Run the gate runner for the current ramp profile and attach the new receipt. Do not advance on a stale receipt.",
+      "safe_next_action": "Re-run the gate; a PENDING/UNKNOWN receipt is not a pass.",
+      "runbook": "infra/metrics/pipeline-census/README.md",
+      "threshold": "$A >= 3600 for 5m"
+    },
+    "labels": {
+      "alert_identity": "omi-pipeline-ledger-gate-receipt-stale",
+      "component": "pipeline-ledger",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "pipeline-driver"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
   {
     "uid": "omi-firestore-caller-overflow",
     "orgID": 1,

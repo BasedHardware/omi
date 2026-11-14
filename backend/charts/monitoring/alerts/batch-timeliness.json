@@ -161,12 +161,14 @@
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
       "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
-      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
       "threshold": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
       "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
-      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: new-cohort legs 10.9-12.2 d old and the all-epoch compute proxy 25.5 d, all sources fresh, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the drain lands; the rule stays page tier because it is the page the Japanese provider-STT failure should have triggered. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
@@ -178,7 +180,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -186,7 +188,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null

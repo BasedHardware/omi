@@ -5172,14 +5172,16 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "record_pending entered via enqueued_at within the last 24h; legacy 8-72h stock is excluded from this page. Up to 1000 cohort rows, capped stock COUNT 5001. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) > 7200 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">7200 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 7200 continuously for 10m.",
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
-      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the 24h new-cohort oldest age is 86,400 s (the cohort cap) against a 7,200 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the record-admission drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "severity": "critical",
@@ -5191,7 +5193,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -5199,7 +5201,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null
@@ -6125,14 +6127,16 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active obligations entered via first_pending_at within the last 24h; fresh includes non-backfill and pending first summaries. Dormant receipts and legacy stock are excluded. Cohort page cap 1000. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Unpaused 2026-11-14 under SCA-2116; see page_disposition and review_by.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) > 3600 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">3600 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 3600 continuously for 10m.",
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
-      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
+      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy.",
+      "page_disposition": "Unpaused 2026-11-14 (SCA-2116, R14). Live read 2026-11-14T10:30Z: the fresh-enrichment oldest age is 86,334 s against a 3,600 s budget, so the former 4h repeat would page about 6x/day. Repeat is capped at 24h (at most one page per day) until the enrichment drain lands. Owner: two-lane-lead. Review/expiry: 2026-11-21.",
+      "page_review_by": "2026-11-21"
     },
     "labels": {
       "severity": "critical",
@@ -6144,7 +6148,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": true,
+    "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -6152,7 +6156,7 @@
       ],
       "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "4h",
+      "repeat_interval": "24h",
       "mute_time_intervals": []
     },
     "record": null
