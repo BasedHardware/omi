@@ -1,0 +1,95 @@
+import { create } from 'zustand';
+import { observeAuth, signOut, signInWithGoogle, signInWithApple } from '@/auth/firebaseAuth';
+import { setAuthToken } from '@/api/omiApi';
+import { DEV_AUTH_TOKEN, DEV_BYPASS_AUTH, DEV_UID } from '@/devFlags';
+import { resetLocalConversationsCache, setActiveLocalConversationOwnerScope } from '@/services/localConversations';
+
+/**
+ * Marks the session created by loginWithoutAccount(). Anything that must not talk
+ * to a real account checks for it: a demo session has no token, so a request built
+ * from it is unauthenticated and the API answers 401 rather than someone else's
+ * data.
+ */
+export const DEMO_UID = 'local-demo-user';
+
+interface AuthState {
+  uid: string | null;
+  token: string | null;
+  /** True only for a local session with no account behind it. */
+  isDemo: boolean;
+  loading: boolean;
+  error: string | null;
+  init: () => () => void;
+  loginWithGoogle: () => Promise<void>;
+  loginWithApple: () => Promise<void>;
+  logout: () => Promise<void>;
+  loginWithoutAccount: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set) => ({
+  uid: null,
+  token: null,
+  isDemo: false,
+  loading: true,
+  error: null,
+  init: () => {
+    // Dev-only bypass: seed a synthetic session backed by a local-backend token
+    // (e.g. ADMIN_KEY) so capture/STT/TTS work without Firebase sign-in. __DEV__
+    // is compile-time false in release builds, so this path is unreachable there.
+    if (DEV_BYPASS_AUTH && DEV_AUTH_TOKEN) {
+      setAuthToken(DEV_AUTH_TOKEN);
+      set({ uid: DEV_UID, token: DEV_AUTH_TOKEN, loading: false, isDemo: false, error: null });
+      setActiveLocalConversationOwnerScope(`account:${DEV_UID}`);
+      console.warn('[auth] DEV_BYPASS_AUTH active — using local dev token, Firebase auth skipped');
+      return () => {};
+    }
+    const unsub = observeAuth((uid, token) => {
+      set({ uid, token, loading: false, isDemo: false });
+      setActiveLocalConversationOwnerScope();
+    });
+    return () => {
+      unsub();
+    };
+  },
+  loginWithGoogle: async () => {
+    set({ loading: true, error: null });
+    try {
+      await signInWithGoogle();
+    } catch (e: any) {
+      console.error('[auth] Google sign-in error:', e);
+      set({ error: e?.message ?? 'Google sign-in failed' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loginWithApple: async () => {
+    set({ loading: true, error: null });
+    try {
+      await signInWithApple();
+    } catch (e: any) {
+      console.error('[auth] Apple sign-in error:', e);
+      set({ error: e?.message ?? 'Apple sign-in failed' });
+    } finally {
+      set({ loading: false });
+    }
+  },
+  /**
+   * Dev only. Enters the app with a local session so the tabs and the on-device
+   * local brain can be exercised without a real account.
+   *
+   * No token is set, on purpose. This is a way to reach the UI, not a way to
+   * impersonate anyone: any request that needs credentials still fails, which is
+   * the honest behaviour for a session that does not exist.
+   */
+  loginWithoutAccount: () => {
+    resetLocalConversationsCache();
+    set({ uid: DEMO_UID, token: null, isDemo: true, loading: false, error: null });
+    setActiveLocalConversationOwnerScope('guest:demo');
+  },
+  logout: async () => {
+    resetLocalConversationsCache();
+    await signOut();
+    set({ uid: null, token: null, isDemo: false });
+    setActiveLocalConversationOwnerScope('guest:anon');
+  },
+}));

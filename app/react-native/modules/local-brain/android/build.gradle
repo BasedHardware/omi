@@ -1,0 +1,59 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+  id 'org.jetbrains.kotlin.android'
+}
+
+group = 'com.omi.localbrain'
+version = '1.0.0'
+
+expoModule {
+  // Not a published package: it lives in this repo and is autolinked from
+  // modules/. canBePublished false keeps the plugin from expecting the
+  // prebuild/publish layout a real npm package would have.
+  canBePublished false
+}
+
+android {
+  namespace "com.omi.localbrain"
+  compileSdk rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdk rootProject.ext.minSdkVersion
+    targetSdk rootProject.ext.targetSdkVersion
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  // The .tflite asset is fetched rather than committed, and the LiteRT runtime
+  // loads it from assets at runtime. Declared so the fetch target is obvious,
+  // not because the build needs it.
+  sourceSets {
+    main {
+      assets.srcDirs += ['src/main/assets']
+    }
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  // Only the low-level interpreter API is needed. Verified against the 2.1.0
+  // AAR: it contains Accelerator, CompiledModel, TensorBuffer and
+  // TensorBufferRequirements. The task-embedding wrapper
+  // (org.tensorflow:tensorflow-lite-task-embedding) is NOT used -- the router
+  // drives CompiledModel directly so the prototypes stay in TypeScript and the
+  // scoring stays inspectable.
+  implementation "com.google.ai.edge.litert:litert:2.1.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+}

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Experimental React Native DevKit voice-agent/dev tooling under app/react-native; no shipped Flutter app behavior change."
+}
