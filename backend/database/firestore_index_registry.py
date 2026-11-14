@@ -41,6 +41,12 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'enrichment_age_gate_unpark_newest',
+        'sync_reprocess_outbox',
+        'COLLECTION',
+        (_asc('age_gate_parked'), _desc('deferred_since'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'conversations_summary_repair_window',
         'conversations',
         'COLLECTION_GROUP',

@@ -61,6 +61,8 @@ run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
+run_proof "age-gate unpark (paging, CAS and durable enqueue debt)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_enrichment_age_gate_unpark_emulator.py
 run_proof "lifecycle properties (real Firestore, named producer exits)" \
   "$PYTHON" -m testing.lifecycle_sim.run \
   --extra-test-module testing/lifecycle_properties/test_properties.py
