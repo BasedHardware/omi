@@ -22,7 +22,11 @@ def test_actual_cold_commit_exit_replays_without_resurrection_or_lost_custody(co
     c = cold
     token, cid = '', ''
     if operation == 'erase':
-        c.sink.page(limit=100)
+        # Prime the crash precondition with bounded pages. This is not a
+        # hundred-row throughput test: every actual page keeps its unchanged
+        # 1.5s budget, and every original row still reaches the real cold sink.
+        for _ in c.rows:
+            assert c.sink.page(limit=1) == 1
         retained, cid, identity, manifest = terminal(c)
         with unit(c) as authority:
             token = authority.token

@@ -10,18 +10,22 @@ import pytest
 from google.cloud.firestore_v1.types import CommitRequest
 
 from database import legal_holds
+from database.batch_pipeline_conversation_purge import purge_conversation
+from database.batch_pipeline_purge import provider_result_artifacts, purge_batch_owner
 from database.conversation_batch_purge_jobs import GATE_KIND
-from database.jobstore.authority import AuthorityRefused
+from database.jobstore.authority import AuthorityRefused, journal
 from database.jobstore.cold_sink import ColdSink
 from database.jobstore.cold_purge import erase_recording
-from database.jobstore.retained_copies import RetainedCopies
+from database.jobstore.retained_copies import RetainedCopies, RetainedCopiesPending
 from database.jobstore.upload_cold_custody import FAMILY, descriptor
 from database.privacy_fence.protocol import conversation_key, lock
+from database.privacy_fence import FenceRefused
 from tests.integration.test_jobstore_handoff import context  # noqa: F401
 from tests.integration.test_jobstore_provider_effect import paid  # noqa: F401
 from tests.integration.test_jobstore_provider_handoff import upload
 from tests.integration.test_jobstore_result_sessions import result, row  # noqa: F401
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
+from utils.other import local_storage
 
 pytestmark = pytest.mark.integration
 
@@ -202,8 +206,6 @@ def test_upload_stale_version_cannot_replace_published_cold_state(upload_cold):
     ],
 )
 def test_real_journal_cannot_export_unknown_upload_source_fields(upload_cold, field, value):
-    from database.jobstore.authority import journal
-
     c = upload_cold
     last = upload_rows(c)[-1]
     with c.handoff.pool.connection() as conn, conn.transaction():
@@ -242,8 +244,6 @@ def test_purge_refuses_unknown_newer_or_changed_upload_destination(upload_cold, 
 
 @pytest.mark.parametrize('changed', ['epoch', 'token', 'restore'])
 def test_upload_original_paid_admission_and_transaction_authority_are_required(upload_cold, monkeypatch, changed):
-    from database.privacy_fence import FenceRefused
-
     c = upload_cold
     if changed == 'epoch':
         c.handoff.authority.ref.update({'epoch': 4})
@@ -289,11 +289,6 @@ def test_upload_copy_and_purge_release_sql_slots_and_guards_before_fs_io(upload_
 
 @pytest.mark.parametrize('scope', ['conversation', 'account'])
 def test_actual_artifactstore_to_production_purge_covers_upload_cold(context, tmp_path, monkeypatch, scope):
-    from database.batch_pipeline_conversation_purge import purge_conversation
-    from database.batch_pipeline_purge import provider_result_artifacts, purge_batch_owner
-    from database.jobstore.retained_copies import RetainedCopiesPending
-    from utils.other import local_storage
-
     h, uid = context
     storage = local_storage.LocalStorageClient(tmp_path)
     audio = storage.bucket('synthetic').blob(f'syncing/{uid}/audio/segment-0')

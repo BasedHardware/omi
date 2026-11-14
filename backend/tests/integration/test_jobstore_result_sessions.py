@@ -5,7 +5,7 @@ import pytest
 from database import legal_holds
 from database.batch_pipeline_purge import provider_result_artifacts
 from database.conversation_batch_purge_jobs import GATE_KIND
-from database.jobstore.authority import AuthorityRefused
+from database.jobstore.authority import AuthorityRefused, journal
 from database.jobstore.gcs_sink import GCSSink
 from database.privacy_fence.protocol import lock
 from tests.integration.test_jobstore_handoff import context  # noqa: F401
@@ -490,7 +490,7 @@ def test_reference_read_budget_and_original_deadline(result, monkeypatch):
     assert not {'expire_at', 'expires_at', 'write_pending_until'} & set(payload)
 
 
-def test_result_session_journal_is_not_silently_reverse_converted(result):
+def test_result_session_journal_only_copies_through_explicit_cold_custody(result):
     from database.jobstore.cold_sink import ColdSink
 
     adapter, _, _, item, _, artifacts = result
@@ -500,8 +500,29 @@ def test_result_session_journal_is_not_silently_reverse_converted(result):
             "SELECT seq,epoch,family,identity,operation,owner_key,body FROM queue_journal WHERE namespace=%s AND family='queue_provider_uploads' ORDER BY seq LIMIT 1",
             (adapter.units.namespace,),
         ).fetchone()
-    with pytest.raises(AuthorityRefused):
-        ColdSink(adapter.handoff).apply(entry, timeout=1.5)
+    sink = ColdSink(adapter.handoff)
+    sink.apply(entry, timeout=1.5)
+    copied = sink.ref(entry[2], entry[3]).get().to_dict()
+    assert copied['cold_only'] is True and copied['body'] == entry[6]
+    assert not list(adapter.handoff.client.collection(adapter.units.namespace + '_jobs').stream())
+    # The now-qualified explicit cold adapter cannot export unknown fields or
+    # session capabilities, even from a real committed journal row.
+    with adapter.units.pool.connection() as conn, conn.transaction():
+        journal(
+            conn,
+            adapter.handoff.ticket,
+            entry[2],
+            entry[3],
+            entry[5],
+            {**entry[6], 'session': 'synthetic-unusable-capability'},
+        )
+        unknown = conn.execute(
+            'SELECT seq,epoch,family,identity,operation,owner_key,body FROM queue_journal '
+            'WHERE namespace=%s ORDER BY seq DESC LIMIT 1',
+            (adapter.units.namespace,),
+        ).fetchone()
+    with pytest.raises(AuthorityRefused, match='source/admission/lifetime'):
+        sink.apply(unknown, timeout=1.5)
     with adapter.units.pool.connection() as conn:
         assert conn.execute(
             'SELECT applied_seq FROM queue_authority WHERE namespace=%s', (adapter.units.namespace,)
