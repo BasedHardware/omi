@@ -115,8 +115,8 @@
       "reviewed": "2026-11-14"
     },
     {
-      "site": "backend/utils/batch_pipeline/metrics.py",
-      "expression": "f'{store.namespace}_jobs'",
+      "site": "backend/database/batch_pipeline_store.py",
+      "expression": "f'{namespace}_jobs'",
       "collection_pattern": "batch_pipeline_*_jobs",
       "owner": "Pipeline allowance parking (SCA-2195)",
       "unit": "hourly leader-only allowance-held COUNT at <=1M held rows",

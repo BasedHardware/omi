@@ -199,6 +199,7 @@ def test_privacy_fence_prevents_release_without_resurrecting_work(h):
     assert service.tick(10) == 0
     assert get(h)['state'] == 'privacy_blocked'
     assert not get(h)['merge_pending']
+    assert h.store.allowance_owners(10000, 100) == []
 
 
 def test_migration_count_only_resume_and_cas(h, monkeypatch):

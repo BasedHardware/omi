@@ -23,6 +23,7 @@ from database.batch_pipeline_store import (
     PROJECTION_OBLIGATION_STATES,
     timeliness_all_time_counts,
     timeliness_sample,
+    allowance_held_count,
 )
 from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINESS_METRICS, LeaderLease
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
@@ -565,10 +566,7 @@ class QueueMetrics:
         if elected and now >= self._allowance_due:
             self._allowance_due = now + 3600
             try:
-                count = (
-                    store.client.collection(f'{store.namespace}_jobs').where('state', '==', 'allowance_held').count()
-                )
-                self.allowance_held.set(int(count.get()[0][0].value))
+                self.allowance_held.set(allowance_held_count(store.client, store.namespace))
                 self._allowance_expires = time.monotonic() + 3600 + interval
             except Exception as error:
                 self._allowance_expires = 0.0

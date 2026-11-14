@@ -747,6 +747,11 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
 
 
+def allowance_held_count(client: Any, namespace: str) -> int:
+    """Hourly leader census, outside the pending-work sample and never a row walk."""
+    return int(client.collection(f'{namespace}_jobs').where('state', '==', 'allowance_held').count().get()[0][0].value)
+
+
 def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     """A durable end-of-allowance hold parks the obligation outside compute.
 

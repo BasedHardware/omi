@@ -101,7 +101,7 @@ class AllowanceHolds:
                 try:
                     released += self.store.run(rollback)
                 except BatchPrivacyBlocked:
-                    self.store.quarantine_fenced(segment, now)
+                    self._revoke(segment, now)
             return released
         released = 0
         for key in self.store.allowance_owners(now, owners):
@@ -112,6 +112,23 @@ class AllowanceHolds:
                     'event=batch_allowance_hold outcome=retry exception_type=%s', type(error).__name__
                 )
         return released
+
+    def _revoke(self, segment: str, now: float) -> None:
+        if not self.store.quarantine_fenced(segment, now):
+            return
+
+        def retire(tx):
+            job = tx.get('jobs', segment)
+            key = job.get('owner_key')
+            if not key:
+                return
+            owner = tx.get(OWNERS, key)
+            if owner:
+                owner['held_count'] = max(0, owner.get('held_count', 0) - 1)
+                owner['active'] = owner['held_count'] > 0
+                tx.put(OWNERS, key, owner)
+
+        self.store.run(retire)
 
     def _owner(self, key: str, now: float, page_size: int) -> int:
         token = uuid.uuid4().hex
@@ -177,7 +194,7 @@ class AllowanceHolds:
                 try:
                     outcome = self.store.run(release)
                 except BatchPrivacyBlocked:
-                    self.store.quarantine_fenced(segment, now)
+                    self._revoke(segment, now)
                     outcome = None
                 if outcome:
                     after, changed = outcome
