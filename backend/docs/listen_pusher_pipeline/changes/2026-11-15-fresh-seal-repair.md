@@ -6,8 +6,14 @@ recency sweep can spend hours walking older pending captures, and ordinary job
 discovery waits 30 minutes. Neither supplies a bounded fresh-recording attempt.
 
 The active CronJob now polls an independent newest-first, two-hour job window,
-starting at 60 seconds of enqueue age. It reserves 75% of its existing row slots
-for that window and preserves the other slots for the original sweeps. New head
+starting at 60 seconds of enqueue age. Fresh work can borrow up to half of the
+existing row slots from ordinary execution capacity. It never shrinks either
+discovery leg: pending jobs retain half the worker budget, including their
+urgent-deadline priority and ordinary-job reserve, and conversations retain the
+other half plus unused job capacity. The checkpointed initial worker group
+starts first; queued fresh rows then take returned ordinary slots. Empty fresh
+capacity is lent back to backlog with a 90-second row limit, while the initial
+urgent/ordinary job leg retains its full configured row budget. New head
 pages interrupt the frozen recent-tail pass. Attempts retry after two minutes;
 90-second fresh row limits prevent slow proofs pinning those slots for 270
 seconds. All children still use isolated processes, bounded IO and canonical
@@ -19,6 +25,12 @@ A successful fresh seal also sets the pending job's `available_at=0` in the same
 transaction, placing it before ordinary intake retries. The job remains pending
 until normal admission validates and stages it. Failed proof/privacy checks
 leave the wake and seal unchanged. The wake intent is included in the plan digest.
+Intake certifies its own retry clock with `record_intake_retry_at` only while
+fresh repair and dead-letter handling are enabled. Claiming removes a previous
+marker; repair rechecks the live clock inside the seal transaction and preserves
+active or unmarked future claims. With fresh repair or dead-letter handling off,
+ordinary deferrals add no marker. Previously stored markers are harmless to old
+readers and are removed when a newer intake replica claims the row.
 
 The chart changes production scheduling: minute ticks replace five-minute ticks,
 with `Forbid`, pod resources, worker count and 1500-second run budget unchanged.

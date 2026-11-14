@@ -193,14 +193,21 @@ transactional job claims and recovery cadence are unchanged. See
 ## Retained seal proof rules
 
 `RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
-it). The repair coordinator reserves three quarters of its existing slots for
+it). The repair coordinator borrows up to half of its existing slots for
 newest-first `record_pending` jobs enqueued 60 seconds to two hours ago, polling
 the live head every 15 seconds independently of the saved sweep frontier.
-Fresh attempts have a 90-second limit and a 120-second retry spacing; the other
-slots retain the existing sweep and row limits. With one worker the existing
+Fresh attempts and ordinary backlog loans have a 90-second limit; fresh retry
+spacing is 120 seconds. Pending-job discovery retains half the original worker
+budget, its urgent deadline ordering and its ordinary-job reserve. Conversation
+discovery retains the other half plus unused job capacity. The checkpointed
+initial worker group starts before fresh borrowing, and idle fresh capacity
+returns to backlog work. With one worker the existing
 sweep runs alone. Successful fresh seals atomically set `available_at=0` so
 intake's due query sees them before ordinary retry wakes. Admission still checks
 the sealed barrier, retained audio, privacy generation, and provider policy.
+The seal transaction preserves live intake claims. Serving intake certifies its
+own retry clock only while fresh repair and dead-letter handling are enabled;
+disabled flags add no retry marker, and claiming removes any old marker.
 The CronJob uses minute ticks with `Forbid`, bounding scheduled restart gaps
 without overlapping repair pods. Disable the switch and restore
 `recordSealRepair.schedule="*/5 * * * *"` to restore previous scheduling.

@@ -686,6 +686,7 @@ def coordinate(
     attempted=lambda _: None,
     fresh=None,
     fresh_workers=0,
+    bootstrap_rows=0,
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
@@ -696,6 +697,9 @@ def coordinate(
     elapsed_by_disposition = Counter()
     if not 0 <= fresh_workers < workers or (fresh is not None and not fresh_workers):
         raise ValueError('fresh slots must leave at least one backlog slot')
+    if not 0 <= bootstrap_rows <= min(workers, len(pending)):
+        raise ValueError('bootstrap exceeds the guaranteed initial worker group')
+    bootstrap_remaining = bootstrap_rows
     fresh_pending, fresh_processes, seen = deque(), set(), {}
     active_paths = {}
     pending_aged_at = started
@@ -726,11 +730,15 @@ def coordinate(
                 fresh_at = clock() + 15
                 now = clock()  # Discovery time counts against the original run deadline.
             while len(active) < workers and now < deadline:
-                is_fresh = bool(fresh_pending and len(fresh_processes) < fresh_workers)
+                # Discovery checkpoints promise this initial group will be
+                # attempted. Start it before borrowing its ordinary capacity;
+                # otherwise an interruption could skip unattempted candidates.
+                is_fresh = bool(not bootstrap_remaining and fresh_pending and len(fresh_processes) < fresh_workers)
                 if is_fresh:
                     path, age = fresh_pending.popleft()
-                elif pending and len(active) - len(fresh_processes) < workers - fresh_workers:
+                elif pending:
                     path, age = pending.popleft()
+                    bootstrap_remaining = max(0, bootstrap_remaining - 1)
                 else:
                     break
                 if path in seen and (not is_fresh or now - seen[path] < config.FRESH_RETRY_SECONDS):
@@ -745,7 +753,10 @@ def coordinate(
                 else:
                     max_age = max(max_age, age)
                 seconds = min(row_seconds, deadline - now)
-                if is_fresh:
+                # The urgent/ordinary job leg retains its original half of the
+                # worker group and full row budget. Unused ordinary slots are
+                # lent to backlog, with a bound on how long fresh must wait.
+                if is_fresh or fresh is not None and len(active) - len(fresh_processes) >= workers - fresh_workers:
                     seconds = min(seconds, config.FRESH_ROW_SECONDS)
                 try:
                     process = launch(path, seconds, mode)
@@ -895,8 +906,10 @@ def run(*, progress=lambda _: None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
     workers, row_seconds, run_seconds, mode = config.settings()
-    fresh_slots = max(1, workers * 3 // 4) if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
-    sweep_workers = workers - fresh_slots
+    fresh_slots = workers // 2 if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
+    # Fresh borrows ordinary execution capacity; it never shrinks either
+    # discovery leg, the urgent allocation or the ordinary-job reserve.
+    sweep_workers = workers
     config.require_runtime()
     with silent_dependencies():
         from database._client import get_firestore_client
@@ -1043,6 +1056,7 @@ def run(*, progress=lambda _: None):
         attempted=attempted,
         fresh=FreshLane(client) if fresh_slots else None,
         fresh_workers=fresh_slots,
+        bootstrap_rows=min(workers, len(rows)),
     )
     report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
     if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
