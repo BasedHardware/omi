@@ -94,7 +94,7 @@
     "omi-private-cloud-sync": {
       "env": "BUCKET_PRIVATE_CLOUD_SYNC",
       "project": "based-hardware",
-      "note": "2026-11-02: David dropped the existing-stock Coldline-to-Archive proposal (large one-time operation cost); prod.json and validate_storage_lifecycle.py permit only the Coldline transition. The rollout handoff reports only playback Delete 30 d and batch Coldline live. prod.json still declares merged/ Delete 3 d and noncurrent .opus.enc Delete; a prod apply would install both, pending explicit clearance. The new-empty-bucket canonical-forward policy is separate.",
+      "note": "2026-11-05: David approved merged/ Delete 3 d and noncurrent Delete after 7 d scoped only to playback/ and merged/ (17:01/17:03Z approval record, lead2/coordinator af2845). prod.json re-declares playback Delete 30 d and batch Coldline; prod.rollback.json restores those two pre-change live rules. Raw-audio chunks/ .opus.enc noncurrent Delete remains pending explicit clearance and is forbidden by validate_storage_lifecycle.py. The 11-02 rejection of existing-stock Archive and the separate new-empty-bucket canonical-forward policy remain unchanged.",
       "protected_prefixes": ["chunks/"],
       "holds": ["source_audio"],
       "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"merged/": 3, "playback/": 30}, "noncurrent_cleanup": true,
