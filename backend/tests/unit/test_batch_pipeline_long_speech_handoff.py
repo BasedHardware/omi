@@ -4,6 +4,7 @@ Staging (2026-10-20): 104/109 quarantined empties with >=5 s worker-VAD speech w
 Vietnamese; repadding cannot make Parakeet TDT v3 transcribe a language it lacks.
 """
 
+import itertools
 import logging
 import time
 from types import SimpleNamespace
@@ -118,6 +119,61 @@ def test_partial_first_pass_words_keep_the_retry():
     state = {'stt_language': 'vi', 'speech_seconds': 30.0}
     assert long_speech_handoff(state, 'empty_asr')
     assert not long_speech_handoff(state, 'no_owned_words')
+
+
+def test_default_posture_arms_the_skip_through_the_safety_net(monkeypatch):
+    # The shipping posture: the recovery and disposition lanes dark, the
+    # ship-on safety net armed, the long-speech kill switch unset (on). The
+    # private flag expression was dark in exactly this posture, so every
+    # long-speech unit paid the doomed padded Parakeet pass the handoff
+    # exists to skip before landing in the same RecoveryWork custody the
+    # safety net had already armed.
+    monkeypatch.delenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', raising=False)
+    # 'pt-BR' reaches the Parakeet forward (its normalized class is supported)
+    # while its raw code sits outside PARAKEET_LANGUAGES: the exact class the
+    # language skip was staged for.
+    built, model, _, _ = worker('pt-BR', speech_seconds=8.0)
+    results = built.process_batch([item('a')])
+    assert model.transcribe.call_count == 1  # first pass only; no doomed padded retry
+    assert results == [RecoveryWork('a', padded_retry='skipped_long_speech')]
+
+
+def test_safety_off_drill_keeps_the_retry(monkeypatch):
+    # Ship-off drill: safety net off with both lanes dark. The boundary
+    # predicate answers exactly the private expression here, so the drill
+    # posture keeps the retry byte for byte.
+    monkeypatch.delenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    built, model, _, _ = worker('pt-BR', speech_seconds=8.0)
+    results = built.process_batch([item('a')])
+    assert model.transcribe.call_count == 2  # first pass + padded retry
+    assert results == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
+
+
+@pytest.mark.parametrize('recovery,disposition,safety', list(itertools.product([False, True], repeat=3)))
+def test_skip_arms_exactly_when_the_boundary_predicate_arms(monkeypatch, recovery, disposition, safety):
+    # The anti-drift property: the skip's flag posture is the boundary's own
+    # predicate answer, never a private expression that can diverge from the
+    # custody the unit actually receives.
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true' if recovery else 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true' if disposition else 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true' if safety else 'false')
+    from config.batch_pipeline_empty_asr import empty_ladder_handoff
+    from diarizer.batch_pipeline import long_speech_handoff
+
+    state = {'stt_language': 'vi', 'speech_seconds': 30.0}
+    expected = empty_ladder_handoff(
+        'empty_asr', recovery_enabled=recovery, disposition_enabled=disposition, safety_enabled=safety
+    )
+    assert long_speech_handoff(state, 'empty_asr', safety_enabled=safety) is expected
+    # no_owned_words never rides the language skip: Parakeet produced words,
+    # so the unit may be in its language.
+    assert not long_speech_handoff(
+        {'stt_language': 'vi', 'speech_seconds': 30.0}, 'no_owned_words', safety_enabled=safety
+    )
 
 
 def staged(context):

@@ -510,7 +510,7 @@ def pack_windows(windows, config):
 PARAKEET_LANGUAGES = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL['nvidia/parakeet-tdt-0.6b-v3'] - {'multi'}
 
 
-def long_speech_handoff(state: dict, reason: str) -> bool:
+def long_speech_handoff(state: dict, reason: str, *, safety_enabled: bool | None = None) -> bool:
     """Skip the padded Parakeet retry: it cannot recover speech in a language Parakeet lacks.
 
     Only a zero-word first pass whose intake recorded an STT language that is
@@ -518,6 +518,20 @@ def long_speech_handoff(state: dict, reason: str) -> bool:
     LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, and only while the
     quarantine-recovery handoff exists. Units without a recorded intake language
     (older staged audio, record lane) keep the retry.
+
+    The handoff exists only while the boundary it hands into accepts the unit:
+    the same ``empty_ladder_handoff`` posture the assemble_words boundary
+    answers with, not a private flag expression that can drift from it. The
+    safety net dominates here exactly as it does there — under the shipping
+    posture (the recovery and disposition lanes dark, the ship-on safety net
+    armed) the private expression disarmed this skip and every long-speech
+    unit paid the doomed padded Parakeet pass the handoff exists to skip
+    before landing in the same RecoveryWork custody the safety net had
+    already armed.
+
+    ``safety_enabled`` mirrors the boundary's computed posture (the words
+    provider gate rides with it); ``None`` reads the switch directly so pure
+    callers can probe the shipping posture without staging a worker.
     """
     language = state.get('stt_language')
     return (
@@ -525,7 +539,12 @@ def long_speech_handoff(state: dict, reason: str) -> bool:
         and isinstance(language, str)
         and language not in PARAKEET_LANGUAGES
         and state.get('speech_seconds', 0.0) >= LONG_SPEECH_HANDOFF_SECONDS
-        and (empty_asr_recovery_enabled() or empty_asr_disposition_enabled())
+        and empty_ladder_handoff(
+            reason,
+            recovery_enabled=empty_asr_recovery_enabled(),
+            disposition_enabled=empty_asr_disposition_enabled(),
+            safety_enabled=safety_net_enabled() if safety_enabled is None else safety_enabled,
+        )
         and long_speech_handoff_enabled()
     )
 
@@ -1425,7 +1444,7 @@ class PipelineWorker:
                             else (state['samples'], 0.0)
                         )
                         fits_retry = padded_retry_fits(retry_samples, self.config.max_padded_seconds)
-                        if long_speech_handoff(state, reason):
+                        if long_speech_handoff(state, reason, safety_enabled=safety):
                             # Repadding cannot make Parakeet transcribe a language it
                             # does not have. Hand off to recovery without a retry.
                             words = []
