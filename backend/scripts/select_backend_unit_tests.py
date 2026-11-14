@@ -452,6 +452,7 @@ AREA_TESTS = (
         (),
         (
             'tests/unit/test_monitoring_*.py',
+            'tests/unit/test_firestore_unattributed_reads_alert.py',
             'tests/unit/test_timeliness_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
             'tests/unit/test_firestore_attribution_charts.py',

@@ -569,3 +569,9 @@ def test_result_copies_only_exact_true_from_job(stamp, expected):
     entry = merge_for(store).commit_next('heavy', NOW)
     assert entry['fresh_capture'] is expected
     assert store.rows['results', 'unit']['fresh_capture'] is expected
+
+
+@pytest.fixture(autouse=True)
+def legacy_fresh_probe(monkeypatch):
+    """Keep the existing probe-path contracts running with the new gate switched off."""
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'false')
