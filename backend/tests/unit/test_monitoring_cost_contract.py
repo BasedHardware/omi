@@ -59,3 +59,22 @@ def test_detects_direct_and_metric_name_selector_consumers(query):
 
 def test_metric_names_are_matched_as_whole_identifiers():
     assert not referenced_metrics('my_prober_probe_duration_seconds_count_backup', DROPPED)
+
+
+def _mib(value) -> int:
+    text = str(value)
+    for suffix, factor in (('Gi', 1024), ('GiB', 1024), ('Mi', 1), ('MiB', 1)):
+        if text.endswith(suffix):
+            return int(float(text[: -len(suffix)]) * factor)
+    raise AssertionError(f'unrecognised memory quantity {text!r}')
+
+
+def test_grafana_memory_limit_covers_the_measured_burst_and_go_soft_limit_sits_below_it():
+    """Grafana was OOM-killed at 2Gi on 2026-11-12 (peak 2048Mi; steady 220-490Mi).
+    The limit must stay above that burst and GOMEMLIMIT must sit below the limit so the
+    runtime collects before the kernel kills (FC-grafana-memory-limit-below-burst-peak)."""
+    grafana = yaml.safe_load(VALUES.read_text())['grafana']
+    limit = _mib(grafana['resources']['limits']['memory'])
+    soft = _mib(grafana['env']['GOMEMLIMIT'])
+    assert limit >= 4 * 1024
+    assert 0 < soft < limit

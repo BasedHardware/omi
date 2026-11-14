@@ -54,6 +54,24 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def fresh_first_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key, *, ready):
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -138,6 +156,9 @@ class MemoryStore:
         return min(values) if values else None
 
     def quarantine_fenced(self, segment_id, now):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
+    def cancel_fenced_recovery(self, segment_id):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
     # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.

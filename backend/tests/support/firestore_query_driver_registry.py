@@ -205,6 +205,8 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
     'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
@@ -379,11 +381,13 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
-# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first.
+# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first, over the
+# purge obligations or the accepted-delete erasure obligations.
 _add(
     DriverEntry(
         'database.conversation_batch_purge_jobs.due_jobs',
         neutrals={'now': _NOW, 'limit': _LIMIT},
+        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
@@ -1131,6 +1135,31 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
+
+
+def _due_marker_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/due-marker-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/due_marker_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.finalization_due_marker_sweep.remark_missing_due_markers',
+        domains={'now': [T0]},
+        neutrals={
+            'limit': _LIMIT,
+            'stale_after': (timedelta(hours=24), 'age bound; with the pinned now the cutoff is fixed, shape unchanged'),
+        },
+        setup=_due_marker_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
@@ -3222,6 +3251,17 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
     CoveredByEntry(
         'database.monthly_usage_totals._month_rows',
         covered_by=('database.monthly_usage_totals.read_monthly_totals',),
@@ -3246,6 +3286,12 @@ _add(
     )
 )
 _add(DriverEntry('database.user_usage.get_daily_history_for_month', base={'uid': UID, 'date': T0}))
+_add(
+    DriverEntry(
+        'utils.backfill_hours_cap.transcribed_seconds_for_day',
+        base={'uid': UID, 'day': FROZEN_TODAY},
+    )
+)
 _add(DriverEntry('database.user_usage.get_hourly_history_for_today', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(

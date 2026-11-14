@@ -437,7 +437,7 @@ class Projector:
         self.finish_backoff = FinishBackoff(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
-        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES)
+        self.assignment_discovery = ProjectionDiscovery(store, states=PROJECTION_ASSIGNMENT_STATES, recent=True)
         self.finish_discovery = ProjectionDiscovery(store, states=PROJECTION_FINISH_STATES)
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
@@ -1759,10 +1759,7 @@ class Projector:
                 )
             finally:
                 if defer:
-                    # A blocked or failed walk must still stamp the row: the
-                    # filtered page cannot see a row without a clock, and the
-                    # survey runs once per process. A deferral failure is its
-                    # own error, not a second walk error.
+                    # A failed deferral leaves the row due for the next page.
                     try:
                         self.finish_backoff.settled(segment_id, entry, result)
                     except Exception as error:
@@ -1771,7 +1768,4 @@ class Projector:
                             error_type(error),
                             error_site_field(error),
                         )
-        # The survey closes only when its last page is durably stamped; a failed
-        # stamp leaves it open so the next tick's unfiltered page finds the row.
-        self.finish_backoff.survey_done()
         return contention

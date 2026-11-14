@@ -258,6 +258,7 @@ class StorageSyncImpl implements StorageSync {
       // longer pairs with): drop the stale local row, nothing to delete.
       _wals = _wals.where((w) => w.id != wal.id).toList();
       listener.onWalUpdated();
+      if (wal.status != WalStatus.synced) throw StateError("Owning device is unavailable; only cached row removed");
       return;
     }
     // A delete that was attempted drops the row whatever the reply said: the
@@ -265,14 +266,15 @@ class StorageSyncImpl implements StorageSync {
     // stays-addressable) and the next listing re-adds a file that survived.
     // Only a delete that never reached the device — no connection — keeps the
     // row, so it cannot resurrect as "new" on the next listing (#14688).
-    final attempted = await _deleteWalsOnDevice([wal]);
-    if (!attempted.contains(wal.id)) {
+    final outcome = await _deleteWalsOnDevice([wal]);
+    if (!outcome.attempted.contains(wal.id)) {
       Logger.debug('StorageSync.deleteWal: delete of ${wal.id} never reached the device, keeping WAL');
       listener.onWalUpdated();
       return;
     }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
+    if (!outcome.confirmed.contains(wal.id)) throw StateError("Device deletion was not confirmed");
   }
 
   /// Cached rows of [status] recorded by a device other than the connected
@@ -295,13 +297,16 @@ class StorageSyncImpl implements StorageSync {
     // covers drops; the other device's pending rows keep their local rows.
     final stale = _previousDeviceWalIds(WalStatus.synced);
     final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
-    final attempted = await _deleteWalsOnDevice(toDelete);
+    final outcome = await _deleteWalsOnDevice(toDelete);
     _wals = _wals
-        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !attempted.contains(w.id)))
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !outcome.attempted.contains(w.id)))
         .toList();
     _logStaleRowsDropped('synced', stale.length);
-    _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, attempted);
+    _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, outcome.attempted);
     listener.onWalUpdated();
+    if (!outcome.confirmed.containsAll(toDelete.map((w) => w.id))) {
+      throw StateError("Some device deletions were not confirmed");
+    }
   }
 
   @override
@@ -310,18 +315,22 @@ class StorageSyncImpl implements StorageSync {
     // deleteAllSyncedWals); they drop locally like the single-row path.
     final stale = _previousDeviceWalIds(WalStatus.miss);
     final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
-    final attempted = await _deleteWalsOnDevice(toDelete);
+    final outcome = await _deleteWalsOnDevice(toDelete);
     // Attempted deletes drop their rows whatever the reply said (a positional
     // index a delete may have removed is burned; the listing re-adds
     // survivors). Rows the clear never attempted — no device, no connection —
     // stay listed, so a clear run with the pendant away does not remove rows
     // whose audio is still on the device and resurrect them as "new"
     // recordings on the next scan (#14688).
-    _wals =
-        _wals.where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !attempted.contains(w.id))).toList();
+    _wals = _wals
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !outcome.attempted.contains(w.id)))
+        .toList();
     _logStaleRowsDropped('miss', stale.length);
-    _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, attempted);
+    _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, outcome.attempted);
     listener.onWalUpdated();
+    if (stale.isNotEmpty || !outcome.confirmed.containsAll(toDelete.map((w) => w.id))) {
+      throw StateError("Some device deletions were not confirmed");
+    }
   }
 
   void _logStaleRowsDropped(String cleared, int count) {
@@ -345,13 +354,13 @@ class StorageSyncImpl implements StorageSync {
   /// first to keep remaining fileNums valid. Returns the ids whose delete was
   /// sent to the device; a delete that never left the phone (no device, no
   /// connection) attempts nothing and confirms nothing.
-  Future<Set<String>> _deleteWalsOnDevice(List<Wal> wals) async {
-    final attempted = <String>{};
-    if (wals.isEmpty || _device == null) return attempted;
-    final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+  Future<({Set<String> attempted, Set<String> confirmed})> _deleteWalsOnDevice(List<Wal> wals) async {
+    final attempted = <String>{}, confirmed = <String>{};
+    if (wals.isEmpty || _device == null || _isSyncing) return (attempted: attempted, confirmed: confirmed);
+    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
-      return attempted;
+      return (attempted: attempted, confirmed: confirmed);
     }
     final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
@@ -361,6 +370,7 @@ class StorageSyncImpl implements StorageSync {
         final ok = await connection.deleteStorageFile(wal.fileNum);
         Logger.debug('StorageSync._deleteWalsOnDevice: deleted fileNum=${wal.fileNum} ok=$ok');
         if (ok) {
+          confirmed.add(wal.id);
           // Firmware shifts remaining indices down by 1 for any file above the deleted one.
           for (final other in _wals) {
             if (deletedIds.contains(other.id)) continue;
@@ -373,7 +383,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
-    return attempted;
+    return (attempted: attempted, confirmed: confirmed);
   }
 
   @override

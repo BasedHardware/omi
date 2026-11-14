@@ -115,7 +115,7 @@ void main() {
     test('drops a recording from the previous device without deleting on the new one', () async {
       final stale = _sdWal(device: 'omi-0');
       final s = sync(wals: [stale]);
-      await s.deleteWal(stale);
+      await expectLater(s.deleteWal(stale), throwsStateError);
       expect(await s.getMissingWals(), isEmpty);
     });
 

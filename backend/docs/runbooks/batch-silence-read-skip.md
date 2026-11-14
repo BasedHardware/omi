@@ -26,6 +26,14 @@ multipart receipts, partial ledgers and prior speech charges; those use the norm
 completion path. The completing unit’s snapshots are reused only inside that same
 transaction. Every sibling still enrolls its job/result in the conflict set.
 
+When an upload has coalesced original receipts, their existing identity reads and
+atomic completion fan-out remain. Original receipt expiry is not extended on
+replay. The post-commit allowance settlement and transcription observers also
+remain: silent completion supplies zero speech and the billing generation from
+the authorizing transaction. A replay uses the stored billing generation for
+settlement and does not emit another transcription advance. Observer failures
+retain their existing handling; no observer or T2 threshold is disabled.
+
 Record-origin/native-record units retain their ordinary path: even silence may
 need to replace live-preview text in a conversation. Empty ASR and
 `no_recoverable_speech` retain their existing paths and evidence requirements.
@@ -42,7 +50,7 @@ skip the redundant assignment pre-check and follow-up transaction.
 | D4/D5 redundant pre-check | Skipped for ordinary silent units: assignment immediately rechecks the same session rows, privacy authority and predecessor in its authorizing transaction. |
 | D4/D5 follow-up `ready()` transaction | Skipped: assignment already wrote the zero-output receipt as ready. |
 | D7 completion sibling rows | Kept in the completion transaction; the current unit reuses its session snapshots. |
-| D8 accounting prepare | Skipped only after every sibling is transactionally verified as silent and ready; zero usage needs no plan/hourly attribution reads. |
+| D8 accounting prepare | Skipped only after every sibling is transactionally verified as silent and ready; zero usage needs no plan/hourly attribution reads. The zero-usage ledger stamp and existing post-commit observers stay. |
 | D9 visible/redirect walks | Skipped for verified all-silent completion; no output IDs exist. |
 | D10 additional completion guard | Skipped only for verified all-silent completion; session preparation already performed the live owner/generation/source fence in the same transaction, and no visible IDs are published. |
 | Retention and publication acknowledgement | Kept unchanged, including their reads and fences. |
@@ -85,9 +93,13 @@ qualified attribution measurement, in addition to the above family totals. This
 PR does not add a high-cardinality unit label or claim that this gap is solved.
 
 A strict read-before-write document fake exercises the real assignment, follow-up
-and completion functions for a two-silent-unit upload: **84 → 35 document lookups**
-(**58.3% fewer**) before publication/retention. It uses no warm cache. This is a
-local path budget, **not** the acceptance test’s whole-family billed-read ratio.
+and completion functions for a two-silent-unit upload. Re-measured after the
+2026-11-14 integration with allowance observers: **89 → 40 document lookups**
+(**55.1% fewer**) before publication/retention, using no warm cache. The original
+2026-11-12 measurement was 84 → 35 (58.3% fewer). These are local path budgets,
+**not** the acceptance test’s whole-family billed-read ratio. Coalesced-original
+receipt reads, retention, publication and observers must remain included in the
+qualified production attribution where applicable.
 
 ## Deployment and verification handoff
 

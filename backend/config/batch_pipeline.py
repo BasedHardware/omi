@@ -581,13 +581,11 @@ PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
 def projection_finish_backoff_enabled() -> bool:
     """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
 
-    Dark read lever: with this off the finish page keeps its exact shape and no
-    result field is written. With it on, a finish walk that changed nothing
-    writes a durable next-attempt clock on the row and the page skips rows whose
-    clock has not passed, so a replay of already-projected work costs no reads.
-    A state change clears the clock in the same transaction, so no obligation
-    waits on it. Rollback is this one switch; the field is additive and unused
-    when off, so no backfill is needed.
+    Off keeps the legacy query and disables no-change deferral transactions.
+    Clock writes on state transitions are unconditional on every writer host.
+    On uses the due-clock filter only after the shared backfill marker exists;
+    until then it keeps the legacy page without per-row stamping. Rollback and
+    re-enable are safe because flag-off writers keep maintaining the clock.
     """
     from config.policy import kill_switch
 
@@ -640,6 +638,52 @@ def recovered_merge_release_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def provider_backlog_release_enabled() -> bool:
+    """Opt-in: the ordered merge may commit provider-route catch-up rows.
+
+    Off (the default), a provider row that is not stamped fresh at admission stays
+    ``result_ready``: only an owner's fresh provider rows commit, through fresh-first. On
+    2026-11-13 the first hour of provider merge membership released about 230,000 already
+    transcribed backlog rows an hour; they filled the projection owner queue, which has no
+    fresh class, and 45% of every user's fresh results were still unprojected 10-20 minutes
+    after commit. The backlog is released by a metered job, not by owner wakes. ``true``
+    restores release paced only by the catch-up depth hold.
+    """
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED')
+
+
+def provider_fresh_capture_lag_seconds() -> int:
+    """Longest capture-to-admission lag at which a provider-route upload is still fresh (2026-11-13).
+
+    Default 86400. The GPU lane keeps ``FRESH_CAPTURE_LAG_SECONDS`` (600). While the provider
+    backlog is held, a provider row not stamped fresh does not commit, and it cannot commit in
+    plain order either because the owner's held rows sit in front of it. With the shared
+    10-minute bar, every provider upload that arrived late was therefore not delivered: 167 of
+    1,195 provider admissions in 36 minutes on 2026-11-13, 103 of them within a day of capture,
+    none committed. A device that was offline for a day and then syncs is normal use.
+    ``600`` restores the shared bar; values are clamped to 600-86400.
+    """
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS', '86400'), 86400, 86400, 600)
+
+
+def provider_merge_membership_enabled() -> bool:
+    """Kill switch: provider-route units take part in the ordered merge the way GPU units do.
+
+    Provider admission stamps ``fresh_capture``, provider settle stamps ``ready_at`` and wakes
+    one coalesced owner drain, and provider rows admitted before the stamp count as catch-up.
+    Without these, a settled provider unit was found only by the 100-row maintenance page and
+    could never use the head wait or fresh-first (2026-11-13: 1.68M transcribed provider units
+    unmerged, 97-100% of each day's settles). Off restores the earlier behaviour for new writes;
+    rows already stamped keep their fields.
+    """
+    from config.policy import kill_switch
+
+    # Read several times per merge transaction attempt: no per-read switch log.
+    return kill_switch('BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED', log=False)
 
 
 def recovery_owner_only_enabled() -> bool:
@@ -749,6 +793,31 @@ def projection_pump_sweep_pages() -> int:
 
 def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
+
+
+def projection_recent_discovery_seconds() -> int:
+    """Seconds of the newest commits that up to half of each assignment discovery page
+    reads from (2026-11-13); 0 is off.
+
+    Discovery pages the pending results oldest first, 100 rows a tick per process. With
+    154,000 pending rows a newly committed result waited about 15 minutes to be seen at
+    all, and GPU-route commits have no other wake. Each tick now also reads up to half a
+    page from a random point inside this window and offers each row there once per
+    process; the rest of the page keeps walking the whole log. 0 restores the single
+    cursor and removes the main cursor's 30-minute restart."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '120'), 120, 3600, 0)
+
+
+def owner_drain_first_turn_seconds() -> int:
+    """Seconds a newly requested owner's first projection turn may run (2026-11-13); 0 is off.
+
+    A productive turn that ends with rows left makes its owner a backlog owner. Backlog
+    owners keep the full two-minute turn but wait in their own queue, behind newly
+    requested owners, and end a turn at the next step when one of those is waiting for a
+    slot. Without this a few hundred backlog owners hold every slot for two minutes each
+    and an owner with a handful of fresh rows waits behind all of them. 0 restores the
+    single FIFO queue."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', '15'), 15, 120, 0)
 
 
 def projection_drain_claim_aware_enabled() -> bool:

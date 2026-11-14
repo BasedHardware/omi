@@ -110,11 +110,16 @@ async def test_accepted_upload_drains_after_rollback_with_encrypted_context_and_
     class Worker:
         calls = 0
 
-        def process_batch(self, items):
+        def process_batch(self, items, *, authorize_dispatch=None):
             self.calls += 1
             work = items[0]
             context = read_context(artifacts.fetch_audio(work))
             assert context['job_id'] == job_id and context['owner_id'] == uid
+            if authorize_dispatch is not None:
+                # Match the real worker's post-decode, pre-ASR authorization recheck.
+                assert authorize_dispatch({work.segment_id for work in items}) == {
+                    work.segment_id: None for work in items
+                }
             payload = {
                 'words': [
                     {'word': word, 'timestamp': [index * 0.2, (index + 1) * 0.2]}

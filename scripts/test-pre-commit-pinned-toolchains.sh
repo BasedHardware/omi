@@ -313,6 +313,9 @@ mv "$TMPDIR/package_config.json" "$REPO/app/.dart_tool/package_config.json"
 # alone (no reformat, no toolchain refusal); a resolved file is still formatted ---
 git -C "$REPO" reset -q --hard
 git -C "$REPO" checkout -q -b incoming
+mkdir -p "$REPO/desktop/macos/Desktop" "$REPO/desktop/macos/scripts"
+printf 'let incoming = 1\n' >"$REPO/desktop/macos/Desktop/Incoming.swift"
+printf 'let resolved = 1\n' >"$REPO/desktop/macos/Desktop/Resolved.swift"
 printf 'void incoming() {  }\n' >"$REPO/app/lib/incoming.dart"
 printf 'void resolved() {  }\n' >"$REPO/app/lib/resolved.dart"
 printf 'const incoming = {x:1}\n' >"$REPO/web/frontend/src/incoming.ts"
@@ -326,7 +329,22 @@ git -C "$REPO" merge -q --no-commit --no-ff incoming >/dev/null 2>&1
 printf 'void resolved() {   }\n' >"$REPO/app/lib/resolved.dart"
 git -C "$REPO" add app/lib/resolved.dart
 rm -rf "$REPO/web/frontend/node_modules"
+# Unchanged incoming Swift must not require the unavailable macOS toolchain.
 run_hook >/dev/null
+test "$(cat "$REPO/desktop/macos/Desktop/Incoming.swift")" = "let incoming = 1"
+printf 'let resolved = 2\n' >"$REPO/desktop/macos/Desktop/Resolved.swift"
+git -C "$REPO" add desktop/macos/Desktop/Resolved.swift
+printf '#!/bin/sh\nexit 0\n' >"$STUBS/xcrun"
+cat >"$REPO/desktop/macos/scripts/swift-format-wrapper.sh" <<'STUB'
+#!/bin/sh
+for f in "$@"; do
+  case "$f" in *.swift) printf 'SWIFT_FORMATTED\n' >"$f" ;; esac
+done
+STUB
+chmod +x "$STUBS/xcrun" "$REPO/desktop/macos/scripts/swift-format-wrapper.sh"
+run_hook >/dev/null
+test "$(cat "$REPO/desktop/macos/Desktop/Incoming.swift")" = "let incoming = 1"
+test "$(git -C "$REPO" show :desktop/macos/Desktop/Resolved.swift)" = "SWIFT_FORMATTED"
 test "$(cat "$REPO/app/lib/incoming.dart")" = "void incoming() {  }"
 test "$(cat "$REPO/web/frontend/src/incoming.ts")" = "const incoming = {x:1}"
 grep -q 'DART_FORMATTED' "$REPO/app/lib/resolved.dart"
@@ -447,5 +465,16 @@ grep -q 'CLANG_FORMATTED' "$REPO/omi/firmware/omi/src/safe_mode.c"
 git -C "$REPO" diff --cached -- omi/firmware/omi/src/safe_mode.c | grep -q 'CLANG_FORMATTED'
 git -C "$REPO" reset -q --hard
 rm -f "$STUBS/clang-format"
+
+# Ordinary Swift edits still require the macOS toolchain.
+mkdir -p "$REPO/desktop/macos/Desktop"
+printf 'let edited = 1\n' >"$REPO/desktop/macos/Desktop/Edited.swift"
+git -C "$REPO" add desktop/macos/Desktop/Edited.swift
+if run_hook PATH="$MINIMAL_BIN" >"$TMPDIR/swift-out.txt" 2>&1; then
+  echo "FAIL: Swift edit accepted without xcrun" >&2
+  exit 1
+fi
+grep -q 'xcrun not found' "$TMPDIR/swift-out.txt"
+test "$(git -C "$REPO" show :desktop/macos/Desktop/Edited.swift)" = "let edited = 1"
 
 echo "pre-commit pinned-toolchain refusal tests passed"

@@ -1,7 +1,8 @@
 """R9: real transactional silence receipts, privacy fences and zero-speech completion."""
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +17,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.projection import Projector
 from utils import fair_use  # Import the legacy metering dependency during collection, outside the call CPU budget.
+from utils.stt import allowance_batch
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
 
@@ -226,3 +228,86 @@ def test_silence_completion_rechecks_privacy_after_assignment(lane, fence):
     with pytest.raises(BatchPrivacyBlocked):
         complete(lane)
     assert lane.client.rows == before
+
+
+def test_silent_completion_keeps_zero_usage_observers_and_replay_generation(lane, monkeypatch):
+    from database import pipeline_ledger
+
+    lane.binding = replace(lane.binding, target_conversation_id='capture')
+    lane.user.collection('conversations').document('capture').create({'id': 'capture'})
+    for sid in lane.binding.segment_ids:
+        lane.client.rows[lane.store.ref('jobs', sid).path]['projection_binding'] = asdict(lane.binding)
+    settlements, transcriptions = [], []
+
+    def settled(client, owner, content, generation, segments, now):
+        ledger = lane.ledger.get().to_dict()
+        assert ledger['status'] == 'completed'
+        assert ledger['usage_committed_seconds'] == ledger['allowance_billed_seconds'] == 0
+        assert client is lane.client
+        assert (owner, content, segments) == (lane.binding.owner_id, lane.binding.content_id, lane.binding.segment_ids)
+        settlements.append((generation, now))
+
+    monkeypatch.setattr(allowance_batch, 'observe_billed_batch', settled)
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: transcriptions.append((args, kwargs)))
+    assign(lane, 'a')
+    assert complete(lane) is None
+    assert not settlements and not transcriptions
+    assign(lane, 'b')
+    result = complete(lane)
+    assert result['outcome'] == 'expected_silence'
+    stamp = datetime.fromtimestamp(10000, timezone.utc)
+    assert settlements == [(stamp, 10000)]
+    args, kwargs = transcriptions.pop()
+    assert args == (lane.binding.owner_id, 'capture', pipeline_ledger.TRANSCRIBED)
+    assert kwargs['speech_seconds'] == 0 and kwargs['has_speech'] is False
+    assert kwargs['now'] == 10000 and kwargs['firestore_client'] is lane.client
+    before = deepcopy(lane.client.rows)
+    assert lane.store.complete('b', lane.binding, 11000, None, policy=lane.policy) == result
+    assert settlements == [(stamp, 10000), (stamp, 11000)]
+    assert not transcriptions
+    assert lane.client.rows == before
+
+
+@pytest.mark.parametrize('mismatch', [None, 'owner', 'generation', 'target', 'content', 'missing'])
+def test_silent_completion_preserves_coalesced_original_receipts(lane, mismatch):
+    member = {'job_id': 'original-job', 'content_id': 'original-content', 'original_units': 3}
+    lane.client.rows[lane.ledger.path]['coalescing'] = {'group_id': 'group', 'members': [member]}
+    intake = lane.store.ref('intakes', member['job_id'])
+    original = sync_content_ledger_ref(lane.client, lane.binding.owner_id, member['content_id'])
+    intake.create(
+        {
+            **member,
+            'owner_id': lane.binding.owner_id,
+            'conversation_id': lane.binding.target_conversation_id,
+            'privacy_generation': lane.binding.privacy_generation,
+            'coalesce_group': 'group',
+        }
+    )
+    original.create({'job_id': member['job_id'], 'dispatch_protocol': 'batch_v1', 'status': 'processing'})
+    assign(lane, 'a')
+    assign(lane, 'b')
+    if mismatch:
+        if mismatch == 'missing':
+            del lane.client.rows[intake.path]
+        else:
+            field, value = {
+                'owner': ('owner_id', 'foreign'),
+                'generation': ('privacy_generation', 1),
+                'target': ('coalesce_target', 'foreign'),
+                'content': ('content_id', 'foreign'),
+            }[mismatch]
+            lane.client.rows[intake.path][field] = value
+        before = deepcopy(lane.client.rows)
+        with pytest.raises(ValueError, match='identity'):
+            complete(lane)
+        assert lane.client.rows == before
+        return
+    result = complete(lane)
+    assert result['outcome'] == 'expected_silence'
+    row = original.get().to_dict()
+    assert row['status'] == 'completed'
+    assert row['result'] == {**result, 'total_segments': 3}
+    assert intake.get().to_dict()['coalesce_target'] == lane.binding.job_id
+    before = deepcopy(lane.client.rows)
+    assert lane.store.complete('b', lane.binding, 11000, None, policy=lane.policy) == result
+    assert lane.client.rows == before  # Replays do not extend original retention.

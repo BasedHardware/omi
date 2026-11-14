@@ -781,3 +781,29 @@ async def test_full_overflow_list_preserves_cached_close_debt_until_cleanup(worl
     await cache.persist_pending()
     assert not cache.marker_retry and not cache.close_debt
     assert any('cached' in call.args[1] for call in projection.record_projection_rebuild.mark_many.call_args_list)
+
+
+def test_full_discovery_names_its_cause_once_per_listing(world):
+    def counts():
+        return {cause: projection.FULL_DISCOVERIES.labels(cause=cause)._value.get() for cause in projection.FULL_CAUSES}
+
+    def delta(before):
+        return {cause: value - before[cause] for cause, value in counts().items() if value != before[cause]}
+
+    cache = projection.PusherAudioProjection('u')
+    before = counts()
+    cache.refresh('c', [world.add(100)])
+    assert delta(before) == {'no_inventory': 1}
+    cache.refresh('c', [world.add(101)])  # incremental append pays no discovery
+    assert delta(before) == {'no_inventory': 1}
+    world.clock[0] += 300
+    cache.refresh('c', [world.add(102)])
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1}
+    cache.refresh('c', [world.add(50)])  # older than the cached tail needs listing order
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1, 'order_fallback': 1}
+    world.conflict[0] = True
+    cache.refresh('c', [world.add(103)])
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1, 'order_fallback': 1, 'cas_conflict': 1}
+    cache.refresh('c', [world.add(104)], force=True)
+    assert delta(before)['forced'] == 1
+    assert len(world.lists) == sum(delta(before).values())

@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -165,6 +166,21 @@ class PostgresTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
+        return self._locked_query_row(*row) if row else None
+
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        state = "AND state = 'result_ready' " if ready else ''
+        row = self.conn.execute(
+            "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+            f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1",
+            (self.store.namespace, owner_key),
+        ).fetchone()
         return self._locked_query_row(*row) if row else None
 
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
@@ -445,6 +461,32 @@ class PostgresStore:
 
         return self.run(revoke)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revoke a prepared/running recovery when privacy blocks; same fence recheck and revoke-only write as Firestore."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        def cancel(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                tx.check_privacy(
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                cancelled = {**job, 'recovery_state': 'cancelled'}
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, cancelled)
+                return True
+            return False
+
+        return self.run(cancel)
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         """Same fence recheck and available_at-only change as the Firestore privacy defer."""
         from database.batch_pipeline_recovery import privacy_defer_update
@@ -469,6 +511,11 @@ class PostgresStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_page(
         self,

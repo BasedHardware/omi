@@ -93,6 +93,8 @@ async def test_drain_shuffles_selected_page_before_admission(monkeypatch):
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '3')
     monkeypatch.setenv('RECORD_DRAIN_CONCURRENCY', '1')
     monkeypatch.setattr(live.random, 'shuffle', lambda segments: segments.reverse())
+    # Paging/shuffle test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for segment in ('first', 'second', 'third'):
         store.rows['jobs', segment] = {
@@ -229,6 +231,8 @@ async def test_record_drain_uses_configured_page_and_reports_full(monkeypatch, c
     from utils.batch_pipeline import live
 
     monkeypatch.setenv('RECORD_DRAIN_BATCH', '2')
+    # Page-size test: no-op admissions; pacing is covered in test_record_drain_pacing.
+    monkeypatch.setenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'off')
     store = MemoryStore()
     for i in range(count):
         store.rows['jobs', str(i)] = {'owner_id': f'synthetic-{i}', 'state': 'record_pending', 'available_at': 0}
@@ -441,6 +445,81 @@ def incoming():
             }
         ],
     }
+
+
+def _ledger_documents(monkeypatch, documents):
+    """Route ledger writes through the real transition planner over an in-memory store."""
+    from database import pipeline_ledger
+
+    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, **fields):
+        plan = pipeline_ledger.plan_advance(documents.get((uid, capture_id)), stage, now=now, **fields)
+        if plan.doc is None:
+            return False
+        plan.doc['owner_key'] = pipeline_ledger.owner_key(uid)
+        documents[(uid, capture_id)] = plan.doc
+        return True
+
+    monkeypatch.setattr(pipeline_ledger, 'advance', advance)
+
+
+def _admission_policy(monkeypatch, live, *, claim):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(live, 'resolve_batch_policy', lambda uid: object())
+    monkeypatch.setattr(live, 'record_capture_eligible', lambda uid, conversation, policy=None: True)
+    monkeypatch.setattr(live, 'ramp_admission_policy', lambda uid, policy: SimpleNamespace(live_record_enabled=True))
+    monkeypatch.setattr(live, 'claim_record_lane_owner', lambda *args, **kwargs: claim())
+
+
+def test_admission_writes_capturing_once_and_never_reopens_a_later_stage(monkeypatch):
+    from utils.batch_pipeline import live
+
+    documents = {}
+    _ledger_documents(monkeypatch, documents)
+    _admission_policy(monkeypatch, live, claim=lambda: datetime.fromtimestamp(120, timezone.utc))
+    conversation = recording(
+        status='processing', record_lane_owner=None, updated_at=datetime.fromtimestamp(100, timezone.utc)
+    )
+    assert live.reserve_recording('synthetic', conversation) == 'batch_live_v1'
+    assert documents[('synthetic', 'record')]['stage'] == 'capturing'
+    # A finalizer replay finds the claimed owner and must not count a second admission.
+    assert live.reserve_recording('synthetic', dict(conversation)) == 'batch_live_v1'
+    assert [entry['stage'] for entry in documents[('synthetic', 'record')]['transitions']] == ['capturing']
+    # A capture that already sealed keeps its forward stage; admission never rewinds it.
+    documents[('synthetic', 'record')] = {
+        **documents[('synthetic', 'record')],
+        'stage': 'sealed',
+        'revision': documents[('synthetic', 'record')]['revision'],
+    }
+    assert live.reserve_recording('synthetic', dict(conversation)) == 'batch_live_v1'
+    assert documents[('synthetic', 'record')]['stage'] == 'sealed'
+
+
+def test_admission_ledger_failure_never_blocks_the_real_admission(monkeypatch, caplog):
+    from database import pipeline_ledger
+    from utils.batch_pipeline import live
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('synthetic ledger outage')
+
+    monkeypatch.setattr(pipeline_ledger, 'advance', broken)
+    _admission_policy(monkeypatch, live, claim=lambda: datetime.fromtimestamp(120, timezone.utc))
+    conversation = recording(
+        status='processing', record_lane_owner=None, updated_at=datetime.fromtimestamp(100, timezone.utc)
+    )
+    assert live.reserve_recording('synthetic', conversation) == 'batch_live_v1'
+    assert 'event=batch_live_ledger outcome=error stage=capturing' in caplog.text
+
+
+def test_admission_writer_ignores_an_identityless_or_deleted_capture(monkeypatch):
+    from database import pipeline_ledger
+    from utils.batch_pipeline import live
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    assert not live.observe_admitted('synthetic', {'id': None})
+    assert not live.observe_admitted('synthetic', {'id': 'record', 'deleted': True})
+    assert not writes
 
 
 def test_cohort_requires_both_flags_and_uses_the_sync_hash(monkeypatch):

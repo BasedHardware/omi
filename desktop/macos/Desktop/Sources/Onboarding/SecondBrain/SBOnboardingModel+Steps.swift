@@ -349,7 +349,7 @@ extension SBOnboardingModel {
   /// every later automatic restore read this as the user's standing intent instead
   /// of force-enabling Rewind for someone who just declined it.
   func answerScreen() {
-    AssistantSettings.shared.screenAnalysisEnabled = scrState == .on
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(scrState == .on, push: false)
     advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files)
   }
   /// A granted Files step builds the local-file profile. A skipped step must

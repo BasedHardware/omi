@@ -715,6 +715,17 @@ recovery behavior.
 
 ## Funded transcription cap
 
+The SCA-1750 watch-only phase uses a shared transactional shadow ledger for
+verified monthly billing, operation reservations, and daily-budget PTT settlement.
+`STT_FREE_ALLOWANCE_WATCH_ENABLED` defaults to `true`; `false`, `0`, `off`, or `no`
+stops new observations/reservations. Existing confirmed operations may still settle.
+The core ledger has no cohort or rollout gate. Serving admission results and wire
+payloads remain unchanged. Async observations wait at most 2.5 seconds; sealed GPU
+authorization uses at most 100 ms of remaining authorization budget. The
+[change note](listen_pusher_pipeline/changes/2026-11-12-free-allowance-watch.md)
+documents billing-unit settlement, conservative expired holds, baseline proof,
+metrics, emulator coverage, and the full-day reconciliation gate before enforcement.
+
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
 Denial preserves receiving and existing audio storage paths; accepted provider
@@ -737,6 +748,25 @@ false/0/off uses generic finalize without reopening held providers. That emergen
 mode can flush sub-second speech fragments earlier because it omits the ordinary
 speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
 local-send phase/exception attribution and the listen-train acceptance checks.
+
+### unlimited_v2 backfill/import daily transcribed-hours cap
+
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) are a separate, default-off
+admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
+already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
+same basis `unit_cost_user_day.tx_sec` uses — and refuses managed **backfill/import**
+transcription once that day reached the cap level. Only the sync `backfill` lane
+and the batch `backfill` lane pass the backfill marker; live listen and fresh
+sync/batch capture never do, so live capture is untouched even on a user-day above
+the cap. The meter is the total day seconds (it cannot separate backfill from live
+seconds); the admission lane is the exact separation for the work being admitted.
+Above the cap the answer is identical to an exhausted allowance: offline segments
+are durably held. Free, Plus and the deprecated paid tiers are unchanged in both
+modes, and an unreadable plan or meter read admits transcription. Deployment,
+readback and activation: [runbook](runbooks/unlimited-v2-backfill-hours-cap.md);
+rollout note:
+[change note](listen_pusher_pipeline/changes/2026-11-14-unlimited-v2-backfill-hours-cap.md).
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
@@ -3120,7 +3150,10 @@ backend reconciliation sweep (or the opt-in self-heal sweep) as a
 never a new conversation — through this same durable job ledger. The recovery
 run reuses normal persistence but is fenced by a pre-persist structured guard:
 kept output carrying only the deterministic minimum raises before the
-completed-status transaction. An explicit relevance discard is a valid
+completed-status transaction. The one exception is a kept, plain, decoded
+conversation whose enrichment returned no structure at all: it completes on the
+deterministic minimum unless `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED`
+is set off (default on; see `changes/2026-11-12-capfix-finalization.md`). An explicit relevance discard is a valid
 terminal outcome without rich structure only when the sweep verifies its
 persisted server-recovery verdict and preserved transcript and audio IDs. With
 `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED`, a clear rule-level
@@ -7950,12 +7983,11 @@ preserve explicit policy delays and provider attempts, and allow same-owner
 siblings to progress. Deletion must cancel before paid work or result upload.
 
 The existing emulator-proof runner includes this suite. Local qualification
-requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. The
-simulator/Postgres deletion-cancellation cases are strict expected failures
-linked to [#23761](https://github.com/BasedHardware/omi/issues/23761): the current
-cancellation writer directly uses a Firestore client instead of the Store
-surface. They assert no provider/result-upload calls even on that failure and
-do not satisfy migration acceptance. Physical erasure and the serving privacy
+requires `OMI_REQUIRE_STORE_BACKENDS=all`; skips do not prove parity. Deletion
+cancellation operates through the bounded revocation `cancel_fenced_recovery`
+on the shared Store surface, ensuring parity across Firestore, Postgres, and the simulator
+(resolving [#23761](https://github.com/BasedHardware/omi/issues/23761)). No provider or
+result-upload calls are permitted on cancellation. Physical erasure and the serving privacy
 bridge remain separate gates. All content and external IO in this suite are
 synthetic; it does not qualify real ASR accuracy or vendor transport retries.
 
@@ -9359,6 +9391,42 @@ to be retried after visibility expiry, so a longer capture still converges after
 it ends. A deleted/incompatible target or size refusal never authorizes a forced
 merge; the standalone recording remains recoverable.
 
+A donor summarized before its live target closed is otherwise refused forever by
+the `already_processed` fence. `SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED` is a
+three-value mode, **default `off`**:
+
+- `off` is the pre-change refusal, byte for byte: the processed donor is refused
+  by the blanket `already_processed` fence, no span is compared, and no
+  assignment is attempted.
+- `shadow` runs the containment predicate and the span comparison, emits a
+  bounded counter and one log line, and returns the same refusal. It never
+  assigns, tombstones, retracts notes or memories, and never emits an identifier
+  or content. A donor the transaction would refuse before planning (a
+  user-managed anchor or a manual speaker receipt) counts
+  `outcome=donor_ineligible`, and a donor carrying unplaced speech counts
+  `outcome=unplaced_donor`, so the dry-run count does not overstate eligible
+  merges.
+- `on` lets the bridge absorb the donor only when both the donor's and the
+  target's placed transcript-segment spans exist and the donor's is fully inside
+  the target's. The merged predicate applies tolerance inward, so the configured
+  tolerance is `0.0`: exact containment (the identical re-upload shape) passes,
+  and a donor that extends even slightly past the target is refused. A stricter
+  value can only refuse more.
+
+A row whose only span is the `finished_at` wall-clock envelope never authorizes
+the merge; that donor stays standalone. User curation, an open target,
+`choose_live_overlap`, privacy and size fences are unchanged, and partial overlap
+keeps the standalone row. The assignment transaction re-proves containment on the
+rows it merges and refuses the whole assignment with
+`contained_donor_not_contained` when the donor grew past the target. A contained
+donor whose speech is an exact repeat of the live target is still absorbed: the
+repeat-only fast path is skipped when this call requested donor absorption, so
+the donor redirect is committed instead of being acknowledged as a no-op. Only
+the documented lowercase words select a mode (`on`, `true`, `yes`, `enabled`,
+`shadow`); an absent, blank, unknown, misspelled or numeric value resolves `off`
+in every capture-coverage mode, so a typo disables the merge and never enables
+it.
+
 Committed donor absorption and published-row counters are documented in [Sync bridge absorption](sync-bridge-absorption.md).
 
 A finalizer losing its processing-result CAS checks the current job lease and
@@ -9563,6 +9631,28 @@ owner drain capacity at import (default 8, clamped 1-16; malformed uses 8).
 [Change and ramp](listen_pusher_pipeline/changes/2026-11-05-projection-pump.md).
 
 
+
+## Record drain pacing
+
+`RECORD_DRAIN_IDLE_WITHOUT_PROGRESS` defaults to `on`. Only `off` after
+trimming whitespace and lowercasing disables it; unset and other values keep
+it enabled. The capacity control lives in `config/record_drain.py`.
+
+A full record-drain page continues immediately only when a selected row left
+`record_pending` for a non-dead state and the pass was not privacy-blocked.
+Pages containing only deferred, failed, barrier-blocked, or dead-lettered rows
+keep the serving loop's idle wait (currently 20 seconds). Partial pages always
+idle. A partial-record coordinator that admits child units but remains
+`record_pending` also keeps the idle wait; child admission alone is not counted
+as parent-row progress. An unchanged inventory poll therefore cannot trigger
+an immediate rescan.
+
+Set `RECORD_DRAIN_IDLE_WITHOUT_PROGRESS=off` to restore the previous full-page
+continuation behavior. This does not disable privacy blocking or make partial
+pages continue immediately. `RECORD_DRAIN_PRIVACY_DEFER_SECONDS` remains a
+separate control, with its existing default of 900 seconds.
+
+[Change and verification](listen_pusher_pipeline/changes/2026-11-14-record-drain-pacing.md).
 
 ## Batch projection drain admission
 

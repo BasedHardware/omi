@@ -27,6 +27,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -58,6 +59,8 @@ class Transaction(Protocol):
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -65,6 +68,7 @@ class Transaction(Protocol):
 
 class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def projection_finish_backfill_complete(self) -> bool: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -77,6 +81,8 @@ class Store(Protocol):
     ) -> list[str]: ...
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def cancel_fenced_recovery(self, segment_id: str) -> bool: ...
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
@@ -87,6 +93,8 @@ class Store(Protocol):
 _DIRECT_READ_KINDS = {
     'first_pending': 'jobs_query',
     'first_ready_pending': 'jobs_query',
+    'fresh_first_pending': 'jobs_query',
+    'fresh_first_ready_pending': 'jobs_query',
     'ready_predecessor': 'jobs_query',
     'service_frontier': 'control_query',
     'check_privacy': 'privacy',
@@ -191,6 +199,12 @@ class FirestoreTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=False, transaction=self.transaction)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=True, transaction=self.transaction)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
@@ -229,9 +243,9 @@ class FirestoreTransaction:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results'}:
+            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
-            job = value if table == 'jobs' else self.get('jobs', key)
+            job = self.get('jobs', key) if table == 'results' else value
             identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
             if identity in guarded:
                 continue
@@ -375,6 +389,41 @@ class FirestoreStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        ref = self.client.collection(f'{self.namespace}_jobs').document(segment_id)
+
+        @firestore.transactional
+        def cancel(transaction):
+            job = ref.get(transaction=transaction).to_dict() or {}
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                assert_batch_write_allowed(
+                    self.client,
+                    transaction,
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                transaction.update(ref, {'recovery_state': 'cancelled'})
+                return True
+            return False
+
+        cancelled = cancel(self.client.transaction())
+        if cancelled:
+            from database.batch_pipeline_shadow_hook import mirror_refresh
+
+            mirror_refresh(self.namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+        return cancelled
+
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         return defer_privacy_blocked_record(self.client, self.namespace, segment_id, until, now)
 
@@ -388,6 +437,9 @@ class FirestoreStore:
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_complete(self.client, self.namespace)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -564,6 +616,24 @@ def held_merge_owners(
         job = first_pending(client, namespace, mark.id, skip_terminal=False)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
+
+
+def fresh_first_pending(client: Any, namespace: str, owner_key: str, *, ready: bool, transaction: Any) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('fresh_capture', '==', True)
+    )
+    if ready:
+        query = query.where('state', '==', 'result_ready')
+    return next(
+        (
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction)
+        ),
+        None,
+    )
 
 
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:

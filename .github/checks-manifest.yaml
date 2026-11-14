@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: worker-image-only-tests
+    command: ["python3", ".github/scripts/test_worker_image_only.py"]
+    triggers: [".github/scripts/worker_image_only.py", ".github/scripts/test_worker_image_only.py", ".github/workflows/gcp_diarizer.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-2149: image.digest-only Helm overrides would activate 28 levers over the approved live empty map; execute the guarded image-only primitive against private-runtime and drift fixtures"
   - id: batch-pipeline-tuning-disclosure
     command: ["python3", ".github/scripts/check_batch_tuning_disclosure.py", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}", "--run-tests"]
     triggers: ["backend/config/batch_pipeline.py", "backend/utils/batch_pipeline/**", "backend/charts/batch-pipeline-worker/**", "backend/charts/pusher/**", "backend/utils/pusher_*.py", ".github/scripts/*check_batch_tuning_disclosure.py", ".github/checks-manifest.yaml"]
@@ -1152,6 +1157,16 @@ checks:
     triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
     lanes: ["local", "ci"]
     reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
+  - id: firestore-collection-budget
+    command: ["python3", ".github/scripts/check_firestore_collection_budget.py", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.cjs", ".github/scripts/check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "M8 / firestore-reads-program: a new Firestore queue/job/lease collection, literal or computed, must state a reviewed read budget before it ships on either in-repo surface (backend Python, web TypeScript); the batch pipeline reached ~1.36B reads/day on unbudgeted job/queue/lease state"
+  - id: firestore-collection-budget-fixtures
+    command: ["python3", ".github/scripts/test_check_firestore_collection_budget.py"]
+    triggers: [".github/scripts/check_firestore_collection_budget.py", ".github/scripts/test_check_firestore_collection_budget.py", ".github/firestore-collection-budgets.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "offline fixtures pin both directions on both surfaces: an unbudgeted new queue/job/lease collection fails, a budgeted one passes, an existing collection is grandfathered, and a computed name fails until its family budget is declared"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]
