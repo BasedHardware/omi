@@ -70,10 +70,10 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
     nodes = RULES[STEP]["data"]
     metric = "firestore_googleapis_com:document_read_count"
     coverage = (
-        "(min(count_over_time(" + metric + "[1h])) >= 58) and "
-        "(count(count by (type) (count_over_time(" + metric + "[1h]))) == 3)"
+        "(min(count_over_time(" + metric + "[1h] offset 1ms)) >= 58) and "
+        "(count(count by (type) (count_over_time(" + metric + "[1h] offset 1ms))) == 3)"
     )
-    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h])) and " + coverage + ")[1h:1h])"
+    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h] offset 1ms)) and " + coverage + ")[1h:1h])"
     assert nodes[0]["model"]["expr"] == hourly
     historical = nodes[1]["model"]["expr"]
     expected = (

@@ -90,15 +90,15 @@ def main():
     median = rules[-1]["data"][1]["model"]["expr"]
     hourly = rules[-1]["data"][0]["model"]["expr"]
     for name, values, query, expected in (
-        ("one missing minute is not extrapolated", "100x29 _ 100x29", hourly, [{"labels": "{}", "value": 5900}]),
+        ("one missing minute is not extrapolated", "100x29 _ 100x28", hourly, [{"labels": "{}", "value": 5900}]),
         (
             "58 raw minutes accepted without extrapolation",
-            "100x28 _x1 100x29",
+            "100x28 _ _ 100x28",
             hourly,
             [{"labels": "{}", "value": 5800}],
         ),
-        ("57 raw minutes reject current hour", "100x27 _x2 100x29", hourly, []),
-        ("missing baseline minutes reject median", "100x27 _x2 100x29", median, []),
+        ("57 raw minutes reject current hour", "100x27 _ _ _ 100x28", hourly, []),
+        ("missing baseline minutes reject median", "100x27 _ _ _ 100x28", median, []),
         ("zero baseline rejects division", "0x59", median, []),
     ):
         tests.append(

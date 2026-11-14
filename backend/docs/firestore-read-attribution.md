@@ -198,7 +198,10 @@ against `[1h] offset 1d`, then break native reads down by `type`. Owner: Firesto
 cost owner, SCA-2173. Remove the batch caller filter for this fleet-wide step.
 The native metric is a per-minute DELTA exposed as a gauge,
 not a counter: the rule sums raw per-60s samples with `sum(sum_over_time(...[1h]))`,
-never `increase()` or an extrapolated mean times 60. Each selected hour requires
+never `increase()` or an extrapolated mean times 60. A 1ms raw-selector offset
+excludes the next hour's boundary sample, giving the completed interval
+`[hour_start, hour_end)` even on older Prometheus range-selector semantics.
+Each selected hour requires
 all three read types and at least 58 raw samples for every series. Up to two
 missing minutes are tolerated without inventing reads; 57 or fewer samples
 make that hour unavailable. Coverage is checked before hourly alignment, on
