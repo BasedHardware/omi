@@ -1,8 +1,8 @@
 """Remaining read-side tool handlers: X posts, goals, chat, people, screen, daily summaries."""
 
 from collections import Counter
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, TypedDict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from google.api_core.exceptions import FailedPrecondition
 
@@ -219,6 +219,19 @@ class _ScreenActivityBucket(TypedDict):
     first_seen: Any
     last_seen: Any
     titles: Counter[str]
+    intervals: List[Tuple[datetime, datetime]]
+
+
+def _observation_union_seconds(intervals: List[Tuple[datetime, datetime]]) -> int:
+    seconds = 0.0
+    tail: Optional[datetime] = None
+    for start, end in sorted(intervals):
+        if tail is None or start > tail:
+            seconds += (end - start).total_seconds()
+        elif end > tail:
+            seconds += (end - tail).total_seconds()
+        tail = max(tail, end) if tail is not None else end
+    return int(seconds)
 
 
 def _screen_activity_buckets(
@@ -230,22 +243,25 @@ def _screen_activity_buckets(
 ) -> List[Dict[str, Any]]:
     """Group one page of rows into count/duration/top-title buckets.
 
-    ``estimated_observation_seconds`` sums the gaps between CONSECUTIVE rows
-    that share the same bucket AND app, capped at
+    ``estimated_observation_seconds`` credits whole seconds between consecutive
+    rows on each device that share the same bucket AND app, capped at
     ``MCP_SCREEN_ACTIVITY_OBSERVATION_GAP_SECONDS`` per gap: it is the span
     covered by observed captures, never a measure of actual usage duration.
-    ``seed_row`` (the previous page's last row, carried by the cursor) lets
-    the gap that bridges a page boundary still count.
+    The raw interval union caps credits so overlapping devices cannot inflate
+    elapsed coverage. ``seed_row`` retains the legacy helper's continuation seam.
     """
     buckets: Dict[str, _ScreenActivityBucket] = {}
-    previous_key = ""
-    previous_app = ""
-    previous_ts: Optional[datetime] = None
+    previous: Dict[str, Tuple[str, str, Optional[datetime]]] = {}
     if seed_row is not None:
-        previous_key = _screen_activity_bucket_key(seed_row, group_by, iso_offset=iso_offset)
-        previous_app = seed_row.get("appName") or "Unknown"
-        previous_ts = _screen_activity_timestamp(seed_row.get("timestamp"))
+        device = str(seed_row.get('clientDeviceId') or seed_row.get('deviceName') or 'unknown')
+        previous[device] = (
+            _screen_activity_bucket_key(seed_row, group_by, iso_offset=iso_offset),
+            seed_row.get("appName") or "Unknown",
+            _screen_activity_timestamp(seed_row.get("timestamp")),
+        )
     for row in rows:
+        device = str(row.get('clientDeviceId') or row.get('deviceName') or 'unknown')
+        previous_key, previous_app, previous_ts = previous.get(device, ('', '', None))
         app = row.get("appName") or "Unknown"
         timestamp = row.get("timestamp")
         parsed_ts = _screen_activity_timestamp(timestamp)
@@ -258,6 +274,7 @@ def _screen_activity_buckets(
                 first_seen=timestamp,
                 last_seen=timestamp,
                 titles=Counter(),
+                intervals=[],
             )
             buckets[key] = bucket
         bucket["count"] += 1
@@ -266,12 +283,22 @@ def _screen_activity_buckets(
         if title:
             bucket["titles"][title] += 1
         if previous_ts is not None and previous_key == key and previous_app == app and parsed_ts is not None:
+            # Legacy timestamps without an offset represent UTC, including seed rows.
+            previous_ts = (
+                previous_ts.replace(tzinfo=timezone.utc)
+                if previous_ts.tzinfo is None
+                else previous_ts.astimezone(timezone.utc)
+            )
+            parsed_ts = (
+                parsed_ts.replace(tzinfo=timezone.utc)
+                if parsed_ts.tzinfo is None
+                else parsed_ts.astimezone(timezone.utc)
+            )
             gap = (parsed_ts - previous_ts).total_seconds()
             if 0 <= gap <= MCP_SCREEN_ACTIVITY_OBSERVATION_GAP_SECONDS:
                 bucket["estimated_observation_seconds"] += int(gap)
-        previous_key = key
-        previous_app = app
-        previous_ts = parsed_ts
+                bucket["intervals"].append((previous_ts, parsed_ts))
+        previous[device] = (key, app, parsed_ts)
 
     results: List[Dict[str, Any]] = []
     for key, bucket in buckets.items():
@@ -282,7 +309,9 @@ def _screen_activity_buckets(
             {
                 **_screen_activity_bucket_label(key, group_by),
                 "count": bucket["count"],
-                "estimated_observation_seconds": bucket["estimated_observation_seconds"],
+                "estimated_observation_seconds": min(
+                    bucket["estimated_observation_seconds"], _observation_union_seconds(bucket["intervals"])
+                ),
                 "top_titles": [{"title": title, "count": count} for title, count in top_titles],
                 "first_seen": bucket["first_seen"],
                 "last_seen": bucket["last_seen"],
