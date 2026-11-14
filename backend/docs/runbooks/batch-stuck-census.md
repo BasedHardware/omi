@@ -60,7 +60,7 @@ email or conversation id is read or exported.
   `batch:leased`, `batch:dead`, `batch:partial_retired`, `cap_hold:held` /
   `retained` / `batch_admitted` and the terminal projection states have a count
   and an age but no rule: they are terminal, actively owned, or durable by
-  design. Everything else has a threshold below.
+  design. The complete thresholds are in the generated alert export.
 
 ## Stocks and thresholds
 
@@ -96,8 +96,10 @@ barrier-approach page one day before the 14-day record deadline);
 `cap_hold:staging` / `sealing` 1 h; `pipeline_ledger` 6 h / 1 h / 30 min / 30 min;
 `speaker_outbox:open` 6 h and `:terminal_pending` 24 h; `enrichment_outbox:pending`
 24 h; `provider_outbox:open` 24 h; `memory_outbox` 24 h pending/retryable, 1 h
-processing. Thresholds live in the registry's `age_alarm_seconds`; the table is
-the generated export, not a second source.
+processing. This paragraph is illustrative, not exhaustive (projection
+`pending` / `persisted` and the recovery stocks also have thresholds).
+The complete list is `backend/charts/monitoring/alerts/batch-census.json`,
+generated from the registry's `age_alarm_seconds`.
 
 ## Cost
 

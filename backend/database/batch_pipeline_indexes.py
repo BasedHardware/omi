@@ -220,16 +220,6 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
     ),
-    # Custody horizon for assignment and quarantine holds on result receipts.
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_census_projection_held_deadline',
-            f'batch_pipeline_{stage}_results',
-            'COLLECTION',
-            (_asc('projection_state'), _asc('held_deadline_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
     # Fleet-wide memory-outbox census. The existing same-field index is
     # COLLECTION-scoped and serves only the per-user worker page; rows live under
     # {user_root}/memory_outbox, so the census needs the group-scoped twin.
@@ -251,7 +241,6 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         )
         for stage in ('prod', 'dev')
         for name, field in (
-            ('held_deadline', 'held_deadline_at'),
             ('superseded', 'superseded_at'),
         )
     ),

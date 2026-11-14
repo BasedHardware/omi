@@ -427,8 +427,8 @@ def _signatures():
         ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'created_at', '__name__')),
         ('batch_pipeline_prod_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
         ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
-        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
-        ('batch_pipeline_dev_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
+        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'committed_at', '__name__')),
+        ('batch_pipeline_dev_results', COLLECTION, ('projection_state', 'committed_at', '__name__')),
         ('memory_outbox', COLLECTION_GROUP, ('status', 'available_at', '__name__')),
     ],
 )
@@ -475,7 +475,7 @@ def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
             'pipeline_ledger_group_stage_admitted_at',
         }
     ]
-    assert len(census) == 30
+    assert len(census) == 26
     assert not {requirement.collection_group for requirement in census} & {'conversations', 'stt_cap_holds'}
     assert {requirement.collection_group for requirement in census} >= {
         'batch_pipeline_prod_jobs',

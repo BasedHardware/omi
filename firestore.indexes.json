@@ -1019,42 +1019,6 @@
       ]
     },
     {
-      "collectionGroup": "batch_pipeline_prod_results",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "projection_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "held_deadline_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_results",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "projection_state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "held_deadline_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "memory_outbox",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
@@ -1081,43 +1045,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "held_deadline_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_prod_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "superseded_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "batch_pipeline_dev_jobs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "held_deadline_at",
           "order": "ASCENDING"
         },
         {
