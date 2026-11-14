@@ -2,7 +2,6 @@
 Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 """
 
-import asyncio
 import logging
 import os
 from typing import Any, Dict, Optional
@@ -53,12 +52,8 @@ def google_integration_has_scope(integration: Optional[Dict[str, Any]], scope: s
     return scope in (integration.get('granted_scopes') or [])
 
 
-from utils.retrieval.google_transport import (  # noqa: F401  (re-exported for existing importers)
-    _MAX_RETRIES,
-    _RETRYABLE_STATUS_CODES,
-    GoogleAPIError,
-    google_api_request,
-)
+from utils.retrieval.google_transport import GoogleAPIError as GoogleAPIError
+from utils.retrieval.google_transport import google_api_request as google_api_request
 
 
 async def _mark_google_integration_reauth_required(
