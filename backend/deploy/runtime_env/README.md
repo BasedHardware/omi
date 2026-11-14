@@ -150,11 +150,14 @@ in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
 `code/defaults` covers partial defaults even if an explicit literal overrides them.
 No broad exception grants expiry coverage to another surface or percentage.
 
-RESOLVED (SCA-2173, 2026-11-14): prod worker and all four prod Cloud Run
+RESOLVED (SCA-2173, 2026-11-14): the prod worker and the prod Cloud Run
 services pin `batch_timeliness_leader:100` and `lifecycle_record_pending_head:100`,
-and set `privacy_checks_shadow:0`. `privacy_ttl60` remains 0. Integration and
-sync pin both `usage_month_cache` and `usage_month_total` to 100; backend,
-backfill and the worker keep both at 0. Every other lever and epoch is unchanged.
+and set `privacy_checks_shadow:0`; `backend-sync-backfill` keeps its ec191a row 3
+pins (`batch_timeliness_leader:0`, `privacy_checks_shadow:100`,
+`lifecycle_record_pending_head:5`). `privacy_ttl60` remains 0. Integration, sync
+and backend pin both `usage_month_cache` and `usage_month_total` to 100 (SCA-2222
+Train 1); backfill and the worker keep both at 0. Every other lever and epoch is
+unchanged.
 These source values ride each surface's next train; no worker roll is requested.
 The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
 worker surfaces and enumerates the remaining unresolved inherited differences.

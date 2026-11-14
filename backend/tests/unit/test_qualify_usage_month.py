@@ -241,7 +241,7 @@ def test_pending_patch_only_proposes_six_monthly_lever_changes(tmp_path):
         desc = services[name]['env']['FIRESTORE_READ_LEVERS']
         levers = json.loads(desc['value'])
         assert levers['usage_month_cache'] == levers['usage_month_total'] == 5
-        expected_monthly = 100 if name == 'backend-integration' else 0
+        expected_monthly = 0 if name == 'backend-sync-backfill' else 100
         levers.update(usage_month_cache=expected_monthly, usage_month_total=expected_monthly)
         original = before['overlay']['cloud_run']['services'][name]['env']['FIRESTORE_READ_LEVERS']['value']
         assert levers == json.loads(original)

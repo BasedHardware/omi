@@ -3843,7 +3843,7 @@ def test_read_lever_partial_code_default_cannot_hide_behind_chart_inheritance(mo
     ('prefix', 'has_partials'),
     [
         ('base/', True),
-        ('overlay/prod/', False),
+        ('overlay/prod/', True),
         ('runtime/dev/', True),
         ('runtime/prod/', True),
         ('chart/dev/', True),
