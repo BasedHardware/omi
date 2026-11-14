@@ -86,6 +86,8 @@ def test_zh_provider_empty_enters_sweep_and_spends_one_bounded_soniox(setup, mon
     monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASKS_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
+    # 1 s of speech is under the vendor skip's 2 s minimum; this test is about the recovery path.
+    monkeypatch.setenv('BATCH_VENDOR_MIN_SPEECH_SECONDS', '0')
     job = row(client)
     job.pop('worker_failure')
     job.update(

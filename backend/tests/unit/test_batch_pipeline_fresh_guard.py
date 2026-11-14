@@ -163,7 +163,7 @@ def test_only_maintenance_leader_samples_even_for_explicit_reconcile(guard, peri
     memory.client, memory.namespace = client, 'batch_pipeline_dev'
     leader = Mock()
     leader.acquire.return_value = False
-    metrics = SimpleNamespace(fresh_guard=sampler, refresh=Mock())
+    metrics = SimpleNamespace(fresh_guard=sampler, delivered_share=Mock(), refresh=Mock())
     service = Serving(memory, leader=leader, metrics=metrics)
     service.reconcile(periodic=periodic)
     assert client.calls == [] and samples(registry) == {}

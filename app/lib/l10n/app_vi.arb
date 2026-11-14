@@ -4639,11 +4639,19 @@
     "referralRewardSecondDetail": "Khi thêm 3 bạn bè mua",
     "referralClaimShort": "Nhận",
     "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
+    "paymentDeclinedMonthlyMessage": "Cập nhật thẻ, hoặc dùng lại {plan} với {price} mỗi tháng",
     "paymentDeclinedMessage": "Cập nhật thẻ để dùng lại {plan}",
     "hasLinkedTasksLabel": "Có nhiệm vụ được liên kết",
     "hasTasksFilter": "Có nhiệm vụ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Chuyển sang gói tháng",
+    "monthlySwitchPlanValue": "{plan}, {price} mỗi tháng",
+    "monthlySwitchNote": "Thay cho khoản phí năm {yearly} chưa thanh toán. Gia hạn hằng tháng. Hủy bất cứ lúc nào.",
+    "monthlySwitchDeclined": "Thanh toán bị từ chối. Gói của bạn không thay đổi.",
+    "monthlySwitchUnavailable": "Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.",
+    "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
+    "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng."
 }

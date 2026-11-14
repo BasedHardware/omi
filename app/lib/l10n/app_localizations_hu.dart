@@ -15456,6 +15456,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paymentDeclinedTitle => 'A kártyáját elutasították';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Frissítse a kártyát, vagy kapja vissza a(z) $plan csomagot havi $price áron';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Frissítse a kártyát a(z) $plan visszaállításához';
   }
@@ -15480,4 +15485,31 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Váltás havi fizetésre';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, havi $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'A kifizetetlen $yearly összegű éves díj helyett. Havonta megújul. Bármikor lemondható.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'A fizetést elutasították. A csomagja nem változott.';
+
+  @override
+  String get monthlySwitchUnavailable => 'A váltás most nem érhető el. Inkább frissítse a kártyát.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Mostantól havonta fizet';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Ma kifizetve: $price. Havonta megújul.';
+  }
 }

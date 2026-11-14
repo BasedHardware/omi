@@ -15476,6 +15476,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get paymentDeclinedTitle => 'La tua carta è stata rifiutata';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Aggiornala o riavi $plan a $price al mese';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Aggiornala per riavere $plan';
   }
@@ -15500,4 +15505,31 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Passa al mensile';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price al mese';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Sostituisce l\'addebito annuale non pagato di $yearly. Si rinnova ogni mese. Disdici quando vuoi.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pagamento rifiutato. Il tuo piano non è cambiato.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Il passaggio non è disponibile ora. Aggiorna invece la carta.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Ora sei sul mensile';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagati oggi. Si rinnova ogni mese.';
+  }
 }

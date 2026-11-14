@@ -15399,6 +15399,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paymentDeclinedTitle => 'Thẻ của bạn đã bị từ chối';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Cập nhật thẻ, hoặc dùng lại $plan với $price mỗi tháng';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Cập nhật thẻ để dùng lại $plan';
   }
@@ -15423,4 +15428,31 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Chuyển sang gói tháng';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mỗi tháng';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Thay cho khoản phí năm $yearly chưa thanh toán. Gia hạn hằng tháng. Hủy bất cứ lúc nào.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Thanh toán bị từ chối. Gói của bạn không thay đổi.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Bạn đã chuyển sang trả theo tháng';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Đã thanh toán $price hôm nay. Gia hạn hằng tháng.';
+  }
 }

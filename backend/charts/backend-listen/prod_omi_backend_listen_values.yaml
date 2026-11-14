@@ -343,6 +343,8 @@ env:
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
     value: "account-deletion"
+  - name: CONVERSATION_ERASURE_TASKS_QUEUE
+    value: "conversation-erasure"
   - name: SYNC_TASKS_PROJECT
     value: "based-hardware"
   - name: SYNC_TASKS_LOCATION

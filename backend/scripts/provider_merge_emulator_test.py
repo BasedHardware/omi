@@ -112,8 +112,8 @@ def settle(h, segment, now=SETTLED):
         calls.append(item.segment_id)
         return {
             'audio_seconds': 5.0,
-            'speech_seconds': 0.5,
-            'speech_spans': [{'start': 0.5, 'end': 1.0}],
+            'speech_seconds': 2.5,
+            'speech_spans': [{'start': 0.5, 'end': 3.0}],
             'words': [{'word': 'synthetic', 'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00'}],
             'diarization': {'turns': []},
             'words_provider': service,
@@ -126,7 +126,8 @@ def settle(h, segment, now=SETTLED):
         Artifacts(),
         stt=vendor,
         allowed=lambda *_: True,
-        inspect=lambda *_: (b'\0\0' * 80_000, 5.0, [{'start': 0.5, 'end': 1.0}]),
+        # Keep merge conformance on the paid path, above the short-speech threshold.
+        inspect=lambda *_: (b'\0\0' * 80_000, 5.0, [{'start': 0.5, 'end': 3.0}]),
         clock=lambda: now,
     )
     result = stage.run(segment)

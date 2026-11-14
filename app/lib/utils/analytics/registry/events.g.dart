@@ -3413,3 +3413,44 @@ final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {};
 }
+
+final class SubscriptionPaymentIssueMonthlyShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyShown();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlySwitched extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlySwitched();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Switched";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SubscriptionPaymentIssueMonthlyFailedReason {
+  declined("declined"),
+  refused("refused"),
+  error("error");
+  const SubscriptionPaymentIssueMonthlyFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyFailed({required this.reason});
+  final SubscriptionPaymentIssueMonthlyFailedReason reason;
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Failed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
