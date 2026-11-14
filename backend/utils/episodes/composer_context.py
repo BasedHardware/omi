@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 from types import SimpleNamespace
 
 from config.episodes import COMPOSER_MEMORY_TOKENS, COMPOSER_PROFILE_TOKENS, COMPOSER_MEMORY_QUERY_TOKENS
+from models.knowledge_ledger_policy import is_prompt_memory_eligible
 
 logger = logging.getLogger(__name__)
 _STOP = frozenset(
@@ -96,8 +97,6 @@ def retrieval_query(members: Sequence[Mapping[str, Any]]) -> str:
 
 def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any]) -> str:
     """IDF overlap over <=1000 vetted candidates; retain at most 20 relevant facts."""
-    from utils.llms.memory import is_prompt_memory_eligible
-
     topics, entities, frequent = _episode_terms(members)
     query = topics | entities | frequent
     candidates = []
@@ -138,7 +137,6 @@ def _search_memories(uid: str, members: Sequence[Mapping[str, Any]]) -> list[Any
     # Never trust vector metadata as authoritative content or bypass tombstone checks.
     from database._client import db
     from utils.memory.memory_service import MemoryService
-    from utils.llms.memory import is_prompt_memory_eligible
 
     query = retrieval_query(members)
     if not query:

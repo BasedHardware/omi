@@ -1468,6 +1468,8 @@ def test_episode_switches_render_on_every_composition_host(environment):
                 {'name': key, 'value': 'false'}
             ]
     for chart in ('backend-listen', 'pusher'):
+        for key in keys:
+            assert config['gke'][chart]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
         chart_dir = _SCRIPT.parents[1] / 'charts' / chart
         values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
         result = subprocess.run(

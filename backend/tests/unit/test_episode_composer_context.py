@@ -1,11 +1,15 @@
 """Owner background stays bounded, relevant and outside episode freshness."""
 
 from datetime import datetime, timedelta, timezone
+import subprocess
+import sys
 from zoneinfo import ZoneInfo
 
 import tiktoken
 
 from config import episodes as config
+from utils.llms import memory as chat_memory
+from utils.episodes import composer
 from utils.episodes import composer_context as context
 from utils.episodes.composer_detail import detail_budget
 
@@ -28,6 +32,23 @@ def tokens(text):
     return len(tiktoken.get_encoding('o200k_base').encode(text, disallowed_special=()))
 
 
+def test_selector_reuses_chat_policy_without_importing_runtime_clients():
+    assert context.is_prompt_memory_eligible is chat_memory.is_prompt_memory_eligible
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'import sys; from utils.episodes import composer_context; '
+            'assert "utils.llms.memory" not in sys.modules; '
+            'assert not any(name.startswith("database") for name in sys.modules)',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_relevance_and_visibility_filter_before_prompt_budget():
     memories = [
         {'content': 'My garden irrigation uses a rain sensor.', 'subject_attribution': 'user'},
@@ -44,9 +65,7 @@ def test_relevance_and_visibility_filter_before_prompt_budget():
 def test_loader_uses_chat_eligibility_for_canonical_memory_prompt(monkeypatch):
     from database import goals, users
     from models.memories import MemoryDB
-    from utils.llms import memory as chat_memory
     from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
-    from utils.episodes import composer
 
     def fact(label, **overrides):
         return MemoryDB.model_construct(
@@ -116,7 +135,6 @@ def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
 def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(monkeypatch):
     from types import SimpleNamespace
     from database import goals, users
-    from utils.llms import memory as chat_memory
     from utils.memory.memory_service import MemoryService
 
     seen = []
@@ -141,7 +159,6 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
 
 def test_search_outage_uses_cached_eligible_facts_and_emits_degradation(monkeypatch):
     from database import goals, users
-    from utils.llms import memory as chat_memory
     from utils.observability import fallback
 
     events = []
@@ -208,7 +225,6 @@ def test_profile_renders_only_selected_fields_and_people():
 
 
 def test_prompt_contains_guarded_background_and_scales_output(monkeypatch):
-    from utils.episodes import composer
 
     row = member()
     messages = composer.build_messages(

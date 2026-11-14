@@ -6,13 +6,13 @@ from cachetools import TTLCache
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from models.knowledge_ledger_policy import (
+    LEDGER_SCHEMA_VERSION,
     PROFILE_CHARACTER_BUDGET,
-    canonicalize_ledger_slot,
+    is_prompt_memory_eligible,
+    is_prompt_memory_visible as _is_prompt_visible,
     render_bounded_profile,
 )
 from models.memories import Memory, MemoryDB
-from models.product_memory import MemoryKind, MemorySubjectScope
-from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.knowledge_ledger_migration import read_ledger_migration_completion
 from utils.memory.memory_service import MemoryService
 import logging
@@ -127,36 +127,6 @@ def safe_create_memory(memory_data: Dict[str, Any]) -> MemoryDB:
                 return MemoryDB(**fixed_data)
         # If we couldn't fix it, re-raise the exception
         raise
-
-
-def _is_prompt_visible(memory: MemoryDB) -> bool:
-    """Rejected, pending-review, locked, and invalidated rows stay out of prompts."""
-    if memory.is_locked:
-        return False
-    if memory.user_review is False:
-        return False
-    if memory.invalid_at is not None:
-        return False
-    return True
-
-
-def is_prompt_memory_eligible(memory: Any) -> bool:
-    """The chat profile admission policy, shared by bounded background consumers.
-
-    Legacy rows retain chat's compatibility intake. Canonical ledger documents,
-    triggers, third-party facts and unconfirmed inferences never become self-facts.
-    """
-    if not _is_prompt_visible(memory):
-        return False
-    if memory.ledger_schema_version != LEDGER_SCHEMA_VERSION:
-        return True
-    return bool(
-        memory.kind == MemoryKind.fact
-        and memory.subject_scope == MemorySubjectScope.primary_user
-        and memory.intent_backed
-        and canonicalize_ledger_slot(memory.slot, strict=False)
-        and memory.content.strip()
-    )
 
 
 def get_prompt_data(
