@@ -232,6 +232,40 @@ final class CallAudioSessionTrackerTests: XCTestCase {
     XCTAssertFalse(CallAppReleasePolicy.releaseEndsCall(bundleID: "com.google.Chrome"))
     XCTAssertTrue(CallAppReleasePolicy.releaseEndsCall(bundleID: "us.zoom.xos"))
   }
+
+  func testDeviceSwitchReleaseDoesNotAdvanceTheZoomGeneration() {
+    var zoom = CallAudioSessionTracker()
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true, device: 1), at: at(0))
+    XCTAssertEqual(zoom.nativeCallIdentity(bundleID: "us.zoom.xos"), "app:us.zoom.xos#1")
+    // Mic drops for a 2s handoff to another input device, then returns on the new device.
+    zoom.ingest(snapshot("us.zoom.xos", input: false, output: true, device: 1), at: at(40))
+    zoom.ingest(snapshot("us.zoom.xos", input: false, output: true, device: 2), at: at(41))
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true, device: 2), at: at(42))
+    XCTAssertEqual(
+      zoom.nativeCallIdentity(bundleID: "us.zoom.xos"), "app:us.zoom.xos#1",
+      "a device-switch release is the same call, not a new generation")
+    XCTAssertEqual(zoom.counters["us.zoom.xos"]?.releasesDeviceSwitch, 1)
+    XCTAssertEqual(zoom.counters["us.zoom.xos"]?.releasesCallEnd, 0)
+  }
+
+  func testCallEndReleaseAdvancesTheZoomGenerationImmediatelyOnReacquire() {
+    var zoom = CallAudioSessionTracker()
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true), at: at(0))
+    zoom.ingest(snapshot("us.zoom.xos", input: false, output: false), at: at(40))
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true), at: at(48))
+    XCTAssertEqual(zoom.nativeCallIdentity(bundleID: "us.zoom.xos"), "app:us.zoom.xos#2")
+  }
+
+  func testMuteLikeReleaseDoesNotAdvanceTheZoomGeneration() {
+    var zoom = CallAudioSessionTracker()
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true), at: at(0))
+    // Muted: mic released while the speaker keeps playing, then mic re-acquired.
+    zoom.ingest(snapshot("us.zoom.xos", input: false, output: true), at: at(40))
+    zoom.ingest(snapshot("us.zoom.xos", input: true, output: true), at: at(45))
+    XCTAssertEqual(
+      zoom.nativeCallIdentity(bundleID: "us.zoom.xos"), "app:us.zoom.xos#1",
+      "a mute-like release is the same call, not a new generation")
+  }
 }
 
 final class MeetingCallObservationTests: XCTestCase {

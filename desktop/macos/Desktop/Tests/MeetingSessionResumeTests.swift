@@ -491,11 +491,56 @@ final class MeetingSessionResumeTests: XCTestCase {
     now += 10
     detector.applySnapshot(shot("us.zoom.xos"))
     detector.applySnapshot(shot("us.zoom.xos", input: false, output: false))
+    now += 2
+    detector.applySnapshot(shot("us.zoom.xos", input: false, output: false))
     now += 8
     detector.applySnapshot(shot("us.zoom.xos", input: false, output: false))
     detector.applySnapshot(shot("us.zoom.xos"))
     XCTAssertFalse(detector.isMeetingConfirmed, "release-ends-call catalog remains authoritative")
     XCTAssertEqual(role, .ambient)
+  }
+
+  func testTeamsReleaseGenerationSeparatesBackToBackCallsInsideTheResumeWindow() {
+    let detector = detector()
+    // Both meetings sit under the same calendar event, so the calendar-overlap
+    // clause would resume the first call; only the new call generation may split.
+    detector.applySnapshot(shot("com.microsoft.teams2"), calendarEventIDs: ["event-A"])
+    now += 10
+    detector.applySnapshot(shot("com.microsoft.teams2"), calendarEventIDs: ["event-A"])
+    XCTAssertEqual(role, .meeting)
+    // Leaving the first call releases the mic; the second meeting re-acquires it
+    // 30s later, inside the 240s resume window, still under the same calendar event.
+    detector.applySnapshot(shot("com.microsoft.teams2", input: false, output: false), calendarEventIDs: ["event-A"])
+    now += 2
+    detector.applySnapshot(shot("com.microsoft.teams2", input: false, output: false), calendarEventIDs: ["event-A"])
+    now += 8
+    detector.applySnapshot(shot("com.microsoft.teams2", input: false, output: false), calendarEventIDs: ["event-A"])
+    XCTAssertFalse(detector.isMeetingActive)
+    now += 20
+    detector.applySnapshot(shot("com.microsoft.teams2"), calendarEventIDs: ["event-A"])
+    XCTAssertFalse(
+      detector.isMeetingConfirmed, "a mic release ended the first call; the new generation must not resume it")
+    XCTAssertEqual(role, .ambient)
+    now += 10
+    detector.applySnapshot(shot("com.microsoft.teams2"), calendarEventIDs: ["event-A"])
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting, .ambient, .meeting])
+  }
+
+  func testTeamsDetectionFlickerWithoutAMicReleaseDoesNotSplitTheCall() {
+    let detector = detector()
+    detector.applySnapshot(shot("com.microsoft.teams2"))
+    now += 10
+    detector.applySnapshot(shot("com.microsoft.teams2"))
+    XCTAssertEqual(role, .meeting)
+    // A detection flicker inside the 8s off grace with the mic never released keeps
+    // the same identity, so there is no off edge and no new call.
+    detector.applyDetected(false)
+    now += 4
+    detector.applyDetected(true, callIDs: ["app:com.microsoft.teams2#1"])
+    XCTAssertTrue(detector.isMeetingActive)
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    XCTAssertNil(detector.resumeOffAt)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting], "a flicker inside the off grace must not split the call")
   }
 }
 
