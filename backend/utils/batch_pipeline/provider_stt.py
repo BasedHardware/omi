@@ -612,7 +612,9 @@ async def transcribe_async(
             await scope.reserve_async(service)
             wav = _wav(pcm)
             if fence_ticket is not None:
-                await asyncio.to_thread(fence_ticket.start, item, service)
+                from utils.executors import db_executor, run_blocking
+
+                await run_blocking(db_executor, fence_ticket.start, item, service)
             response = await _vendor_words(service, wav, duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
