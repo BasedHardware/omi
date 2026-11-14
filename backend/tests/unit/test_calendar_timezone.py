@@ -68,6 +68,7 @@ def _calendar_module():
         "utils.integration_telemetry",
         "utils.log_sanitizer",
         "utils.retrieval",
+        "utils.retrieval.google_transport",
         "utils.retrieval.tools",
         "utils.retrieval.tools.integration_base",
         "utils.retrieval.tools.google_utils",

@@ -108,6 +108,11 @@ def _calendar_module():
         GoogleAPIError=GoogleAPIError,
         refresh_google_token=MagicMock(),
     )
+    google_transport = _module(
+        "utils.retrieval.google_transport",
+        google_api_request=AsyncMock(),
+        GoogleAPIError=GoogleAPIError,
+    )
     telemetry = _module(
         "utils.integration_telemetry",
         GOOGLE_CALENDAR="google_calendar",
@@ -133,6 +138,7 @@ def _calendar_module():
         "utils.executors": executors,
         "utils.http_client": http_client,
         "utils.retrieval": _package("utils.retrieval"),
+        "utils.retrieval.google_transport": google_transport,
         "utils.retrieval.tools": _package("utils.retrieval.tools"),
         "utils.retrieval.tools.integration_base": integration_base,
         "utils.retrieval.tools.google_utils": google_utils,
