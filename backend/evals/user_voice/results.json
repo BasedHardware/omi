@@ -1,0 +1,41 @@
+{
+  "people": [
+    {
+      "person": "p-sister",
+      "spotted_before": 0.88,
+      "spotted_after": 0.5,
+      "polished": {
+        "Running about 10 minutes late, sorry!": "Running about 10 minutes late, sorry!",
+        "Sounds great! See you there!": "Sounds great. See you there!",
+        "Could you please call Mom when you get a chance.": "Could you please call Mom when you get a chance",
+        "Yes! Absolutely!": "Yes. Absolutely!"
+      }
+    },
+    {
+      "person": "p-manager",
+      "spotted_before": 1.0,
+      "spotted_after": 0.5,
+      "polished": {
+        "Running a few minutes late!": "Running a few minutes late.",
+        "The draft is in the folder!!": "The draft is in the folder.",
+        "Thanks so much! That works for me!": "Thanks so much. That works for me.",
+        "Happy to cover the demo!": "Happy to cover the demo."
+      }
+    },
+    {
+      "person": "p-friend-zh",
+      "spotted_before": 1.0,
+      "spotted_after": 0.5,
+      "polished": {
+        "我会晚一点到。": "我会晚一点到",
+        "周六可以！没问题！": "周六可以，没问题",
+        "非常感谢你！": "非常感谢你",
+        "好的，收到。": "好的，收到"
+      }
+    }
+  ],
+  "pairs": 48,
+  "spotted_before": 0.96,
+  "spotted_after": 0.5,
+  "pass": true
+}
