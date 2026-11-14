@@ -256,7 +256,7 @@ from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
-from utils.sync import cap_hold_redrive
+from utils.sync import batch_census, cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
@@ -3874,3 +3874,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 @read_origin('job:cap_hold_recovery')
 async def sweep_cap_hold_recovery(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     return await cap_hold_redrive.sweep()
+
+
+@router.post('/v2/batch-census/run', include_in_schema=False)
+@read_origin('job:batch_census')
+async def run_batch_census(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Exact per-stock counts and oldest ages for the batch census registry."""
+    return JSONResponse(status_code=200, content=await batch_census.snapshot())

@@ -32,7 +32,9 @@ version, conversation existence/ownership/privacy/redirect fields, conversation
 tombstones, and privacy epoch/purge state. This includes dynamic payloads,
 field transforms and deletes. Metadata-only updates with an exists precondition
 are excluded when they cannot change the decision. Full-row `snapshots=`
-consumers always read live, including episode and recorded-time metadata.
+consumers (`database.batch_pipeline_projection_session`, intake, retention,
+custody) read live unless the owner memo serves the decision; see the owner-memo
+section for the partial export that can produce.
 
 Each cached decision re-reads the durable token and checks its server revision,
 including nanoseconds. Missing or malformed tokens/revisions cause live reads.
@@ -162,6 +164,58 @@ Unresolved shadow errors or missing candidate coverage block qualification.
 Compare each plane against its own lifecycle baseline; pusher's first complete
 interval includes setup checks, while listen resets its census after bootstrap.
 
+### Owner-level decision memo (`bpp_owner_memo`, default 100)
+
+Ship-on per the 09:08Z ruling on SCA-2190. One entry per (client, uid) holds the
+token version, generation, the conversation-id union a walk certified and the
+user sync default. Every use re-reads the token in the caller's transaction and
+requires token, server revision and generation to match; ids outside the
+certified union are walked live in that transaction; BLOCK is never stored; the
+kill switch `ops_kill_switches/privacy_decision_cache` is consulted before every
+served decision. `privacy_ttl60` stays off and is not used here.
+
+A served decision exports no rows for ids the entry has already certified.
+Unseen ids are walked live and their rows ARE exported, so a `snapshots=`
+caller can receive a partial export; the projection, intake, retention and
+custody consumers read any row they still need themselves.
+
+Shadow window to run before the default-on revision serves decisions for real:
+
+- Keep `bpp_owner_memo:100`; set `privacy_checks_shadow:10` and
+  `privacy_negative_lookup_cache:0`.
+- For the sampled 10% of uids every transactional batch check serves the LIVE
+  decision and then compares an owner-memo candidate. That covers all three
+  previously unshadowed shapes: attempt-scoped calls, the store/retention
+  `no_attempt` calls and the `snapshots=` callers (projection, intake). Gating
+  shadow on an attempt, or skipping export callers, would leave those paths
+  enforcing with no comparison and a zero `stale_allow` there would be
+  structural, not evidence.
+- The candidate receives a throwaway export dict, so a comparison can never
+  publish rows or perturb the caller's export.
+- Unsampled uids do not enforce either: while any `privacy_checks_shadow`
+  percentage is set, the owner memo serves no one, so the unsampled cohort
+  serves plain live decisions (baseline reads, no memo saving) until the
+  lever clears. Nothing the comparison cohort has not validated serves a
+  decision during the window. Nontransactional provider-STT preflight stays
+  live and never enters the memo path (no transaction); it is live by
+  construction in every stage, so no later lever or stage enforces the memo
+  there. The already-shipped attempt-scoped id-set memo keeps its existing
+  levers and behavior throughout; it is not part of this release's change.
+- The negative lookup cache must stay off for the window: with it on,
+  `negative_shadow` wins and the memo neither enforces nor compares.
+- Gate: `privacy_decision_mismatch_total{family="batch",reason="stale_allow"}`
+  is zero and `privacy_shadow_checks_total{family="batch",result="mismatch"}`
+  is zero, with `candidate_source="owner_hit"` comparisons observed on every
+  shape above. A zero comparison count is not evidence: it means the negative
+  cache is still on or the window is not set.
+- Read cost: the window saves nothing. Sampled uids roughly double their reads
+  — a cold owner pays the live walk plus the candidate walk, a warm owner pays
+  the live walk plus one candidate token read, and every sampled check adds
+  one observation token read. Snapshot callers add per-new-id reads on
+  candidate misses. The unsampled cohort returns to baseline live reads. At
+  10% sampling that is about +0.5 read per check across the fleet, plus the
+  baseline (no-saving) reads for the unsampled 90% until the window ends.
+
 ## Deploy and ramp
 
 1. Lead deploys writer code: **listen → pusher → Cloud Run** (backend,
@@ -173,8 +227,9 @@ interval includes setup checks, while listen resets its census after bootstrap.
    Staging/migration tools are not authority to enable production caching.
 2. Record each slice's pre-ramp live read baseline. Enable
    `privacy_checks_shadow` for the sampled cohorts, then all planes. The memo
-   candidate runs **after** live allow/block, never changes it and never exports
-   snapshots. Shadow wins if an enforcement lever is also present.
+   candidate runs **after** live allow/block, never changes it and never writes
+   to the caller's export (it gets a throwaway copy). Shadow wins if an
+   enforcement lever is also present.
 3. Require **at least 14 days** of all-plane shadow and **zero unexplained
    `privacy_decision_mismatch_total`**, plus the emulator writer matrix and privacy contracts.
    Count/classify benign concurrent ordering rather than discarding it. Grade
