@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
-from utils.messaging.contracts import ChannelMessage, Artifact, InboundAttachment
+from utils.messaging.contracts import ChannelMessage
 from utils.messaging.identity import advances_inbound_head, coerce_utc_datetime
 from utils.messaging.album_turn import inbox_message
 from utils.messaging.gateway import Gateway

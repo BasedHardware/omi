@@ -15,7 +15,7 @@ from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access, SeatFull
-from utils.messaging.contracts import ChannelMessage, Principal, ReentryEvent
+from utils.messaging.contracts import Principal, ReentryEvent
 from utils.messaging.history import history_tool
 from utils.messaging.album_turn import inbox_message, prepare_for_generation
 from utils.messaging.outbound import ChannelReplySink
