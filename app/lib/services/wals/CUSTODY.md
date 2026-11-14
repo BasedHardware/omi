@@ -150,7 +150,10 @@ reasons keep their existing expiry. Audio and both stored clocks stay intact; af
 as reported. Restart and connectivity wakes respect the same persisted last
 attempt. Legacy refused rows start their window at the first recovery attempt.
 Each attempt uses one file, under the existing 25-refusal-per-drain cap. Valid
-audio keeps priority, with a bounded separate turn for unknown clocks.
+audio keeps priority, with a separate unknown-clock batch after at most 36 valid
+batch attempts. This shared budget is checkpointed on waiting WALs in the same owner
+index before each valid attempt and resets after an unknown batch enters the
+gate, so restarts cannot erase it and unknown backlog cannot monopolize uploads.
 Local-only custody stays closed; a held recording already submitted explicitly may recover
 automatically. No install migration, clock reset, or receipt is needed: an old
 invalid-date refusal automatically becomes eligible on its next weekly due date.

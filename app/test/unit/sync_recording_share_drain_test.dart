@@ -34,6 +34,7 @@ void main() {
   late List<String> uploadedBatchFirstFiles;
   late int rateLimitAtBatch;
   late LocalWalSyncImpl sync;
+  late SyncUploadGate uploadGate;
   Future<void> Function()? afterUpload;
 
   setUp(() async {
@@ -56,35 +57,34 @@ void main() {
     rateLimitAtBatch = 0;
     afterUpload = null;
     SyncRateLimiter.instance.clear();
-    sync = LocalWalSyncImpl(
-      _Listener(),
-      uploadGate: SyncUploadGate(
-        limiter: SyncRateLimiter.instance,
-        uploader: (files,
-            {onUploadProgress,
-            conversationId,
-            captureEvidence,
-            recordingSessionId,
-            audioStartSeconds,
-            audioEndSeconds,
-            claimLiveCapture = false,
-            geolocation}) async {
-          if (rateLimitAtBatch > 0 && uploadedConversations.length >= rateLimitAtBatch) {
-            throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 60);
-          }
-          uploadedConversations.add(conversationId);
-          uploadedBatchFirstFiles.add(files.first.uri.pathSegments.last);
-          expect(
-              files.map((file) => file.uri.pathSegments.last).toSet().contains('audio_2145916800.bin') &&
-                  files.length > 1,
-              isFalse,
-              reason: 'unknown clocks must never ride in a request with valid audio');
-          if (afterUpload != null) await afterUpload!();
-          return UploadFilesResult.queued('job-${uploadedConversations.length}');
-        },
-        fairUseStatusLoader: () async => {'stage': 'none'},
-      ),
+    uploadGate = SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        if (rateLimitAtBatch > 0 && uploadedConversations.length >= rateLimitAtBatch) {
+          throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 60);
+        }
+        uploadedConversations.add(conversationId);
+        uploadedBatchFirstFiles.add(files.first.uri.pathSegments.last);
+        expect(
+            files
+                .map((file) => int.parse(file.uri.pathSegments.last.split('_').last.split('.').first) >= 2145916800)
+                .toSet(),
+            hasLength(1),
+            reason: 'unknown clocks must never ride in a request with valid audio');
+        if (afterUpload != null) await afterUpload!();
+        return UploadFilesResult.queued('job-${uploadedConversations.length}');
+      },
+      fairUseStatusLoader: () async => {'stage': 'none'},
     );
+    sync = LocalWalSyncImpl(_Listener(), uploadGate: uploadGate);
   });
 
   tearDown(() async {
@@ -148,6 +148,45 @@ void main() {
       expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded), isTrue);
     });
   }
+
+  test('clock-class turn survives repeated service restarts and yields back to valid audio after each batch', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final unknown = [
+      for (var i = 0; i < 2; i++)
+        await writeWal(2145916800 + i * 60, conversationId: 'shared', seconds: 300)
+          ..recordingSessionId = 'same-session',
+    ];
+    final firstValid = await writeWal(now - 100, conversationId: 'shared', seconds: 300)
+      ..recordingSessionId = 'same-session';
+    sync.testWals = [...unknown, firstValid];
+    afterUpload = () async {
+      if (uploadedBatchFirstFiles.last == unknown.last.filePath) {
+        afterUpload = null;
+        return;
+      }
+      sync.testWals
+          .add(await writeWal(now - 100 + uploadedBatchFirstFiles.length, conversationId: 'shared', seconds: 300)
+            ..recordingSessionId = 'same-session');
+      if (uploadedBatchFirstFiles.length % 10 == 0) sync.cancelSync();
+    };
+    var restarts = 0;
+    while (sync.testWals.any((wal) => wal.status == WalStatus.miss)) {
+      await sync.syncAll();
+      final restored = await WalFileManager.loadWals();
+      if (restored.any((wal) => wal.status == WalStatus.miss)) {
+        expect(restarts++, lessThan(10));
+        final pendingUnknown = restored.where((wal) => wal.timerStart >= 2145916800 && wal.status == WalStatus.miss);
+        expect(pendingUnknown.every((wal) => wal.clockRecoveryValidBatches > 0), isTrue,
+            reason: 'the actual committed index must carry the turn across each restart before 36 batches');
+        sync = LocalWalSyncImpl(_Listener(), uploadGate: uploadGate)..testWals = restored;
+      }
+    }
+    expect(restarts, greaterThanOrEqualTo(7));
+    expect(uploadedBatchFirstFiles.indexOf(unknown.first.filePath!), maxValidBatchesBeforeClockRecovery);
+    expect(uploadedBatchFirstFiles.indexOf(unknown.last.filePath!), 2 * maxValidBatchesBeforeClockRecovery + 1);
+    expect(uploadedBatchFirstFiles.first, firstValid.filePath);
+    expect((await WalFileManager.loadWals()).every((wal) => wal.clockRecoveryValidBatches == 0), isTrue);
+  });
 
   // Device-imported WALs (StorageSync → persistDeviceChunk) carry no
   // conversation or recording-session id; one contiguous run of 60s chunks

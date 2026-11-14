@@ -182,7 +182,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// counter let the oldest recording re-enter every pass at the head and
   /// starve the recordings behind it without ever deferring (#14688).
   final Map<String, int> _drainGroupBatchCounts = {};
-  int _validBatchesSinceClockRecovery = 0;
   final Map<String, int> _drainGroupCountedAt = {};
 
   /// Session fence. Incremented on logout so in-flight chunk/flush/sync cannot
@@ -251,7 +250,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _backlogTelemetry.clearUserData();
     _sessionGeneration++;
     _drainGroupBatchCounts.clear();
-    _validBatchesSinceClockRecovery = 0;
     _drainGroupCountedAt.clear();
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
@@ -2103,8 +2101,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      final clockRecoveryTurn = _validBatchesSinceClockRecovery >= maxValidBatchesBeforeClockRecovery &&
-          pending.any((wal) => walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown);
+      final clockRecoveryTurn = pending.any((wal) =>
+          walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown &&
+          wal.clockRecoveryValidBatches >= maxValidBatchesBeforeClockRecovery);
       final turnPending = clockRecoveryTurn
           ? pending.where((wal) => walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown).toList()
           : pending;
@@ -2240,12 +2239,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       reportUploadProgress();
 
       _notifyUpdated(generation);
+      var clockRecoveryAttempted = false;
       try {
         // Upload only — return as soon as the server acknowledges. We do NOT
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
         if (!await reserveRefusalRetries(batchWals, generation, batchNowSeconds)) return resp;
+        if (!await reserveClockRecoveryBudget(batchWals, generation, batchNowSeconds)) return resp;
         if (!_isCurrent(generation) || passCancelled()) {
           for (final wal in batchWals) {
             wal.isSyncing = false;
@@ -2253,10 +2254,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         final audioBounds = syncUploadAudioBounds(batchWals);
-        _validBatchesSinceClockRecovery =
-            walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown
-                ? 0
-                : min(_validBatchesSinceClockRecovery + 1, maxValidBatchesBeforeClockRecovery);
+        clockRecoveryAttempted = walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown;
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
@@ -2442,6 +2440,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
         }
+      } finally {
+        // Spend the turn only after entering the gate, including refusals.
+        // A crash before that call leaves the durable earned turn intact.
+        if (clockRecoveryAttempted) await completeClockRecoveryTurn(generation);
       }
 
       await _saveWalsToFile(generation);

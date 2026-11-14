@@ -744,6 +744,16 @@ class Wal {
     _changed();
   }
 
+  /// Shared clock-class turn budget, checkpointed on waiting unknown-clock
+  /// rows before valid uploads so process restarts cannot erase their turn.
+  int _clockRecoveryValidBatches;
+  int get clockRecoveryValidBatches => _clockRecoveryValidBatches;
+  set clockRecoveryValidBatches(int value) {
+    if (_clockRecoveryValidBatches == value) return;
+    _clockRecoveryValidBatches = value;
+    _changed();
+  }
+
   /// Recovery is independent of the transient network retry budget. Capture
   /// clocks can become admissible in a later server rollout: retry daily for
   /// the first week, then weekly indefinitely, without changing either clock.
@@ -901,6 +911,7 @@ class Wal {
     int uploadRejectionStatusCode = 400,
     int uploadRejectedAt = 0,
     int uploadRefusalLastAttemptAt = 0,
+    int clockRecoveryValidBatches = 0,
   })  : _timerStart = timerStart,
         _codec = codec,
         _seconds = seconds,
@@ -946,6 +957,7 @@ class Wal {
         _uploadRejectionStatusCode = uploadRejectionStatusCode,
         _uploadRejectedAt = uploadRejectedAt,
         _uploadRefusalLastAttemptAt = uploadRefusalLastAttemptAt,
+        _clockRecoveryValidBatches = clockRecoveryValidBatches,
         data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -1005,6 +1017,7 @@ class Wal {
       uploadRejectionStatusCode: json['upload_rejection_status_code'] ?? 400,
       uploadRejectedAt: json['upload_rejected_at'] ?? 0,
       uploadRefusalLastAttemptAt: json['upload_refusal_last_attempt_at'] ?? 0,
+      clockRecoveryValidBatches: json['clock_recovery_valid_batches'] ?? 0,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -1058,6 +1071,7 @@ class Wal {
       'upload_rejection_status_code': uploadRejectionStatusCode,
       'upload_rejected_at': uploadRejectedAt,
       'upload_refusal_last_attempt_at': uploadRefusalLastAttemptAt,
+      if (clockRecoveryValidBatches > 0) 'clock_recovery_valid_batches': clockRecoveryValidBatches,
     };
   }
 
@@ -1118,6 +1132,7 @@ class Wal {
     h = _mixFingerprint(h, uploadRejectionStatusCode);
     h = _mixFingerprint(h, uploadRejectedAt);
     h = _mixFingerprint(h, uploadRefusalLastAttemptAt);
+    h = _mixFingerprint(h, clockRecoveryValidBatches);
     return h;
   }
 

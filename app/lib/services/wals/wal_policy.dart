@@ -207,6 +207,37 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
     _notifyUpdated(generation);
   }
 
+  Future<bool> reserveClockRecoveryBudget(List<Wal> batch, int generation, int nowSeconds) async {
+    if (walCaptureTimeClass(batch.first, nowSeconds) == WalCaptureTimeClass.unknown) return _isCurrent(generation);
+    final waiting = _wals
+        .where((wal) =>
+            wal.storage == WalStorage.disk &&
+            !wal.onDeviceOnly &&
+            !wal.holdForUser &&
+            (wal.status == WalStatus.miss || wal.status == WalStatus.uploadRejected) &&
+            walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.unknown)
+        .toList();
+    if (waiting.isEmpty) return _isCurrent(generation);
+    final spent = waiting.fold<int>(0, (count, wal) => max(count, wal.clockRecoveryValidBatches));
+    final next = min(spent + 1, maxValidBatchesBeforeClockRecovery);
+    for (final wal in waiting) {
+      wal.clockRecoveryValidBatches = next;
+    }
+    // The budget lives in the owner-fenced audio index, not process memory or
+    // a separate receipt. Persist before the gate and recheck cancellation there.
+    return await _saveWalsToFile(generation) && _isCurrent(generation);
+  }
+
+  Future<void> completeClockRecoveryTurn(int generation) async {
+    if (!_isCurrent(generation)) return;
+    // One clock-class turn serves one batch, not every row that earned it:
+    // reset the shared budget so a large unknown backlog cannot starve valid audio.
+    for (final wal in _wals) {
+      wal.clockRecoveryValidBatches = 0;
+    }
+    await _saveWalsToFile(generation);
+  }
+
   Future<bool> reserveRefusalRetries(List<Wal> wals, int generation, int nowSeconds) async {
     var changed = false;
     for (final wal in wals) {

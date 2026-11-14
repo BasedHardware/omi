@@ -194,8 +194,8 @@ Map<Wal, String> recordingGroupKeys(List<Wal> wals) {
 const maxBatchesPerRecordingPerDrain = 36;
 
 /// Valid audio leads, but continuous arrivals may not starve unknown clocks.
-/// The ledger carries this class budget between drains, independently of a
-/// recording/session key that can contain both trusted and untrusted clocks.
+/// The ledger persists this class budget on waiting WALs across drains and
+/// restarts, independently of a session containing both trusted and unknown clocks.
 const maxValidBatchesBeforeClockRecovery = 36;
 
 /// How long a recording's spent share keeps counting across drain passes. A
