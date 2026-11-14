@@ -119,7 +119,11 @@ def test_privacy_settlement_cannot_skip_other_transactional_fences(lane, fence):
     if fence == 'account':
         lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
     elif fence == 'generation':
-        lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set({'generation': 1})
+        from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge
+
+        generation = advance_privacy_generation(lane.client, lane.uid, blocked=False)
+        finish_privacy_purge(lane.client, lane.uid, generation)
+        assert generation == 1
     elif fence == 'protection':
         lane.user.update({'data_protection_level': 'e2ee'})
     elif fence == 'ledger':

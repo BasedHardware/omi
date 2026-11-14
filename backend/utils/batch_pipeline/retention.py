@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
 import os
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -36,7 +37,9 @@ HOLD_RECHECK = timedelta(hours=1)
 logger = logging.getLogger(__name__)
 
 
-def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None) -> None:
+def delete_batch_object(
+    uid: str, uri: str, *, timeout: float | None = None, storage_client: Any = None, namespace: str | None = None
+) -> None:
     """Delete only a configured, owner-scoped object; foreign refs fail closed.
 
     Inside ``rpc_deadline`` (a gate-held unit) the delete is one attempt with
@@ -44,6 +47,8 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
     caller reuse a client whose session is bound to that deadline.
     """
     parsed = urlsplit(uri)
+    if namespace is not None and not re.fullmatch(r'batch_pipeline_(prod|dev|test_[a-z0-9_]{1,40})', namespace):
+        raise ValueError('explicit batch namespace required')
     bucket_name, path = parsed.netloc, parsed.path.lstrip('/')
     allowed_buckets = {
         value
@@ -59,6 +64,7 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
                 f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
                 f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
                 f'syncing/{uid}/',
+                *((f'batch-pipeline/{namespace}/owners/{privacy_owner_key(uid)}/',) if namespace else ()),
             )
         )
         or any(part in {'.', '..'} for part in path.split('/'))

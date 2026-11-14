@@ -568,6 +568,9 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     monkeypatch.setattr(projection, 'projection_claim', claim)
     projector = projection.Projector(Mock(), Mock())
     projector.store = Mock()
+    from contextlib import nullcontext
+
+    projector.store.writer_scope.side_effect = nullcontext
     job, entry, binding = (
         {'policy_parts': {'projection': ProjectionPolicy().to_dict()}},
         {},
@@ -590,6 +593,9 @@ def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', raising=False)
     projector = Projector(Mock(), Mock())
     projector.store = Mock()
+    from contextlib import nullcontext
+
+    projector.store.writer_scope.side_effect = nullcontext
     projector.store.session.return_value.persist_empty.side_effect = ProjectionReplay({'state': 'persisted'})
     item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
     with pytest.raises(ProjectionReplay):
@@ -672,6 +678,9 @@ def test_assignment_supersession_settles_part_but_conflicts_still_retry(binding,
     }
     projector = projection.Projector(Mock(), Mock(return_value=payload))
     projector.store = Mock()
+    from contextlib import nullcontext
+
+    projector.store.writer_scope.side_effect = nullcontext
     session = projector.store.session.return_value
     receipt = {'state': 'ready', 'disposition': 'superseded', 'conversation_id': None, 'speech_seconds': 0.0}
     session.persist_empty.return_value = receipt
@@ -841,6 +850,9 @@ def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, capl
     }
     projector = projection.Projector(Mock(), Mock(return_value=payload))
     projector.store = Mock()
+    from contextlib import nullcontext
+
+    projector.store.writer_scope.side_effect = nullcontext
     monkeypatch.setattr(
         projection,
         'build_incoming',

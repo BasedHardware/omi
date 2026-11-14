@@ -4,6 +4,8 @@ Synchronous worker seam: offload the call from an async serving coordinator.
 No admission flag is consulted: already accepted work drains after rollback.
 """
 
+from utils.batch_pipeline.projection_writers import customer_writer, persist_playback, writer_scope
+
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
@@ -11,7 +13,6 @@ from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from google.api_core.exceptions import NotFound
 import threading
 import time
 import math
@@ -43,7 +44,6 @@ from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
-from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS
@@ -679,6 +679,7 @@ class Projector:
             self.finish_part(item, binding, receipt, int(index) if index is not None else None, policy=policy)
         return self.complete_content(item.segment_id, binding, policy=policy)
 
+    @customer_writer
     def complete_content(self, segment_id, binding, *, policy=None):
         policy = policy or self.store.policy(segment_id)
         with projection_phase('accounting', policy):
@@ -697,14 +698,12 @@ class Projector:
             if result.get('reason_code') != 'source_deleted':
                 with projection_phase('publication', policy):
                     self.publish(binding, result)
-            from utils.batch_pipeline.retention import expire_completed_segment
-
             for sibling in binding.segment_ids:
                 retained = self.store.ref('results', sibling).get().to_dict() or {}
                 if retained.get('projection_state') == 'erased':
                     continue
                 with projection_phase('retention', policy):
-                    if not expire_completed_segment(self.store.store, binding.owner_id, sibling, self.clock()):
+                    if not self.store.retain_completed(binding.owner_id, sibling, self.clock()):
                         raise ProjectionBlocked('completion retention receipt unavailable')
                     self.store.acknowledge(sibling, binding, self.clock(), policy=policy)
         return result
@@ -842,18 +841,19 @@ class Projector:
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
         try:
-            conversations_db.assign_sync_conversation(
-                binding.owner_id,
-                incoming,
-                target_id=binding.target_conversation_id,
-                firestore_client=self.store.client,
-                before_assign=session.prepare,
-                validate_plan=session.validate_plan,
-                after_assign=lambda transaction, planned: session.persist(transaction, planned),
-                retry_contention=session.policy.projection_contention,
-                timing=session.policy.projection_timing,
-                **self._index_options(hint),
-            )
+            with writer_scope(self.store):
+                conversations_db.assign_sync_conversation(
+                    binding.owner_id,
+                    incoming,
+                    target_id=binding.target_conversation_id,
+                    firestore_client=self.store.client,
+                    before_assign=session.prepare,
+                    validate_plan=session.validate_plan,
+                    after_assign=lambda transaction, planned: session.persist(transaction, planned),
+                    retry_contention=session.policy.projection_contention,
+                    timing=session.policy.projection_timing,
+                    **self._index_options(hint),
+                )
         finally:
             self._mirror_assignment(session)
 
@@ -1047,19 +1047,20 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
-                                binding.owner_id,
-                                incoming,
-                                target_id=context.target_id,
-                                candidate_id=candidate['id'] if candidate else None,
-                                firestore_client=self.store.client,
-                                before_assign=session.prepare,
-                                validate_plan=session.validate_plan,
-                                after_assign=persisted,
-                                retry_contention=policy.projection_contention,
-                                timing=policy.projection_timing,
-                                **self._index_options(hint),
-                            )
+                            with writer_scope(self.store):
+                                assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
+                                    binding.owner_id,
+                                    incoming,
+                                    target_id=context.target_id,
+                                    candidate_id=candidate['id'] if candidate else None,
+                                    firestore_client=self.store.client,
+                                    before_assign=session.prepare,
+                                    validate_plan=session.validate_plan,
+                                    after_assign=persisted,
+                                    retry_contention=policy.projection_contention,
+                                    timing=policy.projection_timing,
+                                    **self._index_options(hint),
+                                )
                         finally:
                             self._mirror_assignment(session)
                         incoming.pop('_sync_lineage_eligible', None)
@@ -1128,6 +1129,7 @@ class Projector:
     def supersede(self, session):
         return persist_disposition(session)
 
+    @customer_writer
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
         if receipt.get('conversation_id'):
@@ -1175,80 +1177,9 @@ class Projector:
                 return
         self.store.ready(item.segment_id, binding, self.clock(), part_index=index, policy=policy)
 
+    @customer_writer
     def persist_playback(self, item: WorkItem, binding, canonical: str, receipt: dict):
-        if self.fetch_audio is None:
-            raise ProjectionBlocked('private playback requires ArtifactStore.fetch_audio')
-        from database.conversations import decode_transcript_segments_verified
-
-        # Reconstruct only this input's retained ranges from the stored legacy
-        # transcript. Never put transcripts or unbounded survivor IDs in receipts.
-        row = (
-            self.store.client.collection('users')
-            .document(binding.owner_id)
-            .collection('conversations')
-            .document(canonical)
-            .get()
-            .to_dict()
-            or {}
-        )
-        if not row or row.get('deleted'):
-            raise ProjectionBlocked('playback target deleted')
-        segments = decode_transcript_segments_verified(
-            binding.owner_id,
-            row.get('transcript_segments'),
-            bool(row.get('transcript_segments_compressed')),
-        )
-        origin = row['started_at'].timestamp()
-        capture_at = receipt.get('capture_at') or item.capture_at
-        scope = receipt.get('speaker_scope') or f'sync:{item.segment_id}'
-        survivors = []
-        for segment in segments:
-            if segment.get('speaker_id_scope') == scope:
-                stamp = origin + segment['start']
-                if scope.startswith('final:batch:') and not (
-                    capture_at <= stamp < (receipt.get('audio_end') or item.capture_at + item.duration_seconds)
-                ):
-                    continue
-                survivors.append(
-                    {
-                        **segment,
-                        'timestamp': stamp,
-                        'start': stamp - capture_at,
-                        'end': origin + segment['end'] - capture_at,
-                    }
-                )
-        if not survivors:
-            return
-        try:
-            audio = self.fetch_audio(item)
-        except NotFound:  # Transcript is projected; close like a no-survivor input.
-            return artifact_missing.record('playback')
-        audio_end = receipt.get('audio_end') or item.capture_at + item.duration_seconds
-        if capture_at != item.capture_at or audio_end != item.capture_at + item.duration_seconds:
-            import io
-            from pydub import AudioSegment
-
-            # Match legacy retrieve_vad_segments slicing before full/partial
-            # audio policy. Never copy a whole multipart capture to each row.
-            decoded = AudioSegment.from_wav(io.BytesIO(audio))
-            sliced = decoded[(capture_at - item.capture_at) * 1000 : (audio_end - item.capture_at) * 1000]
-            output = io.BytesIO()
-            sliced.export(output, format='wav')
-            audio = output.getvalue()
-        # Deliberately share the legacy audio persistence and partial-overlap
-        # policy; its stable chunk timestamps make replay an overwrite.
-        from utils.sync.merge_audio import store_intake_audio
-
-        store_intake_audio(
-            binding.owner_id,
-            capture_at,
-            audio,
-            binding.data_protection_level,
-            survivors,
-            receipt['incoming_segment_count'],
-            True,
-            canonical,
-        )
+        return persist_playback(self, item, binding, canonical, receipt)
 
     def status(self, uid: str, content_id: str) -> dict | None:
         return self.store.status(uid, content_id)

@@ -338,6 +338,12 @@ def _commit(client: Any, ref: Any, uid: str, stage: str, **kwargs: Any) -> str:
 
     @firestore.transactional
     def commit(transaction: Any) -> str:
+        # C1 observers run after their source transaction and may resume after
+        # deletion. Re-read authority inside THIS committing transaction. A
+        # concurrent marker/tombstone/token change conflicts with this write.
+        from database.batch_pipeline_privacy import assert_batch_write_allowed
+
+        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(ref.id,), snapshots={})
         snapshot = ref.get(transaction=transaction)
         existing = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
         plan = plan_advance(existing, stage, **kwargs)

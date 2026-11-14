@@ -593,7 +593,9 @@ def vendor_turns(words: list[dict], duration: float, *, fallback: bool = False) 
     return turns
 
 
-async def transcribe_async(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
+async def transcribe_async(
+    item: WorkItem, language: str | None, inspected: tuple, *, service: str, fence_ticket=None
+) -> dict:
     """One vendor call, awaited on the event loop: Velma batch has no submit/poll mode, so the
     open request holds a socket, never an executor thread. No client retry (one paid POST)."""
     from utils.batch_pipeline.word_validation import validate_words
@@ -608,7 +610,12 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     try:
         async with track(scope):
             await scope.reserve_async(service)
-            response = await _vendor_words(service, _wav(pcm), duration, language)
+            wav = _wav(pcm)
+            if fence_ticket is not None:
+                from utils.executors import db_executor, run_blocking
+
+                await run_blocking(db_executor, fence_ticket.start, item, service)
+            response = await _vendor_words(service, wav, duration, language)
     except (RecoveryFailure, BatchPrivacyBlocked):
         raise
     except Exception:
@@ -646,9 +653,9 @@ async def transcribe_async(item: WorkItem, language: str | None, inspected: tupl
     return payload
 
 
-def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, service: str) -> dict:
+def transcribe(item: WorkItem, language: str | None, inspected: tuple, *, service: str, fence_ticket=None) -> dict:
     """Synchronous seam for callers without an event loop (pull consumers, offline tools)."""
-    return asyncio.run(transcribe_async(item, language, inspected, service=service))
+    return asyncio.run(transcribe_async(item, language, inspected, service=service, fence_ticket=fence_ticket))
 
 
 UnitOutcomeName = Literal['done', 'deferred', 'discarded', 'retry']

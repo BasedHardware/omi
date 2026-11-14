@@ -193,6 +193,7 @@ def test_store_run_reseeds_each_hinted_activation_after_commit(monkeypatch):
     view = SimpleNamespace(hinted_activations={('scheduler_09', 2), ('scheduler_01', 0)})
     store = store_module.FirestoreStore.__new__(store_module.FirestoreStore)
     store.namespace = 'batch_pipeline_dev'
+    store.queue_authority = None
     store._client = object()
     monkeypatch.setattr(store_module.FirestoreStore, 'client', property(lambda self: self._client))
 

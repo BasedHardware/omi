@@ -277,6 +277,7 @@ class _LocalSessionHTTP:
             fcntl.flock(file, fcntl.LOCK_EX)
             state = json.load(file)
             status = state['http_status']
+            properties = state.get('properties')
             if method == 'DELETE':
                 if status == 308:
                     state['http_status'] = status = 499
@@ -309,7 +310,14 @@ class _LocalSessionHTTP:
                 elif status == 200:
                     status = 400  # A finalized capability cannot create again.
             file.seek(0)
-            json.dump(state if state['http_status'] == 308 else {'http_status': state['http_status']}, file)
+            json.dump(
+                (
+                    state
+                    if state['http_status'] == 308
+                    else {'http_status': state['http_status'], 'properties': properties}
+                ),
+                file,
+            )
             file.truncate()
         response = _LocalSessionResponse(status, properties)
         if self.after_request is not None:

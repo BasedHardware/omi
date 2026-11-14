@@ -37,6 +37,8 @@ def admit(
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
     coalescing_group: dict | None = None,
+    handoff=None,
+    provider_plan=None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -47,6 +49,26 @@ def admit(
     row legacy can no longer finish); the batch ledger write below replaces it.
     With both unset, behaviour is unchanged.
     """
+    policy = policy or resolve_batch_policy(binding.owner_id)
+    run = store.run
+    if handoff is not None:
+        from database.jobstore.authority import AuthorityRefused
+        from database.jobstore.intent_store import IntentStore, plan_enqueue
+
+        provider = policy.stt_route == 'provider'
+        if enqueue is not None or binding.record_origin or binding.partial_record or coalescing_group is not None:
+            raise AuthorityRefused('this cohort requires its dedicated PG intent adapter')
+        run = IntentStore(store, handoff, binding).run
+        if provider:
+            from database.jobstore.provider_handoff import provider_plan_enqueue
+
+            enqueue = provider_plan_enqueue(binding, provider_plan)
+        else:
+            if provider_plan is not None:
+                raise AuthorityRefused('provider plan cannot admit a GPU cohort')
+            enqueue = plan_enqueue
+    elif provider_plan is not None:
+        raise ValueError('typed provider plan requires an explicit handoff')
     enqueue_item = enqueue or Scheduler.enqueue_in_transaction
     if not items or tuple(item.segment_id for item in items) != binding.segment_ids:
         raise ValueError('complete ordered sibling set must match immutable projection binding')
@@ -54,7 +76,6 @@ def admit(
         item.owner_id != binding.owner_id or item.privacy_generation != binding.privacy_generation for item in items
     ):
         raise ValueError('work identity must match projection binding')
-    policy = policy or resolve_batch_policy(binding.owner_id)
     content_key = f'{binding.owner_id}/{binding.content_id}'
     serialized_binding = asdict(binding)
     # Ordinary work must remain readable by pre-partial projection hosts
@@ -221,7 +242,7 @@ def admit(
             '_admitted_seconds': sum(i.duration_seconds for i in items),
         }
 
-    outcome = store.run(commit)
+    outcome = run(commit)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:

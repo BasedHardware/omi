@@ -10,6 +10,7 @@ import pytest
 
 from database.outbox import Claim, Outcome
 from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, firestore_outbox
+from database.outbox_firestore import FirestoreOutbox
 from database.outbox import OutboxKind
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import custody
@@ -46,6 +47,30 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
     # The same row is claimable by today's run(): row compatibility (invariant 7).
     assert reprocess.run(KEY, row['task_token'], lambda *_: None, now=601) == 'processed'
     assert KEY not in state_rows
+
+
+def test_nontransactional_enqueue_keeps_committed_row_when_its_wake_fails(rows):
+    def failed(*args):
+        raise RuntimeError('task create failed')
+
+    client = Mock()
+    snapshot = client.collection.return_value.document.return_value.get.return_value
+    snapshot.exists = True
+    snapshot.to_dict.side_effect = lambda: dict(rows[0][KEY])
+    injected = FirestoreOutbox(OutboxKind.ENRICHMENT, create_wake=failed)
+    queued = injected.enqueue(KEY, 'u', PAYLOAD, 600, now=0)
+    injected._bound_client = client
+    original = dict(rows[0][KEY])
+    assert original['task_token'] == queued.wake_token and original['due_at'] == 120
+    # Explicit transactional callers still observe wake failures and can retry.
+    with pytest.raises(RuntimeError, match='task create failed'):
+        injected.wake(KEY, queued.wake_token)
+    assert rows[0][KEY] == original
+    wakes = []
+    injected._create_wake = lambda *args: wakes.append(args)
+    injected.wake(KEY, queued.wake_token)
+    assert wakes == [(KEY, queued.wake_token, 120.0)]
+    assert rows[0][KEY] == original
 
 
 def test_enqueue_coalesces_with_min_and_max_rules(rows):

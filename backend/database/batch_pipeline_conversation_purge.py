@@ -43,7 +43,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as p
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
 from database.legal_holds import settles_unknown_erasure
 
-PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
+PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow', 'ledger')
 DISCOVER_TABLES = ('jobs', 'results')
 DEPENDENT_TABLES = (
     'artifacts',
@@ -163,6 +163,7 @@ def purge_conversation(
     firestore_client: Any = None,
     delete_uri: Callable[[str, str], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    retained_copies: Any = None,
 ) -> int:
     """Erase ``conversation_id``'s batch rows from ``progress.position`` onward; returns rows erased."""
     client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
@@ -170,6 +171,32 @@ def purge_conversation(
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
+    if retained_copies is not None:
+        from database.jobstore.erasure_operations import ErasureOperations, PREFIX
+
+        def resolve_original(target: str) -> bool:
+            from database.jobstore.staging_operations import StagingOperations, PREFIX as STAGING_PREFIX
+            from database.jobstore.gcs_sink import GCSSink, PREFIX as GCS_PREFIX
+
+            if target.startswith(GCS_PREFIX):
+                from utils.other.local_storage import create_storage_client
+                from utils.batch_pipeline.upload_policy import UPLOAD_TIMEOUT
+
+                return GCSSink(retained_copies.handoff, create_storage_client(), timeout=UPLOAD_TIMEOUT).recover(
+                    uid, target
+                )
+            if target.startswith(STAGING_PREFIX):
+                return StagingOperations(retained_copies).resolve(uid, target)
+            if target.startswith(PREFIX):
+                return ErasureOperations(retained_copies).resolve(uid, target)
+            from utils.batch_pipeline.retention import delete_batch_object
+
+            return settles_unknown_erasure(lambda: delete_batch_object(uid, target))
+
+        progress.settle_stuck(resolve_original)
+        _ensure_budget(progress)
+        with progress.unit() as authority:
+            retained_copies.before_legacy(uid, conversation_id, authority)
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
         from utils.other.local_storage import create_storage_client
@@ -355,6 +382,16 @@ def purge_conversation(
                 settle()
                 with progress.unit():
                     purge_jobstore_owner(namespace, uid)
+            elif phase == 'ledger':
+                # C1 capture identity is the conversation ID. Do this through
+                # the same destructive unit/hold fence as other metadata.
+                _ensure_budget(progress)
+                settle()
+                with progress.unit() as authority:
+                    reference = (
+                        client.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id)
+                    )
+                    _fenced_delete(client, reference, authority.fence)
             if phase_index + 1 < len(PHASES):
                 mark({'ns': ns_index, 'phase': PHASES[phase_index + 1]})
             else:

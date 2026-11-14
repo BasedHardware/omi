@@ -16,6 +16,25 @@ NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
 
 
+def provider_result_artifacts(
+    ticket: Any, storage_client: Any, bucket: str, master_secret: bytes, *, lease_seconds: float
+) -> Any:
+    """Explicit customer/storage-role factory; no runtime selector or new policy.
+
+    Keep this composition out of the default paid-provider worker closure.
+    """
+    from database.jobstore.provider_upload import ProviderUpload
+
+    return ProviderUpload(ticket, storage_client, lease_seconds=lease_seconds).artifacts(bucket, master_secret)
+
+
+def retained_provider_copies(handoff: Any) -> Any:
+    """Explicit customer-role adapter; no runtime selection or final purge proof."""
+    from database.jobstore.retained_copies import RetainedCopies
+
+    return RetainedCopies(handoff)
+
+
 def _belongs(data: dict, conversation_id: str | None) -> bool:
     if conversation_id is None:
         return True
@@ -166,6 +185,8 @@ def purge_batch_owner(
     reason: str = 'deleted',
     namespaces: Iterable[str] = NAMESPACES,
     delete_uri: Callable[[str, str], None] | None = None,
+    retained_copies: Any = None,
+    destructive_authority: Any = None,
 ) -> int:
     """Fence first; erase objects before metadata so partial failures can retry.
 
@@ -186,14 +207,30 @@ def purge_batch_owner(
     generation = 0
     if reason not in {'deleted', 'data_protection'}:
         raise ValueError('bounded privacy reason required')
+    if retained_copies is not None:
+        if destructive_authority is None:
+            raise ValueError('retained-copy purge needs the existing destructive-unit authority')
+        if destructive_authority.uid != uid or destructive_authority.client is not client:
+            raise ValueError('retained-copy purge requires this owner and customer client')
+        if retained_copies.handoff.client is not client:
+            raise ValueError('retained-copy purge requires the original customer client')
+        if retained_copies.handoff.ticket.namespace not in namespaces:
+            raise ValueError('retained-copy namespace must belong to the requested census')
+        # Prove terminal P/PC and retain the original census BEFORE advancing F.
+        retained_copies.inventory(uid, conversation_id)
     if conversation_id is None:
-        generation = advance_privacy_generation(client, uid, blocked=reason == 'deleted')
+        advance_options = {'fence': destructive_authority.fence} if retained_copies is not None else {}
+        generation = advance_privacy_generation(client, uid, blocked=reason == 'deleted', **advance_options)
     else:
         tombstone = (
             client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
         )
         if not tombstone.get().exists:
             raise RuntimeError('conversation deletion intent required before batch purge')
+    if retained_copies is not None:
+        retained_copies.before_legacy(
+            uid, conversation_id, destructive_authority, fs_generation=generation if conversation_id is None else None
+        )
     default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object

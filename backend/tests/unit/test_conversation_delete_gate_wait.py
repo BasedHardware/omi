@@ -212,10 +212,16 @@ def gate_client(monkeypatch):
                 target,
             )
 
-    def settle(uid, *, kind, token, firestore_client=None):
+    def settle(uid, *, kind, token, target, firestore_client=None):
         with lock:
             return legal_holds._settle_remote_erasure_transaction.to_wrap(
-                client.transaction(), client, uid, kind, token, legal_holds.datetime.now(legal_holds.timezone.utc)
+                client.transaction(),
+                client,
+                uid,
+                kind,
+                token,
+                legal_holds.datetime.now(legal_holds.timezone.utc),
+                target,
             )
 
     monkeypatch.setattr(legal_holds, 'acquire_destructive_operation', acquire)

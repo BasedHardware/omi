@@ -205,6 +205,19 @@ maintenance (`utils/batch_pipeline/serving.py:start_serving_from_env.run`).
 | `batch:partial_retired` | `database/record_partial.py:update_run` | Terminal placeholder; replacement units own work | none | none | none | `RECORD_AUDIO_PARTIAL_ENABLED` | Retain partial inventory lineage |
 | `batch:committed` | `M:OrderedMerge.commit_next` | Job terminal; P/S still owe projection | none | none | none | No held-specific switch | Job commit is not conversation/finalization completion |
 
+G2's required `privacy_deferred` disposition is currently a dark refusal, not an
+implemented job-state writer/restore runner. Its required integration retains
+jobs and held outbox throughout deletion grace and until purge succeeds, with no
+maximum outage/purge-retry bound (A9). Restore must perform a fresh allowing walk
+and mint a new admission ID before work resumes; purging/erased is terminal
+`privacy_blocked`. Status/hold writes alone are allowed while closed. No serving
+path is enabled by this contract. A STARTed effect can transmit arbitrarily late
+(A3), and COMPLETE refuses its result. The missing durable writer/runner blocks
+source readiness; this requirement is not a claim that the state exists today.
+The dark typed queue persists `hold_reason=privacy_deferred` on refusal and
+releases its lease without discarding the paid-attempt token. This is not the
+document job-state writer or a completed restore/re-admission runner.
+
 `recovery_state` is an orthogonal job field: `held` → `prepared` → `running`
 → `failed_held` or `recovered`; revocation can write `cancelled`
 (`R:cancel_fenced_recovery`). Prepared/running intents never age-expire into
