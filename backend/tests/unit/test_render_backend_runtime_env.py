@@ -1502,11 +1502,8 @@ def test_episode_switches_render_on_every_composition_host(environment):
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-@pytest.mark.parametrize(
-    'chart,key',
-    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'), ('backend-listen', 'SYNC_COLLISION_SUFFIX_ENABLED')],
-)
-def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart, key):
+@pytest.mark.parametrize('chart', ['pusher', 'backend-listen'])
+def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
     chart_dir = _SCRIPT.parents[1] / 'charts' / chart
     values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
     result = subprocess.run(
@@ -1531,5 +1528,14 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart, 
     deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
     assert len(deployments) == 1
     containers = deployments[0]['spec']['template']['spec']['containers']
-    entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
-    assert entries == [{'name': key, 'value': 'true'}]
+    expected = {
+        'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED': 'true',
+        'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
+    }
+    if chart == 'pusher':
+        expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+    contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
+    for key, value in expected.items():
+        entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
+        assert entries == [{'name': key, 'value': value}]
+        assert contract[key]['value'] == value

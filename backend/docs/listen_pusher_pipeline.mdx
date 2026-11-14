@@ -193,14 +193,21 @@ transactional job claims and recovery cadence are unchanged. See
 ## Retained seal proof rules
 
 `RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
-it). The repair coordinator reserves three quarters of its existing slots for
+it). The repair coordinator borrows up to half of its existing slots for
 newest-first `record_pending` jobs enqueued 60 seconds to two hours ago, polling
 the live head every 15 seconds independently of the saved sweep frontier.
-Fresh attempts have a 90-second limit and a 120-second retry spacing; the other
-slots retain the existing sweep and row limits. With one worker the existing
+Fresh attempts and ordinary backlog loans have a 90-second limit; fresh retry
+spacing is 120 seconds. Pending-job discovery retains half the original worker
+budget, its urgent deadline ordering and its ordinary-job reserve. Conversation
+discovery retains the other half plus unused job capacity. The checkpointed
+initial worker group starts before fresh borrowing, and idle fresh capacity
+returns to backlog work. With one worker the existing
 sweep runs alone. Successful fresh seals atomically set `available_at=0` so
 intake's due query sees them before ordinary retry wakes. Admission still checks
 the sealed barrier, retained audio, privacy generation, and provider policy.
+The seal transaction preserves live intake claims. Serving intake certifies its
+own retry clock only while fresh repair and dead-letter handling are enabled;
+disabled flags add no retry marker, and claiming removes any old marker.
 The CronJob uses minute ticks with `Forbid`, bounding scheduled restart gaps
 without overlapping repair pods. Disable the switch and restore
 `recordSealRepair.schedule="*/5 * * * *"` to restore previous scheduling.
@@ -3283,10 +3290,15 @@ atomically stamps `home_transcription_pending_at` and
 `home_transcription_deadline_at`. `HOME_TRANSCRIPTION_DEADLINE_SECONDS` defaults
 to 7200 (invalid, blank or nonpositive values use 7200), matching the batch SLA.
 `HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED` defaults on. Reads compute the effective
-bound from capture end plus `HOME_TRANSCRIPTION_MAX_AGE_SECONDS` (default 86400,
+bound from the server's stamped pending clock plus `HOME_TRANSCRIPTION_MAX_AGE_SECONDS` (default 86400,
 invalid/nonpositive values use 86400), healing existing two-hour stamps without
-writes or additional Firestore reads. Stable pending/creation/stamp clocks cover
-older rows without a capture end; readers never renew the wait. Set the queue
+writes or additional Firestore reads. If pending_at is absent, the stamped
+deadline minus `HOME_TRANSCRIPTION_DEADLINE_SECONDS` recovers the wait start;
+creation is the fallback when both stamps are absent. Capture end never starts
+the wait: offline uploads and backfill can arrive days after capture. Readers
+and same-generation replays never renew it. A writer re-stamping pending for a
+new upload revision starts a new window bounded by 24 hours for that revision;
+there is no lifetime bound across genuinely new revisions. Set the queue
 hold switch to `off` / `false` / `0` / `no` to restore the stamped deadlines and
 two-hour unstamped fallback. Explicit failed status, dead letter and upload
 failure still fail immediately. Conversation and episode members show
@@ -6752,20 +6764,6 @@ the body). Mixed historical batches and lookback rejection keep their existing
 semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
-
-The HTTP upload path always keeps the legacy collision-name normalization:
-`<stem>[_clke<run>]_<ts>_uN.bin` becomes `<stem>_uN[_clke<run>]_<ts>.bin`.
-This has applied to all nonempty V2 uploads since source `7b1a45549b3c`
-(2026-11-01); it is part of the basename-bound durable content identity and
-must remain identical during rolls, retries, artifact repair and rollback.
-Bytes are unchanged; signed manifest claims are matched to the normalized
-names. A colliding pair retains two distinct names and content keys. Ambiguous
-aliases that cannot be normalized without collapse keep their legacy refusal.
-`SYNC_COLLISION_SUFFIX_ENABLED` defaults on for direct admission readers that
-still see a trailing suffix. Set it to `false`, `0`, `off` or `no` to restore
-their previous parser behavior; HTTP normalization and its legacy identity
-remain unchanged in both states. Internal reads and decoded WAVs still drain
-admitted work. Early-clock, future-skew and custody policies are unchanged.
 
 V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill

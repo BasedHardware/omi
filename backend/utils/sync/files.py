@@ -161,10 +161,11 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         if '_' not in filename:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
         try:
-            timestamp = parse_sync_filename_timestamp(filename)
+            timestamp = get_timestamp_from_path(filename)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
-        # This staging boundary also owns the stricter V1 window. V1 (and the
+        # The internal clock read above is window-free (derived names); this
+        # staging boundary owns the capture-time admission window. V1 (and the
         # chat/desktop transcribe seams sharing it) keep the pre-skew-admission
         # contract — any future time is rejected — because their pipelines run
         # at capture-time offset 0, so an admitted future stamp would store and

@@ -149,7 +149,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
         # bound the stamped ones have, so none can stay Processing forever.
         if home_transcription_queue_hold_enabled():
             seconds = home_transcription_max_age_seconds()
-            anchor = row.get('finished_at') or row.get('created_at')
+            anchor = transcribing_hold.wait_started_at(row)
         else:
             seconds = LEGACY_TRANSCRIPTION_SECONDS
             anchor = row.get('finished_at')

@@ -69,7 +69,11 @@ def test_deadline_setting(monkeypatch, raw, expected):
         (86401, "Couldn't transcribe", 'completed'),
     ],
 )
-def test_deadline_decay_and_raw_state(elapsed, title, status):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+def test_deadline_decay_and_raw_state(monkeypatch, elapsed, title, status, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
+    if queue_hold == 'false' and elapsed >= 7200:
+        title, status = "Couldn't transcribe", 'completed'
     row = capture(finished_at=NOW)
     before = deepcopy(row)
     wire = transcribing_hold.project(row, now=NOW + timedelta(seconds=elapsed))
@@ -109,6 +113,7 @@ def test_home_collector_keeps_even_short_pending_and_overdue_rows(monkeypatch, o
     row = capture(
         started_at=NOW - timedelta(hours=25 if overdue else 0, seconds=45),
         finished_at=NOW - timedelta(hours=25 if overdue else 0, seconds=20),
+        home_transcription_pending_at=NOW - timedelta(hours=25 if overdue else 0),
         home_transcription_deadline_at=NOW + timedelta(seconds=-1 if overdue else 7200),
     )
     _install_listing(monkeypatch, {'capture': row})
@@ -154,6 +159,7 @@ def test_list_and_detail_wire_serialization(api, overdue):
     row['home_transcription_deadline_at'] = NOW + timedelta(seconds=-1 if overdue else 7200)
     if overdue:
         row['finished_at'] = NOW - timedelta(hours=25)
+        row['home_transcription_pending_at'] = NOW - timedelta(hours=25)
     expected = "Couldn't transcribe" if overdue else 'Transcribing…'
     for url in ('/v1/conversations', '/v1/conversations/capture'):
         response = client.get(url)
@@ -240,10 +246,17 @@ def test_mcp_rest_detail_uses_same_title(monkeypatch):
     assert set(transcribing_hold.READ_FIELDS) <= set(mcp._REST_CONVERSATION_DETAIL_EXTRA_FIELD_PATHS)
 
 
-def test_stamped_capture_remains_completed_for_batch_replacement():
+@pytest.fixture
+def batch_replacement():
+    # Lazy provider imports are setup, not part of the per-test CPU budget.
     from tests.unit.test_batch_pipeline_live import recording, incoming
     from utils.batch_pipeline.live_projection import replace_record
 
+    return recording, incoming, replace_record
+
+
+def test_stamped_capture_remains_completed_for_batch_replacement(batch_replacement):
+    recording, incoming, replace_record = batch_replacement
     raw = recording(transcript_segments=[], structured={'title': ''})
     raw.update(
         finished_at=NOW, home_transcription_pending_at=NOW, home_transcription_deadline_at=NOW + timedelta(hours=2)
@@ -319,6 +332,7 @@ def test_encoded_empty_capture_has_visible_overdue_exit(monkeypatch, level):
         data_protection_level=level,
         started_at=NOW - timedelta(hours=25, seconds=45),
         finished_at=NOW - timedelta(hours=25, seconds=20),
+        home_transcription_pending_at=NOW - timedelta(hours=25),
         home_transcription_deadline_at=NOW - timedelta(seconds=1),
     )
     stored = conversations.encode_conversation_for_write('u', row, level=level)
@@ -371,7 +385,7 @@ def test_queue_wait_setting(monkeypatch, raw, expected):
 
 
 @pytest.mark.parametrize('surface', ['home_transcription', 'episode_transcription'])
-@pytest.mark.parametrize('anchor_key', ['finished_at', 'pending_at', 'created_at', 'stamp_only'])
+@pytest.mark.parametrize('anchor_key', ['pending_at', 'created_at', 'stamp_only'])
 def test_effective_deadline_is_stable_and_heals_old_stamps(monkeypatch, surface, anchor_key):
     monkeypatch.setenv('HOME_TRANSCRIPTION_MAX_AGE_SECONDS', '86400')
     row = {f'{surface}_deadline_at': NOW + timedelta(hours=2), 'updated_at': NOW + timedelta(days=5)}
@@ -420,15 +434,19 @@ def test_old_two_hour_stamp_heals_api_title_step_and_retry_without_writing(api):
     assert row == before
 
 
-def test_capture_end_wins_over_pending_clock_and_recent_update():
+@pytest.mark.parametrize('lane', ['batch_live_v1', 'batch_sync_v1'])
+@pytest.mark.parametrize('capture_age', [timedelta(hours=25), timedelta(days=16)])
+def test_late_upload_wait_starts_at_server_pending_clock(lane, capture_age):
     row = capture(
-        finished_at=NOW - timedelta(hours=25),
+        record_lane_owner=lane,
+        finished_at=NOW - capture_age,
         home_transcription_pending_at=NOW,
         updated_at=NOW,
         home_transcription_deadline_at=NOW + timedelta(days=5),
     )
-    assert home_step.classify(row) == 'failed'
-    assert transcribing_hold.project(row, now=NOW)['structured']['title'] == "Couldn't transcribe"
+    assert home_step.classify(row) == 'transcribing'
+    assert transcribing_hold.project(row, now=NOW)['structured']['title'] == 'Transcribing…'
+    assert transcribing_hold.project(row, now=NOW + timedelta(hours=24))['structured']['title'] == "Couldn't transcribe"
 
 
 def test_episode_iso_stamp_remains_supported():
@@ -437,26 +455,57 @@ def test_episode_iso_stamp_remains_supported():
 
 
 @pytest.mark.parametrize('prefix', ['home_transcription', 'episode_transcription'])
-@pytest.mark.parametrize('key', ['finished_at', 'pending_at', 'created_at'])
+@pytest.mark.parametrize('key', ['pending_at', 'created_at', 'deadline_at'])
 def test_iso_clock_is_parsed_before_selecting_the_first_valid_anchor(prefix, key):
-    row = {f'{prefix}_deadline_at': NOW - timedelta(hours=1), 'updated_at': NOW}
-    field = f'{prefix}_pending_at' if key == 'pending_at' else key
-    row[field] = (NOW - timedelta(hours=25)).isoformat()
-    if key == 'finished_at':
-        row[f'{prefix}_pending_at'] = NOW - timedelta(hours=3)
+    row = {'finished_at': NOW - timedelta(days=16), 'updated_at': NOW}
+    field = key if key == 'created_at' else f'{prefix}_{key}'
+    row[field] = (NOW - timedelta(hours=23 if key == 'deadline_at' else 25)).isoformat()
     assert transcribing_hold.deadline(row, prefix=prefix) == NOW - timedelta(hours=1)
 
 
-def test_iso_capture_end_does_not_renew_a_lost_recording_from_its_pending_clock():
+@pytest.mark.parametrize('queue_hold,title', [('true', 'Transcribing…'), ('false', "Couldn't transcribe")])
+def test_iso_capture_end_does_not_shorten_server_wait(monkeypatch, queue_hold, title):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
     row = capture(
         finished_at=(NOW - timedelta(hours=25)).isoformat(),
         home_transcription_pending_at=NOW - timedelta(hours=3),
         home_transcription_deadline_at=NOW - timedelta(hours=1),
     )
-    assert transcribing_hold.project(row, now=NOW)['structured']['title'] == "Couldn't transcribe"
+    assert transcribing_hold.project(row, now=NOW)['structured']['title'] == title
 
 
 @pytest.mark.parametrize('invalid', [None, 'invalid', '', 123])
-def test_invalid_clock_falls_through_to_a_valid_iso_pending_clock(invalid):
+def test_invalid_capture_clock_does_not_override_a_valid_iso_pending_clock(invalid):
     row = capture(finished_at=invalid, home_transcription_pending_at=(NOW - timedelta(hours=3)).isoformat())
     assert transcribing_hold.deadline(row) == NOW + timedelta(hours=21)
+
+
+@pytest.mark.parametrize('prefix', ['home_transcription', 'episode_transcription'])
+def test_stamp_only_wait_uses_the_configured_deadline_interval(monkeypatch, prefix):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_DEADLINE_SECONDS', '600')
+    row = {f'{prefix}_deadline_at': NOW + timedelta(seconds=600), 'created_at': NOW - timedelta(days=16)}
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW + timedelta(hours=24)
+
+
+@pytest.mark.parametrize('prefix', ['home_transcription', 'episode_transcription'])
+@pytest.mark.parametrize('invalid', [None, 'invalid', '', 123])
+def test_deadline_recovers_server_wait_before_old_creation(prefix, invalid):
+    row = {
+        f'{prefix}_pending_at': invalid,
+        f'{prefix}_deadline_at': (NOW - timedelta(hours=1)).isoformat(),
+        'created_at': NOW - timedelta(days=16),
+        'finished_at': NOW - timedelta(days=16),
+    }
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW + timedelta(hours=21)
+
+
+@pytest.mark.parametrize('prefix', ['home_transcription', 'episode_transcription'])
+def test_later_upload_revision_restarts_a_bounded_server_wait(prefix):
+    row = {f'{prefix}_pending_at': NOW - timedelta(hours=25), f'{prefix}_deadline_at': NOW - timedelta(hours=23)}
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW - timedelta(hours=1)
+    # A read or a repair update never renews the persisted wait.
+    row['updated_at'] = NOW
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW - timedelta(hours=1)
+    # Only a writer admitting a new wait can stamp a new 24h window.
+    row.update({f'{prefix}_pending_at': NOW, f'{prefix}_deadline_at': NOW + timedelta(hours=2)})
+    assert transcribing_hold.deadline(row, prefix=prefix) == NOW + timedelta(hours=24)

@@ -1,7 +1,7 @@
 """Bounded, presentation-only wait for a completed server-batch capture's transcript.
 
-The completion CAS stamps the deadline once. Readers derive a bounded wait from
-capture end without renewing it or writing a lifecycle status. Shared database
+The completion CAS stamps the server wait once. Readers bound that wait without
+using capture age, renewing it, or writing a lifecycle status. Shared database
 hydration must remain authoritative for replace_record and finalization replay;
 apply project only at API exits.
 """
@@ -19,7 +19,6 @@ from config.episodes import (
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
 
 READ_FIELDS = (
-    'finished_at',
     'created_at',
     'home_transcription_pending_at',
     'home_transcription_deadline_at',
@@ -68,16 +67,13 @@ def _utc(value: datetime | str) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
 
 
-def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime:
-    """Read-time bound heals old stamps without a write, renewal, or job lookup.
+def wait_started_at(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime | None:
+    """Server wait start, including old rows that retained only its deadline.
 
-    Capture end is stable across retries. Pending/creation cover incomplete older
-    rows; a stamp alone still has a finite fallback. Never use updated_at or now.
+    Capture end can predate offline upload by days. Creation is only a fallback
+    when neither pending stamp exists; updated_at and read time never renew it.
     """
-    stamped = _utc(row[f'{prefix}_deadline_at'])
-    if not home_transcription_queue_hold_enabled():
-        return stamped
-    for key in ('finished_at', f'{prefix}_pending_at', 'created_at'):
+    for key in (f'{prefix}_pending_at', f'{prefix}_deadline_at', 'created_at'):
         value = row.get(key)
         if not isinstance(value, (datetime, str)):
             continue
@@ -85,10 +81,22 @@ def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> d
             anchor = _utc(value)
         except ValueError:
             continue
-        break
-    else:
-        anchor = stamped - timedelta(seconds=home_transcription_deadline_seconds())
-    return _utc(anchor) + timedelta(seconds=home_transcription_max_age_seconds())
+        return (
+            anchor - timedelta(seconds=home_transcription_deadline_seconds())
+            if key.endswith('_deadline_at')
+            else anchor
+        )
+    return None
+
+
+def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime:
+    """Read-time bound heals old stamps without a write, renewal, or job lookup."""
+    if not home_transcription_queue_hold_enabled():
+        return _utc(row[f'{prefix}_deadline_at'])
+    anchor = wait_started_at(row, prefix=prefix)
+    if anchor is None:
+        raise ValueError('transcription wait has no server timestamp')
+    return anchor + timedelta(seconds=home_transcription_max_age_seconds())
 
 
 def failed(row: Mapping[str, Any]) -> bool:

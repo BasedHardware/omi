@@ -96,10 +96,17 @@ def test_davids_settled_junk_rows_are_noise(title, seconds):
 
 
 @pytest.mark.parametrize('age_hours,expected', [(1, 'transcribing'), (3, 'transcribing'), (25, 'failed')])
-def test_unstamped_empty_capture_cannot_stay_processing_forever(age_hours, expected):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+def test_unstamped_empty_capture_cannot_stay_processing_forever(monkeypatch, age_hours, expected, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
+    if queue_hold == 'false' and age_hours >= 2:
+        expected = 'failed'
     finished = NOW - timedelta(hours=age_hours)
     data = row(
-        structured={'title': '', 'overview': ''}, started_at=finished - timedelta(seconds=11), finished_at=finished
+        structured={'title': '', 'overview': ''},
+        created_at=finished,
+        started_at=finished - timedelta(seconds=11),
+        finished_at=finished,
     )
     assert home_step.classify(data) == expected
 
@@ -193,8 +200,12 @@ def test_summary_output_stays_visible_with_kill_switch_off(monkeypatch, reason):
     assert home_step.classify(data) == 'ready'
 
 
-@pytest.mark.parametrize('hours,expected', [(1, 'transcribing'), (-1, 'transcribing')])
-def test_stamped_batch_capture_follows_its_deadline(hours, expected):
+@pytest.mark.parametrize('hours,expected', [(1, 'transcribing'), (-1, 'failed')])
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+def test_stamped_batch_capture_follows_its_deadline(monkeypatch, hours, expected, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
+    if queue_hold == 'true':
+        expected = 'transcribing'
     data = row(
         structured={'title': '', 'overview': ''},
         record_lane_owner='batch_sync_v1',
@@ -372,3 +383,11 @@ def test_queue_hold_off_keeps_the_original_finished_at_only_legacy_bound(monkeyp
     monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', 'false')
     empty = row(structured={'title': '', 'overview': ''}, finished_at=finished, created_at=NOW - timedelta(hours=3))
     assert home_step.classify(empty) == 'transcribing'
+
+
+@pytest.mark.parametrize('age,expected', [(3, 'transcribing'), (25, 'failed')])
+@pytest.mark.parametrize('clock', ['created_at', 'home_transcription_pending_at'])
+def test_unstamped_wait_uses_server_clock_not_offline_capture_age(age, expected, clock):
+    empty = row(structured={'title': '', 'overview': ''}, finished_at=NOW - timedelta(days=16), created_at=None)
+    empty[clock] = (NOW - timedelta(hours=age)).isoformat()
+    assert home_step.classify(empty) == expected
