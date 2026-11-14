@@ -1,3 +1,4 @@
+import { AcpAdapterOwner } from "./runtime/acp-adapter-owner.js";
 import { ModelCredentialRelay } from "./runtime/model-credentials.js";
 /**
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
@@ -1286,42 +1287,19 @@ function startOmiToolsRelay(): Promise<string> {
 
 // --- ACP subprocess management ---
 
-/**
- * The live ACP adapter. Kept mutable because the runtime pool can retire a
- * worker whose process it cannot prove dead: `retireAcpAdapter()` swaps in a
- * fresh instance so a replacement worker can never inherit a surviving
- * subprocess or the abandoned attempt's notification handler.
- */
-let acpAdapter = createAcpAdapter();
-
-function createAcpAdapter(): AcpRuntimeAdapter {
-  const adapter = new AcpRuntimeAdapter({ log: logErr });
-  adapter.onProcessExit = () => {
-    isInitialized = false;
-  };
-  return adapter;
-}
-
-/**
- * Retire the current ACP adapter instance. The pool already bounded the
- * retired instance's `stop()`, so this only fences ownership: bridge requests
- * and the next worker use the replacement instance, and the old instance's
- * late `executeAttempt` completion can no longer touch it.
- */
-function retireAcpAdapter(): void {
-  const retired = acpAdapter;
-  acpAdapter = createAcpAdapter();
-  isInitialized = false;
-  // Best-effort: the pool's bounded stop may have given up on this instance.
-  void retired.stop().catch(() => {});
-}
+/** Retire the bridge singleton synchronously before the pool admits another run. */
+const acpAdapterOwner = new AcpAdapterOwner(
+  () => new AcpRuntimeAdapter({ log: logErr }),
+  () => { isInitialized = false; },
+  logErr,
+);
 
 /** Send a JSON-RPC request to the ACP subprocess and wait for the response */
 async function acpRequest(
   method: string,
   params: Record<string, unknown> = {}
 ): Promise<unknown> {
-  return acpAdapter.request(method, params);
+  return acpAdapterOwner.current.request(method, params);
 }
 
 /** Send a JSON-RPC notification (no response expected) to ACP */
@@ -1329,12 +1307,12 @@ function acpNotify(
   method: string,
   params: Record<string, unknown> = {}
 ): void {
-  acpAdapter.notify(method, params);
+  acpAdapterOwner.current.notify(method, params);
 }
 
 /** Start the ACP subprocess */
 async function startAcpProcess(): Promise<void> {
-  await acpAdapter.start();
+  await acpAdapterOwner.current.start();
 }
 
 // --- State ---
@@ -1350,7 +1328,7 @@ let activeOAuthFlow: OAuthFlowHandle | null = null;
 async function restartAcpProcess(): Promise<void> {
   logErr("Restarting ACP subprocess to pick up new credentials...");
   // State is cleaned up by the exit handler (sessions, handlers, etc.)
-  await acpAdapter.restart();
+  await acpAdapterOwner.current.restart();
 }
 
 /**
@@ -1687,14 +1665,14 @@ async function main(): Promise<void> {
   const registry = new AdapterRegistry();
   // Adapter registration is availability, not execution authority. Immutable
   // session profiles decide which registered adapter a run may use.
-  registry.register("acp", () => acpAdapter, 1, {
+  registry.register("acp", () => acpAdapterOwner.current, 1, {
     // ACP is a process-wide singleton, so removing the worker slot alone would
     // let a follow-up worker reuse a process the pool could not prove stopped.
     // Swap the instance when a worker is recycled; the replacement starts its
     // own process on demand.
     onAdapterRetired: () => {
       logErr("Retiring ACP adapter instance after worker recycle");
-      retireAcpAdapter();
+      acpAdapterOwner.retire();
     },
   });
   const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
@@ -4053,7 +4031,7 @@ async function main(): Promise<void> {
         );
         if (journalPumpTimer) clearTimeout(journalPumpTimer);
         store.close();
-        await acpAdapter.stop();
+        await acpAdapterOwner.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
         await stopLocalAcpAdapters();
         process.exit(0);
@@ -4097,7 +4075,7 @@ async function main(): Promise<void> {
       "Agent runtime stopped during tool execution",
     );
     store.close();
-    void acpAdapter.stop();
+    void acpAdapterOwner.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
     void stopLocalAcpAdapters();
     process.exit(0);

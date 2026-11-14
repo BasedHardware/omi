@@ -514,7 +514,13 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   async restart(): Promise<void> {
     if (this.process) {
-      await this.stop();
+      try {
+        await this.stop();
+      } catch (error) {
+        // Bounded stop reports a child that could not be killed after detaching
+        // it. A fresh process is still safe; never reuse a child still owned here.
+        if (this.process) throw error;
+      }
     }
     await this.start();
   }

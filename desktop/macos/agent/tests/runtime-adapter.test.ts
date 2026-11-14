@@ -677,6 +677,34 @@ describe("AcpRuntimeAdapter attempt isolation", () => {
     expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
     await adapter.stop();
   });
+
+  it("restarts on a fresh child after bounded stop has to detach the old process", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(spawn).mockReset();
+      const unkillable = createStubbornProcess("ignore-all");
+      const replacement = createMockProcess();
+      vi.mocked(spawn).mockReturnValueOnce(unkillable as any).mockReturnValueOnce(replacement as any);
+      const adapter = new AcpRuntimeAdapter({
+        nodeBin: "/node",
+        acpEntry: "/acp-entry.mjs",
+        stopGraceTimeoutMs: 20,
+      });
+      await adapter.start();
+      const restarting = adapter.restart();
+      await vi.runAllTimersAsync();
+      await expect(restarting).resolves.toBeUndefined();
+      expect(unkillable.kill).toHaveBeenCalledWith("SIGKILL");
+      expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+      // An old exit must not tear down the newly spawned process.
+      unkillable.emit("exit", 0);
+      await adapter.start();
+      expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+      await adapter.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("PiMonoRuntimeAdapter bindings", () => {
