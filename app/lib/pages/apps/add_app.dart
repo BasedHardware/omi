@@ -19,6 +19,7 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'widgets/capabilities_chips_widget.dart';
@@ -147,6 +148,19 @@ class _AddAppPageState extends State<AddAppPage> {
         );
       },
     );
+  }
+
+  /// A disabled Submit App says nothing, which left the reporter in #24723 guessing why a form
+  /// that looked complete would not send. A tap on it runs the same validation the submit path
+  /// runs, so the unmet requirement (logo, category, prompt, trigger event, and so on) shows the
+  /// way it would on submit. Nothing is sent.
+  void _explainWhySubmitIsDisabled(BuildContext context, AddAppProvider provider) {
+    if (provider.validateForm()) {
+      // The live readiness check is stricter than the submit validation in a few combinations
+      // (notification scopes beside another capability, for one). A generic hint still beats a
+      // silent button.
+      AppSnackbar.showSnackbarError(context.l10n.addAppFillRequiredFields);
+    }
   }
 
   @override
@@ -384,17 +398,21 @@ class _AddAppPageState extends State<AddAppPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      OmiButton(
-                        label: l10n.submitApp,
-                        expand: true,
-                        // Not awaited: the confirmation dialog (and the submit it guards) run on their
-                        // own, the same as the pre-migration hand-drawn button. The page-level
-                        // OmiLoadingState above already covers provider.isSubmitting.
-                        onPressed: provider.isValid
-                            ? () {
-                                _confirmAndSubmit(context, provider);
-                              }
-                            : null,
+                      GestureDetector(
+                        // The disabled button below ignores taps, so they land here.
+                        onTap: provider.isValid ? null : () => _explainWhySubmitIsDisabled(context, provider),
+                        child: OmiButton(
+                          label: l10n.submitApp,
+                          expand: true,
+                          // Not awaited: the confirmation dialog (and the submit it guards) run on their
+                          // own, the same as the pre-migration hand-drawn button. The page-level
+                          // OmiLoadingState above already covers provider.isSubmitting.
+                          onPressed: provider.isValid
+                              ? () {
+                                  _confirmAndSubmit(context, provider);
+                                }
+                              : null,
+                        ),
                       ),
                       const SizedBox(height: 10),
                       GestureDetector(

@@ -528,19 +528,19 @@ class AddAppProvider extends ChangeNotifier {
         return false;
       }
       for (var capability in selectedCapabilities) {
-        if (capability.title == 'chat') {
+        if (capability.id == 'chat') {
           if (chatPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterChatPrompt);
             return false;
           }
         }
-        if (capability.title == 'memories') {
+        if (capability.id == 'memories') {
           if (conversationPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppEnterConversationPrompt);
             return false;
           }
         }
-        if (capability.title == 'external_integration') {
+        if (capability.id == 'external_integration') {
           if (triggerEvent == null) {
             AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppSelectTriggerEvent);
             return false;
