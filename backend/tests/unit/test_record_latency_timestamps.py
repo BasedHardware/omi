@@ -12,6 +12,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline import scheduler as scheduler_module
 from utils.conversations import home_latency, home_step
 
 
@@ -68,8 +69,23 @@ def test_admission_copies_claim_and_seal_and_first_gpu_lease(monkeypatch):
     job = store.rows['jobs', 'first']
     assert (job['record_sealed_at'], job['record_intake_claimed_at'], job['record_ready_at']) == (1000, 1010, 1020)
     scheduler = Scheduler(store)
-    assert scheduler.pull(1030)
+    monkeypatch.setattr(scheduler_module, 'wall_time', lambda: 1030)
+    assert scheduler.pull(1015)  # A long pull began before staging finished.
     assert store.rows['jobs', 'first']['record_first_leased_at'] == 1030
+
+
+@pytest.mark.parametrize('attempt,refusals', [(1, 0), (0, 1)])
+def test_first_lease_clock_is_not_invented_for_historical_retries(attempt, refusals):
+    store = MemoryStore()
+    scheduler = Scheduler(store)
+    scheduler.enqueue(item('retry'), 0)
+    store.rows['jobs', 'retry'].update(
+        projection_binding={'native_record': True},
+        attempt=attempt,
+        admission_refusals=refusals,
+    )
+    assert scheduler.pull(1)
+    assert 'record_first_leased_at' not in store.rows['jobs', 'retry']
 
 
 @pytest.mark.parametrize('stamp', [1000, datetime.fromtimestamp(1000, timezone.utc)])

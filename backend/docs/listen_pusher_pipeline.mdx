@@ -9843,3 +9843,8 @@ from the privacy guard, preserving its decision-only cache contract. A known
 input-upload revision that differs from the current sealed revision retains
 the ordinary settle policy. Privacy, generation and account fences still run
 in the completion transaction before any notes writes.
+
+The first-lease clock uses wall time inside the committing lease transaction,
+rather than the pull call's possibly older start time. Historical retries or
+admission-refunded rows lacking an original lease clock remain unknown; this
+instrumentation never invents their first lease timestamp.
