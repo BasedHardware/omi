@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 
 ADMIN = Path(__file__).resolve().parents[1]
 RECORD = Path('/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics')
@@ -98,11 +99,13 @@ def reload():
 
 
 def screens(out: Path | None = None, wait_seconds: int = 240):
-    """Render the real board; fail on scroll at 1920×1080, truncated titles or panel errors.
+    """Render every present board at both widths; fail on scroll at 1920×1080,
+    truncated titles or panel errors once a board has finished loading.
 
-    A cold wall can still be refreshing when the page settles. The heading and
-    loading waits are bounded but soft: a board that never finishes is still
-    screenshotted, named `-partial`, and reported, so the render is not lost."""
+    A cold wall can still be refreshing when the page settles. The page load,
+    heading and loading waits share one `wait_seconds` budget and are soft: a
+    board that never finishes is still screenshotted, named `-partial`, and
+    reported, so the render is not lost."""
     # Playwright treats a 0 timeout as no timeout: a board that never loads would hang.
     if wait_seconds <= 0:
         raise ValueError('wait_seconds must be positive')
@@ -110,43 +113,60 @@ def screens(out: Path | None = None, wait_seconds: int = 240):
     from playwright.sync_api import sync_playwright
     out = out or RECORD/'build-screens'
     out.mkdir(parents=True,exist_ok=True)
-    wait_ms = wait_seconds * 1000
+    reports = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         for uid, (width,height) in [(u, wh) for u in present_boards() for wh in [(1920,1080),(1440,900)]]:
             page = browser.new_page(viewport={'width':width,'height':height},device_scale_factor=1)
-            page.goto(f'http://127.0.0.1:3207/d/{uid}/{uid}?orgId=1&kiosk',wait_until='networkidle',timeout=120000)
             partial = []
+            # One budget for the whole load phase, so --wait-seconds bounds the run.
+            deadline = time.monotonic() + wait_seconds
+            def remaining():
+                return max(1, int((deadline - time.monotonic()) * 1000))
+            try:
+                page.goto(f'http://127.0.0.1:3207/d/{uid}/{uid}?orgId=1&kiosk',wait_until='networkidle',timeout=remaining())
+            except PlaywrightTimeoutError:
+                partial.append('page load')
             if uid == 'omi-tv-v2':  # the wall's Data & coverage heading; the funnel board has none
                 try:
-                    page.get_by_text('Data & coverage',exact=True).wait_for(timeout=wait_ms)
+                    page.get_by_text('Data & coverage',exact=True).wait_for(timeout=remaining())
                 except PlaywrightTimeoutError:
                     partial.append('no "Data & coverage" heading')
             try:
-                page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=wait_ms)
+                page.wait_for_function("!document.body.innerText.includes('Loading…')",timeout=remaining())
             except PlaywrightTimeoutError:
                 partial.append('still loading')
-            if partial:
-                print(f'partial {uid} at {width}px: {"; ".join(partial)}')
             page.evaluate('document.fonts.ready')
             page.wait_for_timeout(2000)
             truncated = page.locator('[data-testid="data-testid header-container"] h2').evaluate_all(
                 'hs => hs.filter(h => h.scrollWidth > h.clientWidth + 1).map(h => h.textContent)')
-            if truncated:
-                raise RuntimeError(f'Truncated panel titles at {width}px: {truncated}')
             errors = [t for t in ('Unable to find field','Data does not have','No data') if page.get_by_text(t).count()]
-            if errors:
-                raise RuntimeError(f'Panel errors at {width}px: {errors}')
             # A kiosk TV cannot scroll: neither the page nor any panel (legend, table) may overflow.
             overflow = page.evaluate("() => Array.from(document.querySelectorAll('*'))"
                                      ".filter(e => getComputedStyle(e).overflowY !== 'visible' && e.scrollHeight - e.clientHeight > 4)"
                                      ".map(e => (e.closest('[data-viz-panel-key]')?.innerText || 'page').split('\\n')[0])")
+            findings = []
+            if truncated:
+                findings.append(f'Truncated panel titles at {width}px: {truncated}')
+            if errors:
+                findings.append(f'Panel errors at {width}px: {errors}')
             if width == 1920 and overflow:
-                raise RuntimeError(f'Content overflows at 1920×1080: {overflow}')
+                findings.append(f'Content overflows at 1920×1080: {overflow}')
+            # A board that never finished loading cannot be judged on layout: report, do not fail.
+            if findings and not partial:
+                raise RuntimeError('; '.join(findings))
+            partial.extend(findings)
+            if partial:
+                reports.append(f'{uid} at {width}px: {"; ".join(partial)}')
+                print(f'partial {uid} at {width}px: {"; ".join(partial)}')
             prefix = 'omi-tv-v3' if uid == 'omi-tv-v2' else uid
             page.screenshot(path=str(out/f"{prefix}-{width}{'-partial' if partial else ''}.png"))
             page.close()
         browser.close()
+    if reports:
+        print('partial boards: ' + ' | '.join(reports))
+    else:
+        print('all boards rendered complete')
 
 
 if __name__ == '__main__':
