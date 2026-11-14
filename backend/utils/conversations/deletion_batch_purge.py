@@ -159,8 +159,7 @@ def _dispatch(snapshot: Any, collection: str, counts: dict[str, int]) -> bool:
     job = snapshot.id
     erasure = collection == purge_jobs.ERASURE_COLLECTION
     row = snapshot.to_dict() or {}
-    lease_until = row.get('lease_until')
-    if lease_until is not None and lease_until > purge_jobs._now():
+    if purge_jobs.lease_held(row):
         counts['skipped'] += 1  # a run owns it; claim_dispatch would refuse too
         return False
     previous = int(row.get('generation') or 0)

@@ -153,6 +153,12 @@ def _segment_ref(client: Any, job: str, namespace: str, segment_id: str) -> Any:
     return client.collection(COLLECTION).document(job).collection(SEGMENTS).document(digest)
 
 
+def lease_held(row: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Whether a run owns this obligation row right now (renewals move ``lease_until``, never ``due_at``)."""
+    lease_until = row.get('lease_until')
+    return lease_until is not None and lease_until > (now or _now())
+
+
 def claim_dispatch(
     job: str, *, now: datetime | None = None, firestore_client: Any = None, collection: str = COLLECTION
 ) -> tuple[int, int] | None:
@@ -565,6 +571,7 @@ __all__ = [
     'finish_run',
     'job_id',
     'job_ref',
+    'lease_held',
     'run_erasure_job',
     'run_job',
     'segment_records',
