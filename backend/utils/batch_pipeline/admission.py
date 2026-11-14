@@ -13,6 +13,7 @@ from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_en
 from config.sync_telemetry import bounded_exception_class
 from config.batch_pipeline import allowance_hold_retry_seconds
 from utils.stt_cap_dispatch import sync_admission
+from utils import backfill_hours_cap
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -55,11 +56,13 @@ def deadline_seconds(requested: str | float | None) -> float:
     return min(MAX_AUTHORIZE_SECONDS, max(AUTHORIZE_SECONDS, value))
 
 
-def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchPath) -> tuple[bool, str]:
+def batch_admission(
+    job: dict, seconds: float, provider: str, *, path: DispatchPath, backfill: bool = False
+) -> tuple[bool, str]:
     """Spend gate with its bounded DispatchReason surfaced for the durable per-unit record."""
     if admitted_as_byok(job):
         return record_decision(path, True, DispatchReason.BYOK), DispatchReason.BYOK.value
-    return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
+    return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path, backfill=backfill)
 
 
 async def authorize(store, leases: list[dict], *, now: float | None = None, budget: str | float | None = None) -> dict:
@@ -122,7 +125,12 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             # outcome, at} so an outside reader can tell an exhausted-owner
             # hold from a wedge without inventing an age TTL.
             allow_reason = 'scope_disabled'
-            if await stage('scope', cap_dispatch_enabled, job['owner_id'], 'batch'):
+            # The default-off unlimited_v2 backfill day cap is independent of the
+            # legacy/offline dispatch scope: a backfill unit still resolves the
+            # allowance so the cap can answer on a host with the older scope off.
+            backfill = intake.get('lane') == 'backfill'
+            cap_active = backfill and backfill_hours_cap.cap_enabled()
+            if cap_active or await stage('scope', cap_dispatch_enabled, job['owner_id'], 'batch'):
                 permitted, reason = await stage(
                     'funding',
                     batch_admission,
@@ -130,6 +138,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                     float(job.get('duration_seconds', 0)),
                     'parakeet',
                     path=DispatchPath.BATCH_GPU,
+                    backfill=backfill,
                 )
                 if not permitted:
                     # An exhausted allowance/budget is durable until the plan

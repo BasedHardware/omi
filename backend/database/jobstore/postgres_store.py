@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -510,6 +511,11 @@ class PostgresStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_page(
         self,
