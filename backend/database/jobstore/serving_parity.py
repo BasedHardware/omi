@@ -8,6 +8,7 @@ Transaction queries run without flush(), so this cannot become a second writer.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from enum import StrEnum
 import time
 from typing import Any
 
@@ -16,6 +17,7 @@ from prometheus_client import Counter
 import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from database import rpc_deadline
+from utils.observability.reasons import ReasonFamily, reason_label
 
 STORE_QUERIES = frozenset(
     {
@@ -49,6 +51,17 @@ TRANSACTION_QUERIES = frozenset(
         'service_frontier',
     }
 )
+
+
+class ServingParityOutcome(StrEnum):
+    """``omi_jobstore_serving_parity_total{outcome}``; ``unknown`` and ``error`` are not a pass."""
+
+    UNKNOWN = 'unknown'
+    MATCH = 'match'
+    MISMATCH = 'mismatch'
+    ERROR = 'error'
+
+
 SERVING_PARITY_TOTAL = Counter(
     'omi_jobstore_serving_parity_total',
     'Actual serving-query comparisons; unknown is not a pass.',
@@ -148,5 +161,7 @@ def compare_serving_query(
             outcome = 'mismatch'
     except Exception:
         outcome = 'error'
-    SERVING_PARITY_TOTAL.labels(query=query, outcome=outcome).inc()
+    SERVING_PARITY_TOTAL.labels(
+        query=query, outcome=reason_label(ReasonFamily.PARITY, outcome, ServingParityOutcome)
+    ).inc()
     return outcome
