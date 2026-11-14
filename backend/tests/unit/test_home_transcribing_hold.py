@@ -12,11 +12,13 @@ from fastapi.testclient import TestClient
 from config.episodes import home_transcription_deadline_seconds, home_transcription_presentation_gate_enabled
 from database import conversations
 from routers import conversations as routes
-from utils.conversations import home_step, transcribing_hold
-from utils.episodes import home_membership
-from utils.developer_item_reads import read_conversation_item
-from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
+from tests.unit.test_batch_pipeline_live import incoming, recording
 from tests.unit.test_indexed_list_read_path import Db
+from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
+from utils.batch_pipeline.live_projection import replace_record
+from utils.conversations import home_step, transcribing_hold
+from utils.developer_item_reads import read_conversation_item
+from utils.episodes import home_membership
 
 NOW = datetime.now(timezone.utc)
 
@@ -231,9 +233,6 @@ def test_mcp_rest_detail_uses_same_title(monkeypatch):
 
 
 def test_stamped_capture_remains_completed_for_batch_replacement():
-    from tests.unit.test_batch_pipeline_live import recording, incoming
-    from utils.batch_pipeline.live_projection import replace_record
-
     raw = recording(transcript_segments=[], structured={'title': ''})
     raw.update(home_transcription_pending_at=NOW, home_transcription_deadline_at=NOW + timedelta(hours=2))
     assert transcribing_hold.project(raw)['status'] == 'processing'
