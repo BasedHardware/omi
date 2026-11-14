@@ -32,9 +32,11 @@ class FinishBackoff:
         if not self.complete:
             return discovery.next(limit=size)
         if skip_async:
-            # Independent of due clocks and of this cursor. Even a page of only
-            # excluded async receipts must keep the durable outbox scheduled.
-            rows, _ = discovery.store.projection_page(limit=1, states=PROJECTION_FINISH_STATES)
+            # Independent of the sync cursor. Only classified async receipts
+            # wake discovery here; legacy async rows wake it when read below.
+            rows, _ = discovery.store.projection_page(
+                limit=1, states=PROJECTION_FINISH_STATES, due_before=PROJECTION_FINISH_ASYNC_CLOCK
+            )
             self.projector.has_async_followups |= bool(rows)
         ceiling = self.projector.clock() if backoff else float('inf')
         return discovery.next(limit=size, due_before=ceiling, exclude_async=skip_async)

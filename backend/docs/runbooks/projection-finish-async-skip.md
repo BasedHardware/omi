@@ -21,12 +21,15 @@ with it on, the upper bound stays the current time. Before the marker, the
 legacy unfiltered page stays active so unstamped sync obligations remain visible.
 There is no new maintenance pass or production action in this PR.
 
-Each finish sweep also probes the original persisted/ready query with `limit=1`.
-Any result keeps `has_async_followups` true, even if all receipts are excluded
-from the finish page. This is deliberately a conservative hint: a sync-only
-backlog can start a follow-up discovery pass, which still checks pinned policy
-before any effects. The follow-up drain keeps its existing unfiltered discovery,
-claims, privacy fences, readiness, retries and completion transactions.
+Each finish sweep also probes persisted/ready receipts with a clock at or below
+`-1`, using `limit=1` and the same existing index. A result keeps
+`has_async_followups` true even when all async receipts are excluded from the
+finish page. Sync-only rows cannot wake extra follow-up discovery. Positive-clock
+async rows from older writers remain on the ordinary finish page; seeing one
+keeps the drain scheduled and transactionally classifies it. No extra fallback
+page or per-job scan runs for synchronous-only work. The follow-up drain keeps
+its existing unfiltered discovery, claims, privacy fences, readiness, retries
+and completion transactions.
 
 `BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED` defaults on. Set it to `false` to
 remove the lower bound and restore the former finish discovery, preserving the
@@ -58,7 +61,7 @@ local tests cannot establish production latency or dollar savings.
 The observed baseline is about 800,000 full finish-row reads/hour, with roughly
 6M reads/hour attributed to the two projection callers for this loop. An
 async-only, classified finish page now performs zero full row reads: one
-one-row existence query plus an empty bounded clock query per sweep, and at most
+one-row async-clock query plus an empty bounded clock query per sweep, and at most
 one marker read per process until it observes completion. For N sweep calls/hour,
 budget about 2N document reads (plus bounded initial stripe queries), independent
 of async backlog size. Existing follow-up discovery/processing reads remain.

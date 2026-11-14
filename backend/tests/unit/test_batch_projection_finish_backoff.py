@@ -570,3 +570,24 @@ def test_missing_marker_does_not_reclassify_an_already_excluded_row(monkeypatch)
     projector.sweep()
     log.retire_async_finish.assert_not_called()
     assert projector.has_async_followups
+
+
+@pytest.mark.parametrize('backoff', ['true', 'false'])
+def test_sync_only_finish_page_never_wakes_followup_candidate_discovery(monkeypatch, backoff):
+    import asyncio
+    from unittest.mock import AsyncMock
+    from utils.batch_pipeline.serving import Serving
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
+    monkeypatch.setenv(LEVER, backoff)
+    log, ids = finish_log(persisted=100)
+    projector = silent_projector(log)
+    projector.start_followups = AsyncMock(side_effect=AssertionError('sync-only discovery'))
+    projector.sweep(limit=200)
+    assert projector._finish.call_count == len(ids)
+    assert not projector.has_async_followups
+    service = Serving(MemoryStore(), projector=projector)
+    service.reconcile = lambda **_: []
+    asyncio.run(service.reconcile_async())
+    projector.start_followups.assert_not_awaited()
