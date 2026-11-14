@@ -199,7 +199,9 @@ def test_runtime_composition_uses_plain_reads_and_keeps_the_seal_transaction(sou
     assert result['outcome'] == 'ok' and result['dispositions'] == {'sealed': 1}
     assert plain_reads == [JOB_PATH, PATH, JOB_PATH, PATH]
     assert len(source[1].transactions) == 1
-    assert source[1].transactions[0].updates == [(PATH, {'record_audio_closed': True, 'record_upload_sessions': {}})]
+    assert source[1].transactions[0].updates == [
+        (PATH, {'record_audio_closed': True, 'record_upload_sessions': {}, 'record_sealed_at': 1000})
+    ]
     assert discover.call_args.kwargs['limit'] == sweeper.DISCOVERY_LIMIT
     assert isinstance(discover.call_args.kwargs['budget'], SweepBudget)
 

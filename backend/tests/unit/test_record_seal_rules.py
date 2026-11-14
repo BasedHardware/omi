@@ -186,7 +186,8 @@ def failed_plan(source):
     return repair.plan_seals(store, ['pending'], None, artifacts, repair_upload_failed=True)
 
 
-def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source):
+def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source, monkeypatch):
+    monkeypatch.setattr(repair, 'time', SimpleNamespace(time=lambda: 1000))
     store, client, artifacts = source
     plan = failed_plan(source)
     assert plan['entries'][0]['disposition'] == 'eligible'
@@ -195,7 +196,9 @@ def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source):
     assert repair.apply_seals(store, plan, plan['plan_sha256']) == {'upload_failed_cleared': 1}
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['record_upload_failed'] is False
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True, 'record_upload_failed': False})]
+    assert client.transactions[-1].updates == [
+        (PATH, {'record_audio_closed': True, 'record_upload_failed': False, 'record_sealed_at': 1000})
+    ]
 
 
 @pytest.mark.parametrize(

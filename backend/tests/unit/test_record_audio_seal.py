@@ -587,7 +587,7 @@ def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, mo
     assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
     assert row['record_audio_closed'] and row['record_seal_refused_at'] is None
     assert [payload for _, payload in records.transactions[-1].updates] == [
-        {'record_audio_closed': True, 'record_seal_refused_at': None}
+        {'record_audio_closed': True, 'record_seal_refused_at': None, 'record_sealed_at': 200}
     ]
 
 
