@@ -11,6 +11,8 @@ from database import rpc_deadline
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_privacy_attempt import TOKEN_FIELD, token_version
 from database.jobstore.authority import AuthorityRefused, fingerprint, replay_page
+from database.jobstore.cold_batch import apply_rows
+from database.jobstore.cold_packet import packet_for, needs_write
 from database.jobstore.fs_fence import handoff_ref
 from database.jobstore.postgres_store import jsonb
 from database.jobstore.retained_manifest import original_manifest
@@ -134,10 +136,23 @@ class ColdSink:
             rpc_deadline.bind_firestore_client(self.handoff.client)
             return self._apply(row)
 
+    def admit_original(self, original):
+        def admit(conn, admission):
+            self.handoff._guard(conn, original)
+            if any(
+                admission[k] != original['admission'][k]
+                for k in ('privacy_generation', 'privacy_change_seq', 'privacy_targets')
+            ):
+                raise AuthorityRefused('cold copy cannot adopt a restored original')
+
+        return self.handoff.fence.admit_from_authority(
+            self.handoff.client, original['intent']['uid'], original['intent']['conversation_ids'], admit
+        )
+
     def _apply(self, row):
         """Real conditional FS COMMIT. Every response is a definitive per-row ack."""
         recording, original = self._context(row)
-        seq, epoch, family, identity, operation, owner, body = row
+        seq, _epoch, family, identity, _operation, owner, _body = row
         client = self.handoff.client
 
         @firestore.transactional
@@ -149,40 +164,8 @@ class ColdSink:
         # data or reopening privacy. No absence scan stands in for this marker.
         if erased(client.transaction()):
             return
-        if family == 'docs':
-            raise AuthorityRefused('staging document copy requires completed cold erasure; no live reverse adapter')
-        if operation != 'put' or body is None:
-            raise AuthorityRefused('cold delete requires real destructive-unit custody')
-        if body.get('namespace') != self.handoff.ticket.namespace:
-            raise AuthorityRefused('cold body namespace changed')
-
-        def admit(conn, admission):
-            self.handoff._guard(conn, original)
-            if any(
-                admission[k] != original['admission'][k]
-                for k in ('privacy_generation', 'privacy_change_seq', 'privacy_targets')
-            ):
-                raise AuthorityRefused('cold copy cannot adopt a restored original')
-
-        admission = self.handoff.fence.admit_from_authority(
-            client, original['intent']['uid'], original['intent']['conversation_ids'], admit
-        )
-        packet = dict(
-            namespace=self.handoff.ticket.namespace,
-            epoch=epoch,
-            seq=seq,
-            family=family,
-            identity=identity,
-            owner_key=owner,
-            recording_id=recording,
-            cold_only=True,
-            body=body,
-            source_fingerprint=fingerprint(row),
-            original_deadlines={
-                sid: job['typed_provider']['custody_deadline']
-                for sid, job in original['intent']['payload']['jobs'].items()
-            },
-        )
+        packet = packet_for(self.handoff.ticket.namespace, row, recording, original)
+        admission = self.admit_original(original)
         ref = self.ref(family, identity)
 
         @firestore.transactional
@@ -203,25 +186,21 @@ class ColdSink:
                 expected_generation=original['admission']['fs_privacy_generation'],
                 snapshots={},
             )
-            if previous:
-                if (
-                    previous.get('owner_key') != owner
-                    or previous.get('identity') != identity
-                    or previous.get('recording_id') != recording
-                    or previous.get('namespace') != self.handoff.ticket.namespace
-                    or previous.get('cold_only') is not True
-                ):
-                    raise AuthorityRefused('cold destination ownership/identity changed')
-                version = (previous.get('epoch', -1), previous.get('seq', -1))
-                if version > (epoch, seq):
-                    return
-                if version == (epoch, seq):
-                    if previous != packet:
-                        raise AuthorityRefused('cold same-version payload changed')
-                    return
-            transaction.set(ref, packet)
+            if needs_write(previous, packet):
+                transaction.set(ref, packet)
 
         put(client.transaction())
 
     def page(self, *, limit=100):
-        return replay_page(self.handoff.pool, self.handoff.ticket.namespace, self.apply, limit=limit)
+        def apply_page(rows, *, timeout):
+            if len(rows) == 1:
+                return self.apply(rows[0], timeout=timeout)
+            return apply_rows(self, rows, timeout=timeout)
+
+        return replay_page(
+            self.handoff.pool,
+            self.handoff.ticket.namespace,
+            self.apply,
+            limit=limit,
+            apply_rows=apply_page,
+        )

@@ -290,3 +290,23 @@ GCS registry retirement and mode-independent result-reference purge. Tests use
 real isolated FS/PG and the production adapter with local session transport;
 this is not remote C4 or final all-copy certification. R14's production runtime,
 CI, cohort and fleet gates remain open. No new review/merge request or activation.
+
+
+2026-11-14 grouped cold-source qualification: the first combined 24ed5d9
+receipt retained six cold page deadline failures (334 passed). Repeating fresh
+admission and SDK commits for every journal version consumed the unchanged 1.5s
+page budget. The concrete cold sink now validates and retains every exact source
+first, then groups latest images by immutable original recording/admission. Each
+group uses fresh A1/walk/A2, original P/PC and matching F token, one actual SDK
+bulk read and one conditional COMMIT. Journal checkpoint still requires all
+source acknowledgements and the original epoch/checkpoint CAS. Scalar pages
+retain their actual point-read path. No page deadline, retries, suppression,
+original deadlines or custody requirements changed. Multi-recording groups do
+not share privacy admission. No SQL pool slot/owner guard spans SDK I/O.
+
+Ten actual emulator/private-PG grouped cases pass in development, including both
+sides of multi-document COMMIT process exit, original read accounting, free pool
+and owner guards during SDK reads/COMMIT, source/token/epoch refusal and delayed
+puts after real erasure. Existing six failing scenarios pass in the targeted
+combined run. Final exact-head qualification is recorded separately; these
+local results do not establish remote C4, reverse parity or production readiness.

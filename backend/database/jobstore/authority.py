@@ -102,7 +102,7 @@ def stop_copier(conn, namespace):
     ).fetchone()
 
 
-def replay_page(pool, namespace, apply, *, limit=100):
+def replay_page(pool, namespace, apply, *, limit=100, apply_rows=None):
     """Conditional sink apply is idempotent; checkpoint advances only after all acks.
 
     `apply` must transactionally compare (epoch,seq) at the cold FS destination,
@@ -130,7 +130,16 @@ def replay_page(pool, namespace, apply, *, limit=100):
     # late page can never write into a restored FS-authoritative generation.
     expected = state[1] + 1
     deadline = time.monotonic() + 1.5
-    for row in rows:
+    if apply_rows is not None and rows:
+        for row in rows:
+            if row[0] != expected:
+                raise AuthorityRefused('journal gap; preserve checkpoint')
+            expected += 1
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('copier page deadline; checkpoint unchanged')
+        apply_rows(rows, timeout=remaining)
+    for row in (() if apply_rows is not None else rows):
         if row[0] != expected:
             raise AuthorityRefused('journal gap; preserve checkpoint')
         remaining = deadline - time.monotonic()

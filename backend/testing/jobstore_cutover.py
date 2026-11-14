@@ -161,6 +161,7 @@ def races(args):
         'tests/integration/test_jobstore_original_copies.py',
         'tests/integration/test_jobstore_original_metadata_crashes.py',
         'tests/integration/test_jobstore_cold_sink.py',
+        'tests/integration/test_jobstore_cold_batch.py',
         'tests/integration/test_jobstore_cold_crashes.py',
         'tests/integration/test_jobstore_staging_copies.py',
         'tests/integration/test_pipeline_ledger_firestore.py',

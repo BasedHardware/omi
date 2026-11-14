@@ -18,7 +18,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.mark.parametrize('operation', ['copy', 'erase'])
 @pytest.mark.parametrize('gap', ['before', 'after'])
-def test_actual_cold_commit_exit_replays_without_resurrection_or_lost_custody(cold, operation, gap):
+def test_actual_cold_commit_exit_replays_without_resurrection_or_lost_custody(cold, operation, gap, copy_limit=1):
     c = cold
     token, cid = '', ''
     if operation == 'erase':
@@ -69,7 +69,7 @@ def commit(*a,**k):
     return result
 api.commit=commit
 if os.environ['OMI_COLD_OP']=='copy':
-    ColdSink(h).page(limit=1)
+    ColdSink(h).page(limit=int(os.environ['OMI_COLD_PAGE_LIMIT']))
 else:
     uid,cid=os.environ['OMI_COLD_UID'],os.environ['OMI_COLD_CID']
     r=RetainedCopies(h)
@@ -92,6 +92,7 @@ raise AssertionError('did not reach cold COMMIT')
             'OMI_COLD_TOKEN': token,
             'OMI_COLD_OP': operation,
             'OMI_COLD_GAP': gap,
+            'OMI_COLD_PAGE_LIMIT': str(copy_limit),
         },
     )
     assert result.returncode == 86, result.stderr
