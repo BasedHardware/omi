@@ -1423,7 +1423,10 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name
-        epoch = 'c2fs_20261026_r1' if enabled else 'v1'
+        # SCA-1750: prod listen/pusher read the same monthly doc as the Cloud Run billing
+        # gate (allowance watch), so they share its epoch while their levers stay 0.
+        epoch_aligned = enabled or (environment == 'prod' and name in {'gke/backend-listen', 'gke/pusher'})
+        epoch = 'c2fs_20261026_r1' if epoch_aligned else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
         if name.startswith('cloud_run/'):
             rendered = {
@@ -1442,4 +1445,38 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
-        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'chart,key',
+    [('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'), ('backend-listen', 'SYNC_COLLISION_SUFFIX_ENABLED')],
+)
+def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart, key):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            f'{environment}-{chart}',
+            str(chart_dir),
+            '-f',
+            str(values),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.tag=',
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert len(deployments) == 1
+    containers = deployments[0]['spec']['template']['spec']['containers']
+    entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
+    assert entries == [{'name': key, 'value': 'true'}]

@@ -6,10 +6,12 @@ import hashlib
 import json
 import logging
 import math
+import time
 from typing import Any
 
 from google.cloud import firestore
 from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_enabled
+from config import record_seal_repair as repair_config
 
 from database._client import run_transactional
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
@@ -46,9 +48,20 @@ def seal_row_state(row):
 
 
 def _job_state(job):
-    # The pending drainer advances this retry wake every minute. It grants no
-    # seal authority and must not invalidate an otherwise identical approval.
-    return {key: value for key, value in job.items() if key != 'available_at'}
+    # Scheduling metadata grants no seal authority. Recheck its live values in
+    # the commit transaction before waking intake; a claim may race planning.
+    return {key: value for key, value in job.items() if key not in {'available_at', 'record_intake_retry_at'}}
+
+
+def intake_wake_allowed(job, now):
+    available = job.get('available_at', 0)
+    if type(available) not in (int, float) or not math.isfinite(available):
+        return False
+    # A future value with no matching retry marker might be an old binary's
+    # live claim. Preserve it during rolling upgrades too. An already due row
+    # has no unexpired claim to cancel.
+    retry = job.get('record_intake_retry_at')
+    return available <= now or type(retry) in (int, float) and retry == available
 
 
 def plan_digest(value):
@@ -212,6 +225,7 @@ def plan_seals(
     check_budget=lambda: None,
     repair_upload_failed=False,
     repair_closed=False,
+    wake_admission=False,
 ):
     entries = []
     for job_id in sorted(job_ids):
@@ -282,6 +296,7 @@ def plan_seals(
         'producers_stopped': producers_stopped,
         'repair_upload_failed': repair_upload_failed,
         'repair_closed': repair_closed,
+        'wake_admission': wake_admission,
         'overlap_trim_enabled': overlap_trim_enabled(),
     }
     return {**plan, 'plan_sha256': plan_digest(plan)}
@@ -338,6 +353,19 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 patch['record_upload_failed'] = False
             check_budget()
             tx.update(ref, patch)
+            enqueued = current_job.get('enqueued_at')
+            if (
+                plan.get('wake_admission')
+                and repair_config.fresh_enabled()
+                and type(enqueued) in (int, float)
+                and math.isfinite(enqueued)
+                and 0 <= time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS
+                and intake_wake_allowed(current_job, time.time())
+            ):
+                # The seal and wake commit together. Zero sorts ahead of the
+                # barrier-refusal backlog and cancels its 15-minute retry delay.
+                # Admission still runs its full privacy/custody/artifact checks.
+                tx.update(job_ref, {'available_at': 0, 'record_intake_retry_at': None})
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:

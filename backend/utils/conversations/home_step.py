@@ -36,6 +36,8 @@ from config.episodes import (
     home_empty_output_noise_enabled,
     home_processing_max_age_seconds,
     home_step_projection_enabled,
+    home_transcription_max_age_seconds,
+    home_transcription_queue_hold_enabled,
 )
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
@@ -106,7 +108,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if transcribing_hold.applies(row):
         _, presented = transcribing_hold.transcription_presentation(
             transcribing_hold.deadline(row),
-            failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
+            failed=transcribing_hold.failed(row),
         )
         return FAILED if presented == 'failed' else TRANSCRIBING
     if (
@@ -145,7 +147,13 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
         # A capture whose speech has not landed. Unstamped legacy rows get the same
         # bound the stamped ones have, so none can stay Processing forever.
-        return FAILED if _older_than(row.get('finished_at'), LEGACY_TRANSCRIPTION_SECONDS) else TRANSCRIBING
+        if home_transcription_queue_hold_enabled():
+            seconds = home_transcription_max_age_seconds()
+            anchor = row.get('finished_at') or row.get('created_at')
+        else:
+            seconds = LEGACY_TRANSCRIPTION_SECONDS
+            anchor = row.get('finished_at')
+        return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 
 

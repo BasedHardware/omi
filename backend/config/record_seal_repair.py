@@ -7,6 +7,10 @@ from config import record_partial
 
 # Admission has zero upload grace; use the existing partial proof wait instead.
 JOBS_MIN_AGE_SECONDS = record_partial.WAIT_SECONDS
+FRESH_MIN_AGE_SECONDS = 60  # Discovery grace only; all producer/tail/privacy proofs still apply.
+FRESH_WINDOW_SECONDS = 7200
+FRESH_RETRY_SECONDS = 120
+FRESH_ROW_SECONDS = 90
 MISSING_CONVERSATION_SECONDS = 7 * record_partial.INVENTORY_IDLE_SECONDS
 
 
@@ -16,6 +20,10 @@ def jobs_enabled():
 
 def enabled():
     return os.getenv('RECORD_SEAL_REPAIR_ENABLED', 'true').strip().lower() == 'true'
+
+
+def fresh_enabled():
+    return os.getenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'}
 
 
 # Rows are I/O-bound subprocesses (~150 s each, 2026-11-05: CPU 0.7 of 4, no throttling, ~70 MB per worker),
