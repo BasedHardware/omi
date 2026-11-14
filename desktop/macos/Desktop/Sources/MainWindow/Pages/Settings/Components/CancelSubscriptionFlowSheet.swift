@@ -1,7 +1,8 @@
 import OmiTheme
 import SwiftUI
 
-/// Analytics seam so the flow stays testable without PostHog.
+/// Analytics and endpoint seams for the cancel flow.
+/// Keeps the sheet's state machine testable without PostHog or the network.
 struct CancelFlowAnalytics {
   var started: () -> Void
   var reasonSelected: (String?) -> Void

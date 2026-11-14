@@ -1,4 +1,7 @@
-/** Closed cancel-reason vocabulary shared with mobile (contracts/analytics/events.json). */
+/**
+ * Closed cancel-reason vocabulary shared with mobile
+ * (contracts/analytics/events.json). No free-string reasons reach analytics.
+ */
 export const CANCEL_REASONS = [
   'too_expensive',
   'not_using_enough',
