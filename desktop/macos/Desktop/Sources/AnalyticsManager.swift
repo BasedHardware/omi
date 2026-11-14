@@ -1744,10 +1744,11 @@ enum SubscriptionFunnelWire {
   /// Closed cancel-reason vocabulary shared with mobile; absent/unknown reasons
   /// keep the contract's `none`/`unknown` buckets instead of a free string.
   static func cancelReason(_ raw: String?) -> String {
-    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines) {
+    let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    switch value {
     case "too_expensive", "not_using_enough", "missing_features", "audio_quality", "battery_drain",
       "found_alternative", "other":
-      return raw!.trimmingCharacters(in: .whitespacesAndNewlines)
+      return value
     case "none":
       return "none"
     default:
