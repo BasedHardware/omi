@@ -64,7 +64,7 @@ LOCK_CONTRACTS = {
     # validate_firestore_schema_lock_isolation for why it must not be in the
     # backend-stack group.
     "gcp_firestore_indexes.yml": LockContract(
-        "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
+        "firestore-schema-${{ github.event.inputs.environment }}"
     ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_cloud_run_metrics_egress.yml": LockContract(
@@ -237,6 +237,28 @@ def backend_deploy_job_steps(name: str, workflow_text: str) -> list[list[str]]:
 
 def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
     errors: list[str] = []
+    if name == "gcp_firestore_indexes.yml":
+        # Schema checks must not reserve the writer lock while waiting for an
+        # unrelated PR/push job. Preserve the same per-environment writer API.
+        if parse_top_level_concurrency(text) is not None:
+            errors.append(f"{name}: read-only checks must not hold workflow-level concurrency")
+        writers = {
+            "reconcile_composite_indexes": contract.group,
+            "reconcile_development_composite_indexes": "firestore-schema-development",
+            "apply_field_exemptions": "firestore-schema-prod",
+        }
+        for job, group in writers.items():
+            block = job_block(text, job) or []
+            fields = parse_top_level_concurrency("\n".join(line[4:] for line in block)) or {}
+            if fields.get("group") != group or fields.get("cancel-in-progress") != "false":
+                errors.append(f"{name}: {job} requires noncancelling job lock {group!r}")
+        for job in re.findall(r"^  ([A-Za-z_][A-Za-z_0-9]*):$", text.split("\njobs:", 1)[-1], re.M):
+            block = "\n".join(job_block(text, job) or [])
+            if job not in writers and has_firestore_index_writer(block):
+                errors.append(f"{name}: unaudited schema writer job {job!r}")
+            if job not in writers and parse_top_level_concurrency("\n".join(line[4:] for line in block.splitlines())):
+                errors.append(f"{name}: read-only job {job!r} must not reserve writer concurrency")
+        return errors
     concurrency = parse_top_level_concurrency(text)
     if concurrency is None:
         return [f"{name}: missing workflow-level concurrency block"]
@@ -915,7 +937,10 @@ def check_repository() -> list[str]:
             errors.append(f"{name}: audited deploy workflow is missing")
             continue
         errors.extend(validate_lock(name, text, contract))
-        concurrency = parse_top_level_concurrency(text)
+        lock_text = text
+        if name == "gcp_firestore_indexes.yml":
+            lock_text = "\n".join(line[4:] for line in job_block(text, "reconcile_composite_indexes") or [])
+        concurrency = parse_top_level_concurrency(lock_text)
         if concurrency and concurrency.get("group"):
             groups[name] = concurrency["group"]
 
@@ -991,6 +1016,9 @@ jobs:
 """
     if is_persistent_writer(firestore_read_only):
         raise PolicyError("read-only Firestore readiness was classified as a persistent writer")
+    local_plan = firestore_read_only.replace("--check-only", "--add-only-base base.json --plan-additions")
+    if is_persistent_writer(local_plan):
+        raise PolicyError("credential-free additive manifest planning was classified as a schema writer")
     default_reconciliation = firestore_read_only.replace(" \\" + "\n            --check-only\n", "\n")
     if not is_persistent_writer(default_reconciliation):
         raise PolicyError("default Firestore reconciliation bypassed persistent-writer detection")
@@ -1122,6 +1150,26 @@ jobs:
     canceling = good.replace("cancel-in-progress: false", "cancel-in-progress: true")
     if not any("cancel-in-progress" in error for error in validate_lock("fixture.yml", canceling, contract)):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
+
+
+def _self_test_firestore_schema_job_locks() -> None:
+    name = "gcp_firestore_indexes.yml"
+    group = LOCK_CONTRACTS[name].group
+    fixture = "jobs:\n" + "".join(
+        f"  {job}:\n    concurrency:\n      group: {lock}\n      cancel-in-progress: false\n"
+        for job, lock in (("reconcile_composite_indexes", group),
+                          ("reconcile_development_composite_indexes", "firestore-schema-development"),
+                          ("apply_field_exemptions", "firestore-schema-prod"))
+    )
+    if validate_lock(name, fixture, LOCK_CONTRACTS[name]):
+        raise PolicyError("matching schema writer job locks rejected")
+    for invalid in (fixture.replace("firestore-schema-prod", "different-field-lock"),
+                    fixture.replace("cancel-in-progress: false", "cancel-in-progress: true", 1),
+                    "concurrency:\n  group: firestore-schema-prod\n  cancel-in-progress: false\n" + fixture,
+                    fixture + "  push_check:\n    concurrency:\n      group: firestore-schema-prod\n      cancel-in-progress: false\n",
+                    fixture + "  extra_writer:\n    steps:\n      - run: python3 backend/scripts/reconcile_firestore_indexes.py --provision-missing\n"):
+        if not validate_lock(name, invalid, LOCK_CONTRACTS[name]):
+            raise PolicyError("invalid schema writer scheduling passed")
 
 
 def _self_test_firestore_schema_lock_isolation() -> None:
@@ -1435,6 +1483,7 @@ def run_self_test() -> None:
     _self_test_prod_train_lock()
     _self_test_firestore_schema_ownership()
     _self_test_firestore_schema_lock_isolation()
+    _self_test_firestore_schema_job_locks()
     _self_test_automatic_backend_stack_lifecycle()
     _self_test_environment_resolution()
     _self_test_workflow_lock()

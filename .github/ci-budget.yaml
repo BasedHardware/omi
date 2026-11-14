@@ -1512,14 +1512,14 @@
     "gcp_firestore_indexes.yml/reconcile_composite_indexes": {
       "budget_p50_minutes": 5,
       "display_name": "reconcile_composite_indexes",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0.1,
-      "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')",
+      "expected_runs_class": "non-pr-manual-planning-sentinel",
+      "expected_runs_per_day": 0.2,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'composite-indexes'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
+      "rationale": "Explicit typed-confirmed dispatch only; production push is local validation outside writer concurrency (SCA-2225 run 43613610960). Same create-only reconcile/readiness operations and timeout; no added schema cadence. Manual dev uses the automatic dev writer lock. Inventory-only planning sentinel 0.2/day accounts for both manual environment paths, not measured demand or a new dispatch schedule; production automatic writes are removed.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1556,6 +1556,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/validate_merged_prod_indexes": {
+      "budget_p50_minutes": 5,
+      "display_name": "validate_merged_prod_indexes",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Release system owner (SCA-2225)",
+      "rationale": "Local manifest validation and explicit pending owner/deadline replace the production push writer that blocked pinned reconcile run 43613610960; zero GCP calls, no cloud credentials or schema lock.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

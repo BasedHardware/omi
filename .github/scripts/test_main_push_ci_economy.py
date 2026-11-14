@@ -109,7 +109,9 @@ NO_PUSH_PATHS_WORKFLOWS = ("desktop-swift-ci.yml", "mobile-app-checks.yml")
 # accidental edits while this contract evolves.
 UNTOUCHED_CONCURRENCY = {
     "gcp_backend.yml": ("deploy-backend-stack-", "false"),
-    "gcp_firestore_indexes.yml": ("firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}", "false"),
+    # Schema writer locks are job-scoped; local push/PR checks cannot queue
+    # ahead of a release-pinned dispatch. Dedicated schema tests cover writers.
+    "gcp_firestore_indexes.yml": (None, None),
     "main_nightly_full.yml": ("main-nightly-full-${{ github.ref }}", "true"),
     "release-eligibility.yml": (None, None),
 }
