@@ -57,6 +57,8 @@ run_hermetic() {
     tests/unit/test_check_cloud_run_env_drift.py \
     tests/unit/test_deploy_status_report.py \
     tests/unit/test_verify_backend_release_vector.py \
+    tests/unit/test_backend_deploy_services.py \
+    tests/unit/test_resolve_service_images.py \
     tests/unit/test_mcp_oauth_deploy_contract.py -q
 }
 

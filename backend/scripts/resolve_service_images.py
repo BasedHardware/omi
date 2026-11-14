@@ -23,7 +23,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 REGISTRY_PATH = Path(__file__).resolve().parents[1] / "runtime_images.json"
 # Today all four Cloud Run services ship the one fat image built for the base service.
@@ -77,11 +77,17 @@ def resolve(
     deploy_targets: str,
     deploy_gateway: bool,
     base_service: str = "backend",
+    services: Sequence[str] = CLOUD_RUN_SERVICES,
     registry: dict[str, Any] | None = None,
     inspect: Inspector = inspect_image_config,
 ) -> dict[str, str]:
     registry = registry or json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
     pairs = parse_pairs(raw)
+    if not services or set(services) - set(CLOUD_RUN_SERVICES) or len(set(services)) != len(services):
+        raise ServiceImageError("invalid Cloud Run service scope")
+    outside = (set(pairs) & set(CLOUD_RUN_SERVICES)) - set(services)
+    if outside:
+        raise ServiceImageError(f"service_images names unselected services: {sorted(outside)}")
     if "backend-listen" in pairs and deploy_targets != "all":
         raise ServiceImageError("backend-listen deploys only with deploy_targets=all")
     if "llm-gateway" in pairs and not deploy_gateway:
@@ -132,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deploy-targets", required=True)
     parser.add_argument("--deploy-gateway", required=True, choices=("true", "false"))
     parser.add_argument("--base-service", default="backend")
+    parser.add_argument("--services", default=",".join(CLOUD_RUN_SERVICES))
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -143,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             deploy_targets=args.deploy_targets,
             deploy_gateway=args.deploy_gateway == "true",
             base_service=args.base_service,
+            services=tuple(args.services.split(",")),
         )
     except ServiceImageError as error:
         print(f"ERROR: {error}", file=sys.stderr)

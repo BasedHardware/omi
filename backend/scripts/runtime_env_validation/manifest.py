@@ -665,6 +665,7 @@ def validate_runtime_env(
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
+    services: list[str] | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
@@ -699,13 +700,23 @@ def validate_runtime_env(
             )
         )
 
+    live_config = env_config
+    if services is not None:
+        cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+        declared = _as_config_dict(cloud_run.get('services')) or {}
+        if not services or len(set(services)) != len(services) or set(services) - set(declared):
+            return [*errors, ValidationError('cloud_run', 'invalid service selection')]
+        live_config = {
+            **env_config,
+            'cloud_run': {**cloud_run, 'services': {name: declared[name] for name in services}},
+        }
     cloud_run_state = None
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:
-        cloud_run_state = _fetch_live_cloud_run_state(env_config)
+        cloud_run_state = _fetch_live_cloud_run_state(live_config)
 
     if cloud_run_state is not None:
-        errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_cloud_run(live_config, cloud_run_state, strict_provisional=strict_provisional))
         errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
     return errors

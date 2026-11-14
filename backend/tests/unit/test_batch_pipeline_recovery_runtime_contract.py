@@ -73,7 +73,17 @@ def test_recovery_queue_provisioning_is_bounded_and_inventory_errors_fail_closed
         i for i, step in enumerate(steps) if step['name'] == 'Configure production batch quarantine recovery queue'
     )
     step = steps[index]
-    assert step['if'] == "${{ inputs.runtime_env == 'prod' }}"
+    # Shared queue provisioning remains production-only and is skipped for
+    # every explicit service selection. Exercise the actual YAML condition.
+    for raw, environment, expected in (
+        ('', 'prod', True),
+        ('', 'development', False),
+        ('backend-integration', 'prod', False),
+        ('backend-sync', 'prod', False),
+    ):
+        condition = step['if'].removeprefix('${{').removesuffix('}}')
+        condition = condition.replace('inputs.runtime_env', repr(environment)).replace('inputs.services', repr(raw))
+        assert eval(condition.replace('&&', ' and '), {'__builtins__': {}}, {}) is expected
     assert index < next(i for i, s in enumerate(steps) if s.get('id') == 'deploy-backend-integration')
     script = (
         step['run']

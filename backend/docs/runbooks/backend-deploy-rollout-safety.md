@@ -2,16 +2,20 @@
 
 ## Production backend deployment
 
-Dispatch `gcp_backend.yml` once with `environment=prod`, `mode=deploy`,
-`deploy_targets=all`, and the exact admitted `release_sha`. The selected prod
-environment provides the single production approval. The workflow checks
-Firestore readiness before mutation, creates and validates no-traffic Cloud Run
-candidates, reconciles backend secrets using the script-derived service-account
-default, updates the GKE backend surfaces, snapshots Cloud Run traffic before
-promotion, restores it after a failed promotion or serving-vector check, and
-hard-gates the final serving release vector. There is no release-record bucket,
-separate deployer identity, or backend beta ring. This does not change desktop
-Beta or Stable update-channel pointers.
+Dispatch `gcp_backend.yml` with `environment=prod`, `mode=deploy`,
+`deploy_targets=cloud-run-only`, and the exact admitted `release_sha`.
+Production `deploy_targets=all` is rejected. Blank `services` deploys the four
+Cloud Run services; an explicit comma list limits the rollout to those services.
+See [selected-service deployment and rollback](backend-service-deploy.md) for
+usage, evidence and the release-role-only build-only/image-only fallback.
+
+The prod environment provides the production approval. The workflow checks
+Firestore readiness before mutation, validates no-traffic candidates, captures
+the selected services' traffic before promotion and restores it after a failed
+promotion or serving check. Release-vector verification covers the selection.
+Production GKE surfaces use their separate release workflows. There is no
+release-record bucket, separate deployer identity, or backend beta ring. Desktop
+Beta and Stable update-channel pointers remain separate.
 
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
 ```

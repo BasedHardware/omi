@@ -66,6 +66,7 @@ def build_expectation(
     short_sha: str | None = None,
     expected_image: str | None = None,
     service_images: Mapping[str, str] | None = None,
+    services: Sequence[str] | None = None,
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -97,8 +98,11 @@ def build_expectation(
         resolved_short_sha = normalized_sha[:7]
     if expected_image is not None and not expected_image.strip():
         raise ValueError('expected image must not be empty')
+    selected = tuple(CLOUD_RUN_SERVICES if services is None else services)
+    if not selected or len(set(selected)) != len(selected) or set(selected) - set(CLOUD_RUN_SERVICES):
+        raise ValueError('services must be a nonempty unique subset of backend Cloud Run services')
     service_images = dict(service_images or {})
-    unknown = sorted(set(service_images) - {*CLOUD_RUN_SERVICES, LISTENER_SERVICE})
+    unknown = sorted(set(service_images) - {*selected, LISTENER_SERVICE})
     if unknown:
         raise ValueError(f'service images name unknown services: {unknown}')
     if any('@sha256:' not in ref for ref in service_images.values()):
@@ -115,7 +119,7 @@ def build_expectation(
         image=(
             expected_image.strip() if expected_image is not None else f'gcr.io/{project}/backend:{resolved_short_sha}'
         ),
-        revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
+        revisions={service: f'{service}-{suffix}' for service in selected},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
         service_images=service_images,
@@ -139,7 +143,7 @@ def build_read_only_commands(
             f'--region={expectation.region}',
             '--format=json',
         ]
-        for service in CLOUD_RUN_SERVICES
+        for service in expectation.revisions
     }
     if include_revision_documents:
         commands.update(
@@ -154,7 +158,7 @@ def build_read_only_commands(
                     f'--region={expectation.region}',
                     '--format=json',
                 ]
-                for service in CLOUD_RUN_SERVICES
+                for service in expectation.revisions
             }
         )
     if include_listener:
@@ -498,7 +502,7 @@ def evidence(
     latest_ready_poll: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
-    for service in CLOUD_RUN_SERVICES:
+    for service in expectation.revisions:
         document = documents.get(f'cloud_run/{service}', {})
         status = _mapping(document.get('status'))
         template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -632,6 +636,7 @@ def main() -> int:
             'git rev-parse --short=7 HEAD, which Git may extend past seven characters.'
         ),
     )
+    parser.add_argument('--service', action='append', choices=CLOUD_RUN_SERVICES, dest='services')
     parser.add_argument('--deploy-run-id', required=True)
     parser.add_argument('--deploy-run-attempt', required=True)
     parser.add_argument('--project', required=True)
@@ -681,6 +686,14 @@ def main() -> int:
             raise ValueError('latest-ready wait must not be negative')
         if args.latest_ready_poll_interval_seconds <= 0:
             raise ValueError('latest-ready poll interval must be positive')
+        if args.services and set(args.services) != set(CLOUD_RUN_SERVICES) and not args.cloud_run_only:
+            raise ValueError('a service subset requires --cloud-run-only')
+        service_images = {}
+        for item in args.service_image:
+            service, separator, ref = item.partition('=')
+            if not separator or service in service_images or (args.cloud_run_only and service == LISTENER_SERVICE):
+                raise ValueError('service-image must name a unique service in the verified scope')
+            service_images[service] = ref
         expectation = build_expectation(
             commit_sha=args.commit_sha,
             short_sha=args.short_sha,
@@ -690,7 +703,8 @@ def main() -> int:
             region=args.region,
             environment=args.environment,
             expected_image=args.expected_image,
-            service_images=dict(item.split('=', 1) for item in args.service_image),
+            service_images=service_images,
+            services=args.services,
         )
         commands = build_read_only_commands(
             expectation,

@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -77,7 +78,7 @@ def contracts():
     }
 
 
-def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(contracts):
+def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(contracts, tmp_path):
     action = contracts['action']
     steps = action['runs']['steps']
     attach = next(
@@ -90,8 +91,42 @@ def test_sidecars_attach_before_readiness_and_promotion_for_all_three_services(c
     )
     assert attach < readiness
     script = steps[attach]['run']
-    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert name in script
+    # Execute the actual scoped loop: the blank selector covers the whole
+    # fleet, while an explicit selection must not attach an unselected sidecar.
+    from scripts.backend_deploy_services import parse_services
+
+    rendered = (
+        script.replace('${{ inputs.project_id }}', 'test-project')
+        .replace('${{ inputs.region }}', 'us-central1')
+        .replace('${{ steps.image-tag.outputs.revision_suffix }}', 'abcdef1-123-1')
+    )
+    recorder = tmp_path / 'python3'
+    recorder.write_text('#!/bin/bash\nprintf "%s\\n" "$*" >> "$TRACE"\n')
+    recorder.chmod(0o755)
+    trace = tmp_path / 'sidecars'
+    for raw in ('', 'backend', 'backend-integration', 'backend-sync,backend-sync-backfill'):
+        trace.unlink(missing_ok=True)
+        selected = parse_services(raw)
+        result = subprocess.run(
+            ['bash', '-e', '-o', 'pipefail', '-c', rendered],
+            env={
+                **os.environ,
+                'PATH': str(tmp_path) + os.pathsep + os.environ['PATH'],
+                'TRACE': str(trace),
+                'BACKEND_DEPLOY_SERVICES': ' '.join(selected),
+                'DEPLOY_CONTROL_SCRIPTS': '/test/scripts',
+                'RUNNER_TEMP': str(tmp_path),
+                'GMP_CANDIDATE_TAG': '',
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        calls = [shlex.split(line) for line in trace.read_text().splitlines()] if trace.exists() else []
+        assert {next(arg.split('=', 1)[1] for arg in call if arg.startswith('--service=')) for call in calls} == (
+            set(selected) - {'backend'}
+        )
     assert '--config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_sync.yaml"' in script
     assert '--config-env' in script
     assert '--config-secret' not in script

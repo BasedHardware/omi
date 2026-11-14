@@ -17,6 +17,8 @@ from utils.episodes import home_membership
 from utils.developer_item_reads import read_conversation_item
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
 from tests.unit.test_indexed_list_read_path import Db
+from tests.unit.test_batch_pipeline_live import recording, incoming
+from utils.batch_pipeline.live_projection import replace_record
 
 NOW = datetime.now(timezone.utc)
 
@@ -231,9 +233,6 @@ def test_mcp_rest_detail_uses_same_title(monkeypatch):
 
 
 def test_stamped_capture_remains_completed_for_batch_replacement():
-    from tests.unit.test_batch_pipeline_live import recording, incoming
-    from utils.batch_pipeline.live_projection import replace_record
-
     raw = recording(transcript_segments=[], structured={'title': ''})
     raw.update(home_transcription_pending_at=NOW, home_transcription_deadline_at=NOW + timedelta(hours=2))
     assert transcribing_hold.project(raw)['status'] == 'processing'

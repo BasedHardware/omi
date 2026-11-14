@@ -404,7 +404,7 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )
     resolved = resolved.replace(
-        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars || steps.sync-routing.outputs.sync_backfill_env_vars }}',
         sync_backfill_overlay,
     )
     return resolved

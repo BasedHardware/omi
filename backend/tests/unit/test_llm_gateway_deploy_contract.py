@@ -630,8 +630,14 @@ def test_auto_dev_revision_fence_targets_the_deployment_project_static_contract(
     promotion = _workflow_step(
         workflow, 'Shift Cloud Run traffic to validated revisions', workflow_name='gcp_backend_auto_dev.yml'
     )
-    assert str(fence['run']).count('--region=${{ inputs.region }}') == 4
-    assert str(promotion['run']).count('--project=${{ inputs.project_id }}') == 4
+    # The shared action executes one command per validated service, rather
+    # than repeating four commands. Behavioral scope tests execute both loops.
+    for step in (fence, promotion):
+        assert 'for service in $BACKEND_DEPLOY_SERVICES; do' in step['run']
+        assert '--project=${{ inputs.project_id }}' in step['run']
+        assert '--region=${{ inputs.region }}' in step['run']
+    assert 'services describe "$service"' in fence['run']
+    assert 'services update-traffic "$service"' in promotion['run']
 
 
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():

@@ -560,8 +560,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    needs: validate-production-boundary\n",
-            "",
+            "  firestore_readiness:\n    needs: validate-production-boundary\n",
+            "  firestore_readiness:\n",
         )
         self.assertIn(
             "manual source admission must wait for production-boundary validation",
