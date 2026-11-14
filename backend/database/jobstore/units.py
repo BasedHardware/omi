@@ -263,6 +263,13 @@ class Units:
             raise AuthorityRefused('unit binding changed; retry in a fresh transaction')
         return job
 
+    def terminal_provider_source(self, conn, identity):
+        """Customer reader's original source under this transaction's guard."""
+        job = self._guarded_unit(conn, identity)
+        if not job or not job['source'] or job['state'] != 'result_ready' or not job['result']:
+            raise AuthorityRefused('original terminal provider source required')
+        return job
+
     def heartbeat(self, identity, lease_token, *, now, lease_seconds):
         if lease_seconds <= 0:
             raise ValueError('positive lease required')

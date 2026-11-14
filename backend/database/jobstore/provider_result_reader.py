@@ -24,8 +24,8 @@ class ProviderResultReader:
     def load_result(self, item, uri):
         units, handoff = self.adapter.units, self.adapter.handoff
         with units.pool.connection() as conn, conn.transaction():
-            job = units._guarded_unit(conn, item.segment_id)
-            if not job or job['state'] != 'result_ready' or job['result']['result_uri'] != uri:
+            job = units.terminal_provider_source(conn, item.segment_id)
+            if job['result']['result_uri'] != uri:
                 raise AuthorityRefused('original terminal result reference required')
             row = handoff._required_row(conn, job['recording_id'])
             handoff._guard(conn, row)

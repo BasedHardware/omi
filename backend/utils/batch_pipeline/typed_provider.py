@@ -13,7 +13,7 @@ import time
 from database.jobstore.authority import AuthorityRefused
 from database.jobstore.result_upload_rows import ResultUploadRows, uri as upload_uri
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
-from utils.batch_pipeline.provider_stt import ProviderSttStage, UnitOutcome, _Call, result_outcome
+from utils.batch_pipeline.provider_stt import ProviderSttStage, UnitOutcome, ProviderCall, result_outcome
 from utils.batch_pipeline.provider_stt_admission import SttRoute
 
 
@@ -120,7 +120,7 @@ class TypedProviderStage(ProviderSttStage):
             payload = self.artifacts.load_result(item, uri)
             return self._complete(item, uri, result_outcome(payload))
         plan = super()._prepare(segment_id)
-        if isinstance(plan, _Call):
+        if isinstance(plan, ProviderCall):
             if plan.failure or not plan.inspected or not plan.inspected[2]:
                 raise AuthorityRefused('typed inspection/silence disposition requires its custody adapter')
             return replace(plan, fence_ticket=self.ticket)

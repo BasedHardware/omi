@@ -125,6 +125,12 @@ class ProviderProjection(ProjectionStore):
             projector.project(identity)
         return self.ack(now=clock())
 
+    def result_reader(self, storage_client, bucket, master_secret, *, lease_seconds):
+        """Customer-role composition from retained originals, including restart."""
+        from database.jobstore.provider_result_reader import ProviderResultReader
+
+        return ProviderResultReader(self.handoff, storage_client, bucket, master_secret, lease_seconds=lease_seconds)
+
     def custody_manifest(self):
         """Exact new retained-copy census; this is not a purge certificate."""
         return (

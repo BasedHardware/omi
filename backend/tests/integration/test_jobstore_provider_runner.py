@@ -155,11 +155,9 @@ def test_actual_runner_result_customer_receipt_and_grouped_ack(runtime):
     assert names == ['funding', 'inspect', 'funding', 'health', 'cap', 'operation', 'allowance', 'send'] * 2
     assert [e[1] for e in r.events if e[0] == 'operation'] == ['2026-11'] * 2
     view = ProviderProjection(x.handoff, 'recording')
-    from database.jobstore.provider_result_reader import ProviderResultReader
-
     # Customer restart uses only original retained SQL rows and a new reader;
     # none of the worker's in-memory tickets/stores is required for projection.
-    reader = ProviderResultReader(x.handoff, x.storage, 'synthetic', b'x' * 32, lease_seconds=60)
+    reader = view.result_reader(x.storage, 'synthetic', b'x' * 32, lease_seconds=60)
     assert view.project_recording(reader, clock=lambda: 10000, publish=lambda b, result: x.published.append(result))
     assert x.ledger.get().to_dict()['status'] == 'completed'
     assert x.ledger.get().to_dict()['usage_committed_seconds'] == 8

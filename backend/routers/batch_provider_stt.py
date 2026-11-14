@@ -17,6 +17,7 @@ from config.batch_pipeline import merge_head_wait_seconds, provider_merge_member
 from database.outbox import Outbox, OutboxKind, outbox_for
 from utils.batch_pipeline.provider_drain import OwnerDrainCoalescer
 from utils.batch_pipeline.provider_stt import ProviderSttConsumer
+from utils.batch_pipeline.typed_provider import TypedProviderRunner
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import run_blocking, sync_executor
 from utils.sync.stage import current_stage
@@ -65,7 +66,7 @@ async def _run_sync(fn, *args, **kwargs):
     return await run_blocking(sync_executor, fn, *args, **kwargs)
 
 
-async def run_typed_provider_async(runner=None):
+async def run_typed_provider_async(runner: TypedProviderRunner | None = None):
     """Explicit scheduled typed dequeue, default off; never a legacy wake replay.
 
     The typed authority/runner is supplied by the host composition. No env flip

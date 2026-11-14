@@ -672,7 +672,7 @@ class UnitOutcome:
 
 
 @dataclass(frozen=True)
-class _Call:
+class ProviderCall:
     """A minted attempt awaiting its one vendor call (between ``prepare`` and ``finish``)."""
 
     segment_id: str
@@ -840,7 +840,7 @@ class ProviderSttStage:
             self._log('superseded', 'projection_blocked')
             return UnitOutcome('discarded', 'superseded')
 
-    def _call_sync(self, plan: _Call) -> dict | RecoveryFailure:
+    def _call_sync(self, plan: ProviderCall) -> dict | RecoveryFailure:
         if plan.failure is not None or plan.inspected is None:
             failure = plan.failure or {'stage': 'provider', 'reason': 'operation_failed'}
             return RecoveryFailure(failure['stage'], failure['reason'])
@@ -869,7 +869,7 @@ class ProviderSttStage:
             scope.closed = True
             current.reset(scope_token)
 
-    async def _call_async(self, plan: _Call) -> dict | RecoveryFailure:
+    async def _call_async(self, plan: ProviderCall) -> dict | RecoveryFailure:
         if self.stt_async is None or plan.failure is not None or not plan.inspected or not plan.inspected[2]:
             return self._call_sync(plan)
         from utils.stt.allowance_session import Operation, current
@@ -897,7 +897,7 @@ class ProviderSttStage:
 
     # -- phases -----------------------------------------------------------------------------------
 
-    def _prepare(self, segment_id: str) -> UnitOutcome | _Call:
+    def _prepare(self, segment_id: str) -> UnitOutcome | ProviderCall:
         job = self.protocol.read(segment_id)
         if job.get('state') not in STAGE_STATES:
             return UnitOutcome('done', 'superseded')
@@ -996,11 +996,13 @@ class ProviderSttStage:
             return tx.get('intakes', binding.get('job_id', 'missing')) or {}
 
         intake = self.protocol.store.run(read_intake)
-        return _Call(
+        return ProviderCall(
             segment_id, item, route, token, service, inspected, failure, tuple(candidates), intake.get('usage_period')
         )
 
-    def _finish(self, plan: _Call, response: dict | RecoveryFailure, latency: float | None = None) -> UnitOutcome:
+    def _finish(
+        self, plan: ProviderCall, response: dict | RecoveryFailure, latency: float | None = None
+    ) -> UnitOutcome:
         segment_id, item, route, token = plan.segment_id, plan.item, plan.route, plan.token
         duration = item.duration_seconds
         if isinstance(response, dict):
