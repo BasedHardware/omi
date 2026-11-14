@@ -287,6 +287,35 @@ async def test_record_drain_defers_only_still_pending_rows(monkeypatch, outcome,
     lease = 1000 + live.record_drain_lease_seconds()
     expected = lease if outcome == 'admitted' else max(2000 if outcome == 'already_deferred' else 0, 1000 + delay)
     assert row['available_at'] == expected
+    if outcome in {'value_error', 'no_admission'}:
+        assert row['record_intake_retry_at'] == expected
+    else:
+        assert 'record_intake_retry_at' not in row  # Never certify another replica's claim.
+
+
+@pytest.mark.asyncio
+async def test_record_claim_invalidates_retry_marker_before_archive_work(monkeypatch):
+    from utils.batch_pipeline import live
+
+    store = MemoryStore()
+    store.rows['jobs', 'synthetic'] = {
+        'owner_id': 'synthetic',
+        'state': 'record_pending',
+        'available_at': 0,
+        'record_intake_retry_at': 1900,
+    }
+    monkeypatch.setattr(live.time, 'time', lambda: 1000)
+    monkeypatch.setenv('RECORD_DRAIN_LEASE_SECONDS', '900')
+
+    async def admission(store, pending):
+        row = store.rows['jobs', 'synthetic']
+        assert row['available_at'] == 1900
+        assert 'record_intake_retry_at' not in row
+        row['state'] = 'ready'
+
+    monkeypatch.setattr(live, 'admit_recording', admission)
+    await live.drain_recordings(store)
+    assert store.rows['jobs', 'synthetic']['state'] == 'ready'
 
 
 @pytest.mark.asyncio
