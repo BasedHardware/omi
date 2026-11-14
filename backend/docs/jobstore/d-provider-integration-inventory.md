@@ -263,3 +263,11 @@ retained. This is cold-copy phase proof, not remote C4, a final all-copy/parity
 certificate, a cold-to-serving conversion or destructive final PG permission.
 No runtime installs the adapter, TTL is not extended and no new policy chosen.
 The broad first-review P1 remains open and source readiness remains false.
+
+0024: actual GCSSink retirement -> immutable original terminal receipt ->
+PublishedCopies account/conversation purge -> existing ErasureOperations
+progress/recovery. Fenced original references now require durable original
+terminal evidence. No session capability survives registry retirement. Older
+receipt-less fenced rows, prepared reservations, late audio/intake and remaining
+cohorts remain unresolved. Production runner/scheduling and real remote C4 are
+still gates; tests seed account terminal P rather than qualifying orchestration.

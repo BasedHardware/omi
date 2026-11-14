@@ -284,3 +284,9 @@ retained. This is cold-copy phase proof, not remote C4, a final all-copy/parity
 certificate, a cold-to-serving conversion or destructive final PG permission.
 No runtime installs the adapter, TTL is not extended and no new policy chosen.
 The broad first-review P1 remains open and source readiness remains false.
+
+0024 continues the same first FIX: original terminal evidence now joins actual
+GCS registry retirement and mode-independent result-reference purge. Tests use
+real isolated FS/PG and the production adapter with local session transport;
+this is not remote C4 or final all-copy certification. R14's production runtime,
+CI, cohort and fleet gates remain open. No new review/merge request or activation.

@@ -546,3 +546,30 @@ retained. This is cold-copy phase proof, not remote C4, a final all-copy/parity
 certificate, a cold-to-serving conversion or destructive final PG permission.
 No runtime installs the adapter, TTL is not extended and no new policy chosen.
 The broad first-review P1 remains open and source readiness remains false.
+
+### Original terminal-session receipts (0024)
+
+Actual GCSSink retirement now retains a source-bound, immutable terminal receipt
+in the same SQL COMMIT as original upload fencing and registry retirement. It
+contains the original attempt/admission/effect/deadline, terminal status,
+generation and sink fingerprint; it never retains a session capability. Deferred
+constraints reject split outcomes. Recovery and mode-independent retained-copy
+purge require that receipt, never phase=fenced or registry absence alone.
+Unqualified older fenced rows remain unresolved. Positive generations use the
+actual retention deletion and same-generation absence path before reference
+deletion; sticky 499/412 without an owned generation never adopts/deletes a
+collision. New fenced_object/reference progress receipts use existing durable
+cancellation/unknown-COMMIT barriers, not final custody retirement.
+
+Actual ordinary result -> drain -> account/conversation purge tests cover local
+SDK/FS/PG paths, original identity/deadlines, SQL split guards, lost reference
+COMMIT reply, cancellation and abrupt retirement exits. Account tests explicitly
+seed terminal P; production account orchestration remains missing. Local session
+transport is not remote C4. Unique intake/staging/late audio, journal prefix and
+all original custodians remain retained. No runtime selection or TTL added.
+
+R14 priority remains actual runner/cohort binding and backend CI coverage.
+Non-transactional enrichment enqueue now uses its existing durable rearm error
+handling when task creation fails, preserving the committed row for its sweep.
+Explicit caller wake still raises. First-summary deadline/coalescing policy is
+unchanged; remaining generic conformance disagreements are not waived.

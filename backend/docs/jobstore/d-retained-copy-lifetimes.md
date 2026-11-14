@@ -402,3 +402,14 @@ retained. This is cold-copy phase proof, not remote C4, a final all-copy/parity
 certificate, a cold-to-serving conversion or destructive final PG permission.
 No runtime installs the adapter, TTL is not extended and no new policy chosen.
 The broad first-review P1 remains open and source readiness remains false.
+
+0024 adds queue_upload_terminal_receipts as an immutable original per-upload
+evidence custodian, bound by FK to the original attempt and exact existing
+deadline. It contains no session URL and has no independent TTL or final
+retirement permission. It joins actual fencing/registry deletion in SQL.
+Mode-independent purge requires that receipt before retiring a fenced original
+artifact reference; object/reference progress remains durable and cancellable.
+Sticky 499/412 without an owned generation is not foreign-object absence or
+all-copy proof. The original upload, receipt, journal, censuses and unique FS
+intake/staging context remain retained pending complete original-copy proof and
+dedicated final destructive PG barriers. Local transport is not remote C4.

@@ -11,6 +11,7 @@ from psycopg import Error as PostgresError  # pyright: ignore[reportMissingImpor
 from database import legal_holds
 from database.jobstore.authority import AuthorityRefused, fingerprint
 from database.jobstore.gcs_transport import GCSTransport
+from database.jobstore.terminal_uploads import require_terminal
 from database.privacy_fence import FenceRefused
 from database.privacy_fence.protocol import lock, row_dict, owner_key
 
@@ -142,6 +143,33 @@ class GCSSink:
         if row['generation'] is not None and proof.generation != row['generation']:
             raise AuthorityRefused('GCS drain original generation changed')
         self._epoch(conn)
+        # Record evidence from the real transport on the same transaction as
+        # registry retirement. The sensitive session URL never enters this row.
+        if proof.status not in {200, 201, 404, 410, 412, 499} or (
+            proof.generation is None and proof.status not in {412, 499}
+        ):
+            raise AuthorityRefused('unresolved original terminal-session status')
+        conn.execute(
+            'UPDATE queue_provider_uploads SET generation=%s WHERE namespace=%s AND unit_id=%s',
+            (proof.generation, row['namespace'], row['unit_id']),
+        )
+        conn.execute(
+            'INSERT INTO queue_upload_terminal_receipts '
+            '(namespace,unit_id,attempt_token,owner_key,admission_id,effect_id,original_deadline,generation,status,sink_hash) '
+            'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+            (
+                row['namespace'],
+                row['unit_id'],
+                row['attempt_token'],
+                row['owner_key'],
+                row['admission_id'],
+                row['effect_id'],
+                row['original_deadline'],
+                proof.generation,
+                proof.status,
+                proof.sink_hash,
+            ),
+        )
         conn.execute(
             "UPDATE queue_provider_uploads SET phase='fenced',generation=%s WHERE namespace=%s AND unit_id=%s AND attempt_token=%s",
             (proof.generation, row['namespace'], row['unit_id'], row['attempt_token']),
@@ -203,6 +231,8 @@ class GCSSink:
             effect = row_dict(conn, 'SELECT * FROM privacy_effect_inflight WHERE effect_id=%s', (source['effect_id'],))
         if effect is None:
             if source['phase'] == 'fenced':
+                with self.pool.connection(timeout=2) as conn:
+                    require_terminal(conn, source)
                 return True
             raise ConnectionError('unresolved GCS recovery census')
         gate = (

@@ -12,6 +12,7 @@ from psycopg import Error as PostgresError  # pyright: ignore[reportMissingImpor
 
 from database.jobstore.authority import AuthorityRefused
 from database.jobstore.postgres_store import jsonb
+from database.jobstore.terminal_uploads import require_terminal
 from database.privacy_fence.protocol import lock, owner_key, row_dict
 
 PREFIX = 'jobstore-erasure-v1:'
@@ -41,7 +42,8 @@ class ErasureOperations:
             source = self.handoff._required_row(conn, identity)
             if source['owner_key'] != owner_key(uid):
                 raise AuthorityRefused('original source ownership changed')
-            if purpose in {'published_object', 'published_reference'}:
+            upload_purposes = {'published_object', 'published_reference', 'fenced_object', 'fenced_reference'}
+            if purpose in upload_purposes:
                 from database.jobstore.published_copies import payload as upload_payload
 
                 upload = row_dict(
@@ -53,16 +55,23 @@ class ErasureOperations:
                     not upload
                     or upload['recording_id'] != identity
                     or upload['owner_key'] != owner_key(uid)
-                    or upload['phase'] != 'published'
+                    or upload['phase'] != ('fenced' if purpose.startswith('fenced_') else 'published')
                     or str(upload['admission_id']) != source['admission']['admission_id']
                     or upload_payload(upload) != payload
                 ):
                     raise AuthorityRefused('published object outside original upload custody')
+                if purpose.startswith('fenced_'):
+                    require_terminal(conn, upload)
                 if (
-                    purpose == 'published_reference'
+                    purpose.endswith('_reference')
                     and not conn.execute(
-                        "SELECT 1 FROM queue_original_erasure_operations WHERE namespace=%s AND recording_id=%s AND purpose='published_object' AND state='committed' AND payload=%s LIMIT 1",
-                        (self.handoff.ticket.namespace, identity, jsonb(payload)),
+                        "SELECT 1 FROM queue_original_erasure_operations WHERE namespace=%s AND recording_id=%s AND purpose=%s AND state='committed' AND payload=%s LIMIT 1",
+                        (
+                            self.handoff.ticket.namespace,
+                            identity,
+                            purpose.replace('_reference', '_object'),
+                            jsonb(payload),
+                        ),
                     ).fetchone()
                 ):
                     raise AuthorityRefused('published original object proof required before reference erasure')
@@ -75,7 +84,7 @@ class ErasureOperations:
                     for uri in (unit['source']['audio_uri'], unit['result']['result_uri'])
                 }
             )
-            if purpose in {'published_object', 'published_reference'}:
+            if purpose in upload_purposes:
                 pass
             elif purpose == 'object':
                 if set(payload) != {'uri', 'completion_hash'} or payload['uri'] not in uris:
