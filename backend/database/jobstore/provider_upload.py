@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from google.cloud import firestore
 from psycopg import Error as PostgresError  # pyright: ignore[reportMissingImports]
 
+from database import rpc_deadline
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from database.batch_privacy_attempt import TOKEN_FIELD, token_version
 from database.jobstore.authority import AuthorityRefused, fingerprint
@@ -32,6 +33,7 @@ class ProviderUpload:
         self.sink = GCSSink(self.handoff, storage_client, timeout=timeout)
         self.transport = self.sink.transport
         self.client, self.namespace = self.handoff.client, self.handoff.ticket.namespace
+        rpc_deadline.bind_firestore_client(self.client)
 
     def artifacts(self, bucket, master_secret):
         # Customer/storage role composition, never in the provider worker's
@@ -69,10 +71,15 @@ class ProviderUpload:
             admit,
         )
 
-    def _privacy(self, transaction, item, admission):
+    def _privacy(self, transaction, item, admission, *, read_budget=None):
         self.handoff.authority.check(transaction, phases=('PG_OPEN',))
         token = (
-            self.client.collection('batch_pipeline_privacy').document(self.ticket.owner).get(transaction=transaction)
+            self.client.collection('batch_pipeline_privacy')
+            .document(self.ticket.owner)
+            .get(
+                transaction=transaction,
+                **(dict(timeout=read_budget.timeout(10), retry=None) if read_budget is not None else {}),
+            )
         )
         if token_version(token) is None or (token.to_dict() or {}).get(TOKEN_FIELD) != admission['privacy_token']:
             raise AuthorityRefused('result upload writing-transaction token changed')
@@ -84,6 +91,7 @@ class ProviderUpload:
             conversation_ids=self.ticket.conversation_ids,
             expected_generation=item.privacy_generation,
             snapshots=loaded,
+            read_budget=read_budget,
         )
         return ProtectionContext(loaded['user'].get('data_protection_level', 'enhanced'), generation)
 
@@ -95,6 +103,24 @@ class ProviderUpload:
             return self._privacy(transaction, item, admission)
 
         return read(self.client.transaction())
+
+    def authorize_read(self, item, *, read_budget):
+        from database.batch_pipeline_reads import read_snapshot
+
+        read_budget.timeout(10)
+        # Preserve the caller's single-attempt object-authorizing snapshot and
+        # deadline. G2 admission retains its existing bounded A1/walk/A2 policy;
+        # all of its FS RPCs also honour this same caller deadline. The original
+        # paid source remains immutable and is checked again after object I/O.
+        with rpc_deadline.rpc_deadline(read_budget.deadline):
+            admission = self._admission(item)
+            result = read_snapshot(
+                SimpleNamespace(client=self.client, namespace=self.namespace),
+                lambda tx: self._privacy(tx.transaction, item, admission, read_budget=read_budget),
+                read_budget,
+            )
+            read_budget.timeout(10)
+            return result
 
     @contextmanager
     def writer_scope(self):

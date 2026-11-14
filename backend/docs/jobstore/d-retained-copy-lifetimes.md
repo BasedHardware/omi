@@ -310,3 +310,18 @@ Actual GCS qualification, complete upload cohorts, original lifetime scheduling,
 account drain/runtime recovery injection, all-copy proof and final destructive
 PG/journal barriers remain missing. Broad first-review P1 and readiness=false
 remain unchanged; no new review, activation or savings follows.
+
+Budgeted result reads also use the typed original paid source/P/PC/epoch checks,
+fresh real A1/walk/A2 and matching valid F token. They retain the existing
+single-attempt read-only object-authorizing snapshot and caller read deadline;
+all admission FS RPCs honour that same deadline. The legacy reader remains
+unchanged for unbound stores. Added restored-admission/epoch cases first failed
+against the inherited legacy callback; the real binding now refuses before any
+object bytes. Original source is rechecked after I/O. No retry/deadline policy
+or original paid admission was weakened or replaced.
+
+The terminal-session destructive unit treats any original-generation delete or
+absence-probe SDK failure as unresolved, including raw deadline and 412 errors.
+A generic per-request error classification cannot settle this whole multi-step
+proof or clear its gate. Only terminal-session plus original-version absence
+returns normally; the registry and last original custodian stay retained.

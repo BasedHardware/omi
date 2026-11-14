@@ -103,17 +103,23 @@ class GCSTransport:
             raise ConnectionError('terminal session original generation unavailable')
         if generation is not None:
             uri = f"gs://{sink['bucket']}/{sink['key']}#{generation}"
-            delete_batch_object(
-                uid,
-                uri,
-                timeout=max(self.timeout),
-                storage_client=self.client,
-                namespace=sink['namespace'],
-            )
-            blob = self.client.bucket(sink['bucket']).blob(sink['key'], generation=generation)
             try:
-                blob.reload(if_generation_match=generation, timeout=self._timeout(), retry=None)
-            except NotFound:
-                return status, generation
+                delete_batch_object(
+                    uid,
+                    uri,
+                    timeout=max(self.timeout),
+                    storage_client=self.client,
+                    namespace=sink['namespace'],
+                )
+                blob = self.client.bucket(sink['bucket']).blob(sink['key'], generation=generation)
+                try:
+                    blob.reload(if_generation_match=generation, timeout=self._timeout(), retry=None)
+                except NotFound:
+                    return status, generation
+            except Exception:
+                # The destructive unit covers the whole terminal-session and
+                # original-version proof, not one SDK call in isolation. Neither
+                # a raw SDK error nor its 412 may settle an earlier unknown step.
+                raise ConnectionError('original GCS erasure/absence outcome unresolved') from None
             raise ConnectionError('original GCS generation absence not proved')
         return status, None

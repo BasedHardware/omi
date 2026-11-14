@@ -48,7 +48,9 @@ def create_artifact_store(
         authorize=(
             provider_upload.authorize if provider_upload is not None else partial(batch_artifact_authorize, store)
         ),
-        authorize_read=partial(batch_artifact_authorize, store),
+        authorize_read=(
+            provider_upload.authorize_read if provider_upload is not None else partial(batch_artifact_authorize, store)
+        ),
         key_for_owner=key_for_owner,
         register_artifact=partial(batch_artifact_register, store),
         shadow_result=partial(shadow_result, store),

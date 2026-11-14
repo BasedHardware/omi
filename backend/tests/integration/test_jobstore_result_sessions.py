@@ -559,3 +559,69 @@ def test_writing_transaction_rejects_changed_f_token_before_result_bytes(result,
     with pytest.raises(AuthorityRefused, match='token'):
         artifacts.persist_result(item, {})
     assert row(result) is None and effect(result) is None
+
+
+def test_budgeted_original_result_read_and_expired_deadline(result):
+    import time
+    from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
+
+    _, _, _, item, _, artifacts = result
+    uri = artifacts.persist_result(item, {'words': []})
+    budget = ArtifactReadBudget(time.monotonic() + 10, 65536, 1)
+    assert artifacts.load_result(item, uri, read_budget=budget) == {'words': []}
+    assert budget.objects == 1 and 0 < budget.received_bytes == budget.downloaded_bytes < 65536
+    expired = ArtifactReadBudget(time.monotonic() - 1, 65536, 1)
+    with pytest.raises(ArtifactReadLimit, match='deadline'):
+        artifacts.load_result(item, uri, read_budget=expired)
+    assert expired.objects == 0
+
+
+@pytest.mark.parametrize('change', ['restore', 'epoch'])
+def test_budgeted_original_result_read_refuses_changed_authority(result, change):
+    import time
+    from database.jobstore.authority import transition
+    from database.privacy_fence import FenceRefused
+    from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+
+    adapter, _, ticket, item, _, artifacts = result
+    uri = artifacts.persist_result(item, {})
+    if change == 'restore':
+        adapter.units.fence.close(ticket.owner, local=True)
+        adapter.units.fence.admit_from_authority(
+            adapter.handoff.client, item.owner_id, ticket.conversation_ids, lambda *_: None
+        )
+    else:
+        with adapter.units.pool.connection() as conn, conn.transaction():
+            transition(conn, adapter.units.namespace, 'PG_OPEN', 3, 'PG_CLOSING')
+    budget = ArtifactReadBudget(time.monotonic() + 10, 65536, 1)
+    with pytest.raises((AuthorityRefused, FenceRefused)):
+        artifacts.load_result(item, uri, read_budget=budget)
+    assert budget.objects == budget.received_bytes == 0
+
+
+@pytest.mark.parametrize('error_name', ['DeadlineExceeded', 'PreconditionFailed'])
+def test_raw_storage_error_cannot_settle_whole_session_erasure(result, monkeypatch, error_name):
+    from google.api_core import exceptions
+    from utils.other.local_storage import LocalBlob
+
+    adapter, _, ticket, item, storage, artifacts = result
+    storage._http.after_request = lambda *a: (_ for _ in ()).throw(ConnectionError('lost'))
+    with pytest.raises(ConnectionError):
+        artifacts.persist_result(item, {})
+    storage._http.after_request = None
+    adapter.units.fence.close(ticket.owner, local=True)
+
+    def unknown(*a, **k):
+        raise getattr(exceptions, error_name)('earlier generation erase remains unproved')
+
+    monkeypatch.setattr(LocalBlob, 'delete', unknown)
+    with pytest.raises(ConnectionError, match='unresolved'):
+        drain(result)
+    assert effect(result) is not None and row(result)['phase'] == 'draining'
+    gate = (
+        adapter.handoff.client.collection(legal_holds.LEGAL_HOLD_DELETION_GATES_COLLECTION)
+        .document(item.owner_id)
+        .get()
+        .to_dict()
+    )
+    assert gate['remote_inflight'] and gate['remote_target'].startswith('jobstore-gcs-v1:')

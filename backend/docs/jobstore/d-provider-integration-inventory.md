@@ -219,3 +219,12 @@ and runtime injection remain missing. See the source checkpoint for terminal
 status/generation rules. The new original session journal family intentionally
 refuses cold conversion pending its own adapter. Local transport tests are not
 remote C4 proof; remaining cohorts/all-copy/final-custody gates stay open.
+
+Budgeted result reads also use the typed original paid source/P/PC/epoch checks,
+fresh real A1/walk/A2 and matching valid F token. They retain the existing
+single-attempt read-only object-authorizing snapshot and caller read deadline;
+all admission FS RPCs honour that same deadline. The legacy reader remains
+unchanged for unbound stores. Added restored-admission/epoch cases first failed
+against the inherited legacy callback; the real binding now refuses before any
+object bytes. Original source is rechecked after I/O. No retry/deadline policy
+or original paid admission was weakened or replaced.

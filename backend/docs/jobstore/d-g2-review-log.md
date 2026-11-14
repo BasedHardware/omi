@@ -240,3 +240,12 @@ See `d-g2-source-checkpoint.md` for the source contract and
 recovery sessions, reverse conversion of this new journal family and final
 custody retirement remain missing; readiness=false. No additional review or
 activation requested, no savings booked.
+
+Budgeted result reads also use the typed original paid source/P/PC/epoch checks,
+fresh real A1/walk/A2 and matching valid F token. They retain the existing
+single-attempt read-only object-authorizing snapshot and caller read deadline;
+all admission FS RPCs honour that same deadline. The legacy reader remains
+unchanged for unbound stores. Added restored-admission/epoch cases first failed
+against the inherited legacy callback; the real binding now refuses before any
+object bytes. Original source is rechecked after I/O. No retry/deadline policy
+or original paid admission was weakened or replaced.
