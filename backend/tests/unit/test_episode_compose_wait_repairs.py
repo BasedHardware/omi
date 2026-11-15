@@ -28,10 +28,11 @@ def terminal(store, cid='empty'):
         summary_output_present=False,
         notes_written_at=T0 + timedelta(minutes=4),
         record_projection_revision=1,
-        home_transcription_pending_at=T0 + timedelta(minutes=3),
+        home_transcription_pending_at=T0 + timedelta(hours=4),
     )
     store.rows[cid] = row
-    store.episode['conversation_ids'].append(cid)
+    if cid not in store.episode['conversation_ids']:
+        store.episode['conversation_ids'].append(cid)
     return row
 
 
