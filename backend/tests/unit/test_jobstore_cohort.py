@@ -27,6 +27,7 @@ def production(monkeypatch):
     for name in ('FIRESTORE_EMULATOR_HOST', 'GCLOUD_PROJECT', 'GCP_PROJECT', 'FIREBASE_PROJECT_ID'):
         monkeypatch.delenv(name, raising=False)
     env = {
+        'BATCH_JOBSTORE_MODE': 'shadow',
         'OMI_DEPLOYMENT': 'prod',
         'OMI_ENV_STAGE': 'prod',
         'GOOGLE_CLOUD_PROJECT': 'based-hardware',
@@ -202,3 +203,9 @@ def test_projection_is_independent_and_keeps_field_omissions_in_caller(productio
 def test_missing_primary_is_always_retired(production, namespace):
     assert classify_document(namespace, 'jobs', 'row', {}) == 'absent'
     assert project_document(namespace, 'jobs', 'row', {}) is None
+
+
+@pytest.mark.parametrize('mode', ['firestore', '', 'unknown'])
+def test_existing_production_copy_observes_mode_rollback(production, mode):
+    production.setenv('BATCH_JOBSTORE_MODE', mode)
+    assert project_document(NAMESPACE, 'jobs', 'job', {'owner_key': OWNER}) is None

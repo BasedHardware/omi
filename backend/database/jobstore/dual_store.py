@@ -54,7 +54,7 @@ from prometheus_client import Counter, Histogram
 import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.staging_fence import jobstore_mirror_factory_admits
-from database.jobstore.cohort import project_document
+from database.jobstore.cohort import production_policy_applies, project_document
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +403,14 @@ class DualStore:
         reads = {
             address: projected
             for address, doc in view.reads.items()
-            if (projected := (project_document(self.namespace, *address, doc) if doc else {})) is not None
+            if (
+                projected := (
+                    project_document(self.namespace, *address, doc)
+                    if doc or production_policy_applies(self.namespace)
+                    else {}
+                )
+            )
+            is not None
         }
         if self.inline:
             self.mirror(reads, writes)
@@ -603,7 +610,11 @@ class DualStore:
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
                     phase[0] = 'postgres_read'
                     for (table, key), primary_doc in reads.items():
-                        primary_doc = project_document(self.namespace, table, key, primary_doc) if primary_doc else {}
+                        primary_doc = (
+                            project_document(self.namespace, table, key, primary_doc)
+                            if primary_doc or production_policy_applies(self.namespace)
+                            else {}
+                        )
                         if primary_doc is None:
                             _count(table, 'read', ShadowParityOutcome.SKIPPED)
                             continue
@@ -697,7 +708,11 @@ class DualStore:
         try:
             shadow_before = self._read_shadow(table, key)
             primary_doc = read_current(self.primary, [(table, key)]).get((table, key), {})
-            primary_doc = project_document(self.namespace, table, key, primary_doc) if primary_doc else {}
+            primary_doc = (
+                project_document(self.namespace, table, key, primary_doc)
+                if primary_doc or production_policy_applies(self.namespace)
+                else {}
+            )
             if primary_doc is None:
                 _converge_count(table, ShadowConvergenceOutcome.UNKNOWN)
                 return

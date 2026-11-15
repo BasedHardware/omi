@@ -15,6 +15,7 @@ from copy import deepcopy
 from typing import Literal
 
 from database.batch_pipeline_privacy import privacy_owner_key
+from database.batch_pipeline_shadow_hook import shadow_mode_enabled
 from utils.staging_fence import PROD_JOBSTORE_NAMESPACE, is_staging, jobstore_shadow_admits
 
 # jobs/results are keyed by segment ID; intakes by job ID; artifacts by the
@@ -87,7 +88,7 @@ def classify_document(namespace: str, table: str, key: str, doc: dict) -> Docume
     owner = resolve_owner_key(table, key, doc)
     if owner is None:
         return 'unknown_owner'
-    if os.getenv('JOBSTORE_SHADOW_WRITES', '').strip().lower() in _OFF:
+    if not shadow_mode_enabled() or os.getenv('JOBSTORE_SHADOW_WRITES', '').strip().lower() in _OFF:
         return 'excluded'
     return 'selected' if jobstore_shadow_admits(namespace, owner_key=owner) else 'excluded'
 

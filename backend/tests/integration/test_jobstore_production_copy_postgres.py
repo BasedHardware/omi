@@ -73,6 +73,7 @@ def production_copy(monkeypatch):
         # remains the anonymous loopback client in its generated test namespace.
         monkeypatch.setattr(cohort, 'PROD_JOBSTORE_NAMESPACE', harness.namespace)
         monkeypatch.setattr(cohort, 'jobstore_shadow_admits', admits)
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
         monkeypatch.setenv('OMI_DEPLOYMENT', 'local')  # production_policy_applies only excludes staging
         monkeypatch.delenv('JOBSTORE_SHADOW_WRITES', raising=False)
         monkeypatch.delenv('JOBSTORE_SHADOW_QUERY_PARITY', raising=False)
@@ -194,7 +195,7 @@ def test_all_copy_entry_points_apply_current_owner_policy(production_copy, route
     assert _copy(stores, 'jobs', 'gone') == {}
 
 
-@pytest.mark.parametrize('change', ['shrink', 'off', 'writes_off'])
+@pytest.mark.parametrize('change', ['shrink', 'off', 'writes_off', 'mode_off'])
 @pytest.mark.parametrize('kind', ['refresh', 'txn'])
 def test_queued_work_rereads_primary_and_live_cohort(production_copy, monkeypatch, change, kind):
     stores = production_copy
@@ -216,6 +217,8 @@ def test_queued_work_rereads_primary_and_live_cohort(production_copy, monkeypatc
         stores.policy['JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS'] = '1'
     elif change == 'off':
         stores.policy['JOBSTORE_PRODUCTION_MIRROR'] = 'off'
+    elif change == 'mode_off':
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
     else:
         monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
     item = stores.dual._queue.get_nowait()

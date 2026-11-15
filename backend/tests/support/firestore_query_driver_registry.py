@@ -260,6 +260,9 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
+    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
+    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
+    'database.jobstore.reconcile.process_page': '8da64f35613e6d050b720962609c05a274bf498ba59a36bd6f59c0d81dd608f5',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -4340,6 +4343,19 @@ for _key, _reason in (
     (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
+    ),
+    (
+        'database.jobstore.reconcile._primary_keys',
+        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
+        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
+        'No filters or composite index; built-in document-id ordering only.',
+    ),
+    (
+        'database.jobstore.reconcile.process_page',
+        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
+        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
+        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
+        'tests/unit/test_jobstore_reconcile.py.',
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))

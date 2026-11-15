@@ -11,9 +11,10 @@ from __future__ import annotations
 import time
 
 from database import rpc_deadline
+from database.batch_pipeline_shadow_hook import shadow_mode_enabled
 from database.jobstore import codec
 from database.jobstore.cohort import project_document
-from database.jobstore.dual_store import mirrored, read_current
+from database.jobstore.dual_store import mirrored, read_current, shadow_writes_enabled
 from utils.staging_fence import jobstore_mirror_factory_admits
 
 _FIELDS = {'leased': 'lease_until', 'retry': 'available_at', 'result_ready': 'enqueued_at'}
@@ -27,7 +28,11 @@ def compare_sampled_due(primary, shadow, args: tuple, kwargs: dict, budget_s: fl
     limit = args[2] if len(args) > 2 else kwargs.get('limit', 100)
     if state not in _FIELDS:
         return 'unknown'
-    if not jobstore_mirror_factory_admits(primary.namespace):
+    if (
+        not jobstore_mirror_factory_admits(primary.namespace)
+        or not shadow_mode_enabled()
+        or not shadow_writes_enabled()
+    ):
         return 'unknown'
     deadline = time.monotonic() + budget_s
     if getattr(primary, 'client', None) is not None:
@@ -84,4 +89,5 @@ def compare_sampled_due(primary, shadow, args: tuple, kwargs: dict, budget_s: fl
         before, after = observe(), observe()
     if time.monotonic() > deadline:
         raise TimeoutError('sampled due observation deadline')
-    return before[0] if before == after and jobstore_mirror_factory_admits(primary.namespace) else 'unknown'
+    active = jobstore_mirror_factory_admits(primary.namespace) and shadow_mode_enabled() and shadow_writes_enabled()
+    return before[0] if before == after and active else 'unknown'

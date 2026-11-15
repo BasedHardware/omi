@@ -186,7 +186,7 @@ def test_factory_handle_still_requires_owner_and_omits_shared_rows(production):
     assert all('pg_advisory_xact_lock(' in query for query in statements[1:])
 
 
-@pytest.mark.parametrize('change', ['shrink', 'writes_off', 'mirror_off'])
+@pytest.mark.parametrize('change', ['shrink', 'writes_off', 'mirror_off', 'mode_off'])
 @pytest.mark.parametrize('queued_kind', ['refresh', 'txn'])
 def test_queued_copy_rechecks_live_policy_and_retires_retained_rows(production, monkeypatch, change, queued_kind):
     primary, shadow, mirror = production
@@ -204,6 +204,8 @@ def test_queued_copy_rechecks_live_policy_and_retires_retained_rows(production, 
     assert mirror._queue.qsize() == 1
     if change == 'shrink':
         monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS', '1')
+    elif change == 'mode_off':
+        monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
     else:
         monkeypatch.setenv('JOBSTORE_SHADOW_WRITES' if change == 'writes_off' else 'JOBSTORE_PRODUCTION_MIRROR', 'off')
     kind, first, second = mirror._queue.get_nowait()
@@ -253,8 +255,9 @@ def test_captured_shared_excluded_and_unknown_payloads_never_enter_async_queue(p
     primary.rows[('jobs', 'selected')] = {'owner_key': key, 'value': 'selected'}
     mirror.inline = False
     monkeypatch.setattr(mirror, '_ensure_worker', lambda: None)
-    result = mirror.run(lambda tx: [tx.get(*address) for address in sorted(primary.rows)])
-    assert len(result) == 4  # primary caller still gets its real transaction reads
+    addresses = sorted(set(primary.rows) | {('control', 'absent-shared'), ('jobs', 'absent-unknown')})
+    result = mirror.run(lambda tx: [tx.get(*address) for address in addresses])
+    assert len(result) == 6  # primary caller still gets its real transaction reads
     kind, reads, writes = mirror._queue.get_nowait()
     mirror._queue.task_done()
     assert kind == 'txn' and writes == []
@@ -333,3 +336,13 @@ def test_convergence_after_owner_exclusion_records_unknown_instead_of_false_dive
     before = metric._value.get()
     mirror._check_convergence((0, 1, 'jobs', 'j', time.monotonic(), 0))
     assert metric._value.get() == before + 1 and mirror._pending == []
+
+
+@pytest.mark.parametrize('table', ['jobs', 'control'])
+def test_absent_unresolved_rows_cannot_inflate_production_parity(production, monkeypatch, table):
+    primary, _, mirror = production
+    monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS', '1')
+    metric = dual_store.SHADOW_PARITY_TOTAL.labels(table=table, op='read', outcome='match')
+    before = metric._value.get()
+    assert mirror.run(lambda tx: tx.get(table, 'absent-unknown')) == {}
+    assert metric._value.get() == before
