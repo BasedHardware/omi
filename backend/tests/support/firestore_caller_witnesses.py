@@ -550,7 +550,7 @@ def _run_yearly_retention(monkeypatch: pytest.MonkeyPatch, capture: HelperCaptur
     _stub(monkeypatch, users_db, 'get_user_deletion_wipe_status', lambda uid: None)
     _stub(monkeypatch, users_db, 'get_user_subscription', lambda uid: SimpleNamespace(stripe_subscription_id='fixture'))
     _stub(monkeypatch, yearly_router.yearly_switch, 'get_offer', lambda _: SimpleNamespace(eligible=True))
-    monkeypatch.setattr('database._client.get_firestore_client', lambda: FakeFirestore())
+    _stub(monkeypatch, yearly_router.yearly_switch_retention, 'get_firestore_client', lambda: FakeFirestore())
     trial(capture, yearly_router.admit_retention, placement='engaged', uid='u1')
 
 
@@ -576,7 +576,7 @@ WITNESSES: dict[str, CallerWitness] = {
         CallerWitness(
             'routers/yearly_switch.py:admit_retention:database.conversations.get_conversations_count',
             'database.conversations.get_conversations_count',
-            'database.conversations.get_conversations_count',
+            'routers.yearly_switch.get_conversations_count',
             ('yearly-retention-engaged-count',),
             1,
             _run_yearly_retention,
