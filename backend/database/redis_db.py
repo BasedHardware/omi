@@ -1406,9 +1406,15 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
-def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 60 * 60) -> bool:
-    """One backend AI-profile refresh per owner per ``ttl``; also throttles retries after a failure."""
+def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 10 * 60) -> bool:
+    """Exclusive in-progress AI-profile refresh for one owner; released when the run ends."""
     result = r.set(f'users:{uid}:ai_profile_refresh_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60) -> bool:
+    """At most one automatic AI-profile refresh attempt per owner per ``ttl``."""
+    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', '1', ex=ttl, nx=True)
     return result is not None
 
 

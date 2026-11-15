@@ -21,6 +21,11 @@ import {
 } from './dbRecovery'
 import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
+import {
+  dropLegacyProfile,
+  readNewestLegacyProfile,
+  type LegacyProfileRow
+} from './legacyProfileTable'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import {
@@ -617,8 +622,9 @@ function get(): Database.Database {
   // sibling tracks never collide on a user_version bump. See shared/types.ts for
   // the record shapes and the readers/writers at the end of this file.
   db.exec(`
-    -- (ai_user_profiles is gone: the backend owns the AI user profile now, and
-    -- migration v3 in dbMigrations.ts drops the old local history table.)
+    -- (The old local AI-profile history table is no longer created: the backend
+    -- owns the profile. legacyProfileTable.ts uploads its newest unsynced text
+    -- once, then drops it.)
     CREATE TABLE IF NOT EXISTS focus_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       screenshot_id TEXT,
@@ -1879,6 +1885,17 @@ export function recordVoiceTurnFailure(idempotencyKey: string, error: string): v
 }
 
 /* ---- Track 3 (proactive intelligence & memory) ---- */
+
+// --- Legacy local profile table (one-time upgrade salvage) ---
+// See legacyProfileTable.ts: read the newest pre-cloud row, then drop the table
+// once the backend has its text.
+export function readLegacyProfileRow(): LegacyProfileRow | null {
+  return readNewestLegacyProfile(get())
+}
+
+export function dropLegacyProfileTable(): void {
+  dropLegacyProfile(get())
+}
 
 // --- Focus sessions ---
 // One row per Focus-assistant analysis. No backend focus API on Mac; sessions

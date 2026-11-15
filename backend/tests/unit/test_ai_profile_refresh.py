@@ -30,17 +30,25 @@ class FakeStore:
 
 
 class FakeLock:
-    def __init__(self, acquired=True, raises=False):
+    def __init__(self, acquired=True, raises=False, cooldown_free=True):
         self.acquired = acquired
         self.raises = raises
+        self.cooldown_free = cooldown_free
         self.ttls: list[int] = []
+        self.cooldown_ttls: list[int] = []
         self.released = 0
 
-    def acquire(self, uid, ttl=3600):
+    def acquire(self, uid, ttl=600):
         if self.raises:
             raise ConnectionError('redis down')
         self.ttls.append(ttl)
         return self.acquired
+
+    def cooldown(self, uid, ttl=3600):
+        if self.raises:
+            raise ConnectionError('redis down')
+        self.cooldown_ttls.append(ttl)
+        return self.cooldown_free
 
     def release(self, uid):
         self.released += 1
@@ -62,6 +70,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', store.write_if_unchanged)
     monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_refresh_lock', lock.acquire)
     monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_refresh_lock', lock.release)
+    monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_auto_cooldown', lock.cooldown)
     monkeypatch.setattr(refresh, 'generated_compute_allowed', lambda uid, feature: True)
     monkeypatch.setattr(
         refresh,
@@ -94,8 +103,9 @@ def test_stale_profile_is_regenerated_and_written(wired):
     assert written['data_sources_used'] == 3
     assert written['refreshed_at'] == written['generated_at']
     assert calls['kwargs'] == {'past_profiles': ['- old fact'], 'latest_past_user_edited': False}
-    # The lock is kept for its TTL, so a failure or a burst of conversations cannot loop.
-    assert lock.released == 0
+    # The hourly cooldown stays (no retry loop); the in-progress lock is released so an
+    # explicit Generate Now is not blocked by a finished automatic run.
+    assert lock.cooldown_ttls == [3600] and lock.ttls == [600] and lock.released == 1
 
 
 def test_user_edit_is_merged_as_correction(wired):
@@ -118,6 +128,7 @@ def test_fresh_profile_skips_without_lock_or_spend(wired):
 @pytest.mark.parametrize(
     'setup, outcome',
     [
+        (lambda m, lock: setattr(lock, 'cooldown_free', False), 'cooldown'),
         (lambda m, lock: setattr(lock, 'acquired', False), 'locked'),
         (lambda m, lock: setattr(lock, 'raises', True), 'lock_unavailable'),
         (lambda m, lock: m.setattr(refresh, 'generated_compute_allowed', lambda uid, feature: False), 'compute_denied'),
@@ -161,12 +172,65 @@ def test_failures_never_write_or_raise(wired, monkeypatch):
     assert store.writes == []
 
 
-def test_refresh_now_ignores_cadence_and_releases_lock(wired):
+def test_refresh_now_ignores_cadence_and_cooldown_and_releases_lock(wired):
     store, lock, _ = wired
+    lock.cooldown_free = False
     store.profile = {'profile_text': 'x', 'refreshed_at': datetime.now(timezone.utc).isoformat()}
 
     assert refresh.refresh_now(UID)['source'] == 'backend'
-    assert lock.ttls == [600] and lock.released == 1
+    assert lock.ttls == [600] and lock.released == 1 and lock.cooldown_ttls == []
+
+
+def test_refresh_now_fails_closed_without_redis(wired):
+    store, lock, calls = wired
+    lock.raises = True
+    with pytest.raises(refresh.RefreshError) as exc:
+        refresh.refresh_now(UID)
+    assert exc.value.code == 'ai_profile_refresh_unavailable'
+    assert 'kwargs' not in calls and store.writes == []
+
+
+def test_failed_automatic_refresh_releases_in_progress_lock(wired, monkeypatch):
+    _, lock, _ = wired
+    monkeypatch.setattr(refresh.profile_llm, 'synthesize_ai_user_profile', lambda *a, **k: None)
+    assert refresh.refresh_if_stale(UID) == 'ai_profile_synthesis_failed'
+    assert lock.released == 1
+
+
+def test_schedule_refresh_is_bounded_per_process(monkeypatch):
+    monkeypatch.delenv(refresh.KILL_SWITCH_ENV, raising=False)
+    queued: list = []
+    monkeypatch.setattr(refresh, 'submit_with_context', lambda executor, fn, uid: queued.append((fn, uid)))
+    monkeypatch.setattr(refresh, '_automatic_slots', refresh.threading.BoundedSemaphore(2))
+
+    stale = {'profile_text': 'x'}
+    assert refresh.schedule_refresh('a', stale, known=True)
+    assert refresh.schedule_refresh('b', None, known=True)
+    assert not refresh.schedule_refresh('c', stale, known=True)  # both slots busy
+    fresh = {'refreshed_at': datetime.now(timezone.utc).isoformat()}
+    assert not refresh.schedule_refresh('d', fresh, known=True)
+    assert [uid for _, uid in queued] == ['a', 'b']
+
+    # A finished run frees its slot.
+    monkeypatch.setattr(refresh, 'refresh_if_stale', lambda uid: 'written')
+    queued[0][0]('a')
+    assert refresh.schedule_refresh('c', stale, known=True)
+
+    monkeypatch.setenv(refresh.KILL_SWITCH_ENV, 'off')
+    assert not refresh.schedule_refresh('e', stale, known=True)
+
+
+def test_schedule_refresh_releases_slot_when_submit_fails(monkeypatch):
+    monkeypatch.delenv(refresh.KILL_SWITCH_ENV, raising=False)
+    slots = refresh.threading.BoundedSemaphore(1)
+    monkeypatch.setattr(refresh, '_automatic_slots', slots)
+
+    def saturated(*args):
+        raise RuntimeError('executor saturated')
+
+    monkeypatch.setattr(refresh, 'submit_with_context', saturated)
+    assert not refresh.schedule_refresh('a', None, known=True)
+    assert slots.acquire(blocking=False)
 
 
 def test_refresh_now_reports_in_progress(wired):
@@ -178,7 +242,24 @@ def test_refresh_now_reports_in_progress(wired):
 
 
 def test_collect_sources_formats_lines_and_survives_a_failed_source(monkeypatch):
-    monkeypatch.setattr(refresh, 'get_prompt_memories', lambda uid: ('David', '\n- likes tea\n\n- works on Omi\n'))
+    from types import SimpleNamespace
+
+    class FakeMemories:
+        def __init__(self, db_client=None):
+            pass
+
+        def read(self, uid, limit):
+            assert limit == 100
+            return [
+                SimpleNamespace(category=SimpleNamespace(value='interesting'), content='likes tea'),
+                SimpleNamespace(category='system', content='works on Omi'),
+                SimpleNamespace(category='system', content='hidden'),
+                SimpleNamespace(category='system', content=''),
+            ]
+
+    monkeypatch.setattr(refresh, 'MemoryService', FakeMemories)
+    monkeypatch.setattr(refresh, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(refresh, 'is_prompt_memory_visible', lambda memory: memory.content != 'hidden')
     monkeypatch.setattr(
         refresh.action_items_db,
         'get_action_items',
@@ -205,7 +286,7 @@ def test_collect_sources_formats_lines_and_survives_a_failed_source(monkeypatch)
 
     sources = refresh.collect_sources(UID, NOW)
 
-    assert sources.memories == ['- likes tea', '- works on Omi']
+    assert sources.memories == ['[interesting] likes tea', '[system] works on Omi']
     assert sources.tasks == ['[todo/high] ship profile', '[done/medium] old']
     assert sources.goals == ['Run 100km (25% complete)', 'Read (0% complete)']
     assert sources.conversations == ['Standup: Planned the week']

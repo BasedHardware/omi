@@ -150,11 +150,11 @@ describe('legacy local data compatibility', () => {
   })
 })
 
-describe('migration v3: drop_ai_user_profiles', () => {
+describe('migration v3 (reserved no-op)', () => {
   const tableExists = (db: DatabaseSync, name: string): boolean =>
     Boolean(db.prepare("SELECT 1 AS x FROM sqlite_master WHERE name = ?").get(name))
 
-  it('drops the old local AI-profile history table and its index', () => {
+  it('keeps the old local AI-profile table: the profile service uploads, then drops it', () => {
     const db = new DatabaseSync(':memory:')
     db.exec(OLD_SCHEMA)
     runMigrations(db as unknown as MigrationDb, MIGRATIONS.slice(0, 2))
@@ -168,12 +168,24 @@ describe('migration v3: drop_ai_user_profiles', () => {
         backend_synced INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
-      INSERT INTO ai_user_profiles (profile_text, generated_at) VALUES ('old dossier', 1);
+      INSERT INTO ai_user_profiles (profile_text, generated_at) VALUES ('unsynced edit', 1);
     `)
     expect(runMigrations(db as unknown as MigrationDb)).toBe(MIGRATIONS.length - 2)
-    expect(tableExists(db, 'ai_user_profiles')).toBe(false)
-    expect(tableExists(db, 'idx_ai_user_profiles_generated_at')).toBe(false)
+    expect(tableExists(db, 'ai_user_profiles')).toBe(true)
+    expect(db.prepare('SELECT profile_text AS t FROM ai_user_profiles').get()).toEqual({
+      t: 'unsynced edit'
+    })
     expect(getUserVersion(db as unknown as MigrationDb)).toBeGreaterThanOrEqual(3)
+    db.close()
+  })
+
+  it('a database that already ran the unreleased dropping v3 migrates on cleanly', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    runMigrations(db as unknown as MigrationDb, MIGRATIONS.slice(0, 2))
+    db.exec('PRAGMA user_version = 3')
+    expect(runMigrations(db as unknown as MigrationDb)).toBe(MIGRATIONS.length - 3)
+    expect(getUserVersion(db as unknown as MigrationDb)).toBe(MIGRATIONS.length)
     db.close()
   })
 

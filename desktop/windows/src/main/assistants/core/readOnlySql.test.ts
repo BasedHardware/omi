@@ -215,6 +215,9 @@ describe('executeSql table allowlist', () => {
     for (const q of [
       'SELECT * FROM local_conversation',
       'SELECT content FROM memories',
+      // The pre-cloud AI-profile table survives on upgraded installs until its
+      // one-time upload; it must stay unreadable to the agent.
+      'SELECT profile_text FROM ai_user_profiles',
       'SELECT * FROM local_kg_nodes'
     ]) {
       expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)

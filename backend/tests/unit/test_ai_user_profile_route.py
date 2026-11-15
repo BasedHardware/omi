@@ -59,27 +59,18 @@ async def test_synthesize_ai_profile_fails_closed_when_synthesis_returns_none(mo
     assert exc.value.status_code == 502
 
 
-def test_get_ai_profile_queues_refresh_only_when_stale(monkeypatch):
-    from datetime import datetime, timezone
-
-    queued: list[tuple] = []
-    monkeypatch.setattr(users_router, 'submit_with_context', lambda executor, fn, *args: queued.append((fn, args)))
-    monkeypatch.delenv(users_router.ai_profile_refresh.KILL_SWITCH_ENV, raising=False)
-
+def test_get_ai_profile_hands_its_read_to_the_scheduler(monkeypatch):
+    scheduled: list[tuple] = []
+    monkeypatch.setattr(
+        users_router.ai_profile_refresh,
+        'schedule_refresh',
+        lambda uid, profile, known=False: scheduled.append((uid, profile, known)),
+    )
     stale = {'profile_text': '- fact', 'source': 'client'}
     monkeypatch.setattr(users_router.users_db, 'get_ai_user_profile', lambda uid: stale)
+
     assert users_router.get_ai_profile(uid=UID) is stale
-    assert queued == [(users_router.ai_profile_refresh.refresh_if_stale, (UID,))]
-
-    fresh = {'profile_text': '- fact', 'refreshed_at': datetime.now(timezone.utc).isoformat()}
-    monkeypatch.setattr(users_router.users_db, 'get_ai_user_profile', lambda uid: fresh)
-    assert users_router.get_ai_profile(uid=UID) is fresh
-    assert len(queued) == 1
-
-    monkeypatch.setenv(users_router.ai_profile_refresh.KILL_SWITCH_ENV, 'false')
-    monkeypatch.setattr(users_router.users_db, 'get_ai_user_profile', lambda uid: None)
-    assert users_router.get_ai_profile(uid=UID) is None
-    assert len(queued) == 1
+    assert scheduled == [(UID, stale, True)]
 
 
 def test_patch_ai_profile_records_source(monkeypatch):
@@ -107,6 +98,7 @@ def test_delete_ai_profile(monkeypatch):
 @pytest.mark.parametrize(
     'code, status',
     [
+        ('ai_profile_refresh_unavailable', 503),
         ('ai_profile_refresh_in_progress', 409),
         ('ai_profile_insufficient_data', 422),
         ('ai_profile_synthesis_failed', 502),

@@ -92,16 +92,15 @@ export const MIGRATIONS: Migration[] = [
   },
   {
     version: 3,
-    name: 'drop_ai_user_profiles',
-    up: (d) => {
-      // The backend owns the AI user profile (GET/PATCH/DELETE/refresh on
-      // /v1/users/ai-profile); the client no longer generates it or keeps a
-      // local history. The old table held only past client-generated texts —
-      // the current one already lives on the backend (it was PATCH-mirrored) —
-      // so drop it rather than leave user content orphaned on disk. IF EXISTS:
-      // installs that never created it (or a bare migration harness) skip.
-      d.exec('DROP INDEX IF EXISTS idx_ai_user_profiles_generated_at')
-      d.exec('DROP TABLE IF EXISTS ai_user_profiles')
+    name: 'reserved_ai_user_profiles_noop',
+    up: () => {
+      // Intentionally empty. An unreleased build dropped the old local AI-profile
+      // history table here, but that table can hold the only copy of the newest
+      // profile text or a user edit (the old mirror PATCH was fire-and-forget).
+      // The AI profile service now uploads anything unsynced and drops the table
+      // itself (assistants/aiUserProfile/service.ts + ipc/legacyProfileTable.ts).
+      // The version stays reserved so a database that ran that build (user_version
+      // 3) and one that did not converge on the same numbering.
     }
   }
 ]

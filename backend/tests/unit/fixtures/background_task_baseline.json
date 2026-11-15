@@ -1,6 +1,13 @@
 {
   "entries": [
     {
+      "path": "utils/ai_profile_refresh.py",
+      "function": "schedule_refresh",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "AI profile refresh (2026-11-16), at most MAX_CONCURRENT_AUTOMATIC per process: a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its hourly cooldown expires"
+    },
+    {
       "path": "utils/sync/worker_runtime.py",
       "function": "Runtime.execute",
       "kind": "start_background_task",
@@ -179,8 +186,8 @@
       "path": "utils/conversations/process_conversation.py",
       "function": "process_conversation._emit_derived_effects",
       "kind": "submit_with_context",
-      "count": 6,
-      "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor; the created webhook is submitted from one of two mutually exclusive sites (directly, or by the merge via created_webhook_observer once it can no longer roll back, #22415), so still at most once per run; the AI profile refresh (2026-11-16) is safe to lose: a daily, idempotent rewrite of a derived summary, so a lost run only leaves the profile stale until the next trigger once its 1h per-owner lock expires"
+      "count": 5,
+      "why": "pre-existing; unreviewed; durability risk: structured vector, action items, goal progress and created webhook are fire-and-forget on postprocess_executor; the created webhook is submitted from one of two mutually exclusive sites (directly, or by the merge via created_webhook_observer once it can no longer roll back, #22415), so still at most once per run"
     },
     {
       "path": "utils/conversations/process_conversation.py",
@@ -405,13 +412,6 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "routers/users.py",
-      "function": "get_ai_profile",
-      "kind": "submit_with_context",
-      "count": 1,
-      "why": "AI profile refresh queued by a stale GET (2026-11-16): a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its 1h per-owner lock expires"
     }
   ]
 }

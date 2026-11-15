@@ -117,6 +117,29 @@ extension APIClient {
       authorizationSnapshot: try Self.aiProfileOwnerSnapshot())
   }
 
+  /// Upload a profile the retired local history held but never mirrored. Sent the way released
+  /// builds mirrored it (no `source`, so the backend records `client`, with its `generated_at`),
+  /// and pinned to the owner whose database the row was read from.
+  func restoreLocalProfile(
+    profileText: String, generatedAt: Date, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> AIUserProfileResponse {
+    struct RestoreRequest: Encodable {
+      let profileText: String
+      let generatedAt: String
+
+      enum CodingKeys: String, CodingKey {
+        case profileText = "profile_text"
+        case generatedAt = "generated_at"
+      }
+    }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return try await patch(
+      "v1/users/ai-profile",
+      body: RestoreRequest(profileText: profileText, generatedAt: formatter.string(from: generatedAt)),
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
   func deleteAIUserProfile() async throws {
     try await delete("v1/users/ai-profile", authorizationSnapshot: try Self.aiProfileOwnerSnapshot())
   }

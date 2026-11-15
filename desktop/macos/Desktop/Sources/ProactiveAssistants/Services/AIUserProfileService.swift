@@ -107,22 +107,41 @@ actor AIUserProfileService {
   static let explorationSeparator = "\n\n--- File Exploration Insights ---\n"
 
   private let client: AIUserProfileClient
+  private let localHistory: LocalProfileHistoryRetirement.Store
   private let now: @Sendable () -> Date
 
   private var cached: AIUserProfile?
   /// When the cache was last confirmed by the backend; nil until the first good read.
   private var cachedAt: Date?
   private var lastFailureAt: Date?
-  private var inFlight: Task<AIUserProfile?, Never>?
+  private var inFlight: Task<ProfileRead, Never>?
   private var inFlightID = 0
   private var isRefreshing = false
   /// Bumped on owner switch: nothing started for the previous owner may land in the cache.
   private var ownerEpoch = 0
   /// Bumped on every mutation: a read that started earlier must not overwrite it.
   private var writeRevision = 0
+  /// The owner session whose retired local history was already salvaged (or attempted).
+  private var localHistoryEpoch: Int?
+  private var localHistorySalvage: Task<Void, Never>?
 
-  init(client: AIUserProfileClient = .live, now: @escaping @Sendable () -> Date = { Date() }) {
+  /// What one backend read established.
+  private enum ProfileRead {
+    /// The backend answered for the current owner: its profile, or nil when it has none.
+    case current(AIUserProfile?)
+    /// The read failed.
+    case failed
+    /// The owner changed while the read was in flight.
+    case superseded
+  }
+
+  init(
+    client: AIUserProfileClient = .live,
+    localHistory: LocalProfileHistoryRetirement.Store = .live,
+    now: @escaping @Sendable () -> Date = { Date() }
+  ) {
     self.client = client
+    self.localHistory = localHistory
     self.now = now
   }
 
@@ -154,45 +173,84 @@ actor AIUserProfileService {
   /// on failure returns the cached profile.
   @discardableResult
   func fetchProfile() async -> AIUserProfile? {
-    await startFetch().value
+    switch await startFetch().value {
+    case .current(let profile): return profile
+    case .failed: return cached
+    case .superseded: return nil
+    }
   }
 
-  private func startFetch() -> Task<AIUserProfile?, Never> {
+  private func startFetch() -> Task<ProfileRead, Never> {
     if let inFlight { return inFlight }
     let epoch = ownerEpoch
     let revision = writeRevision
     inFlightID += 1
     let id = inFlightID
     let client = client
-    let task = Task<AIUserProfile?, Never> {
+    // Bound before the request, so the local history salvage that follows a good read runs
+    // only for the owner this read answered for.
+    let owner = localHistoryEpoch == epoch ? nil : localHistory.bindOwner()
+    let task = Task<ProfileRead, Never> {
       let result: Result<AIUserProfile?, Error>
       do {
         result = .success(AIUserProfile(try await client.fetch()))
       } catch {
         result = .failure(error)
       }
-      return self.finishFetch(result, id: id, epoch: epoch, revision: revision)
+      return self.finishFetch(result, id: id, epoch: epoch, revision: revision, owner: owner)
     }
     inFlight = task
     return task
   }
 
   private func finishFetch(
-    _ result: Result<AIUserProfile?, Error>, id: Int, epoch: Int, revision: Int
-  ) -> AIUserProfile? {
-    guard epoch == ownerEpoch else { return nil }
+    _ result: Result<AIUserProfile?, Error>, id: Int, epoch: Int, revision: Int,
+    owner: LocalProfileHistoryRetirement.Owner?
+  ) -> ProfileRead {
+    guard epoch == ownerEpoch else { return .superseded }
     if id == inFlightID { inFlight = nil }
     switch result {
     case .success(let profile):
-      guard revision == writeRevision else { return cached }
-      cached = profile
-      cachedAt = now()
-      lastFailureAt = nil
+      // A mutation that landed after this read started is newer than its answer.
+      if revision == writeRevision {
+        cached = profile
+        cachedAt = now()
+        lastFailureAt = nil
+      }
+      salvageLocalHistory(owner: owner, epoch: epoch)
+      return .current(cached)
     case .failure(let error):
       lastFailureAt = now()
       log("AIUserProfileService: Fetch failed: \(error.localizedDescription)")
+      return .failed
     }
-    return cached
+  }
+
+  /// Once per owner session, after its first good read: upload what the retired local history
+  /// holds that the backend lacks, then drop the table. A failure leaves it for the next launch.
+  private func salvageLocalHistory(owner: LocalProfileHistoryRetirement.Owner?, epoch: Int) {
+    guard let owner, localHistoryEpoch != epoch, owner.isCurrent() else { return }
+    localHistoryEpoch = epoch
+    let revision = writeRevision
+    let cloud = cached.map(LocalProfileHistoryRetirement.CloudState.init)
+    let historyStore = localHistory
+    localHistorySalvage = Task {
+      let outcome = await LocalProfileHistoryRetirement.salvage(cloud: cloud, owner: owner, store: historyStore) {
+        await self.isUnchanged(epoch: epoch, revision: revision)
+      }
+      guard case .restored(let profile, _) = outcome else { return }
+      _ = self.store(profile, epoch: epoch)
+    }
+  }
+
+  /// Wait for the local history salvage started by the last good read (tests).
+  func waitForLocalHistorySalvage() async {
+    await localHistorySalvage?.value
+  }
+
+  /// Same owner session, and no profile mutation since `revision`.
+  private func isUnchanged(epoch: Int, revision: Int) -> Bool {
+    epoch == ownerEpoch && revision == writeRevision
   }
 
   // MARK: Mutations
@@ -229,9 +287,17 @@ actor AIUserProfileService {
   }
 
   /// Fold a file-exploration answer into the profile (or start one with it).
+  ///
+  /// A read-modify-write, so it needs a read the backend answered right before the write:
+  /// a failed read is not "no profile yet", and writing then would replace the profile with
+  /// the exploration text alone. Returns false without writing when that read fails.
   func appendExploration(_ text: String) async -> Bool {
-    let existing = await fetchProfile()?.profileText
-    let combined = Self.combine(existing: existing, exploration: text)
+    let epoch = ownerEpoch
+    guard case .current(let profile) = await startFetch().value, epoch == ownerEpoch else {
+      log("AIUserProfileService: Skipped exploration save: the current profile could not be read")
+      return false
+    }
+    let combined = Self.combine(existing: profile?.profileText, exploration: text)
     do {
       _ = try await updateProfileText(combined, source: .exploration)
       return true

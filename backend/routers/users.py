@@ -146,14 +146,7 @@ from utils.cloud_tasks import (
     verify_conversation_batch_purge_cloud_tasks_oidc,
 )
 from database import conversation_batch_purge_jobs
-from utils.executors import (
-    db_executor,
-    erasure_executor,
-    llm_executor,
-    postprocess_executor,
-    run_blocking,
-    submit_with_context,
-)
+from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -2678,8 +2671,7 @@ class AIUserProfileResponse(BaseModel):
 def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
     """The backend-owned profile. Never blocks on generation; a stale one is refreshed in the background."""
     profile = users_db.get_ai_user_profile(uid)
-    if ai_profile_refresh.automatic_refresh_enabled() and ai_profile_refresh.is_stale(profile):
-        submit_with_context(postprocess_executor, ai_profile_refresh.refresh_if_stale, uid)
+    ai_profile_refresh.schedule_refresh(uid, profile, known=True)
     return profile
 
 
@@ -2705,6 +2697,7 @@ def delete_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
 
 
 _AI_PROFILE_REFRESH_STATUS = {
+    'ai_profile_refresh_unavailable': 503,
     'ai_profile_refresh_in_progress': 409,
     'ai_profile_insufficient_data': 422,
     'ai_profile_synthesis_failed': 502,
@@ -2713,7 +2706,7 @@ _AI_PROFILE_REFRESH_STATUS = {
 
 @router.post('/v1/users/ai-profile/refresh', tags=['users'], response_model=AIUserProfileResponse)
 async def refresh_ai_profile(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_refresh")),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "users:ai_profile_refresh", fail_closed=True)),
 ):
     """Regenerate the profile now from the owner's backend data (Generate Now / Regenerate)."""
     if generated_compute_configured():

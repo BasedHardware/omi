@@ -2466,7 +2466,6 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
-    LocalProfileHistoryRetirementMigration.registerMigration(on: &migrator)
     return addingSpeakerLabelSourceMigration(migrator)
   }
 

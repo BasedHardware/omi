@@ -7,18 +7,22 @@ edit it (``source=user_edit``) or seed it (``source=exploration``). There is no 
 the stored text, including a user's edit, is the past profile the next synthesis
 consolidates, so knowledge accumulates and corrections carry forward.
 
-Cadence: ``refresh_if_stale`` runs after a processed conversation and when a client reads
+Cadence: ``schedule_refresh`` runs after a processed conversation and when a client reads
 the profile. It is a no-op unless the last backend refresh is older than
-``REFRESH_AFTER``, the owner may spend generated compute, and the per-owner Redis lock
-(held for an hour, so a failure is not retried in a loop) is free.
+``REFRESH_AFTER``; at most ``MAX_CONCURRENT_AUTOMATIC`` automatic refreshes run per process,
+so they never occupy more than that many postprocessing workers, and a skipped one is
+retried by the next trigger. A refresh then needs the owner's hourly automatic cooldown
+key (so a failure is not retried in a loop), the short in-progress lock that it shares
+with the explicit route, and generated-compute admission. Redis errors fail closed.
 ``AI_PROFILE_BACKEND_REFRESH_ENABLED=false`` stops automatic refreshes; the explicit
-``POST /v1/users/ai-profile/refresh`` keeps working under its own rate limit.
+``POST /v1/users/ai-profile/refresh`` keeps working under its own fail-closed rate limit.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -28,9 +32,12 @@ import database.conversations as conversations_db
 import database.goals as goals_db
 import database.redis_db as redis_db
 import database.users as users_db
+from database._client import get_firestore_client
+from models.knowledge_ledger_policy import is_prompt_memory_visible
+from utils.executors import postprocess_executor, submit_with_context
 from utils.generated_compute import generated_compute_allowed
 from utils.llm import ai_user_profile as profile_llm
-from utils.llms.memory import get_prompt_memories
+from utils.memory.memory_service import MemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,11 @@ CONVERSATION_LIMIT = 20
 MESSAGE_LIMIT = 30
 SOURCE_BACKEND = 'backend'
 SOURCE_USER_EDIT = 'user_edit'
+IN_PROGRESS_TTL_SECONDS = 10 * 60
+AUTOMATIC_COOLDOWN_SECONDS = 60 * 60
+MAX_CONCURRENT_AUTOMATIC = 2
+
+_automatic_slots = threading.BoundedSemaphore(MAX_CONCURRENT_AUTOMATIC)
 
 
 class RefreshError(Exception):
@@ -84,8 +96,15 @@ def _safe(name: str, uid: str, read) -> list[str]:
 
 
 def _memories(uid: str) -> list[str]:
-    _, rendered = get_prompt_memories(uid)
-    return [line.strip() for line in str(rendered or '').splitlines() if line.strip()][:MEMORY_LINES]
+    # The canonical default-visible read the memories list and prompt context use.
+    rows = MemoryService(db_client=get_firestore_client()).read(uid, limit=MEMORY_LINES)
+    lines = []
+    for memory in rows or []:
+        if not is_prompt_memory_visible(memory) or not memory.content:
+            continue
+        category = getattr(memory.category, 'value', memory.category)
+        lines.append(f'[{category}] {memory.content}')
+    return lines
 
 
 def _tasks(uid: str) -> list[str]:
@@ -184,22 +203,25 @@ def _generate(uid: str) -> tuple[dict, bool]:
     return profile, True
 
 
+def _release_in_progress(uid: str) -> None:
+    try:
+        redis_db.release_ai_profile_refresh_lock(uid)
+    except Exception:
+        pass  # The lock expires on its own after IN_PROGRESS_TTL_SECONDS.
+
+
 def refresh_now(uid: str) -> dict:
     """Explicit refresh for the owner. Caller has already passed compute admission."""
     try:
-        acquired = redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=10 * 60)
+        acquired = redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS)
     except Exception:
-        acquired = True  # An explicit, rate-limited request may proceed without Redis.
+        raise RefreshError('ai_profile_refresh_unavailable')  # No lock, no spend.
     if not acquired:
         raise RefreshError('ai_profile_refresh_in_progress')
     try:
         return _generate(uid)[0]
     finally:
-        try:
-            # Release so a later manual retry is not blocked; the stamp gates the daily cadence.
-            redis_db.release_ai_profile_refresh_lock(uid)
-        except Exception:
-            pass
+        _release_in_progress(uid)
 
 
 def refresh_if_stale(uid: str) -> str:
@@ -210,18 +232,54 @@ def refresh_if_stale(uid: str) -> str:
         if not is_stale(users_db.get_ai_user_profile(uid)):
             return 'fresh'
         try:
-            if not redis_db.try_acquire_ai_profile_refresh_lock(uid):
+            if not redis_db.try_acquire_ai_profile_auto_cooldown(uid, ttl=AUTOMATIC_COOLDOWN_SECONDS):
+                return 'cooldown'
+            if not redis_db.try_acquire_ai_profile_refresh_lock(uid, ttl=IN_PROGRESS_TTL_SECONDS):
                 return 'locked'
         except Exception:
             return 'lock_unavailable'  # Fail closed: no lock, no spend.
-        if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
-            return 'fresh'
-        if not generated_compute_allowed(uid, 'memories'):
-            return 'compute_denied'
-        return 'written' if _generate(uid)[1] else 'superseded'
+        try:
+            if not is_stale(users_db.get_ai_user_profile_fresh(uid)):
+                return 'fresh'
+            if not generated_compute_allowed(uid, 'memories'):
+                return 'compute_denied'
+            return 'written' if _generate(uid)[1] else 'superseded'
+        finally:
+            _release_in_progress(uid)
     except RefreshError as error:
         logger.info('event=ai_profile_refresh outcome=%s uid=%s', error.code, uid)
         return error.code
     except Exception as error:
         logger.warning('event=ai_profile_refresh outcome=error uid=%s exc=%s', uid, type(error).__name__)
         return 'error'
+
+
+def _run_scheduled(uid: str) -> None:
+    try:
+        refresh_if_stale(uid)
+    finally:
+        _automatic_slots.release()
+
+
+def schedule_refresh(uid: str, profile: Optional[dict] = None, *, known: bool = False) -> bool:
+    """Queue an automatic refresh if the profile looks stale and a process slot is free.
+
+    ``known`` means ``profile`` is the caller's current read (``None`` = no profile), which
+    saves a cache read. Never blocks and never raises; returns whether work was queued.
+    """
+    try:
+        if not uid or not automatic_refresh_enabled():
+            return False
+        if not is_stale(profile if known else users_db.get_ai_user_profile(uid)):
+            return False
+        if not _automatic_slots.acquire(blocking=False):
+            return False  # Busy: the next trigger retries.
+        try:
+            submit_with_context(postprocess_executor, _run_scheduled, uid)
+        except Exception:
+            _automatic_slots.release()
+            raise
+        return True
+    except Exception as error:
+        logger.warning('event=ai_profile_refresh outcome=schedule_error uid=%s exc=%s', uid, type(error).__name__)
+        return False

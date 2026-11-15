@@ -713,8 +713,11 @@ struct ChatPrompts {
   /// Tables to exclude from the schema prompt (internal/GRDB tables)
   static let excludedTablePrefixes = ["sqlite_", "grdb_"]
   /// Any table whose name contains "_fts" is an FTS virtual or internal table — exclude all.
-  /// Specific infra tables also excluded.
-  static let excludedTables: Set<String> = ["migration_status", "task_dedup_log"]
+  /// Specific infra tables also excluded, plus the retired local profile history, which stays on
+  /// disk only until its newest row is reconciled with the backend-owned profile.
+  static let excludedTables: Set<String> = [
+    "migration_status", "task_dedup_log", LocalProfileHistoryRetirement.table,
+  ]
 
   /// Infrastructure columns to strip from schema — file paths, binary blobs, sync state, internal flags.
   /// New migrations are still picked up automatically; only these specific names are hidden.

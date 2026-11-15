@@ -10,7 +10,11 @@
 //   PATCH  /v1/users/ai-profile          a user edit, sent with source=user_edit
 //   DELETE /v1/users/ai-profile          clear it; the backend regenerates later
 //
-// No local generation, history table, synthesize call or mirror PATCH.
+// No local generation, history table, synthesize call or mirror PATCH. The one
+// exception is a one-time upgrade step: older builds kept the profile in a local
+// table and mirrored it with a fire-and-forget PATCH, so after the first
+// authenticated read this module uploads that table's newest text if the backend
+// never got it, then drops the table (see salvageLegacyProfile below).
 //
 // Prompt consumers (focus, screen-task extraction, chat personalization) read the
 // profile synchronously, so this module keeps the last fetched profile in memory
@@ -22,6 +26,8 @@
 // relays a session on sign-in and on every id-token refresh (see
 // renderer/src/lib/aiProfileHost.ts). The shared `core/session.ts` holds it.
 import { net } from 'electron'
+import { dropLegacyProfileTable, readLegacyProfileRow } from '../../ipc/db'
+import type { LegacyProfileRow } from '../../ipc/legacyProfileTable'
 import type {
   AiProfileErrorCode,
   AiProfileResult,
@@ -67,6 +73,20 @@ let readInFlight: Promise<AiProfileResult<AiUserProfile | null>> | null = null
 // request, so a caller under the new session starts its own instead of joining it.
 let readEpoch = -1
 let refreshInFlight: Promise<AiProfileResult<AiUserProfile>> | null = null
+// Bumped whenever a mutation (refresh, edit, delete, legacy upload) commits. A read
+// pins it when it starts and drops its result if it moved: the GET may have been
+// served before the mutation, and storing it would undo the mutation in the cache
+// (and mark that older copy fresh for CACHE_TTL_MS).
+let mutationRevision = 0
+
+// Legacy-table upload state (one attempt per launch, see salvageLegacyProfile).
+// The local database belongs to the account signed in when this process first
+// read the profile: sign-out always wipes before it clears the session (and
+// dbWipe.ts clears the legacy rows), so a later account never sees them. Any other
+// uid in this process is never allowed to upload them.
+let legacyOwnerUid: string | null = null
+let legacySettled = false
+let legacyRunning = false
 
 // Sign-out: forget the departed account's profile before anyone else signs in.
 onSessionReset(() => {
@@ -80,6 +100,14 @@ class ProfileHttpError extends Error {
   constructor(readonly status: number) {
     super(`HTTP ${status}`)
     this.name = 'ProfileHttpError'
+  }
+}
+
+/** The session changed before a fenced request was dispatched. */
+class StaleSessionError extends Error {
+  constructor() {
+    super('AI profile: session changed')
+    this.name = 'StaleSessionError'
   }
 }
 
@@ -157,12 +185,15 @@ export function parseProfile(json: unknown): AiUserProfile | null {
 
 /** One authed request against the Python backend. Resolves with the parsed JSON
  *  body (null for an empty body); throws ProfileHttpError on a non-OK status.
- *  The timeout covers reading the body too, and a session change aborts it. */
+ *  The timeout covers reading the body too, and a session change aborts it.
+ *  With `epoch`, the request is never dispatched unless the session is still that
+ *  one (a token pull inside fetchWithFreshToken can switch accounts). */
 async function send(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body: unknown,
-  timeoutMs: number
+  timeoutMs: number,
+  epoch?: number
 ): Promise<unknown> {
   if (!getBackendSession()) throw new NotSignedInError()
   const external = getAbortSignal()
@@ -172,19 +203,18 @@ async function send(
   if (external?.aborted) ctrl.abort()
   else external?.addEventListener('abort', onExternalAbort, { once: true })
   try {
-    const res = await fetchWithFreshToken(
-      (session) =>
-        net.fetch(`${session.apiBase}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
-          },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-          signal: ctrl.signal
-        }),
-      `${method} ${path}`
-    )
+    const res = await fetchWithFreshToken(async (session) => {
+      if (epoch !== undefined && getSessionEpoch() !== epoch) throw new StaleSessionError()
+      return net.fetch(`${session.apiBase}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${session.token}`,
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {})
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: ctrl.signal
+      })
+    }, `${method} ${path}`)
     if (!res.ok) throw new ProfileHttpError(res.status)
     const raw = await res.text()
     return raw ? (JSON.parse(raw) as unknown) : null
@@ -203,6 +233,13 @@ function currentUid(): string | null {
 function storeIfCurrent(uid: string | null, profile: AiUserProfile | null): void {
   if (!getBackendSession() || currentUid() !== uid) return
   cache = { uid, profile, fetchedAt: Date.now() }
+}
+
+/** Record a committed mutation's result. Bumping the revision makes any read
+ *  that started before it discard its (possibly older) response. */
+function commitMutation(uid: string | null, profile: AiUserProfile | null): void {
+  mutationRevision += 1
+  storeIfCurrent(uid, profile)
 }
 
 function cachedForCurrentUser(): CacheEntry | null {
@@ -240,11 +277,21 @@ function isFresh(now: number = Date.now()): boolean {
 export function loadProfile(): Promise<AiProfileResult<AiUserProfile | null>> {
   if (readInFlight && readEpoch === getSessionEpoch()) return readInFlight
   const uid = currentUid()
-  readEpoch = getSessionEpoch()
+  const epoch = getSessionEpoch()
+  const revision = mutationRevision
+  readEpoch = epoch
+  if (legacyOwnerUid === null && uid !== null && getBackendSession()) legacyOwnerUid = uid
   const p: Promise<AiProfileResult<AiUserProfile | null>> = run('read', async () => {
     const profile = parseProfile(await send('GET', PROFILE_PATH, undefined, READ_TIMEOUT_MS))
+    if (revision !== mutationRevision) {
+      // An edit/delete/refresh committed while this GET was out; its result is
+      // newer than (or at least as new as) what this read saw.
+      const c = cachedForCurrentUser()
+      return c && c.uid === uid ? c.profile : profile
+    }
     storeIfCurrent(uid, profile)
-    return profile
+    if (epoch !== getSessionEpoch()) return profile
+    return (await salvageLegacyProfile(uid, epoch, profile)) ?? profile
   })
     .then((r) => {
       if (r.ok) return r
@@ -268,7 +315,7 @@ export function refreshProfile(): Promise<AiProfileResult<AiUserProfile>> {
     // A 200 with no text would be a backend bug; report it as a failed synthesis
     // rather than showing an empty profile as success.
     if (!profile) throw new ProfileHttpError(502)
-    storeIfCurrent(uid, profile)
+    commitMutation(uid, profile)
     return profile
   }).finally(() => {
     refreshInFlight = null
@@ -294,7 +341,7 @@ export async function editProfile(text: string): Promise<AiProfileResult<AiUserP
       source: 'user_edit' as const,
       refreshedAt: cachedForCurrentUser()?.profile?.refreshedAt ?? null
     }
-    storeIfCurrent(uid, profile)
+    commitMutation(uid, profile)
     return profile
   })
 }
@@ -304,7 +351,7 @@ export async function deleteProfile(): Promise<AiProfileResult<null>> {
   const uid = currentUid()
   return run('delete', async () => {
     await send('DELETE', PROFILE_PATH, undefined, READ_TIMEOUT_MS)
-    storeIfCurrent(uid, null)
+    commitMutation(uid, null)
     return null
   })
 }
@@ -318,9 +365,111 @@ export function getLatestProfileText(): string | null {
   return cachedForCurrentUser()?.profile?.profileText || null
 }
 
+// --- Legacy local table: one-time upload --------------------------------------
+
+/** Whether the newest pre-cloud local row holds text the backend lacks. The old
+ *  `backendSynced` marker is set when a generation's mirror PATCH succeeded, but an
+ *  edit never cleared it, so a failed edit sync still reads as synced. Hence: an
+ *  unsynced row, or a row whose text differs from the cloud's and is not older
+ *  than it (an edit PATCHed with its generation's timestamp), is uploaded. A cloud
+ *  profile without a timestamp is trusted unless the row is marked unsynced. */
+export function legacyRowNeedsUpload(row: LegacyProfileRow, cloud: AiUserProfile | null): boolean {
+  const text = row.profileText.trim()
+  if (!text) return false
+  if (!cloud) return true
+  if (text === cloud.profileText.trim()) return false
+  if (cloud.generatedAt === null || !Number.isFinite(row.generatedAt)) return !row.backendSynced
+  return row.generatedAt >= cloud.generatedAt
+}
+
+/** After an authenticated GET for the account that owns the local database: if
+ *  the old local table holds newer text the backend never got, PATCH it (as a
+ *  legacy client write: no source, the row's generated_at), and drop the table only
+ *  once the backend has the text. A failed PATCH keeps the table for the next
+ *  launch. Every step is fenced on the session epoch the GET ran under, and the
+ *  PATCH is never dispatched under another session. Resolves with the profile the
+ *  upload produced, or undefined when nothing was uploaded. */
+async function salvageLegacyProfile(
+  uid: string | null,
+  epoch: number,
+  cloud: AiUserProfile | null
+): Promise<AiUserProfile | undefined> {
+  if (legacySettled || legacyRunning || uid === null || uid !== legacyOwnerUid) return undefined
+  legacyRunning = true
+  try {
+    let row: LegacyProfileRow | null
+    try {
+      row = readLegacyProfileRow()
+    } catch (e) {
+      legacySettled = true
+      console.warn('[ai-profile] legacy table read failed:', describeError(e))
+      return undefined
+    }
+    if (getSessionEpoch() !== epoch) return undefined
+    if (!row || !legacyRowNeedsUpload(row, cloud)) {
+      dropLegacy()
+      return undefined
+    }
+    const revision = mutationRevision
+    let json: unknown
+    try {
+      json = await send(
+        'PATCH',
+        PROFILE_PATH,
+        {
+          profile_text: row.profileText.slice(0, MAX_PROFILE_CHARS),
+          generated_at: new Date(row.generatedAt).toISOString()
+        },
+        READ_TIMEOUT_MS,
+        epoch
+      )
+    } catch (e) {
+      // A session change (sign-out wipes the rows; a same-user token push may
+      // retry later under the same owner) leaves the attempt open; any other
+      // failure keeps the table for the next launch.
+      if (getSessionEpoch() === epoch) legacySettled = true
+      console.warn('[ai-profile] legacy profile upload failed:', describeError(e))
+      return undefined
+    }
+    dropLegacy()
+    const profile = parseProfile(json) ?? {
+      profileText: row.profileText.slice(0, MAX_PROFILE_CHARS),
+      generatedAt: row.generatedAt,
+      dataSourcesUsed: cloud?.dataSourcesUsed ?? 0,
+      source: 'client' as const,
+      refreshedAt: cloud?.refreshedAt ?? null
+    }
+    if (revision === mutationRevision) {
+      commitMutation(uid, profile)
+    } else {
+      // A user action committed while the upload was out; the server's final
+      // state depends on arrival order, so let the next consumer re-read it.
+      mutationRevision += 1
+      if (cache) cache.fetchedAt = 0
+    }
+    console.log('[ai-profile] uploaded the pre-cloud local profile')
+    return profile
+  } finally {
+    legacyRunning = false
+  }
+}
+
+function dropLegacy(): void {
+  legacySettled = true
+  try {
+    dropLegacyProfileTable()
+  } catch (e) {
+    console.warn('[ai-profile] legacy table drop failed:', describeError(e))
+  }
+}
+
 /** Test seam: drop the cache and any in-flight bookkeeping. */
 export function _resetAiProfileCache(): void {
   cache = null
   readInFlight = null
   refreshInFlight = null
+  mutationRevision = 0
+  legacyOwnerUid = null
+  legacySettled = false
+  legacyRunning = false
 }
