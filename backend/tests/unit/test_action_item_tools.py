@@ -171,6 +171,31 @@ class TestActionItemTools(unittest.TestCase):
         res = action_mod.get_action_items_tool.func(config={"configurable": None})
         self.assertEqual(res, "Error: User ID not found in configuration")
 
+    def test_get_action_items_sanitizes_config_exception(self):
+        class BrokenConfig:
+            def get(self, key):
+                raise RuntimeError("secret_db_password_123")
+
+        res = action_mod.get_action_items_tool.func(config=BrokenConfig())
+        self.assertEqual(res, "Error: Configuration error.")
+        self.assertNotIn("secret_db_password_123", res)
+
+    def test_create_action_item_sanitizes_config_exception(self):
+        class BrokenConfig:
+            def get(self, key):
+                raise TypeError("Bad config mapping")
+
+        res = action_mod.create_action_item_tool.func(description="Buy coffee", config=BrokenConfig())
+        self.assertEqual(res, "Error: Configuration not available")
+
+    def test_update_action_item_sanitizes_config_exception(self):
+        class BrokenConfig:
+            def get(self, key):
+                raise AttributeError("No configurable")
+
+        res = action_mod.update_action_item_tool.func(action_item_id="item_999", completed=True, config=BrokenConfig())
+        self.assertEqual(res, "Error: Configuration not available")
+
     def test_get_action_items_coerces_string_limit_and_offset(self):
         res = action_mod.get_action_items_tool.func(limit="100", offset="5", config=self.config)
         self.assertIn("No action items found", res)
@@ -198,6 +223,21 @@ class TestActionItemTools(unittest.TestCase):
             due_start_date=None,
             due_end_date=None,
             limit=500,
+            offset=0,
+        )
+
+    def test_get_action_items_falls_back_to_50_on_invalid_limit(self):
+        res = action_mod.get_action_items_tool.func(limit="abc", config=self.config)
+        self.assertIn("No action items found", res)
+        mock_db.get_action_items.assert_called_with(
+            uid="test_uid",
+            conversation_id=None,
+            completed=None,
+            start_date=None,
+            end_date=None,
+            due_start_date=None,
+            due_end_date=None,
+            limit=50,
             offset=0,
         )
 
