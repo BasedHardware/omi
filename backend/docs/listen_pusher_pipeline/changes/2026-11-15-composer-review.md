@@ -52,3 +52,31 @@ neither hold's default and schedules no notes regeneration.
 The projector now publishes a bounded, coalescing process-local receipt marker through a stdlib-only module, without importing the composer, memory, vector or LLM stack and without doing database IO. The composer poller drains those markers in its existing worker pool and re-reads the committed member before scheduling. Assignment metadata and Home recovery remain the durable restart/overflow recovery path. Import-graph and fresh-process tests enforce the producer boundary. Active transcript waits retain their membership signature; membership, visibility and explicit regeneration invalidations bypass wait suppression immediately. An unchanged wait still adds zero composer reads to a Home request.
 
 The production embedding proxy accepts text only. Budgeted retrieval calls that real signature, checks the deadline after embedding and before vector IO, and uses autospec tests against the production embedding proxy, owner index and Firestore profile/people/hydration interfaces. The earlier paid replay injected selected memories from the private snapshot directly into assembled prompts; it contained memory context but bypassed this production embedding/vector path and did not validate its availability. No new paid replay was run after the gateway token was removed.
+
+## Durable batch transcript recovery
+
+Batch intake marks its existing assignment transaction to stamp
+`episode_transcript_updated_at` in the same conversation write as newly accepted
+speech, including append and rollover outputs. Exact retries do not advance the
+marker. Live capture replacement retains its existing transactional stamp. The
+process-local queue is only a fast path: neither a crash before enqueue nor a
+crash after dequeue can remove the committed revision signal. Projection adds
+no transaction, document write, or heavy import.
+
+Home list/page reconciliation reads that existing member metadata and queues a
+closed episode whose transcript revision exceeds its covered revision. A
+successful or evidence-identical compose acknowledges the revision in
+`composed_transcript_updated_at`, with member-revision fencing. Fast-path and
+read recovery share the existing evidence/fingerprint dedupe and paid-call
+lease. Removed, moved and hidden members contribute no recovery signal; Home
+clears its private aggregate marker rather than erasing the conversation's
+historical revision timestamp or waking a former episode.
+
+After process loss, recovery is triggered by the next Home list/page read that
+includes the episode. There is no periodic durable episode-receipt sweep and
+therefore no wall-clock bound without such a read. Closed episodes must be at
+least 60 seconds old; each read admits at most the configured per-read cap,
+then existing executor availability and the existing quiet/max-settle window
+apply. Queue polling is a best-effort one-second fast path, not an end-to-end
+latency guarantee. The six-hour transcript wait does not suppress a newer
+blocking-member receipt on a qualifying read.

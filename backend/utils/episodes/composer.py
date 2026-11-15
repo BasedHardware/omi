@@ -1208,8 +1208,8 @@ def _compose(
         and (not single or episode.get('composed_fingerprint') == print_)
     ):
         metrics.record_compose_trigger_skipped('evidence_unchanged')
-        if episode.get('compose_pending_since'):
-            _write(uid, episode_id, c, _trigger_stamp(episode, members))
+        if episode.get('compose_pending_since') or _unacknowledged_transcript(episode, members):
+            _write(uid, episode_id, c, _trigger_stamp(episode, members), expected_member_revisions=member_revisions)
         return 'unchanged'
     if (
         not force
@@ -1218,10 +1218,12 @@ def _compose(
         and not episode.get('summary_needs_regeneration')
         and _readable_body(episode)
     ):
-        if episode.get('compose_pending_since') or (
-            episode_compose_settle_enabled() and episode.get('composed_evidence') is None
+        if (
+            episode.get('compose_pending_since')
+            or _unacknowledged_transcript(episode, members)
+            or (episode_compose_settle_enabled() and episode.get('composed_evidence') is None)
         ):
-            _write(uid, episode_id, c, _trigger_stamp(episode, members))
+            _write(uid, episode_id, c, _trigger_stamp(episode, members), expected_member_revisions=member_revisions)
         return 'unchanged'
     if single and has_notes(members[0]):
         # No model call, so no lease, settle window or failure backoff: the notes are already paid for.
@@ -1456,10 +1458,25 @@ def _compose(
     return 'composed'
 
 
+def _latest_transcript(members: Sequence[Mapping[str, Any]]) -> Optional[datetime]:
+    return max(
+        (_utc(row.get('episode_transcript_updated_at')) for row in members),
+        key=lambda at: at or datetime.min.replace(tzinfo=timezone.utc),
+        default=None,
+    )
+
+
+def _unacknowledged_transcript(episode: Mapping[str, Any], members: Sequence[Mapping[str, Any]]) -> bool:
+    latest = _latest_transcript(members)
+    covered = _utc(episode.get('composed_transcript_updated_at')) or _utc(episode.get('composed_at'))
+    return bool(latest and (covered is None or latest > covered))
+
+
 def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     # Keep collecting stamps during rollback so re-enabling never requires a paid migration wave.
     return {
         'composed_evidence': _evidence(members),
+        'composed_transcript_updated_at': _latest_transcript(members),
         'composed_membership': sorted(_retained_ids(episode)),
         'compose_pending_since': None,
         'compose_transcript_wait_until': None,
@@ -1549,7 +1566,10 @@ def needs_compose(
     if not episode or policy.is_live(episode) or not episode_composer_enabled():
         return False
     projected = _utc(episode.get('_member_transcript_updated_at'))
-    composed_at = _utc(episode.get('composed_at'))
+    composed_at = max(
+        (at for at in (_utc(episode.get('composed_at')), _utc(episode.get('composed_transcript_updated_at'))) if at),
+        default=None,
+    )
     wait_until = _utc(episode.get('compose_transcript_wait_until'))
     wait_started = _utc(episode.get('compose_transcript_wait_started_at'))
     if episode_compose_transcript_wait_enabled() and wait_until and wait_until > datetime.now(timezone.utc):
@@ -1773,6 +1793,11 @@ def schedule_for_conversation(
         client = getattr(c, 'firestore_client', None)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
         if episode and not policy.is_live(episode):
+            if transcript_updated and (
+                conversation_id not in _retained_ids(episode)
+                or (row is not None and (hidden_member(row) or not conversations_db.is_visible_conversation(row)))
+            ):
+                return
             if transcript_updated:
                 with _inflight_lock:
                     _deferred.pop((uid, str(episode['id'])), None)

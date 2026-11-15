@@ -323,6 +323,8 @@ def build_incoming(
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    # Consumed by the existing assignment transaction, never a separate write.
+    incoming['_episode_transcript_receipt'] = True
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)

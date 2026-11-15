@@ -1979,3 +1979,97 @@ def test_projection_signal_respects_global_episode_switch(store, monkeypatch):
     monkeypatch.setattr(composer, 'schedule_for_conversation', lambda *a, **kw: seen.append(1))
     composer.transcript_projected(UID, store.rows['c1'])
     assert seen == []
+
+
+def _home_reconcile_transcript(store, monkeypatch):
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda _: 'UTC')
+    wire = home_read.project_episode(UID, store.episode, members=store.rows, list_row=True)
+    return home_read.schedule_missed_composes(UID, [store.episode], [wire] if wire else [])
+
+
+@pytest.mark.parametrize('crash', ['before_enqueue', 'after_take'])
+@pytest.mark.parametrize('waiting', [False, True])
+def test_durable_transcript_marker_recovers_lost_queue_receipt_once(store, monkeypatch, crash, waiting):
+    from collections import OrderedDict
+
+    monkeypatch.setattr(composer.transcript_receipts, '_pending', OrderedDict())
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2']['transcript_segments'] = []
+    if waiting:
+        store.rows['c2']['home_transcription_pending_at'] = datetime.now(timezone.utc)
+    assert composer.compose(UID, 'ep1', collaborators=c) == ('waiting' if waiting else 'composed')
+    paid_before = len(calls)
+    # Models the existing assignment transaction's committed speech + marker.
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'Late launch decision.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    if crash == 'after_take':
+        composer.transcript_receipts.enqueue(UID, store.rows['c2'])
+        assert composer.transcript_receipts.take()  # Worker dies before handling it.
+    composer._deferred.clear()
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_compose_settle_enabled', lambda: False)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    assert _home_reconcile_transcript(store, monkeypatch) == 1
+    assert len(calls) == paid_before + 1
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert composer.transcript_receipts.take() == []
+
+
+@pytest.mark.parametrize('fast_first', [False, True])
+def test_transcript_fast_path_and_home_recovery_buy_one_compose(store, monkeypatch, fast_first):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'Late launch decision.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_compose_settle_enabled', lambda: False)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    fast = lambda: composer.schedule_for_conversation(
+        UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True
+    )
+    recover = lambda: _home_reconcile_transcript(store, monkeypatch)
+    first, second = (fast, recover) if fast_first else (recover, fast)
+    first()
+    composer._recent.clear()  # Dedupe must survive the process-local throttle too.
+    second()
+    assert len(calls) == 2
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+
+
+@pytest.mark.parametrize('change', ['deleted', 'moved'])
+def test_stale_transcript_receipt_does_not_compose_former_member_and_home_drops_marker(store, monkeypatch, change):
+    calls = []
+    c = _c(calls=calls)
+    if change == 'deleted':
+        store.rows['c2']['deleted'] = True
+    else:
+        store.episode['conversation_ids'] = ['c1']
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    store.episode['_member_transcript_updated_at'] = datetime.now(timezone.utc)
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1))
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert '_member_transcript_updated_at' not in store.episode
+    assert not queued and len(calls) == 1
+
+
+def test_unchanged_transcript_revision_is_acknowledged_without_paid_compose(store, monkeypatch):
+    calls = []
+    c = _c(calls=calls)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    store.rows['c2']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'unchanged'
+    assert store.episode['composed_transcript_updated_at'] == store.rows['c2']['episode_transcript_updated_at']
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    assert len(calls) == 1
