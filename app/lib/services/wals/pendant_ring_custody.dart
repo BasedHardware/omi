@@ -329,6 +329,19 @@ class PendantRingCustody {
 
   static final PendantRingCustody shared = PendantRingCustody();
 
+  /// Constant work per connected device, independent of the ledger's size.
+  /// Live notification diagnostics must not sort/copy all historical ranges.
+  Map<String, Map<String, Object?>> get diagnosticMarkStateByDevice => Map.unmodifiable({
+        for (final entry in _devices.entries)
+          entry.key: Map<String, Object?>.unmodifiable({
+            'ring_id': entry.value.checkpoint.ringId,
+            'evidence_broken': entry.value.evidenceBroken,
+            'incarnation_invalid': entry.value.incarnationInvalid,
+            'last_observed_mark_seq': entry.value.marks.lastOrNull?.ringSeq,
+            'last_observed_mark_index': entry.value.marks.lastOrNull?.liveIndex,
+          }),
+      });
+
   /// Content-free ledger metadata only. Export never validates or advances.
   /// Keep this getter separate from custody decisions (Q12-AC diagnostics).
   Map<String, Map<String, Object?>> get diagnosticsByDevice => Map.unmodifiable({

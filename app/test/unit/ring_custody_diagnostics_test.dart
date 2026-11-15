@@ -218,6 +218,11 @@ void main() {
     await custody.recordDurableRingRange('pendant', 1, 42, 30, 35, []);
     await custody.recordDurableRingRange('pendant', 1, 42, 21, 24, []);
     final before = custody.durableFrontierFor('pendant', 1);
+    final mark = custody.diagnosticMarkStateByDevice['pendant']!;
+    expect(mark.keys.toSet(),
+        {'ring_id', 'evidence_broken', 'incarnation_invalid', 'last_observed_mark_seq', 'last_observed_mark_index'});
+    expect(mark['ring_id'], 42);
+    expect(() => mark['ring_id'] = 999, throwsUnsupportedError);
     final ledger = custody.diagnosticsByDevice['pendant']!;
     expect(ledger['proof_record_span'], 10);
     expect(ledger['durable_frontier'], 25);

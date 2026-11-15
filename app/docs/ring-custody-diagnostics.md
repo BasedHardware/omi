@@ -22,6 +22,8 @@ frame counts, decoded time and adjacent-record plausibility help distinguish
 stored timestamps from misframing. End-of-read neighbours remain null.
 
 The getter `PendantRingCustody.diagnosticsByDevice` copies numeric metadata only.
+Live-mark observation uses the separate `diagnosticMarkStateByDevice` getter,
+whose work is independent of ledger size; it never sorts historical ranges.
 The ledger summary uses the union of previously recorded proof ranges; export
 never revalidates files or authorizes reclaim. First gap is [frontier, next proof
 start), capped at current write_seq. `records_held_behind_gap` counts the suffix

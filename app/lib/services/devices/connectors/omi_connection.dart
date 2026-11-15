@@ -202,9 +202,9 @@ class OmiDeviceConnection extends DeviceConnection {
           if (value[0] == RingProtocol.notifyLiveMark) {
             final mark = RingProtocol.parseLiveMarkNotification(value);
             if (mark != null) {
-              final before = _custody.diagnosticsByDevice[device.id];
+              final before = _custody.diagnosticMarkStateByDevice[device.id];
               _custody.observeLiveMark(device.id, epoch, mark);
-              final after = _custody.diagnosticsByDevice[device.id];
+              final after = _custody.diagnosticMarkStateByDevice[device.id];
               final reason = !_livePersistEnabled
                   ? RingDiagnosticReason.notEnabled
                   : after?['ring_id'] != mark.ringId
