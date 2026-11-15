@@ -53,11 +53,11 @@ def test_synthetic_product_fix(tmp_path, capsys):
     git(clone, 'read-tree', base)
     path = 'backend/database/record_audio.py'
     source = git(clone, 'show', f'{base}:{path}')
-    needle = b"        if row.get('record_upload_sessions'):\n            return 'producer_pending'"
+    needle = b"        if row.get('record_upload_sessions'):\n"
     assert source.count(needle) == 1
     patched = source.replace(
         needle,
-        b"        if row.get('record_upload_sessions'):\n            tx.update(ref, {'record_upload_sessions': {}, 'record_audio_closed': True})\n            return None",
+        b"        if row.get('record_upload_sessions'):\n            tx.update(ref, {'record_upload_sessions': {}, 'record_audio_closed': True})\n            return None\n",
     )
     blob = git(clone, 'hash-object', '-w', '--stdin', data=patched).decode()
     git(clone, 'update-index', '--add', '--cacheinfo', f'100644,{blob},{path}')

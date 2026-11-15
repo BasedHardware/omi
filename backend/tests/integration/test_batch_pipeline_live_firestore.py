@@ -276,6 +276,9 @@ def test_stale_finalizer_and_late_socket_cannot_overwrite_record(lane):
     # Internal markers do not round-trip through the public model dump. The
     # canonical finalizer must retain both the route and pusher's close receipt.
     processed = Conversation(**live).model_dump()
+    # The completed finalizer must satisfy main's kept-summary receipt fence;
+    # this case tests stale record ownership, not empty summary acceptance.
+    processed['structured']['overview'] = 'Synthetic finalized summary.'
     assert 'record_lane_owner' not in processed
     assert lane.conversations.persist_processing_result_with_lifecycle(lane.uid, processed)
     current = lane.user.collection('conversations').document('live-record').get().to_dict()
