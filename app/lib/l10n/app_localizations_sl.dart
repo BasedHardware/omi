@@ -7045,6 +7045,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Prijava s Apple ni uspela, prosimo, poskusite ponovno.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Prijava z Applom ni uspela. Poskusite znova ali nadaljujte z Googlom.';
+
+  @override
   String get authFailedToRetrieveToken => 'Pridobivanje Firebase žetona ni uspelo, prosimo, poskusite ponovno.';
 
   @override

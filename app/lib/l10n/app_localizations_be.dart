@@ -7049,6 +7049,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не вдалося ўвайсці праз Apple, спрабуйце яшчэ раз.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не атрымалася ўвайсці праз Apple. Паспрабуйце яшчэ раз або працягніце з Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не вдалося атрымаць токен firebase, спрабуйце яшчэ раз.';
 
   @override

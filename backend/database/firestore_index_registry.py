@@ -12,6 +12,7 @@ from database.mcp_read_queries import (
     MCP_CONVERSATION_CARD_QUERY_SPECS,
 )
 from database.review_queries import REVIEW_QUERY_SPECS
+from database.home_feed_queries import HOME_FEED_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
@@ -2036,6 +2037,7 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    *HOME_FEED_QUERY_SPECS,
     MCP_DAILY_RECORDINGS_QUERY,
     *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,

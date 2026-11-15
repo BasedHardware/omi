@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Gagal masuk dengan Google. Silakan coba lagi.",
     "authenticationFailed": "Autentikasi gagal. Silakan coba lagi.",
     "authFailedToSignInWithApple": "Gagal masuk dengan Apple. Silakan coba lagi.",
+    "authAppleSignInFailedUseGoogle": "Masuk dengan Apple tidak berhasil. Coba lagi atau lanjutkan dengan Google.",
     "authFailedToRetrieveToken": "Gagal mengambil token. Silakan coba lagi.",
     "authUnexpectedErrorFirebase": "Terjadi kesalahan tak terduga saat masuk dengan Firebase. Silakan coba lagi.",
     "authUnexpectedError": "Terjadi kesalahan tak terduga saat masuk. Silakan coba lagi.",

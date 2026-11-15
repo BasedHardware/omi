@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Nie udało się zalogować przez Google, spróbuj ponownie.",
     "authenticationFailed": "Uwierzytelnianie nie powiodło się. Spróbuj ponownie.",
     "authFailedToSignInWithApple": "Nie udało się zalogować przez Apple, spróbuj ponownie.",
+    "authAppleSignInFailedUseGoogle": "Logowanie przez Apple nie powiodło się. Spróbuj ponownie lub kontynuuj przez Google.",
     "authFailedToRetrieveToken": "Nie udało się pobrać tokenu Firebase, spróbuj ponownie.",
     "authUnexpectedErrorFirebase": "Nieoczekiwany błąd podczas logowania, błąd Firebase, spróbuj ponownie.",
     "authUnexpectedError": "Nieoczekiwany błąd podczas logowania, spróbuj ponownie",

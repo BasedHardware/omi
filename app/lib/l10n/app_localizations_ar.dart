@@ -6978,6 +6978,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.';
 
   @override

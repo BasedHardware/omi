@@ -48,6 +48,7 @@ from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRI
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
+from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
@@ -197,7 +198,7 @@ BODY_DIGEST = {
     'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '4d2bf50ebc80c25117858198bedfd687cc9a0bd042daa35bb6eaad2ec6d923ed',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -3581,6 +3582,7 @@ for entry in (
     *allowance_hold_entries(),
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
+    *home_feed_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),

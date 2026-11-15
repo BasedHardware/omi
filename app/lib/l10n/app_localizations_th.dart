@@ -6994,6 +6994,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get authFailedToSignInWithApple => 'ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google';
+
+  @override
   String get authFailedToRetrieveToken => 'ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง';
 
   @override
