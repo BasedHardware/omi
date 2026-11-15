@@ -22,6 +22,7 @@ from utils.pusher_record_close import PusherCloseState
 @pytest.mark.parametrize('version', [None, 2, 3])
 async def test_listener_requires_matching_v3_and_its_own_switch(monkeypatch, enabled, version):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', str(enabled).lower())
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     ack = (
         []
         if version is None
@@ -54,6 +55,7 @@ async def test_listener_requires_matching_v3_and_its_own_switch(monkeypatch, ena
 @pytest.mark.parametrize('version', [None, 2, 3])
 async def test_pusher_requires_matching_v3_and_its_own_switch(inline_session, monkeypatch, enabled, version):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', str(enabled).lower())
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     client, path, _, projected = inline_session
     controls = [
         struct.pack('<I', 104)
@@ -81,6 +83,7 @@ async def test_pusher_requires_matching_v3_and_its_own_switch(inline_session, mo
 @pytest.mark.asyncio
 async def test_handshake_deadline_exits_with_source_and_producer_fences_intact(monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     clock = [100.0]
     socket = FakePusherWebSocket()
     session = make_session(
@@ -134,10 +137,12 @@ def test_commit_requires_exact_received_watermark():
 @pytest.mark.asyncio
 async def test_switch_off_ignores_previously_retired_boundaries(monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     session = make_session(deps_overrides={'finish_recording_audio': AsyncMock(return_value=True)})
     session.record_boundary.retire('conv-1', current='conv-1')
     session.record_close_boundaries['conv-1'] = True
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     with session.audio_frame('conv-1') as frame:
         assert frame is None
         session.audio_bytes_send(b'\x01\x00', 100)
@@ -153,6 +158,7 @@ async def test_switch_off_ignores_previously_retired_boundaries(monkeypatch):
 @pytest.mark.parametrize('status', ['completed', 'processing'])
 async def test_cloud_tasks_poll_notifies_before_waiting_for_successor(monkeypatch, enabled, status):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', str(enabled).lower())
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     entered, release = asyncio.Event(), asyncio.Event()
     state = SimpleNamespace(active=True, current_conversation_id='current', last_audio_received_time=None)
     row = {'id': 'current', 'status': status}
@@ -189,6 +195,7 @@ async def test_cloud_tasks_poll_notifies_before_waiting_for_successor(monkeypatc
 @pytest.mark.parametrize('enabled', [False, True])
 async def test_cloud_tasks_close_signal_is_not_suppressed_by_boundary_hold(monkeypatch, enabled):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', str(enabled).lower())
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     notify = AsyncMock(return_value=False)
     host = SimpleNamespace(
         state=SimpleNamespace(active=True, current_conversation_id='current', last_audio_received_time=None),

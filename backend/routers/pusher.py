@@ -518,7 +518,7 @@ async def _run_websocket_util_trigger(
 
     close_protocol = (
         PusherCloseState(True)
-        if close_notify_enabled() and record_close_protocol == RECORD_CLOSE_VERSION and audio_outbox_enabled()
+        if close_notify_enabled(uid) and record_close_protocol == RECORD_CLOSE_VERSION and audio_outbox_enabled()
         else None
     )
     if close_protocol is not None:
@@ -1777,7 +1777,7 @@ async def _run_websocket_util_trigger(
                         ):
                             raise ValueError('invalid close-v2 control')
                         status, base = 'unsupported', 0
-                        if close_protocol is not None and close_notify_enabled() and private_cloud_sync_enabled:
+                        if close_protocol is not None and close_notify_enabled(uid) and private_cloud_sync_enabled:
                             if phase == 'prepare':
                                 status, base = close_protocol.prepare(
                                     conversation_id, request_id, record_close_requests
@@ -2147,7 +2147,7 @@ async def _run_websocket_util_trigger(
 
         if (
             close_protocol is not None
-            and close_notify_enabled()
+            and close_notify_enabled(uid)
             and receive_task is not None
             and receive_task.done()
             and record_worker is not None

@@ -58,6 +58,7 @@ def prepare():
 @pytest.fixture
 def recovery(inline_session, monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     client, path, _, _ = inline_session
     client.rows[path]['status'] = 'completed'
     owners, trackers, socket_barriers = [], [], []
@@ -205,8 +206,8 @@ async def test_live_handshake_deadline_keeps_producer_fenced(recovery):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('cohort', ['off'])
-async def test_disabled_never_enters_prepared_recovery(recovery, monkeypatch, cohort):
+@pytest.mark.parametrize('cohort', ['off', 'outside'])
+async def test_disabled_or_noncohort_never_enters_prepared_recovery(recovery, monkeypatch, cohort):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false' if cohort == 'off' else 'true')
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '0')
     monkeypatch.setattr(
