@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def _shadow_mode() -> bool:
     # Store-selection infrastructure config, not per-unit policy (baselined in the batch-stage env ratchet).
-    return os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() == 'shadow'
+    return os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() in {'shadow', 'index'}
 
 
 def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
@@ -64,12 +64,17 @@ def shadow_parity_collectors() -> tuple:
 
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
 
-        return (
+        collectors = (
             SERVING_PARITY_TOTAL,
             dual_store.SHADOW_PARITY_TOTAL,
             dual_store.SHADOW_CONVERGENCE_TOTAL,
             dual_store.SHADOW_CONVERGENCE_SECONDS,
         )
+        if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() == 'index':
+            from database.jobstore.index_store import INDEX_READS_TOTAL
+
+            return (*collectors, INDEX_READS_TOTAL)
+        return collectors
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)
         return ()

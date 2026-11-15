@@ -320,12 +320,17 @@ class DualStore:
 
         def observed(*args, **kwargs):
             result = method(*args, **kwargs)
-            # An additional operator opt-in; no query traffic with current defaults.
-            if os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
-                self._observe_query(name, args, kwargs)
+            self.observe_discovery(name, args, kwargs)
             return result
 
         return observed
+
+    def observe_discovery(self, name: str, args: tuple, kwargs: dict) -> None:
+        """Keep optional parity on its bounded queue when an index supplies the discovery answer."""
+        from database.jobstore.serving_parity import STORE_QUERIES
+
+        if name in STORE_QUERIES and os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
+            self._observe_query(name, args, kwargs)
 
     def _observe_query(self, name, args, kwargs):
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
@@ -816,24 +821,28 @@ def shadow_from_env(primary: Any) -> Any:
     (the pool dials lazily).
     """
     mode = os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower()
-    if mode != 'shadow':
+    if mode not in {'shadow', 'index'}:
         return primary
     namespace = getattr(primary, 'namespace', '')
     if not jobstore_shadow_admits(namespace):
         logger.warning('event=jobstore_shadow outcome=refused reason=namespace_admission')
         return primary
     with _SHADOWED_LOCK:
-        if namespace in _SHADOWED:
-            return _SHADOWED[namespace]
-        try:
-            store = _configured_copy(primary)
-        except RuntimeError:
-            logger.warning('event=jobstore_shadow outcome=refused reason=configuration')
-            return primary
+        store = _SHADOWED.get(namespace)
         if store is None:
-            return primary
-        _SHADOWED[namespace] = store
-        return store
+            try:
+                store = _configured_copy(primary)
+            except RuntimeError:
+                logger.warning('event=jobstore_shadow outcome=refused reason=configuration')
+                return primary
+            if store is None:
+                return primary
+            _SHADOWED[namespace] = store
+    if mode == 'index':
+        from database.jobstore.index_config import index_from_env
+
+        return index_from_env(store)
+    return store
 
 
 def _configured_copy(primary: Any) -> DualStore | None:
@@ -885,9 +894,10 @@ def mirror_refresh(namespace: str, keys) -> None:
     A strict no-op (nothing constructed, nothing read) unless this process runs ``BATCH_JOBSTORE_MODE=shadow``;
     otherwise queued for the mirror thread. Never raises into the caller.
     """
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
-        namespace
-    ):
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() not in {
+        'shadow',
+        'index',
+    } or not jobstore_shadow_admits(namespace):
         return
     try:
         store = _SHADOWED.get(namespace)
@@ -895,6 +905,8 @@ def mirror_refresh(namespace: str, keys) -> None:
             from database.batch_pipeline_store import FirestoreStore
 
             store = shadow_from_env(FirestoreStore(namespace))
+            # Index mode returns a discovery wrapper; the cached DualStore owns mirror refreshes.
+            store = _SHADOWED.get(namespace, store)
         if isinstance(store, DualStore):
             store.refresh(keys)
     except Exception:
