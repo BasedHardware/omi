@@ -113,10 +113,28 @@ def test_first_outside_transaction_refresh_keeps_the_new_cold_cache_mirror(confi
     assert seen == [('jobs', 'synthetic')]
 
 
-def test_private_worker_registry_exports_index_and_existing_parity_collectors(configured):
+@pytest.mark.parametrize('mode', ['index', ' INDEX '])
+@pytest.mark.parametrize('disabled_switch', [None, 'JOBSTORE_INDEX_READS', 'JOBSTORE_SHADOW_WRITES'])
+def test_private_worker_registry_exports_index_and_existing_parity_collectors(
+    configured, monkeypatch, mode, disabled_switch
+):
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+    if disabled_switch:
+        monkeypatch.setenv(disabled_switch, 'off')
     collectors = hook.shadow_parity_collectors()
     assert INDEX_READS_TOTAL in collectors
     assert dual_store.SHADOW_PARITY_TOTAL in collectors
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'firestore', 'unknown', ''])
+def test_private_worker_registry_keeps_other_modes_separate(configured, monkeypatch, mode):
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+    collectors = hook.shadow_parity_collectors()
+    assert INDEX_READS_TOTAL not in collectors
+    if mode == 'shadow':
+        assert dual_store.SHADOW_PARITY_TOTAL in collectors
+    else:
+        assert collectors == ()
 
 
 def test_index_answers_preserve_optional_async_serving_parity(configured, monkeypatch):
