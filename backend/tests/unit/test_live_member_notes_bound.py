@@ -35,7 +35,7 @@ def deferred(monkeypatch):
     monkeypatch.setattr(episodes, 'get_episode_owner_snapshot', lambda *a: dict(owner))
     monkeypatch.setattr(episodes, 'get_episode', lambda *a, **kw: dict(owner))
     monkeypatch.setattr(jobs, 'get_finalization_job', lambda *a: dict(job))
-    return owner, job, {'id': 'first', 'status': 'processing', 'finalization_job_id': 'job'}
+    return owner, job, {'id': 'first', 'status': 'processing', 'source': 'omi', 'finalization_job_id': 'job'}
 
 
 def test_idle_non_last_member_retry_uses_home_idle_close(deferred, monkeypatch):
@@ -87,7 +87,7 @@ def test_kill_switch_off_is_inert_even_for_old_idle_members(deferred, monkeypatc
 def test_second_gate_keeps_the_durable_job_clock(deferred):
     _, job, _ = deferred
     job['created_at'] = NOW - timedelta(seconds=181)
-    conversation = SimpleNamespace(id='first', status='processing', transcript_segments=[object()])
+    conversation = SimpleNamespace(id='first', source='omi', status='processing', transcript_segments=[object()])
     member_notes.before_notes(
         'synthetic', conversation, ProcessingTrigger.CAPTURE_END, finalization_fence=('job', 1, 1)
     )
@@ -98,6 +98,42 @@ def test_failed_idle_read_does_not_disable_timeout(deferred, monkeypatch):
     job['created_at'] = NOW - timedelta(seconds=181)
     monkeypatch.setattr(episodes, 'get_episode', Mock(side_effect=TimeoutError('synthetic')))
     assert not member_notes.waits('synthetic', row)
+
+
+@pytest.mark.parametrize('field,value', [('source', 'desktop'), ('record_lane_owner', 'batch_live_v1')])
+def test_bounded_recovery_stays_inside_the_measured_live_scope(deferred, monkeypatch, field, value):
+    owner, job, row = deferred
+    job['created_at'] = NOW - timedelta(hours=1)
+    owner['last_activity_at'] = NOW - timedelta(hours=1)
+    row[field] = value
+    read = Mock(side_effect=AssertionError('outside bounded live scope'))
+    monkeypatch.setattr(episodes, 'get_episode', read)
+    assert member_notes.waits('synthetic', row)
+    read.assert_not_called()
+
+
+def test_old_job_recording_detail_keeps_its_independent_escalation(deferred, monkeypatch):
+    _, job, row = deferred
+    job['created_at'] = NOW - timedelta(hours=1)
+    row['transcript_segments'] = [object()]
+    redis = Mock()
+    redis.get.return_value = None
+    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    enqueue = Mock()
+    monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
+    member_notes.open_recording('synthetic', row)
+    enqueue.assert_called_once()
+    redis.set.assert_called_once()
+    redis.get.return_value = '1'
+    permit = Mock(side_effect=AssertionError('explicit detail uses ordinary processing'))
+    monkeypatch.setattr(permits, 'claim', permit)
+    member_notes.before_model(
+        'synthetic',
+        SimpleNamespace(id='first', source='omi'),
+        ProcessingTrigger.CAPTURE_END,
+        finalization_fence=('job', 1, 2),
+    )
+    permit.assert_not_called()
 
 
 @pytest.mark.parametrize('state', ['closed', 'in_progress', 'no_job'])
@@ -187,7 +223,7 @@ def test_consumed_paid_permit_waits_until_close_or_explicit_request(deferred, mo
     owner, job, _ = deferred
     job['created_at'] = NOW - timedelta(seconds=181)
     monkeypatch.setattr(permits, 'claim', Mock(return_value=False))
-    conversation = SimpleNamespace(id='first', sync_content_revision=3)
+    conversation = SimpleNamespace(id='first', source='omi', sync_content_revision=3)
     with pytest.raises(member_notes.LiveMemberNotesDeferred):
         member_notes.before_model(
             'synthetic', conversation, ProcessingTrigger.CAPTURE_END, finalization_fence=('job', 1, 2)
@@ -238,7 +274,7 @@ def test_idle_retry_reuses_real_transaction_and_speech_wins(monkeypatch, new_spe
         return close(*args, **kwargs)
 
     monkeypatch.setattr(episodes, 'close_episode', racing_close)
-    row = {'id': 'first', 'status': 'processing', 'finalization_job_id': 'job'}
+    row = {'id': 'first', 'status': 'processing', 'source': 'omi', 'finalization_job_id': 'job'}
     assert member_notes.waits('synthetic', row) is new_speech
     stored = store.rows[episode_path]
     assert stored['status'] == ('live' if new_speech else 'closed')

@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from database._client import get_firestore_client
-from database.conversation_finalization_jobs import FINALIZATION_JOBS_COLLECTION
 
 
 def _claim(transaction, job_ref, conversation_ref, fence, revision, now):
@@ -39,7 +38,7 @@ def claim(uid, conversation_id, fence, revision, *, firestore_client=None):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     return firestore.transactional(_claim)(
         client.transaction(),
-        client.collection(FINALIZATION_JOBS_COLLECTION).document(fence[0]),
+        client.collection('conversation_finalization_jobs').document(fence[0]),
         client.collection('users').document(uid).collection('conversations').document(conversation_id),
         fence,
         revision,

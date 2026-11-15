@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 from config.home_processing import live_member_notes_enabled, bounded_member_notes_enabled
 from database import episodes, live_member_notes
-from database import conversation_finalization_jobs as finalization_jobs
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from utils.conversations import demand_processing
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -56,7 +55,7 @@ def _aged_job(uid, row):
     job_id = row.get('finalization_job_id')
     if not job_id or row.get('status') == 'in_progress':
         return False
-    job = finalization_jobs.get_finalization_job(job_id)
+    job = importlib.import_module('database.conversation_finalization_jobs').get_finalization_job(job_id)
     created = utc((job or {}).get('created_at'))
     return bool(
         job
@@ -64,6 +63,15 @@ def _aged_job(uid, row):
         and job.get('conversation_id') == row['id']
         and created
         and time.time() - created.timestamp() >= LIVE_MEMBER_NOTES_MAX_DEFERRAL_SECONDS
+    )
+
+
+def _bounded_retry(row):
+    return (
+        row.get('finalization_job_id')
+        and row.get('status') != 'in_progress'
+        and row.get('source') == 'omi'
+        and row.get('record_lane_owner') != 'batch_live_v1'
     )
 
 
@@ -87,7 +95,7 @@ def waits(uid: str, row: dict, trigger=ProcessingTrigger.SYNC_UPDATE) -> bool:
         return False
     if not owner or owner.get('status') != 'live' or row['id'] not in owned_member_ids(owner):
         return False
-    if bounded_member_notes_enabled() and row.get('finalization_job_id') and row.get('status') != 'in_progress':
+    if bounded_member_notes_enabled() and _bounded_retry(row):
         try:
             owner = _settle_idle_owner(uid, owner)
             if owner.get('status') != 'live' or row['id'] not in owned_member_ids(owner):
@@ -116,6 +124,8 @@ def before_notes(uid, conversation, trigger, *, finalization_fence=None):
             {
                 'id': getattr(conversation, 'id', None),
                 'status': getattr(conversation, 'status', None),
+                'source': getattr(conversation, 'source', None),
+                'record_lane_owner': getattr(conversation, 'record_lane_owner', None),
                 'finalization_job_id': finalization_fence[0] if finalization_fence else None,
             },
             trigger,
@@ -134,12 +144,28 @@ def before_model(uid, conversation, trigger, *, finalization_fence=None):
         return
     if finalization_fence is None:
         return
-    row = {'id': conversation.id, 'finalization_job_id': finalization_fence[0]}
-    owner = episodes.get_episode_owner_snapshot(uid, conversation.id)
+    row = {
+        'id': conversation.id,
+        'finalization_job_id': finalization_fence[0],
+        'source': getattr(conversation, 'source', None),
+        'record_lane_owner': getattr(conversation, 'record_lane_owner', None),
+    }
+    if not _bounded_retry(row):
+        return
+    try:
+        owner = episodes.get_episode_owner_snapshot(uid, conversation.id)
+    except Exception as error:
+        _unavailable('owner_unavailable', error)
+        return  # Preserve main's eager processing on an unavailable ownership gate.
     if not owner or owner.get('status') != 'live' or conversation.id not in owned_member_ids(owner):
         return
     if not _aged_job(uid, row):
         return
+    try:
+        if demand_processing.client().get(_key(uid, conversation.id)):
+            return  # A recording-detail request retains its independent budget.
+    except Exception as error:
+        _unavailable('lease_unavailable', error)
     if not live_member_notes.claim(
         uid, conversation.id, finalization_fence, getattr(conversation, 'sync_content_revision', None)
     ):
@@ -150,7 +176,11 @@ def before_model(uid, conversation, trigger, *, finalization_fence=None):
 
 
 def open_recording(uid: str, row: dict) -> None:
-    if not waits(uid, row) or row.get('status') == 'in_progress' or not row.get('transcript_segments'):
+    if (
+        not waits(uid, {'id': row.get('id')})
+        or row.get('status') == 'in_progress'
+        or not row.get('transcript_segments')
+    ):
         return
     now = time.time()
     # Reuse the durable enrichment obligation and its ordinary revision/claim

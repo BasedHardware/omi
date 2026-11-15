@@ -3276,7 +3276,7 @@ wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enric
 a 4,200-second per-recording escalation lease (maximum hold plus one quiet window);
 expired intent restores the wait. Empty-transcript process entry bypasses this notes
 gate, and scheduling deferrals propagate through donor completion unchanged.
-`HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED` defaults on. A finished member's durable
+`HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED` defaults on for non-batch pendant members. A durable
 retry settles an idle owner through Home's activity-fenced idle-close transaction,
 including when the member is not last. Otherwise, at 180 seconds since its
 finalization job was created, its own notes may proceed while the owner stays
