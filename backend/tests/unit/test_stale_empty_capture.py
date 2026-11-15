@@ -12,7 +12,7 @@ from utils.conversations import empty_capture, home_step, transcribing_hold
 from utils.episodes import home_read
 
 NOW = datetime.now(timezone.utc)
-OLD = NOW - timedelta(hours=17)
+OLD = NOW - timedelta(hours=25)
 
 
 def placeholder(**changes):
@@ -109,13 +109,22 @@ def test_content_curation_producers_unknown_or_new_wait_release_noise(changes):
 
 
 def test_exact_existing_age_bound_and_naive_stamp():
-    row = placeholder(episode_transcription_pending_at=OLD.replace(tzinfo=None))
+    row = placeholder(episode_transcription_pending_at=OLD.replace(tzinfo=None), server_batch_audio_closed=True)
     assert not empty_capture.applies(row, now=OLD + timedelta(hours=2) - timedelta(seconds=1))
     assert empty_capture.applies(row, now=OLD + timedelta(hours=2))
 
 
 def test_empty_rule_is_independent_of_completed_stt_empty_wire_switch(monkeypatch):
-    row = placeholder()
+    # Closed audio, past the 2h deadline but inside the 24h age bound.
+    start = NOW - timedelta(hours=17)
+    row = placeholder(
+        server_batch_audio_closed=True,
+        created_at=start,
+        started_at=start,
+        finished_at=start,
+        episode_transcription_pending_at=start,
+        episode_transcription_deadline_at=start + timedelta(hours=2),
+    )
     monkeypatch.setenv('HOME_SETTLED_EMPTY_WIRE_ENABLED', 'false')
     assert home_step.classify(row) == 'noise'
     monkeypatch.setenv('HOME_STALE_EMPTY_CAPTURE_NOISE_ENABLED', 'false')
@@ -149,3 +158,30 @@ def test_empty_caption_survives_legacy_home_step_omission(monkeypatch):
     member = home_read.project_episode('synthetic', episode(), members={'empty': row})['members'][0]
     assert member['status'] == 'completed' and member['title'] == 'No summary'
     assert 'home_step' not in member
+
+
+def test_unclosed_received_audio_waits_out_the_full_age_bound():
+    # A buffered first frame can still commit at teardown: not noise at 3h or 23h.
+    for hours in (3, 23):
+        start = NOW - timedelta(hours=hours)
+        row = placeholder(
+            episode_transcription_pending_at=start,
+            episode_transcription_deadline_at=start + timedelta(hours=2),
+        )
+        assert not empty_capture.applies(row, now=NOW)
+        assert empty_capture.project(row, now=NOW) is row
+    start = NOW - timedelta(hours=24)
+    row = placeholder(
+        episode_transcription_pending_at=start, episode_transcription_deadline_at=start + timedelta(hours=2)
+    )
+    assert empty_capture.applies(row, now=NOW)
+
+
+@pytest.mark.parametrize('field', ['episode_transcription_deadline_at', 'home_transcription_deadline_at'])
+def test_future_transcription_deadline_is_live_work(field):
+    row = placeholder(server_batch_audio_closed=True, **{field: NOW + timedelta(minutes=5)})
+    assert not empty_capture.applies(row, now=NOW)
+
+
+def test_read_masks_carry_the_open_audio_evidence():
+    assert {'server_batch_audio_received', 'server_batch_audio_closed'} <= set(transcribing_hold.READ_FIELDS)

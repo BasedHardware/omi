@@ -38,6 +38,8 @@ READ_FIELDS = (
     'episode_transcription_deadline_at',
     'sync_content_revision',
     'is_locked',
+    'server_batch_audio_received',
+    'server_batch_audio_closed',
 )
 
 

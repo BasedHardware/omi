@@ -1,15 +1,20 @@
 """Expired zero-content capture placeholders are noise only on the read wire.
 
 Unlike an STT-empty receipt, this is not custody or lifecycle authority. A first
-buffered frame can set received=True without ever committing an audio span.
-Keep the row and all audio; any late content or active producer releases this
-presentation rule immediately.
+buffered frame sets received=True before any audio span commits, and that frame can
+still commit at teardown, so a row whose received audio is not closed waits out the
+full transcription age bound. A transcription deadline still in the future is live work. Keep the row and all
+audio; any late content or active producer releases this presentation rule immediately.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from config.episodes import home_step_projection_enabled, home_transcription_deadline_seconds
+from config.episodes import (
+    home_step_projection_enabled,
+    home_transcription_deadline_seconds,
+    home_transcription_max_age_seconds,
+)
 from config.transcription_pending import stale_empty_noise_enabled
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.home_titles import summary_owed
@@ -50,6 +55,13 @@ def applies(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
         or row.get('finalization_status') == 'dead_letter'
     ):
         return False
+    current = now or datetime.now(timezone.utc)
+    for key in ('home_transcription_deadline_at', 'episode_transcription_deadline_at'):
+        value = row.get(key)
+        if isinstance(value, datetime):
+            deadline = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+            if deadline > current:
+                return False
     anchors: list[datetime] = []
     for key in ('home_transcription_pending_at', 'episode_transcription_pending_at'):
         value = row.get(key)
@@ -60,7 +72,11 @@ def applies(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
     # Both pending generations must be expired. A new wait is real work, not a
     # reason to keep hiding an old placeholder. Never use updated_at/read time.
     anchor = max(anchors)
-    return ((now or datetime.now(timezone.utc)) - anchor).total_seconds() >= home_transcription_deadline_seconds()
+    # Received audio that never closed may still commit at teardown: wait out the
+    # full transcription age bound before calling it noise.
+    open_audio = row.get('server_batch_audio_received') is True and row.get('server_batch_audio_closed') is not True
+    bound = home_transcription_max_age_seconds() if open_audio else home_transcription_deadline_seconds()
+    return (current - anchor).total_seconds() >= bound
 
 
 def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
