@@ -1,6 +1,7 @@
 """Erase WAL crash orphans without importing sync serving/provider machinery."""
 
 from google.cloud.exceptions import NotFound
+from google.api_core.retry import Retry
 
 from config.record_wal_storage import private_archive_bucket
 from utils.other.local_storage import create_storage_client
@@ -12,7 +13,8 @@ def purge_record_wal_owner(uid: str) -> None:
         raise ValueError('bounded WAL erasure owner required')
     bucket = create_storage_client().bucket(private_archive_bucket())
     prefix = f'record-wal/{uid}/'
-    for blob in bucket.list_blobs(prefix=prefix, versions=True, timeout=10, retry=None):
+    listing_retry = Retry(deadline=10)
+    for blob in bucket.list_blobs(prefix=prefix, versions=True, timeout=10, retry=listing_retry):
         generation = int(blob.generation or 0)
         if generation <= 0:
             raise ValueError('WAL erasure requires an immutable generation')
@@ -23,5 +25,5 @@ def purge_record_wal_owner(uid: str) -> None:
             blob.delete(**options)
         except NotFound:
             pass
-    if list(bucket.list_blobs(prefix=prefix, versions=True, max_results=1, timeout=10, retry=None)):
+    if list(bucket.list_blobs(prefix=prefix, versions=True, max_results=1, timeout=10, retry=listing_retry)):
         raise RuntimeError('WAL owner storage purge did not converge')
