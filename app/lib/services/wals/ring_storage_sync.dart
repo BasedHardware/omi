@@ -106,13 +106,16 @@ class RingStorageSyncImpl implements RingStorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   final Timer Function(Duration, void Function()) _transferTimer;
+  final Timer Function(Duration, void Function()) _persistenceDeadlineTimer;
   final Future<DeviceConnection?> Function(String)? _connectionResolver;
 
   RingStorageSyncImpl(
     this.listener, {
     Timer Function(Duration, void Function())? transferTimer,
+    Timer Function(Duration, void Function())? persistenceTimer,
     Future<DeviceConnection?> Function(String)? connectionResolver,
   })  : _transferTimer = transferTimer ?? Timer.new,
+        _persistenceDeadlineTimer = persistenceTimer ?? Timer.new,
         _connectionResolver = connectionResolver;
 
   @visibleForTesting
@@ -644,7 +647,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (!ringDrainRecoveryEnabled || _isCancelled) return;
       if (startOnly && _persistenceTimer != null) return;
       _persistenceTimer?.cancel();
-      _persistenceTimer = _transferTimer(const Duration(seconds: 45), () {
+      _persistenceTimer = _persistenceDeadlineTimer(const Duration(seconds: 45), () {
         DebugLogManager.logEvent('pendant_custody', {'action': 'persistence_timeout', 'ring_id': ringId});
         cancelSync();
       });

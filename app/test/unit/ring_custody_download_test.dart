@@ -249,7 +249,7 @@ void main() {
   });
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
-      {Timer Function(Duration, void Function())? timer}) {
+      {Timer Function(Duration, void Function())? timer, Timer Function(Duration, void Function())? persistenceTimer}) {
     final custody = PendantRingCustody(
       walValidator: (ref) async {
         final path = await Wal.getFilePath(ref.fileName);
@@ -259,7 +259,7 @@ void main() {
       },
     );
     custodies.add(custody);
-    final sync = RingStorageSyncImpl(_Listener(), transferTimer: timer)
+    final sync = RingStorageSyncImpl(_Listener(), transferTimer: timer, persistenceTimer: persistenceTimer)
       ..testConnection = card
       ..testCustody = custody
       ..testWals = [wal];
@@ -518,7 +518,7 @@ void main() {
     final local = _FakeLocalSync()..indexGate = Completer<void>();
     final wal = ringWal(records: 61);
     void Function()? deadline;
-    final sync = syncWith(local, card, wal, timer: (duration, callback) {
+    final sync = syncWith(local, card, wal, persistenceTimer: (duration, callback) {
       if (duration == const Duration(seconds: 45)) deadline = callback;
       return Timer(duration, callback);
     });
