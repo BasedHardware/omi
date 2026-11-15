@@ -42,7 +42,12 @@ from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
 from utils.batch_pipeline.future_capture_decode import decode_future_units
-from utils.sync.receipt_clock import POLICY as FUTURE_CLOCK_POLICY, FutureCaptureRefused, FutureCaptureRetry
+from utils.sync.receipt_clock import (
+    POLICY as FUTURE_CLOCK_POLICY,
+    ESTIMATED_POLICY,
+    FutureCaptureRefused,
+    FutureCaptureRetry,
+)
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
@@ -431,13 +436,15 @@ def start_response(status: dict) -> JSONResponse:
 
 
 def upload_decoder(uid, device_id, context):
-    if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY:
+    if (context or {}).get('capture_clock_policy') in {FUTURE_CLOCK_POLICY, ESTIMATED_POLICY}:
         return partial(decode_future_units, uid=uid, device_id=device_id)
     return decode_units
 
 
 def upload_capture_trust(context):
-    return 'untrusted' if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY else None
+    return (
+        'untrusted' if (context or {}).get('capture_clock_policy') in {FUTURE_CLOCK_POLICY, ESTIMATED_POLICY} else None
+    )
 
 
 def _sync_unavailable_response() -> JSONResponse:

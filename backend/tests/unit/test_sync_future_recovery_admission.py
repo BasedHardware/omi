@@ -222,3 +222,8 @@ def test_requeued_estimate_with_run_token_meets_existing_upload_contract(admissi
     result = response.json()
     assert result['job_id'] and result['status'] == 'queued' and result['total_files'] == 1
     assert result['total_segments'] == 1 and result['poll_after_ms'] > 0
+    assert staged[0][0].capture_time_trust == 'untrusted'
+    assert staged[0][0].conversation_id.startswith('receipt-')
+    assert staged[0][0].capture_at == stamp
+    assert result['lane'] == 'backfill'
+    assert not anchors.rows  # The client's estimate is not replaced by a future-clock anchor.

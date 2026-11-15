@@ -228,11 +228,17 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
+    future_capture_clamp_enabled,
     is_early_capture_time,
     is_implausible_future_capture_time,
 )
 from utils.sync.clock_run import capture_clock_run_from_path
-from utils.sync.receipt_clock import POLICY as RECEIPT_CLOCK_POLICY, FutureCaptureRefused, require_future_upload
+from utils.sync.receipt_clock import (
+    POLICY as RECEIPT_CLOCK_POLICY,
+    ESTIMATED_POLICY,
+    FutureCaptureRefused,
+    require_future_upload,
+)
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -939,7 +945,15 @@ async def sync_local_files_v2(
         future_capture = any(
             is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at) for path in paths
         )
-        capture_clock_policy = None
+        estimated_capture = (
+            future_capture_clamp_enabled()
+            and not isinstance(conversation_id, str)
+            and any(
+                capture_clock_run_from_path(path) and not is_early_capture_time(get_timestamp_from_path(path))
+                for path in paths
+            )
+        )
+        capture_clock_policy = ESTIMATED_POLICY if estimated_capture else None
         if future_capture:
             future_paths = [
                 path
@@ -980,7 +994,7 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                if early_capture_received_at is not None or future_capture:
+                if early_capture_received_at is not None or future_capture or estimated_capture:
                     # Reset clocks prove no server-clock interval. Do not use
                     # a possibly years-wide client claim for session lookup;
                     # explicit targets and source-frame evidence stay intact.
@@ -1104,8 +1118,14 @@ async def sync_local_files_v2(
                 intake_context={
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
-                        {'capture_received_at': capture_received_at if future_capture else early_capture_received_at}
-                        if early_capture_received_at is not None or future_capture
+                        {
+                            'capture_received_at': (
+                                capture_received_at
+                                if future_capture or estimated_capture
+                                else early_capture_received_at
+                            )
+                        }
+                        if early_capture_received_at is not None or future_capture or estimated_capture
                         else {}
                     ),
                     'recording_session_id': recording_session_id,

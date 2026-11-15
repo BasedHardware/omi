@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Iterable, Optional
 
 from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.clock_run import capture_clock_run_from_path
 from utils.sync.capture_clock import (
     maximum_future_skew_seconds,
     early_capture_clamp_enabled,
@@ -76,6 +77,7 @@ def classify_sync_lane(
     allow_legacy_fresh: bool = False,
 ) -> SyncLaneDecision:
     """Classify a whole upload batch; mixed batches conservatively become backfill."""
+    filenames = list(filenames)
     capture_times: list[float] = []
     for filename in filenames:
         try:
@@ -104,6 +106,10 @@ def classify_sync_lane(
     early_clamped = early_capture_clamp_enabled() and any(is_early_capture_time(value) for value in capture_times)
     future_clamped = future_capture_clamp_enabled() and any(
         is_implausible_future_capture_time(value, now=effective_now) for value in capture_times
+    )
+    estimated = future_capture_clamp_enabled() and any(
+        capture_clock_run_from_path(name) and not is_early_capture_time(value)
+        for name, value in zip(filenames, capture_times)
     )
     if early_clamped or future_clamped:
         capture_times = [
@@ -141,13 +147,17 @@ def classify_sync_lane(
             maximum_age_seconds=maximum_age,
             automatic_recovery_allowed=False,
         )
-    if early_clamped or future_clamped:
-        # A reset clock proves no age: retain backfill pacing, never a fresh
+    if early_clamped or future_clamped or estimated:
+        # A reset or explicitly estimated clock proves no age: retain backfill pacing, never a fresh
         # trust upgrade. Valid historical siblings still obey lookback above.
         return SyncLaneDecision(
             lane=SyncLane.BACKFILL,
             trust=CaptureTimeTrust.UNTRUSTED,
-            reason='future_capture_clamped' if future_clamped else 'early_capture_clamped',
+            reason=(
+                'future_capture_clamped'
+                if future_clamped
+                else 'early_capture_clamped' if early_clamped else 'estimated_capture_isolated'
+            ),
             oldest_capture_at=oldest,
             newest_capture_at=newest,
             maximum_age_seconds=None,

@@ -6,7 +6,7 @@ by default) enter receipt recovery, including stamps only 601 seconds ahead.
 There is no 24-hour hole: clock error magnitude does not establish correctness.
 Within-tolerance skew, pre-2024 placement and deprecated V1 are unchanged.
 False/0/off/no restores typed HTTP 400 `invalid_capture_time` for new future
-admissions. The twelve dev/prod declarations are true, category `ops_kill`.
+admissions and the existing nonfuture estimated-upload behavior. The twelve dev/prod declarations are true, category `ops_kill`.
 No customer data migration or GPU image change is included.
 
 ## App contract and dates
@@ -14,7 +14,10 @@ No customer data migration or GPU image change is included.
 Upload the existing multipart WAL bytes, codec/rate filename, optional frame
 claims and custody proofs to `/v2/sync-local-files`. Untouched future filenames
 with no `_clke` token are accepted. A requeued file estimated within the normal
-skew window with a `_clke<run>_` token follows the existing estimated-time path.
+skew window with a `_clke<run>_` token keeps its supplied estimate but uses
+`estimated_source_isolated_v1`: per-source identity and untrusted chronology.
+It cannot merge with a real conversation or use its estimate for coverage.
+These marked estimates remain backfill, rather than taking fresh capacity.
 A marked future run needs the stable client-device header. An unmarked file
 needs no device/run identity: its owner and canonical single-file content HMAC
 identify it. Do not attach an unrelated explicit conversation target.
@@ -39,8 +42,10 @@ starts. Failed account/anchor reads or transactions return 503 with
 
 ## Fences and response
 
-The future-only decoder validates strict frame counts/full decoded durations
-before yielding units. It never coalesces independent files. Each source has
+The dedicated decoder validates strict future frame counts/full decoded durations
+before yielding units. It never coalesces independent files. Normal marked estimates use the existing
+strict decoder per original source, without a new receipt offset or Auth/anchor
+read, and inherit the same identity/trust fences. Each source has
 a content-derived `receipt-<HMAC>` conversation identity; projection parts of
 that source may append to that same identity, but distinct sources never bind
 by synthetic time. Job, projection and assignment retain

@@ -147,8 +147,10 @@ def test_combined_suffix_and_future_route_uses_main_normalizer_and_content_ident
     assert captured['content_id'] == expected_content_id
     assert Path(captured['paths'][0]).name == canonical
     assert pipeline.get_timestamp_from_path(captured['paths'][0]) == raw
-    assert ('capture_clock_policy' in captured['intake_context']) is untrusted
-    assert captured['lane'] == ('backfill' if untrusted else 'fresh')
+    assert captured['intake_context']['capture_clock_policy'] == (
+        'future_device_offset_v1' if untrusted else 'estimated_source_isolated_v1'
+    )
+    assert captured['lane'] == 'backfill'
 
 
 @pytest.mark.parametrize('untrusted_first', [False, True])

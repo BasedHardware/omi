@@ -17,6 +17,7 @@ from utils.sync.clock_run import capture_clock_run_from_path
 from utils.sync.files import get_timestamp_from_path
 
 POLICY = 'future_device_offset_v1'
+ESTIMATED_POLICY = 'estimated_source_isolated_v1'
 
 
 class FutureCaptureRefused(HTTPException):
