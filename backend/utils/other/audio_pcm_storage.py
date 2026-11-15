@@ -7,6 +7,8 @@ import time
 
 from prometheus_client import Counter, Histogram
 
+from utils.observability.fallback import record_fallback
+
 DECISIONS = Counter('omi_audio_pcm_storage_total', 'New PCM representation attempts', ['result'])
 INPUT_BYTES = Counter(
     'omi_audio_pcm_storage_input_bytes_total', 'PCM bytes admitted to encoding attempts, including retries'
@@ -136,5 +138,15 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                                 SAVED_BYTES.inc(len(pcm) - len(encoded))
         finally:
             _ENCODERS.release()
+    if result == 'deadline':
+        # Shared resilience telemetry: the optional representation was skipped and
+        # custody continues with original PCM. The domain counter below stays.
+        record_fallback(
+            component='audio_custody',
+            from_mode='flac',
+            to_mode='pcm16',
+            reason='timeout',
+            outcome='degraded',
+        )
     DECISIONS.labels(result).inc()
     return payload, codec

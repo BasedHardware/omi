@@ -197,6 +197,7 @@ ALLOWED_COMPONENTS = frozenset(
         'stt_live_session',
         'vad',
         'audio_merge',
+        'audio_custody',
         'webhook',
         'realtime_hub',
         'ptt_cascade',

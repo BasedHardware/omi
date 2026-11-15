@@ -24,7 +24,11 @@ instead of only each child:
 - **New closed-set outcome `deadline`** for a pack that does not fit the budget.
   A child killed at the two-second cap remains `encoder_error`; a child killed
   by the shared budget is `deadline`, so a slow surface is not reported as a
-  codec fault.
+  codec fault. Each `deadline` also calls the shared
+  `utils.observability.fallback.record_fallback` once
+  (`component="audio_custody"`, `from_mode="flac"`, `to_mode="pcm16"`,
+  `reason="timeout"`, `outcome="degraded"`) while the domain `DECISIONS`
+  counter is retained.
 
 Unchanged: eligibility (32,000 bytes–16 MiB mono PCM16 with a complete PCM
 identity proof), the 5% saving floor, byte-exact decode verification before the
@@ -50,6 +54,7 @@ disabled path and cannot requalify encoding.
 `tests/unit/test_audio_pcm_storage.py` covers the exhausted budget (no child
 launched), the budget-limited child timeout labelled `deadline`, the full
 two-second cap still labelled `encoder_error`, the encode/decode split of the
-shared budget, the no-budget-left-after-encode fallback, and the single-slot
-bound. Existing real-FFmpeg, writer, receipt, gapped-frame and rollback tests
-are unchanged.
+shared budget, the no-budget-left-after-encode fallback, the single-slot
+bound, and the shared fallback record (exactly one per `deadline`, none for a
+verified FLAC or the disabled switch). Existing real-FFmpeg, writer, receipt,
+gapped-frame and rollback tests are unchanged.

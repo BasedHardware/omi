@@ -55,8 +55,12 @@ mismatch/over-budget counts as well as deltas to catch a first event before
 the first scrape. The shared budget bounds the whole optional step at 0.4 s
 (plus process startup/cleanup), so `deadline` means the pack did not fit the
 surface's CPU rather than a codec fault; busy capacity falls back immediately
-rather than queueing another encoder. A disabled surface still times every call,
-so its p99 measures the disabled path and is not evidence about encoder latency.
+rather than queueing another encoder. Each `deadline` also records the shared
+resilience fallback
+`omi_fallback_total{component="audio_custody",from_mode="flac",to_mode="pcm16",reason="timeout",outcome="degraded"}`,
+so the skip is visible outside the domain counter. A disabled surface still
+times every call, so its p99 measures the disabled path and is not evidence
+about encoder latency.
 
 Release reads the following PromQL through the project's managed Prometheus
 API with `ro-prod`, separately for `job="prod-omi-backend-listen"` and
