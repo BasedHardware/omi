@@ -30,6 +30,14 @@ def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
     return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
+@pytest.fixture(scope="module")
+def runtime_manifest() -> dict:
+    # Both environment cases inspect the same immutable document. Reuse one
+    # safe parse instead of charging its large pure-Python parse to each call.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    return yaml.load((SCRIPT.parents[2] / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -548,9 +556,9 @@ def test_post_seal_controls_are_listen_only_rendered_bindings(environment, prefl
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment, runtime_manifest):
     root = SCRIPT.parents[2]
-    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments'][environment]
+    manifest = runtime_manifest['environments'][environment]
     classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
     key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
     assert key in classification
