@@ -231,6 +231,13 @@ def test_account_purge_removes_creator_owned_public_apps_and_nested_data(monkeyp
     experiments.document.assert_called_once_with('EXP-006-yearly-switch-retention')
     experiments.document.return_value.collection.return_value.document.assert_called_once_with('creator')
     experiments.document.return_value.collection.return_value.document.return_value.delete.assert_called_once_with()
+    assignment_delete = experiments.document.return_value.collection.return_value.document.return_value.delete
+    assignment_delete.side_effect = RuntimeError('assignment erase failed')
+    with pytest.raises(RuntimeError, match='assignment erase failed'):
+        purge_user_subtree('creator', client, recursive)
+    assignment_delete.side_effect = None
+    assert purge_user_subtree('creator', client, recursive)['status'] == 'ok'
+    assert assignment_delete.call_count == 3
 
 
 def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_expand_batch_scope():

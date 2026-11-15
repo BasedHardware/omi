@@ -8,9 +8,10 @@ No payer inference, new identity key, collection, or billing mutation lives here
 import os
 from datetime import datetime, timedelta, timezone
 
+from database._client import get_firestore_client
+from database.yearly_switch_retention import EXPERIMENT_ID, erase_assignment
 from utils import experiments
 
-EXPERIMENT_ID = 'EXP-006-yearly-switch-retention'
 ENGAGED_CAPTURES = 8
 WINDOW_DAYS = 14
 
@@ -24,16 +25,9 @@ def enabled() -> bool:
     )
 
 
-def erase_assignment(uid: str, client) -> None:
-    # A failed erase propagates into the existing retryable account wipe.
-    client.collection('experiments').document(EXPERIMENT_ID).collection('assignments').document(uid).delete()
-
-
 def assignment_exists(uid: str, client=None) -> bool:
     """Read the existing roster before billing or eligibility work on repeat visits."""
     if client is None:
-        from database._client import get_firestore_client
-
         client = get_firestore_client()
     snapshot = client.collection('experiments').document(EXPERIMENT_ID).collection('assignments').document(uid).get()
     return bool(snapshot.exists)
@@ -43,8 +37,6 @@ def admit(uid: str, placement: str, *, count_captures, blocked, client=None, now
     if placement not in {'cancel', 'engaged'} or not enabled() or blocked():
         return False
     if client is None:
-        from database._client import get_firestore_client
-
         client = get_firestore_client()
     now = now or datetime.now(timezone.utc)
     start = now - timedelta(days=WINDOW_DAYS)

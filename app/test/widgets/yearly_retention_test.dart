@@ -42,6 +42,7 @@ final offer = wire.GeneratedYearlySwitchResponse(
 
 class Usage extends UsageProvider {
   int cancellations = 0;
+  Completer<bool>? cancelResult;
   @override
   Future<void> fetchSubscription() async {}
   @override
@@ -49,7 +50,7 @@ class Usage extends UsageProvider {
   @override
   Future<bool> cancelUserSubscription({String? reason, String? reasonDetails}) async {
     cancellations++;
-    return false;
+    return cancelResult == null ? false : await cancelResult!.future;
   }
 }
 
@@ -215,6 +216,48 @@ void main() {
     expect(usage.cancellations, 1);
     pending.complete(null);
     await tester.pumpAndSettle();
+  });
+
+  iosTestWidgets('cancellation becoming busy during flag read prevents yearly confirmation', (tester) async {
+    final flag = Completer<bool>();
+    var reads = 0;
+    var previews = 0;
+    final usage = await pump(
+        tester,
+        CancelSubscriptionFlow(
+            loadOffer: () async => null,
+            yearlyClaim: (_) async => offer,
+            yearlyEnabled: () {
+              reads++;
+              return reads == 2 ? flag.future : Future.value(true);
+            },
+            yearlyPreview: ({bool preview = false}) async {
+              previews++;
+              return offer;
+            }));
+    usage.cancelResult = Completer<bool>();
+    await confirmStep(tester);
+    expect(reads, 1);
+    await tester.tap(find.byKey(const ValueKey('yearly_retention_cancel')));
+    await tester.pump();
+    expect(reads, 2);
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold).first));
+    await tester.tap(find.text(l10n.cancelSubscription));
+    await tester.pump();
+    expect(usage.cancellations, 1);
+    flag.complete(true);
+    // Cancellation intentionally remains pending, so its spinner cannot settle.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(previews, 0);
+    expect(find.byKey(const Key('yearly_switch_confirm')), findsNothing);
+    usage.cancelResult!.complete(false);
+    await tester.pumpAndSettle();
+    // The abandoned open releases its guard after the competing action finishes.
+    await tester.tap(find.byKey(const ValueKey('yearly_retention_cancel')));
+    await tester.pumpAndSettle();
+    expect(previews, 1);
+    expect(find.byKey(const Key('yearly_switch_confirm')), findsOneWidget);
   });
 
   iosTestWidgets('engaged placement renders once through rebuilds; flag off hides it', (tester) async {

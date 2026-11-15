@@ -8,7 +8,10 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 import database.users as users_db
+from database.account_deletion_policy import account_deletion_blocks_access
+from database.conversations import get_conversations_count
 from utils import yearly_switch, yearly_switch_retention
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -53,8 +56,6 @@ def admit_retention(placement: Literal['cancel', 'engaged'], uid: str = Depends(
     """Consume one UID admission, for either placement; never applies a switch."""
     if not yearly_switch_retention.enabled():
         return YearlySwitchResponse(eligible=False, reason='retention_disabled')
-    from database.account_deletion_policy import account_deletion_blocks_access
-    from database.conversations import get_conversations_count
 
     def blocked():
         return account_deletion_blocks_access(users_db.get_user_deletion_wipe_status(uid))
@@ -113,8 +114,6 @@ def admit_retention(placement: Literal['cancel', 'engaged'], uid: str = Depends(
         )
     except Exception:
         # This optional placement must never block the existing cancel path.
-        from utils.observability.fallback import record_fallback
-
         record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
         return YearlySwitchResponse(eligible=False, reason='unavailable')
     return (

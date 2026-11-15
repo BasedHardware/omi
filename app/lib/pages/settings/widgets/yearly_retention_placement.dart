@@ -171,7 +171,7 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
     _opening = true;
     final candidate = _candidate;
     try {
-      if (!await _checkEnabled() || !mounted || _candidate != candidate) return;
+      if (!await _checkEnabled() || !mounted || widget.busy || _candidate != candidate) return;
       final switched = await showYearlySwitchSheet(context,
           surface: widget.surface, load: widget.loadPreview, apply: widget.apply, readEnabled: widget.readEnabled);
       if (!mounted) return;

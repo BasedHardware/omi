@@ -79,6 +79,13 @@ helper was added or removed. Re-pinned only this purge scope with Python 3.11
 after the strict generation/erasure tests and all 31 owned loopback emulator
 checks passed. The inventory check also passes; no production data was accessed.
 
+The independent second-look correction moves that same UID erase into
+`database/yearly_switch_retention.py` and imports it at module scope. Its target,
+ordering, propagated failure and retry semantics are unchanged. Re-audited the
+purge fingerprint after this import-only scope change: the strict generation/
+erasure suites and all 31 owned loopback emulator checks pass again; People
+subtree and generation-head erasure remain unchanged.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter

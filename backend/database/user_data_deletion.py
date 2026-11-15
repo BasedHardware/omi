@@ -12,6 +12,7 @@ from database._client import get_data_plane_firestore_client
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
+from database.yearly_switch_retention import erase_assignment
 from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
 from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
 from database.redis_db import delete_app_cache_by_id, delete_generic_cache
@@ -79,7 +80,5 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     stop_quiet_checks_for_account(uid, firestore_client=client)
     # EXP-006 uses the existing top-level UID experiment roster. Its row is
     # outside the user subtree; erase explicitly on every wipe/retry.
-    from utils.yearly_switch_retention import erase_assignment
-
     erase_assignment(uid, client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

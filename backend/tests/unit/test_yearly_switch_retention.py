@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
+from database.yearly_switch_retention import erase_assignment
 from utils import experiments, yearly_switch_retention as retention
 
 
@@ -75,6 +76,19 @@ def test_cancel_does_not_require_engagement():
     assert admit(FakeFirestore(), uid_for('treatment'), count=0)
 
 
+def test_default_firestore_client_is_requested_only_at_call_time(monkeypatch):
+    client = Mock(return_value=FakeFirestore())
+    monkeypatch.setattr(retention, 'get_firestore_client', client)
+    monkeypatch.setenv('YEARLY_SWITCH_RETENTION_ENABLED', 'false')
+    assert not retention.admit(uid_for('treatment'), 'cancel', count_captures=Mock(), blocked=lambda: False)
+    client.assert_not_called()
+    monkeypatch.setenv('YEARLY_SWITCH_RETENTION_ENABLED', 'true')
+    assert retention.admit(uid_for('treatment'), 'cancel', count_captures=Mock(), blocked=lambda: False)
+    client.assert_called_once_with()
+    assert retention.assignment_exists(uid_for('treatment'))
+    assert client.call_count == 2
+
+
 def test_failed_enrollment_cannot_deliver(monkeypatch):
     monkeypatch.setattr(experiments, 'enroll', lambda **_: None)
     assert not admit(FakeFirestore(), uid_for('treatment'))
@@ -91,15 +105,15 @@ def test_erase_is_retryable_uid_scoped_and_failure_propagates():
     db = FakeFirestore()
     for uid in ('synthetic-a', 'synthetic-b'):
         experiments.enroll(experiment_id=retention.EXPERIMENT_ID, uid=uid, firestore_client=db)
-    retention.erase_assignment('synthetic-a', db)
-    retention.erase_assignment('synthetic-a', db)
+    erase_assignment('synthetic-a', db)
+    erase_assignment('synthetic-a', db)
     assert len(db.docs) == 1 and next(iter(db.docs)).endswith('/synthetic-b')
     bad = Mock()
     bad.collection.return_value.document.return_value.collection.return_value.document.return_value.delete.side_effect = RuntimeError(
         'erase failed'
     )
     with pytest.raises(RuntimeError, match='erase failed'):
-        retention.erase_assignment('synthetic-b', bad)
+        erase_assignment('synthetic-b', bad)
 
 
 def test_concurrent_eligible_hosts_only_one_delivery(monkeypatch):
@@ -127,7 +141,6 @@ def retention_http(monkeypatch):
     # Cold router imports and ASGI startup are setup, not admission CPU work.
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    import database.conversations as conversations
     import routers.yearly_switch as routes
     from utils.yearly_switch import YearlySwitch
 
@@ -150,7 +163,7 @@ def retention_http(monkeypatch):
         routes.yearly_switch, 'get_offer', lambda _: YearlySwitch(True, 'eligible', yearly_amount=26991)
     )
     count = Mock(return_value=8)
-    monkeypatch.setattr(conversations, 'get_conversations_count', count)
+    monkeypatch.setattr(routes, 'get_conversations_count', count)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: uid_for('treatment')
