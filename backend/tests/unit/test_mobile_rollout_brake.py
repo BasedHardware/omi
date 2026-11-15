@@ -435,7 +435,7 @@ class BrakeTests(unittest.TestCase):
 
         credentials_factory.assert_called_once_with(
             {"type": "service_account"},
-            scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"],
+            scopes=["https://www.googleapis.com/auth/cloud-scheduler"],
         )
         session_factory.return_value.get.assert_called_once_with(
             "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"

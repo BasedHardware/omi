@@ -198,6 +198,26 @@ def test_android_first_sight_pending_production_code_creates_bounded_hide():
     assert (repairs, clears) == (1, 0)
 
 
+def test_android_completed_old_build_does_not_clear_a_pending_replacement_hide():
+    config = {
+        'hidden_versions': ['3.0.0'],
+        'review_submission_entries': [active_entry('android', '3.0.0', code='412')],
+    }
+
+    updated, repairs, clears = lifecycle.reconcile_android_config(
+        config,
+        production_codes={'412'},
+        pending_versions_by_code={'413': '3.0.0'},
+        now=NOW,
+    )
+
+    assert updated['hidden_versions'] == ['3.0.0']
+    assert [(entry['version_code'], entry['state']) for entry in updated['review_submission_entries']] == [
+        ('413', 'active')
+    ]
+    assert (repairs, clears) == (1, 0)
+
+
 def test_android_first_sight_does_not_recreate_an_expired_tombstone():
     tombstone = active_entry('android', '3.0.0', code='412')
     tombstone['state'] = 'expired'
@@ -255,6 +275,21 @@ def test_replayed_receipt_does_not_extend_an_active_submission_lease():
     row = updated["review_submission_entries"][0]
     assert row["expires_at"] == existing["expires_at"]
     assert row["owns_hidden_version"] is True
+
+
+def test_new_android_build_receipt_gets_a_full_lease():
+    existing = active_entry("android", "3.0.0", code="412", expiry=NOW + timedelta(minutes=1))
+    config = {"hidden_versions": ["3.0.0"], "review_submission_entries": [existing]}
+
+    updated = lifecycle.record_submission_config(
+        config, platform="android", version="3.0.0", version_code="413", now=NOW
+    )
+
+    assert len(updated["review_submission_entries"]) == 1
+    row = updated["review_submission_entries"][0]
+    assert row["version_code"] == "413"
+    assert row["submitted_at"] == NOW.isoformat().replace("+00:00", "Z")
+    assert row["expires_at"] == (NOW + timedelta(days=14)).isoformat().replace("+00:00", "Z")
 
 
 def test_fresh_receipt_replaces_a_past_deadline_with_a_full_lease():

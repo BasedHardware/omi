@@ -156,7 +156,10 @@ def record_submission_config(
         (
             entry
             for entry in reversed(entries)
-            if entry.get('platform') == platform and entry.get('version') == version and entry.get('state') == 'active'
+            if entry.get('platform') == platform
+            and entry.get('version') == version
+            and entry.get('state') == 'active'
+            and (platform != 'android' or entry.get('version_code') == version_code)
         ),
         None,
     )
@@ -291,17 +294,19 @@ def reconcile_android_config(
     # A missing receipt must not leave a held/draft/in-progress production
     # release visible. Create a bounded lease once, while preserving expired
     # tombstones so a sweep cannot silently re-arm a version after its lease.
-    for code, version in (pending_versions_by_code or {}).items():
-        same_version = [
+    pending_versions_by_code = pending_versions_by_code or {}
+    for code, version in pending_versions_by_code.items():
+        same_code = [
             entry
             for entry in entries
             if entry.get('platform') == 'android'
+            and entry.get('version_code') == code
             and isinstance(entry.get('version'), str)
             and _same_visible_version(entry['version'], version)
         ]
-        if any(entry.get('state') == 'active' for entry in same_version):
+        if any(entry.get('state') == 'active' for entry in same_code):
             continue
-        if any(entry.get('state') == 'expired' for entry in same_version):
+        if any(entry.get('state') == 'expired' for entry in same_code):
             continue
         _append_hidden(hidden, version)
         current = now or _now_utc()
@@ -325,9 +330,20 @@ def reconcile_android_config(
         if entry.get('platform') == 'android' and isinstance(code, str) and code in production_codes:
             version = entry.get('version')
             was_hidden = isinstance(version, str) and any(_same_visible_version(item, version) for item in hidden)
-            if isinstance(version, str):
+            other_pending = isinstance(version, str) and any(
+                other_code != code
+                and _same_visible_version(other_version, version)
+                and any(
+                    entry.get('platform') == 'android'
+                    and entry.get('version_code') == other_code
+                    and entry.get('state') == 'active'
+                    for entry in entries
+                )
+                for other_code, other_version in pending_versions_by_code.items()
+            )
+            if isinstance(version, str) and not other_pending:
                 hidden[:] = [item for item in hidden if not _same_visible_version(item, version)]
-            if was_hidden and isinstance(version, str):
+            if was_hidden and isinstance(version, str) and not other_pending:
                 clears += 1
             continue
         # L1 records are authoritative for a submitted version even if an

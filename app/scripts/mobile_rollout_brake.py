@@ -48,7 +48,7 @@ def scheduler_job_json() -> object:
 
         credentials = service_account.Credentials.from_service_account_info(
             json.loads(credentials_raw),
-            scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"],
+            scopes=["https://www.googleapis.com/auth/cloud-scheduler"],
         )
         session = AuthorizedSession(credentials)
         response = session.get(
