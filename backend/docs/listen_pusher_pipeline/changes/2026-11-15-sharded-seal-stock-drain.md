@@ -66,32 +66,24 @@ of 8–10k seals/h gives 2.7–3.6h for a hypothetical 27–29k sealable subset.
 actual remaining sealable share is unknown: partial/privacy rows must stay
 unsealed. This estimate includes no guarantee of GPU completion or notes.
 
-The synthetic canonical privacy walk uses 16 document reads on an uncontended
-successful seal. At 10k seals/h, canonical reads are about 160k/h before retries
-and SDK fences. Five fresh scanners cost at most 307,200 metadata reads/h;
-initial scans at most 120,000/h; one full 31,319-row stock scan per shard per
-25m is about 376k/h. Total nominal sizing is about 0.97M/h before fence/retry
-allowances. Use a conservative **4M reads/h planning envelope ($2.04/h at
-$0.51/million)**, allowing up to 15x the 16-read canonical model plus metadata
-and margin. This is a sizing upper estimate at the stated stock/rate, not a
-hard billing cap or measured production read cost; remeasure terminal child
-probe totals and retry rates after deployment. Normal traffic/admission reads,
-GCS/network, CPU nodes and vendor spend are separate.
+The synthetic canonical privacy walk now uses **20 document reads** per
+uncontended successful repair: the prior16 plus one committed-source revision
+read and three deletion/source/ledger fence reads. The same shared post-seal
+hook as the pusher runs after repair commits, fails open, and counts admission
+only when record_admitted_at was first stamped in the real seal transaction.
+The committed revision lets a proven repair supersede an earlier failed ledger
+stage without treating an old admission as a new one. A reopened producer map
+before the observation causes the closed-source observation to be skipped.
 
-Main #25304 adds a separate, fail-open post-seal ledger transaction on
-`database.record_audio.seal_record_audio`: three fenced document reads and at
-most one ledger write per first admission. At 10k first admissions/h, allow
-another 30k reads/h and 10k writes/h: nominal read sizing becomes about
-0.99M/h ($0.51/h), still within the 4M/h planning envelope. Canonical repair
-itself writes one conversation and, when claim-safe, one intake wake: 10–20k
-document writes/h; including the ledger allowance gives 20–30k writes/h.
-The supplied $0.51/million price is for reads only; ledger write charges are
-additional and not priced here. The repair's existing direct
-`apply_seals` transaction does not invoke that new pusher ledger writer, so its
-ledger admission coverage remains a separate integration gap, not an asserted
-effect or a dependency of this drain. Privacy/source deletion fences on the
-new ledger writer are unchanged. Ledger retries are included only as a sizing
-allowance; production billing is not verified.
+At10k seals/h, canonical reads are200k/h; fresh scans<=307200/h, initial scans
+<=120000/h and one31319-row stock pass/shard/25min approximately376k/h. Nominal
+sizing is about1.00M reads/h ($0.51/h at$0.51/million), approximately100reads/seal.
+The conservative4M reads/h planning envelope remains$2.04/h (400reads/seal);
+it is an estimate allowing retry/fence overhead, not a billing hard cap.
+Canonical repair writes one conversation and, when claim-safe, one intake wake,
+plus at most one ledger write:20–30k document writes/h at10k seals/h. The given
+read price does not price writes. Normal admission, GCS, CPU nodes, index-entry
+reads and vendor spend are separate; actual billing is unverified.
 
 At 00:39Z the fleet completed about 588 audio-hours/hour. At the supplied ~20%
 utilization, linear extrapolation is ~2940 audioh/h total, ~2350 spare, unverified.
@@ -100,50 +92,91 @@ this is an audio-demand proxy, not measured uploaded audio. RECENT/DEEP ready
 can grow. Fresh stays in the existing higher class, subject to the unchanged
 non-preemptible flight already running; observe fresh ready and wait metrics.
 
-## Target-only rollout and rollback
+## Target-only prepare, server validation, apply and readback
 
-Use the approved second train's immutable repair-capable image. The backend CPU
-image contains the repair script and ffmpeg; the release owner must smoke its
-repair entrypoint. Pin it via recordSealRepair.imageRepository/imageDigest,
-leaving image.repository/image.digest (the GPU artifact) unchanged. First deploy
-intake priority to Cloud Run/listen and verify new old-capture units use
-RECENT/DEEP. Then run these commands from the combined checkout, using a private
-scratch directory and **no Helm upgrade/apply of the whole chart**:
+Release Cloud Run/listen intake priority first; verify old native captures use
+RECENT/DEEP. Smoke the approved CPU image repair entrypoint. The release owner
+must set REPAIR_REPOSITORY/REPAIR_DIGEST to that approved immutable CPU artifact,
+GPU_REPOSITORY/GPU_DIGEST to the current GPU pins (render input only), and
+BEFORE_REPAIR_IMAGE to the independently approved current repair image. This
+lane does not execute dry-run or writes; those commands belong to the release
+owner's authorized operator tier. No full-chart Helm upgrade/apply is allowed.
+
+The tool is offline. It rejects incompatible selectors, entrypoints, resource
+budgets, existing index/failure policies and gates. It preserves every policy
+map, cohort, secret ref and unrelated field. An absent fresh switch is added;
+a present true switch is retained; an explicit false kill switch blocks this
+expansion. Workers stay8. Prepare saves a mode0600 receipt containing the full
+before/after specs, hashes, complete approved delta, and original image. It also
+saves a private inverse template BEFORE apply; no reviewed field is omitted.
 
 ```sh
+set -e
 umask 077
 TASK_DIR=$(mktemp -d /Volumes/Ephemeral/scratch/seal-drain.XXXXXX)
 CHART=backend/charts/batch-pipeline-worker
-# REPAIR_REPOSITORY and REPAIR_DIGEST are the release owner's smoke-verified CPU image.
-# GPU_REPOSITORY and GPU_DIGEST are the current pinned GPU image; render input only.
+REPAIR_TOOL=backend/deploy/record-seal-repair/render_stock_drain_patch.py
+REPAIR_PY=backend/.venv/bin/python
+# Pre-read and record the pre-change fresh-ready age/count baseline.
+kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/before.json"
 helm template prod-omi-batch-pipeline-worker "$CHART" -n prod-omi-backend \
   -f "$CHART/prod_omi_batch-pipeline-worker_values.yaml" \
   --set-string image.repository="$GPU_REPOSITORY" --set-string image.digest="$GPU_DIGEST" \
   --set-string recordSealRepair.imageRepository="$REPAIR_REPOSITORY" \
   --set-string recordSealRepair.imageDigest="$REPAIR_DIGEST" \
-  --set recordSealRepair.shards=5 \
-  --show-only templates/record-seal-repair.yaml > "$TASK_DIR/rendered.yaml"
-kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/live.json"
-backend/.venv/bin/python backend/deploy/record-seal-repair/render_stock_drain_patch.py \
-  --live-json "$TASK_DIR/live.json" --rendered-yaml "$TASK_DIR/rendered.yaml" \
-  --output "$TASK_DIR/patch.json"
+  --set recordSealRepair.shards=5 --show-only templates/record-seal-repair.yaml > "$TASK_DIR/rendered.yaml"
+"$REPAIR_PY" "$REPAIR_TOOL" prepare --live-json "$TASK_DIR/before.json" \
+  --rendered-yaml "$TASK_DIR/rendered.yaml" --expected-image "$BEFORE_REPAIR_IMAGE" --out "$TASK_DIR"
+# Review approvedDelta privately; never print or commit policy/cohort packets.
 kubectl -n prod-omi-backend patch cronjob record-seal-repair --type=json \
-  --patch-file "$TASK_DIR/patch.json"
+  --patch-file "$TASK_DIR/forward.json" --dry-run=server -o json > "$TASK_DIR/dry-run.json"
+"$REPAIR_PY" "$REPAIR_TOOL" check-object --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/dry-run.json" --state after
+# Generate the private inverse before applying. This binding is a dry-run RV;
+# refresh it from a fresh readback before any real rollback.
+"$REPAIR_PY" "$REPAIR_TOOL" rollback --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/dry-run.json" --output "$TASK_DIR/rollback.pending.json"
+# Only after all commands above pass, apply the reviewed forward packet.
+kubectl -n prod-omi-backend patch cronjob record-seal-repair --type=json \
+  --patch-file "$TASK_DIR/forward.json" -o json > "$TASK_DIR/applied.json"
+kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/readback.json"
+"$REPAIR_PY" "$REPAIR_TOOL" verify --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/readback.json" --state after
 ```
 
-The offline renderer only patches schedule/jobTemplate on this exact CronJob,
-checks resourceVersion atomically and preserves live effective serving policy,
-producer-lease gates, existing fresh kill setting, secret refs, KSA and other pod
-fields. It changes repair image, shard count/index, placement/resources and the
-per-pod worker count. Never print or commit its private input/output files.
-A resourceVersion mismatch requires a fresh read/re-render; never bypass the CAS.
-No GPU Deployment, continuous worker, RBAC or monitoring resource is applied.
+Every command is gated on the preceding command succeeding. Run with shell
+`set -e` or stop at the first failure. A server-dry-run/defaulting difference,
+object replacement, resourceVersion race, receipt mutation or unapproved spec
+change is a HOLD: re-read and review a new packet; never weaken its checks.
+Checks compare the entire spec, so every changed field and every unchanged
+policy field must match. The tool never calls Kubernetes and never writes an
+account or recording. No GPU Deployment, worker runtime, RBAC or monitoring
+resource is applied.
 
-Rollback: repeat the same render/get/patch sequence with
-`--set recordSealRepair.shards=1`; keep intake age priority on. The existing Job
-finishes under Forbid (at most 1680s), then future Jobs have one pod. This is not
-an immediate stop of already running shards. For a complete source rollback,
-use the release owner's approved prior repair digest and saved prior CronJob
-shape; never restore the GPU image or alter producer/privacy proofs. After the
-change, verify CronJob completion counts, all five pod indexes, CPU-only placement,
-row dispositions, fresh ready/wait, intake claim refusals and serving identities.
+## Full footprint rollback
+
+Set shards=1 only to reduce future capacity; it is NOT a footprint rollback.
+The inverse below restores the exact original image, schedule, resources,
+placement, tolerations, index mode/fields, args, env, mounts and volumes. It is
+UID/resourceVersion/spec guarded and emits only after the current after-spec
+matches the approved receipt. Active Jobs finish under Forbid within1680s;
+this CronJob rollback does not immediately terminate them.
+
+```sh
+kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/current.json"
+"$REPAIR_PY" "$REPAIR_TOOL" rollback --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/current.json" --output "$TASK_DIR/rollback.json"
+kubectl -n prod-omi-backend patch cronjob record-seal-repair --type=json \
+  --patch-file "$TASK_DIR/rollback.json" --dry-run=server -o json > "$TASK_DIR/rollback-dry-run.json"
+"$REPAIR_PY" "$REPAIR_TOOL" check-object --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/rollback-dry-run.json" --state before
+kubectl -n prod-omi-backend patch cronjob record-seal-repair --type=json \
+  --patch-file "$TASK_DIR/rollback.json" -o json > "$TASK_DIR/rolled-back.json"
+kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/rollback-readback.json"
+"$REPAIR_PY" "$REPAIR_TOOL" verify --receipt "$TASK_DIR/receipt.json" \
+  --object "$TASK_DIR/rollback-readback.json" --state before
+```
+
+Keep intake age priority enabled during a repair rollback. The packet preserves
+policy; refreshing RECORD_SEAL_REPAIR_SERVER_FLAGS is a separate operation and
+is not implemented by this stock-drain tool.
