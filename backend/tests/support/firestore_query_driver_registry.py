@@ -49,6 +49,7 @@ from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipe
 from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
+from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
@@ -4613,3 +4614,6 @@ _add(
         domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )
+
+for _composer_default_context_entry in composer_default_context_entries():
+    _add(_composer_default_context_entry)

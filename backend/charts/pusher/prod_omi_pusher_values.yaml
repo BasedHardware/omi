@@ -115,6 +115,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED
+    value: "true"
   - name: EPISODE_COMPOSER_CONTEXT_ENABLED
     value: "true"
   - name: EPISODE_COMPOSER_DETAIL_ENABLED
