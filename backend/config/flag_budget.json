@@ -617,6 +617,11 @@
       "review_by": "2026-11-28",
       "registry": "config/feature-flags.yaml"
     },
+    "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED": {
+      "owner": "q12-live-notes",
+      "registry": "config/feature-flags.yaml",
+      "review_by": "2026-12-14"
+    },
     "HOSTED_LID_API_URL": {
       "owner": "planscost",
       "review_by": "2026-11-30"
