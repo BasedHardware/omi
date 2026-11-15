@@ -33,6 +33,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';

@@ -15,6 +15,7 @@ import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Ring-buffer storage sync for firmware 3.0.20+ (omi PR #7216).
@@ -97,9 +98,12 @@ class RingStorageSyncImpl implements RingStorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   final Timer Function(Duration, void Function()) _transferTimer;
+  final DateTime Function() _clock;
 
-  RingStorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
-      : _transferTimer = transferTimer ?? Timer.new;
+  RingStorageSyncImpl(this.listener,
+      {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock})
+      : _transferTimer = transferTimer ?? Timer.new,
+        _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -479,6 +483,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     final status = await connection.getRingStatus();
     if (!stillEpoch()) return false;
     final rtcValid = status?.isRtcValid ?? false;
+    final phoneNow = _clock().millisecondsSinceEpoch ~/ 1000;
+    bool useRecordTime(int ts) => rtcValid && useDeviceCaptureTime(ts, phoneNow);
 
     final custodyDeviceId = _device!.id;
     final effectiveCaps = connection.ringEffectiveCaps;
@@ -512,7 +518,9 @@ class RingStorageSyncImpl implements RingStorageSync {
     // spans one), and the estimated-clock run it belongs to (null = device clock).
     final recordBreaks = <bool>[];
     final recordRuns = <String?>[];
+    bool clockWarningReported = false;
     int? lastRecordTs;
+    int? lastRawRecordTs;
     String? currentRun;
     int provenSeq = readStart;
     int skippedDuplicates = 0;
@@ -580,7 +588,7 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final chunkSeqs = recordSeqs.sublist(0, recordsToTake);
         final chunk = bytesData.sublist(0, framesToTake);
-        final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
+        final chunkTimerStart = (recordTimestamps.isNotEmpty && useRecordTime(recordTimestamps.first))
             ? recordTimestamps.first
             : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
                 bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
@@ -604,6 +612,14 @@ class RingStorageSyncImpl implements RingStorageSync {
             bufferBaseElapsed = elapsedTotal - bytesData.length;
             if (finalFlush && recordFrameCounts.isEmpty) break;
             continue;
+          }
+          // An underestimate of the unread region must not let a long untimed
+          // stream run into an impossible date. Fail closed before persistence
+          // and leave its unproven records on the pendant.
+          if (!deviceCaptureClockRepairOff &&
+              chunkClockRun != null &&
+              (!phoneCaptureClockPlausible(phoneNow) || !deviceCaptureTimePlausible(chunkTimerStart, phoneNow))) {
+            throw StateError('Estimated ring clock outside plausible window; retain unproven records');
           }
           final localSync = _localSync;
           if (localSync == null) throw StateError('LocalWalSync unavailable; refusing release');
@@ -731,19 +747,31 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final record in reassembler.drainRecords()) {
         final seq = readStart + recordsConsumed;
         recordsConsumed += 1;
-        final ts = RingProtocol.readRecordTimestamp(record);
+        final rawTs = RingProtocol.readRecordTimestamp(record);
+        // Normalize only presentation time. seq/ringId and every durability
+        // proof below continue to come from the untouched ring coordinates.
+        final ts = deviceCaptureClockRepairOff || useRecordTime(rawTs) ? rawTs : 0;
+        if (rawTs > 0 && ts == 0 && !clockWarningReported) {
+          clockWarningReported = true;
+          DebugLogManager.logWarning('Implausible ring timestamp; capture date estimated, byte integrity unverified', {
+            'device_time_seconds': rawTs,
+            'phone_time_seconds': phoneNow,
+            'ring_id': ringId,
+            'seq': seq,
+          });
+        }
         final audio = record.sublist(RingProtocol.timestampBytes);
         final frames = RingProtocol.parseAudioPayload(audio);
         elapsedTotal += frames.length;
 
         // Anchor timerStart on the first usable timestamp.
         if (firstRecordTs == null) {
-          if (rtcValid && ts > 0) {
+          if (useRecordTime(ts)) {
             firstRecordTs = ts;
           } else {
             // Fallback: now - estimated duration of the unread region.
             final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
+            firstRecordTs = estimatedDeviceStart(phoneNow, estSecs);
           }
         }
 
@@ -753,20 +781,33 @@ class RingStorageSyncImpl implements RingStorageSync {
           continue;
         }
 
+        final lastUsableRecordTs = lastRecordTs;
         final boundary = ringRecordClockBoundary(
           previousTs: lastRecordTs,
           ts: ts,
           rtcValid: rtcValid,
           currentRun: currentRun,
         );
-        currentRun = boundary.run;
+        // Invalid wall time cannot place audio on a calendar, but a reset or
+        // jump still forbids claiming that two stretches share one clock run.
+        final rawStep = lastRawRecordTs == null ? null : rawTs - lastRawRecordTs!;
+        final untrustedBreak = !deviceCaptureClockRepairOff &&
+            ts == 0 &&
+            ((lastUsableRecordTs != null && lastUsableRecordTs > 0) ||
+                (rtcValid &&
+                    rawTs > 0 &&
+                    lastRawRecordTs != null &&
+                    lastRawRecordTs! > 0 &&
+                    (rawStep! < 0 || rawStep > ringRecordGapBreakSeconds)));
+        currentRun = untrustedBreak ? Wal.newClockRun() : boundary.run;
         lastRecordTs = ts;
+        lastRawRecordTs = rawTs;
 
         recordSeqs.add(seq);
         recordTimestamps.add(ts);
         recordFrameCounts.add(frames.length);
-        recordBreaks.add(boundary.breaks);
-        recordRuns.add(boundary.run);
+        recordBreaks.add(boundary.breaks || untrustedBreak);
+        recordRuns.add(currentRun);
         bytesData.addAll(frames);
       }
 
