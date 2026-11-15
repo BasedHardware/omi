@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
+# Ready rows scanned when a blocked record sibling hides independent work.
+RECORD_SIBLING_PROBE_ROWS = FRESH_PROBE_ROWS + 128
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -568,7 +570,7 @@ class OrderedMerge:
                         if (cursor.get('head') == strict_blocked['segment_id'])
                         else None
                     )
-                    page = self.store.ready_pending(key, FRESH_PROBE_ROWS + 128, after=after)
+                    page = self.store.ready_pending(key, RECORD_SIBLING_PROBE_ROWS, after=after)
 
                     def independent(tx):
                         over_depth = bool(depth and _awaiting_projection(tx, tx.get('owners', key)) >= depth)
@@ -590,7 +592,7 @@ class OrderedMerge:
                         def remember(tx):
                             tx.check_privacy(owner_id)
                             current = tx.get('owners', key)
-                            if len(page) >= FRESH_PROBE_ROWS + 128:
+                            if len(page) >= RECORD_SIBLING_PROBE_ROWS:
                                 current['record_sibling_cursor'] = {
                                     'head': strict_blocked['segment_id'],
                                     'capture_at': page[-1]['capture_at'],

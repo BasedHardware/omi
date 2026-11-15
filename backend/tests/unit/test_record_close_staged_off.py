@@ -29,9 +29,18 @@ def test_shipping_switch_defaults_are_independent(monkeypatch, value):
     assert close_fast_path_enabled() and seal_wake_enabled()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('ending', ['normal', 'rollover', 'disconnect', 'cloud_tasks'])
-async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(inline_session, monkeypatch, ending):
+@pytest.fixture(scope='module')
+def protocol_harness():
+    # AsyncMock's first signature/spec inspection is shared setup, not work
+    # performed by an audio drain. Each case still drives the real protocol.
+    return SimpleNamespace(
+        process=AsyncMock(),
+        optional=SimpleNamespace(submit=Mock(return_value=True), wait_owner=AsyncMock()),
+    )
+
+
+@pytest.fixture
+def legacy_session(inline_session, monkeypatch, ending, protocol_harness):
     client, path, _, projected = inline_session
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     client.rows[path]['status'] = 'completed'
@@ -51,11 +60,10 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(inlin
     monkeypatch.setattr(
         listen_pusher_session, 'PendingClose', Mock(side_effect=AssertionError('disabled close allocated'))
     )
-    monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
+    monkeypatch.setattr(pusher, 'process_conversation_task', protocol_harness.process)
     # Optional worker behavior has its own blocked-discovery proof. Keep this
     # matrix focused on real receipt/token/seal/wake and durable marker writes.
-    optional = SimpleNamespace(submit=Mock(return_value=True), wait_owner=AsyncMock())
-    monkeypatch.setattr(pusher_playback_coordinator, 'coordinator', lambda: optional)
+    monkeypatch.setattr(pusher_playback_coordinator, 'coordinator', lambda: protocol_harness.optional)
     offered = []
     socket = FakePusherWebSocket()
 
@@ -71,10 +79,6 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(inlin
         config_overrides={'uid': 'owner', 'sample_rate': 16000},
         deps_overrides={'connect_to_pusher': connect, 'get_current_conversation_id': lambda: binding['cid']},
     )
-    await session.connect()
-    assert 'record_close_protocol' not in offered[0]
-    assert session.pending_record_closes is None and session.record_close_boundaries is None
-    session.audio_bytes_send(b'\x01\x00', 100)
     route = 'pusher' if ending == 'normal' else 'cloud_tasks'
     persist = AsyncMock(return_value={'route': route, 'job_id': 'job', 'dispatch_generation': 1})
     host = SimpleNamespace(
@@ -88,6 +92,32 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(inlin
     monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
     controller = LiveConversationController(host)
     controller.on_conversation_processing_started = Mock()
+    return SimpleNamespace(
+        client=client,
+        path=path,
+        projected=projected,
+        job_path=job_path,
+        offered=offered,
+        socket=socket,
+        binding=binding,
+        active=active,
+        session=session,
+        host=host,
+        controller=controller,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ending', ['normal', 'rollover', 'disconnect', 'cloud_tasks'])
+async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(legacy_session, ending):
+    harness = legacy_session
+    session, host, controller = harness.session, harness.host, harness.controller
+    client, path, projected = harness.client, harness.path, harness.projected
+    socket, binding, active = harness.socket, harness.binding, harness.active
+    await session.connect()
+    assert 'record_close_protocol' not in harness.offered[0]
+    assert session.pending_record_closes is None and session.record_close_boundaries is None
+    session.audio_bytes_send(b'\x01\x00', 100)
     assert await controller.schedule_finalization('conversation')
     host.request_recording_close.assert_not_awaited()
     assert not await session.request_recording_close('conversation')
@@ -121,6 +151,6 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(inlin
     assert all(struct.unpack('<I', frame[:4])[0] not in {204, 206} for frame in sock.sent)
     assert client.rows[path]['record_audio_closed'] and client.rows[path]['record_upload_sessions'] == {}
     assert b''.join(chunk['data'] for batch in projected for chunk in batch[0]) == b'\x01\x00\x02\x00'
-    assert client.rows[job_path]['available_at'] == 0
+    assert client.rows[harness.job_path]['available_at'] == 0
     pusher.PusherCloseState.assert_not_called()
     listen_pusher_session.PendingClose.assert_not_called()
