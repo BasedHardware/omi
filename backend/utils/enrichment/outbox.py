@@ -609,9 +609,13 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     owner = uuid.uuid4().hex
     cache: dict[str, FirstSummaryPolicy] = {}
     stamps: list[tuple[str, str]] = []
+    expired_sources = []
+    claim_owner = []
 
     def claim(old: Row | None) -> tuple[Row | None, tuple[str, Row | None]]:
         stamps.clear()
+        expired_sources.clear()
+        claim_owner.clear()
         if old is None or old.get('dormant') or old['task_token'] != task_token:
             return old, ('stale', None)
         if old.get('lease_until', 0) > current:
@@ -624,6 +628,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
+        if row.get('record_notes_producers'):
+            from database import record_notes_hold
+
+            status, blocked = record_notes_hold.admit(row, get_firestore_client(), now=current)
+            if status == 'stale':
+                expired_sources.extend(blocked)
+                claim_owner.append(row['uid'])
+                return row, ('stale', None)
+            if status == 'deferred':
+                return row, ('deferred', row)
+
         first_summary = first_summary_pending(row)
         lease_seconds = FIRST_SUMMARY_LEASE_SECONDS if first_summary else LEASE_SECONDS
         row.update(lease_until=current + lease_seconds, owner=owner)
@@ -631,6 +646,10 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
     status, row = _mutate(document_id, claim)
     record_summary_stamps(stamps)
+    if expired_sources:
+        from database import record_notes_hold
+
+        record_notes_hold.record_timeout(get_firestore_client(), claim_owner[0], expired_sources, now=current)
     if status == 'deferred':
         assert row is not None
         _enqueue(row)
@@ -832,6 +851,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     dispatch=None,
                     summary_repair=False,
                     summary_expected_revision=None,
+                    record_notes_producers={},
                 )
                 return settled, None
             return None, None

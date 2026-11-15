@@ -9,13 +9,13 @@ from database import pipeline_ledger, record_audio
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from tests.unit.test_record_complete_notes import recording, NOW, POLICY
 from utils.conversations import demand_processing
-from utils.enrichment import age_gate, consumer
+from utils.enrichment import age_gate, callback, consumer
 from utils.sync import processing_hold, reprocess
 from utils.workers.consumer import run_push
 
 
-@pytest.fixture
-def delivery(recording, monkeypatch):
+@pytest.fixture(params=['consumer', 'legacy'])
+def delivery(recording, monkeypatch, request):
     f = recording
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
@@ -38,6 +38,9 @@ def delivery(recording, monkeypatch):
         return result
 
     monkeypatch.setattr(adapter, '_mutate', mutate)
+    monkeypatch.setattr(reprocess, '_mutate', mutate)
+    monkeypatch.setattr(reprocess, '_enqueue', Mock())
+    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: f.client)
     f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
     assert ref.get().to_dict()['record_notes_producers'] == {'capture': 1}
     clock = [NOW + 120]
@@ -48,6 +51,9 @@ def delivery(recording, monkeypatch):
     def deliver(at):
         clock[0] = at
         token = ref.get().to_dict()['task_token']
+        if request.param == 'legacy':
+            status = reprocess.run(key, token, worker._callback(), now=at)
+            return SimpleNamespace(outcome='done' if status == 'processed' else status)
         return run_push(worker, adapter, key, token, now=at)
 
     return SimpleNamespace(**locals())
@@ -119,7 +125,6 @@ def test_clear_barrier_does_not_add_a_delay_or_buy_duplicate_notes(delivery):
 def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_deadline(
     delivery, monkeypatch, merge_first
 ):
-    from utils.enrichment import callback
 
     d = delivery
     d.f.client.rows[d.ref.path]['summary_seen'] = True
@@ -150,3 +155,32 @@ def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_dead
     assert result.outcome == 'deferred'
     assert d.ref.get().to_dict()['due_at'] == NOW + 700
     paid.assert_not_called()
+
+
+def test_redirect_transfers_every_source_producer_fence_without_renewing_deadline(delivery):
+    from database.outbox import Claim
+    from utils.enrichment import custody
+
+    d = delivery
+    d.f.client.rows[d.f.conversation.path].update(deleted=True, sync_merged_into='survivor')
+    d.f.user.collection('conversations').document('survivor').create({'status': 'completed'})
+    target_key = reprocess.key(d.f.binding.owner_id, 'survivor')
+    d.adapter.enqueue(
+        target_key,
+        d.f.binding.owner_id,
+        {
+            'conversation_id': 'survivor',
+            'language': 'en',
+            'record_notes_producer': {'conversation_id': 'another-capture', 'revision': 3},
+        },
+        NOW + 120,
+        now=NOW + 10,
+        snapshot_summary=True,
+    )
+    token = d.ref.get().to_dict()['task_token']
+    claim = d.adapter.claim_key(d.key, token, 120, now=NOW + 120)
+    assert isinstance(claim, Claim)
+    moved = custody.transfer_redirect(d.key, token, claim.lease_token, 'survivor', now=NOW + 120)
+    assert moved['record_notes_producers'] == {'capture': 1, 'another-capture': 3}
+    assert moved['first_pending_at'] == NOW
+    assert not d.ref.get().exists

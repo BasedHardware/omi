@@ -235,13 +235,9 @@ class FirestoreEnrichmentOutbox:
             if producer:
                 # Sidecar metadata stays on the durable row, outside the <=4 KiB claim payload.
                 producers = {} if old and old.get('dormant') else dict(new.get('record_notes_producers') or {})
-                capture_id, revision = producer['conversation_id'], producer.get('revision')
-                prior = producers.get(capture_id)
-                producers[capture_id] = (
-                    max(prior, revision)
-                    if prior is not None and revision is not None
-                    else (prior if revision is None else revision)
-                )
+                from database.record_notes_hold import merge_producers
+
+                producers = merge_producers(producers, {producer['conversation_id']: producer.get('revision')})
                 new['record_notes_producers'] = producers
             provenance = payload.get('record_notes_processing_hold')
             if isinstance(provenance, dict):
@@ -333,29 +329,12 @@ class FirestoreEnrichmentOutbox:
             if row.get('record_notes_producers'):
                 from database import record_notes_hold
 
-                blocked = record_notes_hold.inspect(self._client(), row['uid'], row['record_notes_producers'])
-                if blocked:
-                    deadline = record_notes_hold.deadline(row)
-                    if now >= deadline:
-                        expired_sources.extend(blocked)
-                        claim_owner.append(row['uid'])
-                        row.update(
-                            dormant=True,
-                            due_at=None,
-                            lease_until=0,
-                            owner=None,
-                            record_notes_producer_timeout_at=now,
-                            record_notes_producers={},
-                        )
-                        return row, (Outcome.STALE, None)
-                    due = min(now + record_notes_hold.RETRY_SECONDS, deadline)
-                    row.update(
-                        due_at=due,
-                        task_due_at=due,
-                        task_token=uuid.uuid4().hex,
-                        deferred_reason='record_producer_pending',
-                        wake_check_after=due,
-                    )
+                status, blocked = record_notes_hold.admit(row, self._client(), now=now)
+                if status == 'stale':
+                    expired_sources.extend(blocked)
+                    claim_owner.append(row['uid'])
+                    return row, (Outcome.STALE, None)
+                if status == 'deferred':
                     return row, (Outcome.DEFERRED, row)
             row.update(
                 lease_until=now + lease_seconds, owner=owner, claim_attempts=int(row.get('claim_attempts') or 0) + 1

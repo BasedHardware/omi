@@ -114,6 +114,13 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             summary_repair=False,
             summary_expected_revision=None,
         )
+        if donor.get('record_notes_producers'):
+            from database.record_notes_hold import merge_producers
+
+            pending['record_notes_producers'] = merge_producers(
+                None if previous.get('dormant') else previous.get('record_notes_producers'),
+                donor['record_notes_producers'],
+            )
         if donor.get('sync_hold'):
             pending['sync_hold'] = True
             if donor.get('sync_hold_requested') or not donor.get('merge_hold'):

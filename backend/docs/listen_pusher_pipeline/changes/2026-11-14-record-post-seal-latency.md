@@ -275,3 +275,8 @@ blocked-group attempt, and runs only on that exceptional path. No healthy-path
 query or recurrent polling is added. At $0.51/million reads, 30 producer checks
 cost $0.0000153 per source/output; the blocked-group probe's actual count
 depends on the returned page and predecessor set.
+
+The current enrichment consumer and retained sync-task adapter share this
+producer-admission rule. Redirect custody transfers union all source fences
+without renewing first_pending_at, so changing dispatch route or canonical
+conversation cannot drop the delivery check.

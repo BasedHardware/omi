@@ -1,5 +1,7 @@
 """Delivery-only producer fence for completion-owned recording notes."""
 
+import uuid
+
 from config.record_audio import require_record_audio_barrier
 from database import pipeline_ledger
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
@@ -45,3 +47,44 @@ def record_timeout(client, uid, blocked, *, now):
             owner_ref=client.collection('users').document(uid),
             firestore_client=client,
         )
+
+
+def merge_producers(existing, incoming):
+    result = dict(existing or {})
+    for capture_id, revision in (incoming or {}).items():
+        prior = result.get(capture_id)
+        result[capture_id] = (
+            max(prior, revision)
+            if prior is not None and revision is not None
+            else (prior if revision is None else revision)
+        )
+    return result
+
+
+def admit(row, client, *, now):
+    """Mutate a due row only when custody refuses; shared by both delivery adapters."""
+    if not row.get('record_notes_producers'):
+        return None, []
+    blocked = inspect(client, row['uid'], row['record_notes_producers'])
+    if not blocked:
+        return None, []
+    until = deadline(row)
+    if now >= until:
+        row.update(
+            dormant=True,
+            due_at=None,
+            lease_until=0,
+            owner=None,
+            record_notes_producer_timeout_at=now,
+            record_notes_producers={},
+        )
+        return 'stale', blocked
+    due = min(now + RETRY_SECONDS, until)
+    row.update(
+        due_at=due,
+        task_due_at=due,
+        task_token=uuid.uuid4().hex,
+        deferred_reason='record_producer_pending',
+        wake_check_after=due,
+    )
+    return 'deferred', []
