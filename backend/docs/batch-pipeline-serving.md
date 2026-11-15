@@ -1458,6 +1458,22 @@ index entries per count (minimum two reads per sample), and do not alter merge,
 projection or enrichment order. See the 2026-11-13 fresh-delivery change note
 for the complete reader inventory and release-owner live acceptance procedure.
 
+An independent 20s supervised guard timer uses the same maintenance lease and
+the DB executor, rather than waiting for the general maintenance pass and its
+sync executor. The existing lock still limits all callers together to one count
+pair per 60s. A slow pass can therefore continue without delaying guard refresh;
+query failures still remove counts/ratio and let age advance. The additional
+`omi_batch_pipeline_fresh_guard_sample_timestamp_seconds` gauge records the
+successful pair's **window anchor** (before either RPC), expires with the counts,
+and lets acceptance use the identical inclusive commit bounds. On the ro-prod
+tier run `python backend/scripts/fresh_guard_cohort.py --project based-hardware
+--stage prod --sample-time <anchor>` for two count aggregations and JSON totals,
+pending, ratio, and bounds. This replaces `projection_cohort.py` for this guard's
+comparison: that tool's `fresh_first`/capture-age cohort is different. The command
+never streams documents; empty/failed counts produce a null ratio. Compare near
+the metric sample because projection can advance between reads. No healthy hour
+or live agreement is inferred from these implementation tests.
+
 The same leader also samples the per-route, per-language delivered share at most
 every 300 s. It walks one bounded page of job metadata (states in the census
 vocabulary minus `record_pending`, admitted 20 to 5 minutes ago, ordered by
