@@ -9,8 +9,15 @@ from openai import AsyncOpenAI
 from openai.resources.embeddings import AsyncEmbeddings
 
 from utils.byok import get_byok_key
-from utils.llm.clients import _require_client_budget, _embeddings_gateway_mode
-from utils.llm.gateway_client import ainvoke_openai_embeddings_gateway
+from utils.generated_compute import require_current_generated_compute as _require_client_budget
+from utils.llm.gateway_client import ainvoke_openai_embeddings_gateway, should_route_features_through_gateway
+
+
+def _embeddings_gateway_mode() -> bool:
+    try:
+        return should_route_features_through_gateway()
+    except RuntimeError:
+        return False
 
 
 def embed_query_once(text: str, *, deadline_monotonic: float) -> List[float]:

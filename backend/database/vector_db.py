@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import logging
 import os
 import time
@@ -55,12 +56,18 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
-from utils.llm.summary_embeddings import embed_query_once
 from utils.observability.fallback import record_fallback
 
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 
 logger = logging.getLogger(__name__)
+
+
+def embed_query_once(text: str, *, deadline_monotonic: float) -> List[float]:
+    """Load the optional summary provider only on its isolated request path."""
+    provider = importlib.import_module('utils.llm.summary_embeddings')
+    return provider.embed_query_once(text, deadline_monotonic=deadline_monotonic)
+
 
 R = TypeVar("R")
 
