@@ -19,6 +19,7 @@ from tests.unit.test_sync_receipt_clock_anchor import anchors
 from utils.batch_pipeline import intake, projection
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+from utils.conversations.recorded_time import write_span
 from utils.stt import batch_language
 from utils.sync import legacy_dark, live_overlap
 from utils.sync.content_id import compute_sync_content_id
@@ -150,6 +151,7 @@ def test_recovered_projection_uses_source_identity_and_exposes_unknown_date():
     later = projection.build_incoming(replace(item, capture_at=item.capture_at + 100), binding, payload)
     assert first['id'] == later['id'] == 'receipt-source'
     assert first['capture_time_trust'] == 'untrusted' and first['clock'] == 'imported'
+    assert write_span({**first, 'sync_content_revision': 1})['clock'] == 'imported'
     assert first['sync_clock_run'] == later['sync_clock_run'] == first['id']
     assert Conversation.model_validate(first).model_dump()['capture_time_trust'] == 'untrusted'
     neighbour = {**first, 'id': 'neighbour', 'sync_clock_run': 'receipt-other'}
