@@ -121,6 +121,8 @@ async def test_only_successful_closing_refresh_retires_acknowledged_debt(monkeyp
     monkeypatch.setattr(module, '_owner', None)
     monkeypatch.setattr(PusherAudioProjection, 'refresh', lambda *args, **kwargs: applied)
     retire = MagicMock(return_value=True)
+    fallback = MagicMock()
+    monkeypatch.setattr(module, 'record_fallback', fallback)
     monkeypatch.setattr(module.record_projection_rebuild, 'retire_observed', retire)
     from utils import speaker_learning_jobs
 
@@ -132,3 +134,8 @@ async def test_only_successful_closing_refresh_retires_acknowledged_debt(monkeyp
         retire.assert_called_once_with('u', 'c', observed_update_time='committed')
     else:
         retire.assert_not_called()
+    if applied is None:
+        assert fallback.call_args.kwargs['reason'] == 'input_missing'
+        assert fallback.call_args.kwargs['outcome'] == 'degraded'
+    else:
+        fallback.assert_not_called()

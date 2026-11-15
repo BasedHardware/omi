@@ -92,6 +92,14 @@ class PlaybackCoordinator:
                 )
             if job.callback is not None:
                 job.callback(job.cid, applied)
+            if applied is None:
+                record_fallback(
+                    component='pusher',
+                    from_mode='playback_metadata',
+                    to_mode='durable_repair',
+                    reason='input_missing',
+                    outcome='degraded',
+                )
             if applied:
                 schedule_person_voice_learning_retry(job.uid, job.cid)
             if applied is True and job.closing and job.observed_update_time is not None:
@@ -113,6 +121,15 @@ class PlaybackCoordinator:
                 > MAX_PATHS
             ):
                 self.cache.popitem(last=False)
+        except asyncio.CancelledError:
+            record_fallback(
+                component='pusher',
+                from_mode='playback_metadata',
+                to_mode='durable_repair',
+                reason='cancelled',
+                outcome='degraded',
+            )
+            raise
         except Exception:
             # Write-ahead debt already exists. A worker failure changes no seal proof.
             record_fallback(
