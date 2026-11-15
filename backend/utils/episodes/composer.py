@@ -82,7 +82,7 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
-from utils.episodes import composer_context, metrics, policy, transcript_receipts
+from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.episodes.visibility import hidden_member
@@ -793,7 +793,12 @@ def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
 
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
     pending = _utc(row.get('home_transcription_pending_at')) or _utc(row.get('episode_transcription_pending_at'))
-    if episode_compose_transcript_wait_enabled() and pending and not _segments(row):
+    if (
+        episode_compose_transcript_wait_enabled()
+        and pending
+        and not _segments(row)
+        and not compose_wait.settled_terminal(row)
+    ):
         return pending + timedelta(seconds=episode_compose_transcript_wait_seconds())
     return None
 
