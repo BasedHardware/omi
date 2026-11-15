@@ -46,3 +46,27 @@ unchanged; this executes in CPU projection services.
 Coverage includes fresh merge off with a 15-minute recording, days-old backlog,
 held/dead/missing sibling deadlines, delayed wake durability, flag-off drain,
 128-unit coalescing, rollover, and all preexisting immediate-wake hold gates.
+
+## Composition with the lifecycle ledger and tunable processing hold
+
+Merged main 7f944b6d38059 keeps `record_admitted_at` once per capture and the
+ledger CAS after the real seal transaction. `record_sealed_at` stays in the
+actual closure transaction and advances only when an open capture is sealed;
+it is not replaced with the ledger write time. Recording-end eligibility still
+uses `finished_at`; ledger `end_at` and `home_ready_at` retain main's outcome
+semantics.
+
+An active processing hold owns its existing absolute quiet/deadline clock.
+Complete-record notes reuse `processing_hold.admission` on the canonical row
+already read by completion, so an elapsed hold does not acquire another 600
+seconds of settle. An existing outbox sync/merge hold keeps its deadline and
+flags; a notes mark does not reassert them as a new content arrival. Earlier
+first-summary delivery still passes the same consumer hold check before paid
+work. These paths update the same coalesced obligation; the previous one-run
+normal / at-most-two late-completion budget is unchanged. No extra Firestore
+reads, document writes, polls or paid obligation are added by this composition.
+
+Projection admission-provenance instrumentation retains the bounded direct
+follow-up hint and the same four slots. Fresh guard cadence is independent
+observation; `RECORD_FRESH_MERGE_ENABLED` remains explicitly false in every
+deployed dev/prod reader and worker values. No GPU worker image is rolled.

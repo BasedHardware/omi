@@ -331,3 +331,48 @@ def test_flag_off_before_first_projection_still_initializes_marked_record_deadli
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
     assert row.get().to_dict()['due_at'] == NOW + 120
     assert f.ledger.get().to_dict()['record_notes_fallback_outputs'] == ['capture']
+
+
+@pytest.mark.parametrize('quiet,remaining', [(120, 0), (300, 50), (600, 350)])
+def test_complete_record_uses_processing_hold_deadline_without_another_settle(recording, monkeypatch, quiet, remaining):
+    f = recording
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', str(quiet))
+    f.client.rows[f.conversation.path]['sync_processing_hold'] = {
+        'held': True,
+        'pending_since': NOW - 300,
+        'last_content_at': NOW - 250,
+    }
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    # First-summary policy may deliver earlier, but its consumer still checks
+    # this same absolute hold deadline before making a paid call.
+    assert row.get().to_dict()['due_at'] == min(NOW + remaining, NOW + 120)
+    from utils.sync import processing_hold
+
+    outcome, due = processing_hold.admission(
+        f.conversation.get().to_dict(),
+        row.get().to_dict(),
+        now=NOW + remaining,
+    )
+    assert due is None and outcome in {'ready', 'max_hold'}
+    assert row.get().to_dict()['version'] == 2
+    f.store.complete('first', f.binding, NOW + remaining + 1, f.accounting, policy=POLICY)
+    assert row.get().to_dict()['version'] == 2
+
+
+@pytest.mark.parametrize('hold', ['sync_hold', 'merge_hold'])
+def test_complete_record_preserves_existing_outbox_hold_without_renewing_quiet(recording, monkeypatch, hold):
+    f = recording
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '300')
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    f.client.rows[row.path].update(
+        {hold: True, 'due_at': NOW + 40, 'first_pending_at': NOW - 260, 'summary_seen': True}
+    )
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    saved = row.get().to_dict()
+    assert saved['due_at'] == NOW + 40
+    assert saved[hold] is True and saved['version'] == 2

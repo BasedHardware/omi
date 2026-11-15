@@ -14,12 +14,25 @@ import 'package:omi/services/wals/wal_frame_encoder.dart';
 /// update was interrupted. Sealed files use the normal sync/retry/job pipeline.
 class MobileBatchBuffer {
   MobileBatchBuffer(
-      {required this.directory, required this.publish, this.maxBytes = 256 * 1024 * 1024, this.maxFiles = 4096});
+      {required this.directory,
+      required this.publish,
+      this.maxBytes = 256 * 1024 * 1024,
+      this.maxFiles = 4096,
+      RandomAccessFile Function(File)? openWriter})
+      : _openWriter = openWriter ?? _openAppend;
+
+  static RandomAccessFile _openAppend(File file) => file.openSync(mode: FileMode.append);
+
+  // One process-wide revision also covers observers recreated for the same
+  // directory. It invalidates disk snapshots, never supplies custody proof.
+  static int _journalRevision = 0;
+  static int get journalRevision => _journalRevision;
 
   final Directory directory;
   final Future<void> Function(Wal) publish;
   final int maxBytes;
   final int maxFiles;
+  final RandomAccessFile Function(File) _openWriter;
   RandomAccessFile? _writer;
   Wal? _wal;
   File? _journal;
@@ -29,19 +42,58 @@ class MobileBatchBuffer {
   Future<void> _pending = Future.value();
   bool failed = false;
 
-  /// Chunks sealed but not yet registered as files. A chunk whose publish
-  /// failed stays here: its audio is in the journal, not in the file index.
-  final List<Wal> _publishing = [];
-
-  /// Audio of [recordingSessionId] this buffer holds that is not yet a
-  /// registered file: the chunk being written, and sealed chunks still being
-  /// published. Read-only; callers observe it and never seal on its account.
-  /// Returns each chunk's start time in epoch seconds.
-  List<int> unregisteredStarts(String recordingSessionId) => [
-        if (_wal != null && _wal!.recordingSessionId == recordingSessionId) _wal!.timerStart,
-        for (final wal in _publishing)
-          if (wal.recordingSessionId == recordingSessionId) wal.timerStart,
-      ];
+  /// Read durable journals, including failed seals and prior processes. A
+  /// recovered journal may overlap the index: over-count until acceptance,
+  /// never discard evidence because an in-memory writer/list lost its WAL.
+  /// Unreadable metadata counts conservatively; a directory error propagates
+  /// so the reporter omits the marker instead of asserting zero. No writes.
+  /// With [ownerUid], a journal that names another account is not this
+  /// account's pending audio: it can never be uploaded from here, so counting
+  /// it would hold the recording open forever after an account switch.
+  Future<int> pendingJournalCount(String recordingSessionId,
+      {String? ownerUid, DateTime? through, DateTime? now, Map<String, int> acceptedFileBytes = const {}}) async {
+    var count = 0;
+    final throughSeconds = through?.millisecondsSinceEpoch;
+    final nowSeconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
+    await for (final entry in directory.list(followLinks: false)) {
+      if (!entry.path.endsWith('.batch-journal')) continue;
+      if (entry is! File) {
+        count++; // A link or unreadable entry cannot prove absence of audio.
+        continue;
+      }
+      final name = entry.uri.pathSegments.last;
+      final audioName = name.substring(0, name.length - '.batch-journal'.length);
+      try {
+        final acceptedBytes = acceptedFileBytes[audioName];
+        // Replay can expose an open journal before its writer seals. A later
+        // append is pending even if the server accepted an earlier prefix.
+        if (acceptedBytes != null &&
+            await File('${directory.path}/$audioName').length() == acceptedBytes &&
+            !await File('${directory.path}/$audioName.torn').exists()) {
+          continue;
+        }
+        final metadata = jsonDecode(await entry.readAsString());
+        if (metadata is! Map<String, dynamic> ||
+            metadata['owner_uid'] is! String ||
+            (metadata['owner_uid'] as String).isEmpty ||
+            metadata['recording_session_id'] is! String ||
+            (metadata['recording_session_id'] as String).isEmpty ||
+            metadata['timer_start'] is! int) {
+          count++; // Retained evidence cannot prove this recording has nothing left.
+          continue;
+        }
+        if (metadata['recording_session_id'] != recordingSessionId) continue;
+        if (ownerUid != null && ownerUid.isNotEmpty && metadata['owner_uid'] != ownerUid) continue;
+        final start = metadata['timer_start'] as int;
+        if (throughSeconds == null || start <= 0 || start <= throughSeconds ~/ 1000 || start > nowSeconds) count++;
+      } on FileSystemException {
+        count++;
+      } on FormatException {
+        count++;
+      }
+    }
+    return count;
+  }
 
   Future<void> initialize() async {
     await directory.create(recursive: true);
@@ -70,6 +122,7 @@ class MobileBatchBuffer {
       return false;
     }
     var accepted = false;
+    _journalRevision++;
     try {
       if (_wal != null &&
           (_wal!.ownerUid != uid || _wal!.codec != codec || _wal!.recordingSessionId != recordingSessionId)) {
@@ -98,7 +151,7 @@ class MobileBatchBuffer {
         );
         _journal = File('${directory.path}/$name.batch-journal');
         _journal!.writeAsStringSync(jsonEncode(wal.toJson()), flush: true);
-        _writer = File('${directory.path}/$name').openSync(mode: FileMode.append);
+        _writer = _openWriter(File('${directory.path}/$name'));
         _files++;
         _wal = wal;
         _chunkFrames = 0;
@@ -147,10 +200,8 @@ class MobileBatchBuffer {
     _writer = null;
     _wal = null;
     _journal = null;
-    _publishing.add(wal);
     _pending = _pending.then((_) async {
       await publish(wal);
-      _publishing.remove(wal);
       // publish persists the shared WAL index before removing the journal.
       if (await journal.exists()) await journal.delete();
     }).catchError((Object _) {

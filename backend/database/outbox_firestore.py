@@ -211,11 +211,12 @@ class FirestoreEnrichmentOutbox:
                 conversation_id,
                 language,
                 current=now,
-                settle_at=now + settle_seconds() if held else available_at,
+                # This is another notes obligation, not a content arrival.
+                # Keep the producer's absolute hold deadline; reasserting its
+                # hold flags below would restart the tunable quiet window.
+                settle_at=old['due_at'] if held else available_at,
                 coalesce='max' if held else coalesce,
                 effects_only=effects_only,
-                sync_hold=bool(held and old.get('sync_hold')),
-                merge_hold=bool(held and old.get('merge_hold')),
                 batch=tx is not None,
                 policy_id=policy_id,
                 new_dispatch=new_dispatch,

@@ -23,12 +23,14 @@ def test_seal_stamps_actual_close_once_and_reseal_replaces_clock(monkeypatch):
     monkeypatch.setattr(record_audio.time, 'time', lambda: 1000)
     assert record_audio.seal_record_audio('synthetic-owner', 'capture', firestore_client=client) is None
     assert ref.get().to_dict()['record_sealed_at'] == 1000
+    assert ref.get().to_dict()['record_admitted_at'] == 1000
     assert record_audio.seal_record_audio('synthetic-owner', 'capture', firestore_client=client) is None
     assert not client.transactions[-1].sets and not client.transactions[-1].updates
     client.rows[ref.path]['record_audio_closed'] = False
     monkeypatch.setattr(record_audio.time, 'time', lambda: 1010)
     assert record_audio.seal_record_audio('synthetic-owner', 'capture', firestore_client=client) is None
     assert ref.get().to_dict()['record_sealed_at'] == 1010
+    assert ref.get().to_dict()['record_admitted_at'] == 1000
 
 
 def test_admission_copies_claim_and_seal_and_first_gpu_lease(monkeypatch):

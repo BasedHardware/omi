@@ -44,6 +44,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
+from utils.sync import processing_hold
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
@@ -140,6 +141,8 @@ class ProjectionStore:
         try:
             from database import pipeline_ledger
 
+            owner_ref = self.client.collection('users').document(binding.owner_id)
+            source_ref = owner_ref.collection('conversations').document(capture_id)
             pipeline_ledger.advance(
                 binding.owner_id,
                 capture_id,
@@ -148,6 +151,8 @@ class ProjectionStore:
                 speech_seconds=speech_seconds,
                 has_speech=speech_seconds > 0,
                 speech_basis='transcript',
+                source_ref=source_ref,
+                owner_ref=owner_ref,
                 firestore_client=self.client,
             )
         except Exception as error:  # The durable completion is already authoritative.
@@ -821,11 +826,8 @@ class ProjectionStore:
                 for canonical in outputs[:128]:
                     row = conversation_rows.get(canonical) or {}
                     hold = row.get('sync_processing_hold') or {}
-                    eager = (
-                        record_notes_eager_enabled()
-                        and recent_native_record_notes(session.job, now)
-                        and not hold.get('held')
-                        and bool(row.get('record_audio_closed'))
+                    producer_ready = (
+                        bool(row.get('record_audio_closed'))
                         and not row.get('record_audio_partial')
                         and not row.get('record_upload_failed')
                         and (
@@ -833,19 +835,36 @@ class ProjectionStore:
                             or session.job['record_input_upload_revision'] == row.get('record_upload_revision')
                         )
                     )
-                    if eager:
+                    if producer_ready:
                         try:
                             require_record_audio_barrier(row)
                         except ValueError:
-                            eager = False
+                            producer_ready = False
+                    eager = (
+                        record_notes_eager_enabled()
+                        and recent_native_record_notes(session.job, now)
+                        and not hold.get('held')
+                        and producer_ready
+                    )
+                    due_at = now if eager else now + settle_seconds()
+                    hold_owns_delay = producer_ready and processing_hold.FIELD in row
+                    if hold_owns_delay:
+                        # The transcript arrival already started this clock.
+                        # Do not add another settle after its absolute deadline.
+                        _, held_until = (
+                            processing_hold.admission(row, {'first_pending_at': now}, now=now)
+                            if processing_hold.enabled_for(row)
+                            else ('ready', None)
+                        )
+                        due_at = now if held_until is None else held_until
                     wake = outbox.enqueue(
                         reprocess.key(binding.owner_id, canonical),
                         binding.owner_id,
                         {'conversation_id': canonical, 'language': binding.language or row.get('language') or 'en'},
-                        now if eager else now + settle_seconds(),
+                        due_at,
                         tx=_ClientTransaction(self.client, transaction),
                         now=now,
-                        coalesce='min' if eager else 'max',
+                        coalesce='min' if eager or hold_owns_delay else 'max',
                         snapshot_summary=True,
                         eager_if_unheld=eager,
                         pending_writes=notes_writes,
