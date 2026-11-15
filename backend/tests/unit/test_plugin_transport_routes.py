@@ -82,6 +82,7 @@ async def test_actual_finalized_fanout_signs_payload_and_retains_idempotency(con
     )
     monkeypatch.setattr(integrations, 'get_available_apps', lambda uid: [app])
     monkeypatch.setattr(integrations, 'is_app_webhook_disabled', lambda app_id: False)
+    monkeypatch.setattr('database.webhook_signing.get_app_webhook_signing_db', lambda app_id: None)
     monkeypatch.setattr(
         integrations, 'conversation_to_dict', lambda value: {'id': value.id, 'structured': {'title': 'Synthetic'}}
     )

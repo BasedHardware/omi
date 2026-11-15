@@ -8,6 +8,9 @@ import {
   setDeveloperWebhook,
   enableDeveloperWebhook,
   disableDeveloperWebhook,
+  getDeveloperWebhookSigningSecretStatus,
+  issueDeveloperWebhookSigningSecret,
+  deleteDeveloperWebhookSigningSecret,
   getDeveloperApiKeys,
   createDeveloperApiKey,
   deleteDeveloperApiKey,
@@ -17,6 +20,10 @@ import {
   exportAllData,
   deleteKnowledgeGraph,
 } from '@/lib/api';
+import type {
+  WebhookSigningSecretIssuedResponse,
+  WebhookSigningSecretStatusResponse,
+} from '@/lib/omiApi.generated';
 import type { DeveloperWebhooks, DeveloperApiKey, McpApiKey } from '@/types/user';
 
 /**
@@ -33,6 +40,9 @@ export function useDeveloperSettings() {
   const [apiKeysError, setApiKeysError] = useState(false);
   const [mcpKeysError, setMcpKeysError] = useState(false);
   const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
+  const [signingSecret, setSigningSecret] =
+    useState<WebhookSigningSecretStatusResponse | null>(null);
+  const [signingSecretError, setSigningSecretError] = useState(false);
 
   const loadApiKeys = async () => {
     try {
@@ -48,6 +58,14 @@ export function useDeveloperSettings() {
       setMcpKeysError(false);
     } catch {
       setMcpKeysError(true);
+    }
+  };
+  const loadSigningSecretStatus = async () => {
+    try {
+      setSigningSecret(await getDeveloperWebhookSigningSecretStatus());
+      setSigningSecretError(false);
+    } catch {
+      setSigningSecretError(true);
     }
   };
 
@@ -72,6 +90,7 @@ export function useDeveloperSettings() {
           getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
           getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
           getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
+          loadSigningSecretStatus(),
         ]);
         // Full MCP key is only returned at creation time; keep secrets in memory for this session only.
         if (typeof window !== 'undefined') {
@@ -136,6 +155,43 @@ export function useDeveloperSettings() {
     } catch (error) {
       console.error('Failed to delete API key:', error);
       showToast('Failed to delete API key. Please try again.', 'error');
+    }
+  };
+
+  const handleIssueSigningSecret =
+    async (): Promise<WebhookSigningSecretIssuedResponse | null> => {
+      try {
+        const issued = await issueDeveloperWebhookSigningSecret();
+        // The secret itself is shown once by the control and never kept here.
+        setSigningSecret({
+          configured: true,
+          created_at: issued.created_at,
+          previous_valid_until: issued.previous_valid_until ?? null,
+        });
+        setSigningSecretError(false);
+        return issued;
+      } catch (error) {
+        console.error('Failed to issue webhook signing secret:', error);
+        showToast(
+          'Failed to update the webhook signing secret. Please try again.',
+          'error',
+        );
+        return null;
+      }
+    };
+
+  const handleDeleteSigningSecret = async (): Promise<boolean> => {
+    try {
+      await deleteDeveloperWebhookSigningSecret();
+      setSigningSecret({ configured: false });
+      return true;
+    } catch (error) {
+      console.error('Failed to delete webhook signing secret:', error);
+      showToast(
+        'Failed to delete the webhook signing secret. Please try again.',
+        'error',
+      );
+      return false;
     }
   };
 
@@ -245,8 +301,13 @@ export function useDeveloperSettings() {
     mcpKeys,
     mcpKeysError,
     webhooks,
+    signingSecret,
+    signingSecretError,
     loadApiKeys,
     loadMcpKeys,
+    loadSigningSecretStatus,
+    handleIssueSigningSecret,
+    handleDeleteSigningSecret,
     handleCreateApiKey,
     handleDeleteApiKey,
     handleCreateMcpKey,
