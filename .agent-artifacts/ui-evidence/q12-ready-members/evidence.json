@@ -35,6 +35,13 @@
       "description": "Compact Processing page Delete confirms only its 2 pending records, excluding 2 READY records. Fictional fixture; no deletion confirmed.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-cold-processing-members.png",
+      "platform": "mobile-ios",
+      "description": "Cold compact Processing page resolves its source episode on demand and shows only its two pending recordings; two READY recordings remain finished on Home. Fictional fixture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
   "captured_at_utc": "2026-11-15T12:24:54Z",
