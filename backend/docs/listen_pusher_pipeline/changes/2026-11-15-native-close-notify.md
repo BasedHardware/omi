@@ -131,3 +131,33 @@ Desktop backend uses the separate desktop_backend:create_app entrypoint, which
 mounts neither transcribe/listen nor sync playback; it needs neither shared flag.
 All four Cloud Run main:app services bind both switches even where a listener
 cannot connect to a hosted pusher.
+
+## Long-lived connections and image-only GKE roll
+
+Terminal listener ACKs do not consume the pending-close admission count. Recent
+terminal boundaries are capped at the100-request code default. An explicitly
+old conversation offer outside the current/pending set is refused before relay
+acceptance; already accepted/replay runs keep their recorded owner and proof.
+Pusher retires received counters and active requests only on terminal drain
+cleanup, retaining at most128 recent idempotent replies. An evicted old request
+must prepare again under its own producer fence. The150-sequential-recording
+single-socket test verifies actual durable receipt drains/seals and bounded wire
+inventories; the uncommitted reservation test still requires a producer fence.
+
+An unsupported response terminates that connection's protocol attempt, removes
+the matching pending request, and suppresses further close controls on that
+socket. Ordinary finalization remains active. A frozen boundary stays frozen;
+a replacement connection can negotiate anew. A duplicate old capability ACK
+cannot override the negative result.
+
+Tonight's GKE roll patches only the image. Shared switches and native wake all
+default on in code; targeted env patches, not chart values, flip rollback on
+serving GKE pods. Safety needs no new chart/overlay value: pending closes100,
+wire active/recent histories128 each, coordinator128 keys/2048 paths/two workers,
+metadata executor2 workers/zero queued calls, debt executor2 workers/32 queued
+calls, retained-drain default32 (clamped8..128), abandon default4 (clamped0..16),
+close calls4 active/at most12 outstanding with16 default barrier threads, and
+producer-pending retirement after6 refusals. All are safe code defaults or
+constants. Existing GKE env overrides survive an image-only patch. RSS remains
+unmeasured. Cloud Run rendered bindings are declared; GKE image-only activation
+and any kill-switch env patch require independent runtime verification.
