@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, wait
+from dataclasses import dataclass, field
 from typing import Any, TypeGuard
 
 from fastapi import HTTPException
@@ -77,9 +78,14 @@ def _source_successor(
     return targets[0], True
 
 
-def _canonical_batch(
-    uid: str, memory_ids: list[str], client: Any, deadline: float
-) -> tuple[Any, dict[str, Any], dict[str, MemoryDB | None]]:
+@dataclass(frozen=True)
+class _CanonicalBatch:
+    client: Any
+    rows: dict[str, Any] = field(default_factory=dict)
+    direct: dict[str, MemoryDB | None] = field(default_factory=dict)
+
+
+def _canonical_batch(uid: str, memory_ids: list[str], client: Any, deadline: float) -> _CanonicalBatch:
     """One direct-live read round, independent of page size (at most 300 ids).
 
     Keep payloads local to the read workers; no worker receives recap objects.
@@ -90,7 +96,7 @@ def _canonical_batch(
     root = MemoryCollections(uid=uid).memory_items
     refs = [client.document(f'{root}/{mid}') for mid in memory_ids if _valid_id(mid)]
     if not refs:
-        return client, {}, {}
+        return _CanonicalBatch(client)
     rows = {}
     direct = {}
     for snapshot in client.get_all(refs, timeout=_remaining(deadline), retry=None):
@@ -110,7 +116,7 @@ def _canonical_batch(
             except Exception:
                 # Bad payload/identity is unresolved, never deletion evidence.
                 pass
-    return client, rows, direct
+    return _CanonicalBatch(client, rows, direct)
 
 
 def _project_active(uid: str, mid: str, raw: dict[str, Any]) -> MemoryDB | None:
@@ -244,8 +250,9 @@ def _read_results(uid: str, memory_ids: list[str], client: Any, deadline: float)
     batch = None
     try:
         batch = db_executor.submit(_canonical_batch, uid, memory_ids, client, deadline)
-        client, canonical, direct = batch.result(timeout=_remaining(deadline))
-        results.update(direct)
+        read = batch.result(timeout=_remaining(deadline))
+        client, canonical = read.client, read.rows
+        results.update(read.direct)
         remaining = iter(mid for mid in memory_ids if mid not in results)
         while True:
             while len(pending) < MAX_CONCURRENT_RESOLUTIONS:
