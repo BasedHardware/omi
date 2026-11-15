@@ -1456,21 +1456,26 @@ def test_episode_switches_render_on_every_composition_host(environment):
         'EPISODE_COMPOSER_DETAIL_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+        'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
+        'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+        'HOME_SETTLED_EMPTY_WIRE_ENABLED',
         'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
     )
+    expected = {key: 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true' for key in keys}
     config = _MANIFEST['environments'][environment]
     for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         env = config['cloud_run']['services'][name]['env']
         for key in keys:
-            assert env[key] == {'value': 'true', 'category': 'ops_kill'}
-            assert _MODULE['_render_env_entries']({key: env[key]}) == [{'name': key, 'value': 'true'}]
+            assert env[key] == {'value': expected[key], 'category': 'ops_kill'}
+            assert _MODULE['_render_env_entries']({key: env[key]}) == [{'name': key, 'value': expected[key]}]
             # An operator override must survive the renderer rather than fall back to code defaults.
             assert _MODULE['_render_env_entries']({key: {'value': 'false', 'category': 'ops_kill'}}) == [
                 {'name': key, 'value': 'false'}
             ]
     for chart in ('backend-listen', 'pusher'):
         for key in keys:
-            assert config['gke'][chart]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+            assert config['gke'][chart]['env'][key] == {'value': expected[key], 'category': 'ops_kill'}
         chart_dir = _SCRIPT.parents[1] / 'charts' / chart
         values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
         result = subprocess.run(
@@ -1500,7 +1505,7 @@ def test_episode_switches_render_on_every_composition_host(environment):
             if entry['name'] in keys
         ]
         assert sorted(entries, key=lambda entry: entry['name']) == [
-            {'name': key, 'value': 'true'} for key in sorted(keys)
+            {'name': key, 'value': expected[key]} for key in sorted(keys)
         ]
 
 

@@ -8,6 +8,7 @@ owner carries no fresh decision and must not be counted.
 
 from unittest.mock import AsyncMock, Mock, patch
 from types import SimpleNamespace
+from functools import partial
 
 import pytest
 from starlette.datastructures import UploadFile
@@ -68,6 +69,9 @@ def _router():
 
 
 async def _upload(module, BytesIO, *, conversation_id=None):
+    # This suite tests routing counters, not wall-clock lookback admission. Keep
+    # the classifier's clock aligned with its fixed synthetic file timestamp.
+    module.classify_sync_lane = partial(module.classify_sync_lane, now=1792152000.0)
     return await module.sync_local_files_v2(
         files=[UploadFile(filename=f'omi_{int(module.time.time())}.bin', file=BytesIO(b'\x00' * 10))],
         uid=UID,

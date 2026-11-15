@@ -588,6 +588,21 @@
       "review_by": "2026-12-10",
       "registry": "config/feature-flags.yaml"
     },
+    "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-11-17",
+      "registry": "config/feature-flags.yaml"
+    },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
       "owner": "rollout-meetings / occasion architecture",
       "review_by": "2026-11-28",
@@ -625,6 +640,11 @@
       "owner": "q12-live-notes",
       "registry": "config/feature-flags.yaml",
       "review_by": "2026-12-14"
+    },
+    "HOME_SETTLED_EMPTY_WIRE_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
     },
     "HOSTED_LID_API_URL": {
       "owner": "planscost",
