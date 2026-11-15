@@ -80,3 +80,11 @@ then existing executor availability and the existing quiet/max-settle window
 apply. Queue polling is a best-effort one-second fast path, not an end-to-end
 latency guarantee. The six-hour transcript wait does not suppress a newer
 blocking-member receipt on a qualifying read.
+
+Active transcript waits also persist all pending blocker IDs. Home already
+holds a bounded per-member timestamp map, so it checks only those blockers;
+unrelated ready-member receipts neither clear the wait nor schedule another
+attempt. Membership/visibility changes and explicit regeneration requests
+still bypass suppression. Existing waits without blocker IDs retain the
+compatible episode-wide timestamp check until they are re-evaluated. This
+adds zero database reads to the Home wait check.

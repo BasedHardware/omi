@@ -2073,3 +2073,34 @@ def test_unchanged_transcript_revision_is_acknowledged_without_paid_compose(stor
     assert store.episode['composed_transcript_updated_at'] == store.rows['c2']['episode_transcript_updated_at']
     assert _home_reconcile_transcript(store, monkeypatch) == 0
     assert len(calls) == 1
+
+
+def test_only_pending_transcript_members_wake_an_active_wait(store, monkeypatch):
+    c = _c()
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert store.episode['compose_transcript_wait_members'] == ['c2']
+    persisted = dict(store.episode)
+    due = composer._deferred[UID, 'ep1']
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1) or True)
+    store.rows['c1']['episode_transcript_updated_at'] = datetime.now(timezone.utc)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'], transcript_updated=True)
+    assert not queued and store.episode == persisted and composer._deferred[UID, 'ep1'] == due
+    assert _home_reconcile_transcript(store, monkeypatch) == 0
+    store.rows['c2'].update(
+        transcript_segments=[{'start': 0, 'end': 5, 'text': 'The blocker is now ready.'}],
+        episode_transcript_updated_at=datetime.now(timezone.utc),
+    )
+    assert _home_reconcile_transcript(store, monkeypatch) == 1
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
+    assert len(queued) == 2 and store.episode['compose_transcript_wait_until'] is None
+
+
+def test_transcript_wait_tracks_every_pending_blocker(store):
+    pending = datetime.now(timezone.utc)
+    for member in store.rows.values():
+        member.update(transcript_segments=[], home_transcription_pending_at=pending)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert store.episode['compose_transcript_wait_members'] == ['c1', 'c2']

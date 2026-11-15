@@ -786,9 +786,11 @@ def _members(
     *,
     revisions: Optional[dict[str, Optional[datetime]]] = None,
     waiting_until: Optional[list[datetime]] = None,
+    waiting_members: Optional[list[str]] = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
+    awaiting_transcript = False
     for cid in _retained_ids(episode):
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
         if revisions is not None:
@@ -803,10 +805,13 @@ def _members(
         if due and due > datetime.now(timezone.utc):
             if waiting_until is not None:
                 waiting_until.append(due)
-            return 'waiting', []
+            if waiting_members is not None:
+                waiting_members.append(cid)
+            awaiting_transcript = True
+            continue
         members.append({**row, 'id': cid, 'transcript_segments': _named(uid, row, c)})
     members.sort(key=lambda row: _span(row)[0] or datetime.max.replace(tzinfo=timezone.utc))
-    return 'ok', members
+    return ('waiting', []) if awaiting_transcript else ('ok', members)
 
 
 _Updates = Union[Mapping[str, Any], Callable[[Mapping[str, Any]], Mapping[str, Any]]]
@@ -1134,15 +1139,20 @@ def _compose(
         return 'live'
     member_revisions: dict[str, Optional[datetime]] = {}
     waiting_until: list[datetime] = []
+    waiting_members: list[str] = []
     wait_observed_at = datetime.now(timezone.utc)
-    state, members = _members(uid, episode, c, revisions=member_revisions, waiting_until=waiting_until)
+    state, members = _members(
+        uid, episode, c, revisions=member_revisions, waiting_until=waiting_until, waiting_members=waiting_members
+    )
     if state == 'waiting':
         if waiting_until:
             now = datetime.now(timezone.utc)
             due = min(waiting_until)
-            if _utc(episode.get('compose_transcript_wait_until')) != due or episode.get(
-                'compose_pending_membership'
-            ) != sorted(_retained_ids(episode)):
+            if (
+                _utc(episode.get('compose_transcript_wait_until')) != due
+                or episode.get('compose_pending_membership') != sorted(_retained_ids(episode))
+                or episode.get('compose_transcript_wait_members') != waiting_members
+            ):
                 written = _write(
                     uid,
                     episode_id,
@@ -1151,6 +1161,7 @@ def _compose(
                         'compose_pending_since': episode.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
                         'compose_transcript_wait_started_at': wait_observed_at,
+                        'compose_transcript_wait_members': waiting_members,
                         'compose_pending_membership': sorted(_retained_ids(episode)),
                     },
                     expected_member_revisions=member_revisions,
@@ -1481,6 +1492,7 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
         'compose_pending_since': None,
         'compose_transcript_wait_until': None,
         'compose_transcript_wait_started_at': None,
+        'compose_transcript_wait_members': None,
         'compose_activity_at': None,
         'compose_pending_evidence': None,
         'compose_pending_membership': None,
@@ -1583,6 +1595,14 @@ def needs_compose(
             return True  # A removed blocker must reach _members again without a transcript receipt.
         # Home already read the bounded member metadata. A newer transcript receipt
         # can wake this wait, including an episode that has never been composed.
+        blockers = episode.get('compose_transcript_wait_members')
+        updates = episode.get('_member_transcript_updates')
+        if blockers is not None and isinstance(updates, Mapping):
+            projected = max(
+                (_utc(updates.get(cid)) for cid in blockers),
+                key=lambda at: at or datetime.min.replace(tzinfo=timezone.utc),
+                default=None,
+            )
         return bool(
             episode_compose_transcript_ready_enabled() and projected and wait_started and projected > wait_started
         )
@@ -1798,6 +1818,17 @@ def schedule_for_conversation(
                 or (row is not None and (hidden_member(row) or not conversations_db.is_visible_conversation(row)))
             ):
                 return
+            wait_until = _utc(episode.get('compose_transcript_wait_until'))
+            blockers = episode.get('compose_transcript_wait_members')
+            if (
+                wait_until
+                and wait_until > datetime.now(timezone.utc)
+                and blockers is not None
+                and conversation_id not in blockers
+                and not episode.get('summary_needs_regeneration')
+                and episode.get('compose_pending_membership') == sorted(_retained_ids(episode))
+            ):
+                return  # Unrelated ready speech cannot restart another member's wait.
             if transcript_updated:
                 with _inflight_lock:
                     _deferred.pop((uid, str(episode['id'])), None)
@@ -1810,9 +1841,15 @@ def schedule_for_conversation(
                     {
                         'compose_transcript_wait_until': None,
                         'compose_transcript_wait_started_at': None,
+                        'compose_transcript_wait_members': None,
                     },
                 )
-                episode = {**episode, 'compose_transcript_wait_until': None, 'compose_transcript_wait_started_at': None}
+                episode = {
+                    **episode,
+                    'compose_transcript_wait_until': None,
+                    'compose_transcript_wait_started_at': None,
+                    'compose_transcript_wait_members': None,
+                }
             # An already composed partial episode must catch up even when the original capture is old.
             catch_up = transcript_updated and episode.get('composed_fingerprint')
             if not catch_up and defer_late_compose(uid, episode, c or SimpleNamespace(firestore_client=None)):
