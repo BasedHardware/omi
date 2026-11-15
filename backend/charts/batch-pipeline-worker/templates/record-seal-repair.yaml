@@ -81,9 +81,11 @@ spec:
           containers:
             - name: repair
               image: "{{ .Values.recordSealRepair.imageRepository | default .Values.image.repository | required "repair image repository required" }}@{{ .Values.recordSealRepair.imageDigest | default .Values.image.digest | required "repair image digest required" }}"
-              command: [python, scripts/record_seal_repair_job.py]
               {{- if gt $shards 1 }}
+              command: [python, scripts/record_seal_repair_job.py]
               args: ["--shards", {{ $shards | quote }}, "--shard-index-file", /etc/repair-partition/index]
+              {{- else }}
+              command: [python, scripts/record_seal_repair_job.py]
               {{- end }}
               ports:
                 - {name: metrics, containerPort: 9090}
