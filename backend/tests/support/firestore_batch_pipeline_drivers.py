@@ -75,7 +75,10 @@ def entries():
         DriverEntry(
             'utils.record_projection_rebuild.run',
             domains={'mode': ['apply', 'plan']},
-            neutrals={'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only')},
+            neutrals={
+                'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
+                'report': (None, 'aggregate output accumulator only; does not affect query shape'),
+            },
             patchers=(_projection_debt_on,),
         ),
         DriverEntry(
