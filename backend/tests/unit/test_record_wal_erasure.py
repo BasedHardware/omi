@@ -7,6 +7,7 @@ import pytest
 
 from tests.unit.test_owner_storage_purge_and_gate import _Bucket, _Client
 from utils.other import storage
+from utils.other.local_storage import LocalStorageClient
 from utils.batch_pipeline import record_wal_erasure
 from utils.batch_pipeline.retention import delete_batch_object, purge_batch_storage_owner
 from scripts import retention_contract
@@ -26,15 +27,16 @@ def test_conversation_erasure_removes_originals_in_every_relevant_bucket(monkeyp
     assert all(bucket.names == {'record-wal/synthetic/other/keep.enc'} for bucket in buckets.values())
 
 
-def test_account_erasure_discovers_pre_receipt_crash_orphans(monkeypatch):
-    bucket = _Bucket({'record-wal/synthetic/record/orphan.enc', 'record-wal/other/record/keep.enc'})
-    monkeypatch.setattr(storage, '_get_storage_client', lambda: _Client({'private': bucket}))
-    monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'private')
+def test_account_erasure_discovers_pre_receipt_crash_orphans(monkeypatch, tmp_path):
+    client = LocalStorageClient(tmp_path)
+    bucket = client.bucket('private')
+    bucket.blob('record-wal/synthetic/record/orphan.enc').upload_from_string(b'synthetic orphan')
+    bucket.blob('record-wal/other/record/keep.enc').upload_from_string(b'synthetic other owner')
     monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', 'private')
-    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: _Client({'private': bucket}))
+    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: client)
     monkeypatch.delenv('BUCKET_BATCH_PIPELINE', raising=False)
     purge_batch_storage_owner('synthetic', 'batch_pipeline_dev', wal_originals=True)
-    assert bucket.names == {'record-wal/other/record/keep.enc'}
+    assert [blob.name for blob in bucket.list_blobs(prefix='record-wal/')] == ['record-wal/other/record/keep.enc']
 
 
 @pytest.mark.parametrize(
