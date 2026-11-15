@@ -234,8 +234,9 @@ ignored) changed; a simulator-only change lists nothing.
 
 **Not covered.** BLE: there is no BLE lane yet (the plan's BabbleSim
 two-image lane is future work), so GATT writes are modelled at the handler
-(`app_mute`) and committee items that live in the BLE TX path (storage INFO
-flush cadence, TX stall) are jig checks for now. Also RF/PHY, SMP transport, MCUboot and
+(`app_mute`) and the committee item that lives in the BLE TX path (TX stall)
+is a jig check for now. The storage INFO flush cadence is covered on the host by
+`tests/test_storage.c` and `tests/test_sd_card.c`; what it costs in current is still a jig measurement. Also RF/PHY, SMP transport, MCUboot and
 signing, the network core, real SD timing and wear, current draw, codec and
 microphone paths, 32-bit layout. Those stay bench/jig checks
 (`tools/cv1/jig_gestures.py` replays the physical subset of these scenarios

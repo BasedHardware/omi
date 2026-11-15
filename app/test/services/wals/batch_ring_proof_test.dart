@@ -248,8 +248,9 @@ void main() {
     await buffer.pending;
     await custody.flush();
     expect(pendant.advances.map((a) => a.seq), [10]);
-    expect(await custody.isDurableLiveRecord('pendant', 42, 5), !ringDrainRecoveryEnabled,
-        reason: 'confirmed ACK retires old proof refs from subsequent validation work');
+    expect(await custody.isDurableLiveRecord('pendant', 42, 5), isTrue,
+        reason: 'spent live refs remain fresh-validation candidates for an in-flight read');
+    expect(custody.advanceTarget('pendant', 1), isNull, reason: 'spent proofs do not reopen ADVANCE work');
     final wal = (await WalFileManager.loadIndexedWals()).single;
     expect(wal.liveOrdinalStart, 0);
     expect(wal.liveOrdinalEnd, 50);

@@ -44,7 +44,7 @@ class _ManualTimer implements Timer {
 class _BlockedCustody implements PendantRingCustody {
   final firstRecord = Completer<bool>();
   @override
-  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq) =>
+  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq, {CustodyProofMemo? memo}) =>
       seq == 5 ? firstRecord.future : Future.value(false);
   @override
   bool isIncarnationInvalid(String deviceId, int epoch) => false;
