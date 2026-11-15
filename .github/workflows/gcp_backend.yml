@@ -56,6 +56,14 @@ on:
         options:
           - all
           - cloud-run-only
+      completions_canary:
+        description: 'Production completion canary (off records an explicit workflow-context bypass)'
+        required: true
+        default: 'on'
+        type: choice
+        options:
+          - 'on'
+          - 'off'
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -105,6 +113,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # OMI_COMPLETIONS_CANARY_PROTOCOL=route90-v1
+  # Immutable capability consumed by the parent admission/dispatch protocol.
+  OMI_COMPLETIONS_CANARY_PROTOCOL: route90-v1
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
   # retries instead of hanging 7-10 min until the TCP reset (#22890).
   GIT_HTTP_LOW_SPEED_LIMIT: "1000"
@@ -732,6 +743,7 @@ jobs:
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
           deploy_profile: manual
+          completions_canary: ${{ github.event.inputs.completions_canary || 'on' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
