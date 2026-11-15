@@ -122,6 +122,7 @@ class PusherAudioProjection:
         self.inventory: dict[str, Inventory | None] = {}
         self.defer_metadata = False
         self.durable_debt: set[str] = set()
+        self.debt_versions: dict[str, Any] = {}
 
     def refresh(self, conversation_id: str, paths: list[str] | None = None, *, force: bool = False) -> bool | None:
         state = self.inventory.pop(conversation_id, None)
@@ -328,9 +329,17 @@ class PusherAudioProjection:
         self.defer_metadata = True
         if paths:
             self.durable_debt.discard(conv_id)  # A new upload needs a new durable request.
+            self.debt_versions.pop(conv_id, None)
         if not await self.defer_rebuild(conv_id):
             return False
-        coordinator().submit(self.uid, conv_id, paths, closing, self.on_refresh)
+        coordinator().submit(
+            self.uid,
+            conv_id,
+            paths,
+            closing,
+            self.on_refresh,
+            observed_update_time=self.debt_versions.get(conv_id),
+        )
         self.inventory.pop(conv_id, None)
         self.has_uploaded_paths = True
         if closing and len(self.finished) < MAX_CONVERSATIONS:
@@ -352,7 +361,9 @@ class PusherAudioProjection:
         self.marker_retry[conv_id] = self.marker_sequence
         try:
             async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
-                await run_blocking(playback_debt_executor, record_projection_rebuild.mark_many, self.uid, {conv_id})
+                versions = await run_blocking(
+                    playback_debt_executor, record_projection_rebuild.mark_many, self.uid, {conv_id}
+                )
         except Exception as exc:
             MARKER_WRITES.labels(outcome='marker_write_failed').inc()
             logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
@@ -360,6 +371,8 @@ class PusherAudioProjection:
         self.marker_retry.pop(conv_id, None)
         if len(self.durable_debt) < MAX_CONVERSATIONS:
             self.durable_debt.add(conv_id)
+            if isinstance(versions, dict) and (version := versions.get(conv_id)) is not None:
+                self.debt_versions[conv_id] = version
         self.close_debt.discard(conv_id)
         MARKER_WRITES.labels(outcome='persisted').inc()
         return True
@@ -390,7 +403,7 @@ class PusherAudioProjection:
                 return
             try:
                 async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
-                    await run_blocking(
+                    versions = await run_blocking(
                         playback_debt_executor if close_fast_path_enabled() else db_executor,
                         record_projection_rebuild.mark_many,
                         self.uid,
@@ -406,6 +419,8 @@ class PusherAudioProjection:
                     self.close_debt.discard(cid)
                     if close_fast_path_enabled() and len(self.durable_debt) < MAX_CONVERSATIONS:
                         self.durable_debt.add(cid)
+                        if isinstance(versions, dict) and (version := versions.get(cid)) is not None:
+                            self.debt_versions[cid] = version
             MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 
     async def persist_pending(self) -> None:

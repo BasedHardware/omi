@@ -459,3 +459,35 @@ def test_pressure_alerts_when_all_empty_candidates_are_fenced(monkeypatch, clear
     assert consumer.PRESSURE_BLOCKED.collect()[0].samples[0].value == (0 if clear_one else 1)
     for doc in docs:
         doc.reference.delete.assert_not_called()  # Only the fenced transaction may retire empty debt.
+
+
+def test_uploaded_batch_ack_maps_each_marker_to_its_committed_version():
+    client = MagicMock()
+    versions = iter(['first', 'second'])
+    client.batch.return_value.commit.return_value = [SimpleNamespace(update_time=next(versions)) for _ in range(2)]
+    observed = jobs.mark_many('u', ['a', 'b'], firestore_client=client)
+    ordered_cids = [call.args[1]['conversation_id'] for call in client.batch.return_value.set.call_args_list]
+    assert observed == dict(zip(ordered_cids, ['first', 'second']))
+    client.batch.return_value.commit.assert_called_once_with(timeout=1, retry=None)
+
+
+@pytest.mark.parametrize('replacement', [False, True])
+def test_successful_close_retires_only_acknowledged_marker_version(replacement):
+    client = MagicMock()
+    ref = client.collection.return_value.document.return_value
+    state = {'version': 'newer' if replacement else 'acknowledged', 'present': True}
+    client.write_option.side_effect = lambda **kw: kw
+
+    def conditional_delete(*, option, **kwargs):
+        assert option == {'last_update_time': 'acknowledged'}
+        if state['version'] != option['last_update_time']:
+            raise FailedPrecondition('replacement must survive')
+        state['present'] = False
+
+    ref.delete.side_effect = conditional_delete
+    assert jobs.retire_observed('u', 'c', observed_update_time='acknowledged', firestore_client=client) is (
+        not replacement
+    )
+    assert state['present'] is replacement
+    ref.get.assert_not_called()
+    ref.update.assert_not_called()

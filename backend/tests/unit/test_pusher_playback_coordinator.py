@@ -107,3 +107,22 @@ async def test_failed_durable_debt_keeps_token_until_commit_ack(inline_session, 
     finally:
         can_commit.set()
         await asyncio.wait_for(handler, 5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('closing,applied', [(True, True), (False, True), (True, False), (True, None)])
+async def test_only_successful_closing_refresh_retires_acknowledged_debt(monkeypatch, closing, applied):
+    monkeypatch.setattr(module, '_owner', None)
+    monkeypatch.setattr(PusherAudioProjection, 'refresh', lambda *args, **kwargs: applied)
+    retire = MagicMock(return_value=True)
+    monkeypatch.setattr(module.record_projection_rebuild, 'retire_observed', retire)
+    from utils import speaker_learning_jobs
+
+    monkeypatch.setattr(speaker_learning_jobs, 'schedule_person_voice_learning_retry', MagicMock())
+    owner = module.coordinator()
+    assert owner.submit('u', 'c', [], closing, None, observed_update_time='committed')
+    await owner.wait_owner('u')
+    if closing and applied is True:
+        retire.assert_called_once_with('u', 'c', observed_update_time='committed')
+    else:
+        retire.assert_not_called()

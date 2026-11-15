@@ -4,12 +4,13 @@ import asyncio
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from utils.pusher_audio_projection import PusherAudioProjection
 
-from utils.executors import playback_metadata_executor, run_blocking, start_background_task
+from utils.executors import playback_metadata_executor, playback_debt_executor, run_blocking, start_background_task
+from database import record_projection_rebuild
 from utils.pusher_receive_metrics import observe_work
 from utils.observability.fallback import record_fallback
 
@@ -25,6 +26,7 @@ class Refresh:
     paths: tuple[str, ...]
     closing: bool
     callback: Callable[[str, bool | None], None] | None
+    observed_update_time: Any = None
 
 
 class PlaybackCoordinator:
@@ -35,7 +37,7 @@ class PlaybackCoordinator:
         self.cache: OrderedDict[tuple[str, str], PusherAudioProjection] = OrderedDict()
         self.loop = asyncio.get_running_loop()
 
-    def submit(self, uid, cid, paths, closing, callback):
+    def submit(self, uid, cid, paths, closing, callback, *, observed_update_time=None):
         key = uid, cid
         prior = self.pending.get(key)
         paths = tuple(dict.fromkeys([*(prior.paths if prior else ()), *(paths or ())]))
@@ -47,7 +49,9 @@ class PlaybackCoordinator:
         )
         if len(keys) > MAX_CONVERSATIONS or weight > MAX_PATHS:
             return False
-        self.pending[key] = Refresh(uid, cid, paths, closing or bool(prior and prior.closing), callback)
+        self.pending[key] = Refresh(
+            uid, cid, paths, closing or bool(prior and prior.closing), callback, observed_update_time
+        )
         self._start()
         return True
 
@@ -90,6 +94,14 @@ class PlaybackCoordinator:
                 job.callback(job.cid, applied)
             if applied:
                 schedule_person_voice_learning_retry(job.uid, job.cid)
+            if applied is True and job.closing and job.observed_update_time is not None:
+                await run_blocking(
+                    playback_debt_executor,
+                    record_projection_rebuild.retire_observed,
+                    job.uid,
+                    job.cid,
+                    observed_update_time=job.observed_update_time,
+                )
             self.cache[key] = cache
             # Bound cached inventories as well as queued path arguments globally.
             while (
