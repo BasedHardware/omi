@@ -34,7 +34,14 @@ spec:
       parallelism: {{ $shards }}
       # Discovery <=60s + repair <=1500s + startup/reaping headroom.
       activeDeadlineSeconds: 1680
+      {{- if gt $shards 1 }}
+      # A failed index must not terminate healthy siblings (Kubernetes >=1.33).
+      backoffLimit: {{ $shards }}
+      backoffLimitPerIndex: 0
+      maxFailedIndexes: {{ $shards }}
+      {{- else }}
       backoffLimit: 0
+      {{- end }}
       template:
         metadata:
           labels:

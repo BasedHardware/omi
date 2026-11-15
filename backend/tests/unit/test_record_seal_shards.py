@@ -97,7 +97,9 @@ def test_five_shards_are_cpu_only_spread_and_do_not_change_gpu_deployments():
     assert [key for key in before if before[key] != after[key]] == [('CronJob', 'record-seal-repair')]
     job = after['CronJob', 'record-seal-repair']['spec']['jobTemplate']['spec']
     assert job['completionMode'] == 'Indexed' and job['completions'] == job['parallelism'] == 5
-    assert job['backoffLimit'] == 0
+    assert job['backoffLimit'] == 5
+    assert job['backoffLimitPerIndex'] == 0 and job['maxFailedIndexes'] == 5
+    assert before['CronJob', 'record-seal-repair']['spec']['jobTemplate']['spec']['backoffLimit'] == 0
     pod = job['template']['spec']
     assert 'tolerations' not in pod
     affinity = pod['affinity']
