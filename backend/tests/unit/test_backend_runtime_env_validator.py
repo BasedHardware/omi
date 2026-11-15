@@ -3994,3 +3994,25 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
             assert host['env'][key] == expected
             assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
     assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in config['gke']['pusher']['env']
+
+
+def _assert_record_close_listener_bindings(config):
+    # main.py defaults to ALL: every declared backend service can mount /v4/listen.
+    hosts = [config['gke']['backend-listen'], config['gke']['pusher'], config['desktop_backend']]
+    hosts.extend(config['cloud_run']['services'].values())
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    for host in hosts:
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_record_close_notify_bound_on_all_listener_hosts(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    _assert_record_close_listener_bindings(config)
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' in classification['kinds']['config']
+    for host in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        missing = copy.deepcopy(config)
+        del missing['cloud_run']['services'][host]['env']['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED']
+        with pytest.raises(AssertionError):
+            _assert_record_close_listener_bindings(missing)

@@ -336,6 +336,7 @@ overlay:
       name: dev-omi-backend-config
   desktop_backend:
     env:
+      PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
     secrets:
@@ -364,6 +365,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -444,6 +446,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -537,6 +540,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -608,6 +612,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}

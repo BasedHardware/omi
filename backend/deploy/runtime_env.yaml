@@ -839,6 +839,9 @@ environments:
           value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+          value: 'true'
+          category: ops_kill
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
@@ -1181,6 +1184,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1522,6 +1528,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1848,6 +1857,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -2137,6 +2149,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -3387,6 +3402,9 @@ environments:
           value: desktop-backend
         PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+          value: 'true'
+          category: ops_kill
         OMI_FLAGS_FIRESTORE_PROJECT:
           value: based-hardware
           category: service_discovery
@@ -3777,6 +3795,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4251,6 +4272,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4718,6 +4742,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5130,6 +5157,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill

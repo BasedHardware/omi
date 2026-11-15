@@ -1492,3 +1492,16 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
         entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
         assert entries == [{'name': key, 'value': value}]
         assert contract[key]['value'] == value
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_record_close_notify_renders_on_every_cloud_run_listener(environment, service, monkeypatch):
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](
+        _MODULE['_render_env_vars'](config['cloud_run']['services'][service]['env'])
+    )
+    assert [(name, value) for name, value in rendered if name == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] == [
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    ]
