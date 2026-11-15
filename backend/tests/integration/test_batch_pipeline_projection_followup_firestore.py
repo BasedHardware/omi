@@ -4,17 +4,26 @@ import pytest
 
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows
 
+import asyncio
+from database import batch_pipeline_projection_claim as claims
+from database.batch_pipeline_projection import ProjectionBlocked
+from utils.batch_pipeline import projection_followup
+from utils.sync import reprocess
+import fakeredis
+from utils.batch_pipeline.projection_followup import ProjectionFollowups
+from database import batch_pipeline_projection_claim as claims, sync_jobs
+from utils.batch_pipeline.projection import publish_client_completion
+from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
+from unittest.mock import Mock
+from database.batch_pipeline_projection_finish_backfill import backfill_ref, BACKFILL_VERSION
+from utils.batch_pipeline.serving import Serving
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
 async def test_async_followup_slow_enrichment_keeps_transcript_order_and_atomic_sibling_completion(lane, monkeypatch):
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims
-    from database.batch_pipeline_projection import ProjectionBlocked
-    from utils.batch_pipeline import projection_followup
-    from utils.sync import reprocess
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
@@ -82,9 +91,6 @@ async def test_async_followup_slow_enrichment_keeps_transcript_order_and_atomic_
 @pytest.mark.asyncio
 @pytest.mark.parametrize('kind', ['account', 'conversation'])
 async def test_async_followup_rechecks_deletion_after_assignment(lane, monkeypatch, kind):
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline.projection_followup import ProjectionFollowups
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     monkeypatch.setattr(claims, '_redis_client', lambda: fakeredis.FakeRedis())
@@ -106,12 +112,6 @@ async def test_async_followup_rechecks_deletion_after_assignment(lane, monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize('committed', [False, True])
 async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usage(lane, monkeypatch, committed):
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims, sync_jobs
-    from utils.batch_pipeline.projection import publish_client_completion
-    from utils.batch_pipeline import projection_followup
-    from utils.sync import reprocess
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     redis = fakeredis.FakeRedis()
@@ -188,10 +188,6 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
 @pytest.mark.asyncio
 async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
     """The old first page pins forever; both real scanners must escape it."""
-    import asyncio
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline import projection_followup
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     # Isolate paginated discovery. Newer owner-chain walking and pending-only
@@ -261,10 +257,6 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
 
 @pytest.mark.asyncio
 async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, monkeypatch):
-    from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
-    from database import batch_pipeline_projection_claim as claims
-    from utils.batch_pipeline.projection_followup import ProjectionFollowups
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     redis = fakeredis.FakeRedis()
@@ -289,13 +281,6 @@ async def test_async_assignment_supersession_drains_all_sibling_receipts(lane, m
 
 @pytest.mark.asyncio
 async def test_excluded_async_finish_rows_still_schedule_and_complete(lane, monkeypatch):
-    import asyncio
-    from unittest.mock import Mock
-    from database import batch_pipeline_projection_claim as claims
-    from database.batch_pipeline_projection_finish_backfill import backfill_ref, BACKFILL_VERSION
-    from utils.batch_pipeline.serving import Serving
-    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
-    import fakeredis
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')

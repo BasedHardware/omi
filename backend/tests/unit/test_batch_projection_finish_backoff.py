@@ -27,6 +27,22 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_sweep_owner_chain import Recording
 
+from contextlib import contextmanager
+from utils.batch_pipeline import projection, projection_followup
+from tests.unit.test_batch_pipeline_quarantine import projection_fixture
+from database.firestore_index_registry import firebase_index_manifest
+import math
+import asyncio
+from unittest.mock import AsyncMock
+from utils.batch_pipeline.serving import Serving
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
+from google.api_core.exceptions import Aborted
+from database.firestore_transaction_retry import FirestoreContentionExhausted
+from config.batch_pipeline import projection_finish_classify_page_limit
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 LEVER = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'
 SWITCHES = (
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED',
@@ -36,13 +52,10 @@ SWITCHES = (
 
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
-    from contextlib import contextmanager
 
     @contextmanager
     def claim(*_):
         yield True
-
-    from utils.batch_pipeline import projection, projection_followup
 
     monkeypatch.setattr(projection, 'projection_claim', claim)
     monkeypatch.setattr(projection_followup, 'projection_claim', claim)
@@ -131,7 +144,6 @@ def test_a_deferred_row_leaves_the_page_until_its_clock_passes(monkeypatch):
 
 @pytest.mark.parametrize("enabled", ["true", "false"])
 def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch, enabled):
-    from tests.unit.test_batch_pipeline_quarantine import projection_fixture
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     client, store, binding = projection_fixture()
@@ -362,7 +374,6 @@ def test_projection_page_due_cursor_and_seed_shapes():
 
 
 def test_the_finish_index_is_declared_for_both_namespaces():
-    from database.firestore_index_registry import firebase_index_manifest
 
     fields = [
         index['fields']
@@ -537,7 +548,6 @@ def test_new_async_state_writes_exclude_without_backfill_or_policy_reads():
 
 @pytest.mark.parametrize('stripe', [0, 2048])
 def test_sync_finish_with_backoff_off_seeds_a_finite_cursor(monkeypatch, stripe):
-    import math
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'on')
@@ -574,10 +584,6 @@ def test_missing_marker_does_not_reclassify_an_already_excluded_row(monkeypatch)
 
 @pytest.mark.parametrize('backoff', ['true', 'false'])
 def test_sync_only_finish_page_never_wakes_followup_candidate_discovery(monkeypatch, backoff):
-    import asyncio
-    from unittest.mock import AsyncMock
-    from utils.batch_pipeline.serving import Serving
-    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     monkeypatch.setenv(LEVER, backoff)
@@ -603,7 +609,6 @@ def legacy_async_log(rows=20):
 @pytest.mark.parametrize('limit', [0, 1, 4, 16])
 @pytest.mark.parametrize('backoff', ['true', 'false'])
 def test_classification_budget_counts_only_successful_updates(monkeypatch, limit, backoff):
-    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', str(limit))
@@ -651,9 +656,6 @@ def test_repeated_pages_do_not_refill_budget_until_after_last_attempt(monkeypatc
 
 @pytest.mark.parametrize('kind', ['abort', 'contention', 'failure'])
 def test_classification_failures_are_counted_without_sweep_errors_or_deferral(monkeypatch, caplog, kind):
-    from google.api_core.exceptions import Aborted
-    from database.firestore_transaction_retry import FirestoreContentionExhausted
-    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '4')
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
@@ -691,7 +693,6 @@ def test_classification_failures_are_counted_without_sweep_errors_or_deferral(mo
 
 
 def test_classification_fence_noop_is_neither_success_nor_failure(monkeypatch):
-    from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     log, _ids = legacy_async_log(rows=2)
@@ -707,7 +708,6 @@ def test_classification_fence_noop_is_neither_success_nor_failure(monkeypatch):
 
 @pytest.mark.parametrize('value,expected', [(None, 8), ('0', 0), ('16', 16), ('-1', 8), ('17', 8), ('bad', 8)])
 def test_classification_page_limit_setting(monkeypatch, value, expected):
-    from config.batch_pipeline import projection_finish_classify_page_limit
 
     if value is None:
         monkeypatch.delenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', raising=False)
@@ -717,8 +717,6 @@ def test_classification_page_limit_setting(monkeypatch, value, expected):
 
 
 def test_overlapping_pages_keep_individual_caps_and_share_process_budget(monkeypatch):
-    from concurrent.futures import ThreadPoolExecutor
-    import threading
 
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '4')
     monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
