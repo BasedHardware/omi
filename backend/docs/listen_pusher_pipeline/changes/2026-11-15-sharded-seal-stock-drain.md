@@ -205,3 +205,21 @@ changed path and its before/after values, not just this descriptive inventory:
 - Hard Job deadline1680 and Forbid remain unchanged. No Deployment is patched.
 
 Do not apply if the dry-run changes anything beyond the receipt's exact delta.
+
+## First ten minutes watch
+
+Start this clock at creation of the first Indexed Job, not at patch time. Save
+fresh-ready age/count before the patch, then sample at least once per minute.
+The release owner holds further expansion and prepares the exact inverse on:
+
+1. At+5min, fewer than five Running indexes on five distinct api-pool nodes,
+   with persistent FailedScheduling, ImagePullBackOff or absent node scale-up.
+2. Any coordinator OOMKilled, failed pod, BackoffLimitExceeded or DeadlineExceeded.
+3. Fresh-ready age above300s on two consecutive samples, above its pre-change
+   baseline, with fresh-ready count growing.
+
+Also watch overlap_refused, missing/failed indexes and effective4/5 throughput;
+record per-index dispositions and CPU usage. A CronJob inverse controls future
+Jobs; immediate termination of running Jobs is a separate release-owner action,
+not part of this tool. Verify the unchanged GPU Deployment identities and the
+new repair image identity, and retain the private before/after packet.
