@@ -247,12 +247,13 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
 
     monkeypatch.setattr(router, 'registered_record_response', batch_route)
     monkeypatch.setattr(router, 'accept_batch_upload', intake.accept_upload)
-    path = Path(pcm(tmp_path, 2147472000, 16000))
+    future = int(router.time.time()) + 12 * 365 * 86400
+    path = Path(pcm(tmp_path, future, 16000))
     payload = path.read_bytes()
     response = client.post(
         '/v2/sync-local-files',
         headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
-        files=[('files', ('audio_omi_pcm16_16000_clkeone_2147472000.bin', payload, 'application/octet-stream'))],
+        files=[('files', (f'audio_omi_pcm16_16000_clkeone_{future}.bin', payload, 'application/octet-stream'))],
     )
     assert response.status_code == 503, response.text
     assert response.json()['code'] == 'capture_clock_anchor_unavailable'

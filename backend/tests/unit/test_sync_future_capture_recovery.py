@@ -28,7 +28,8 @@ from utils.sync.files import get_timestamp_from_path
 from utils.sync.content_id import compute_sync_content_id
 from routers import sync as router
 
-FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
+# Future-window cases move with the clock instead of expiring in 2038.
+FUTURE = int(datetime.now(timezone.utc).timestamp()) + 12 * 365 * 86400
 NAME = f'audio_omi_pcm16_16000_clkeone_{int(FUTURE)}.bin'
 
 
