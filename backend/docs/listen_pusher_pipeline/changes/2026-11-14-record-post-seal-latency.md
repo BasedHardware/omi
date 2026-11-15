@@ -159,9 +159,13 @@ no budget increase or combined rollback control is needed.
 
 There are two live merge/commit implementations of the same source:
 
-- `main.py:247` starts serving on all five CPU hosts. `Serving` constructs
-  `OrderedMerge` and `Projector` (`utils/batch_pipeline/serving.py:91`, `:412`).
-  These services currently consume `gcr.io/<compute-project>/backend`, built
+- All five CPU hosts call `start_serving_from_env` at `main.py:247`; the
+  declared prod config enables its periodic serving loop on backend-integration
+  only. API/worker batch RPC and provider callbacks can also construct the same
+  `Serving`, which owns `OrderedMerge` and `Projector`
+  (`utils/batch_pipeline/serving.py:91`, `:412`). Bind every potential reader,
+  including disabled periodic hosts. These services currently consume
+  `gcr.io/<compute-project>/backend`, built
   from `backend/Dockerfile`; role-specific image declarations are not proof
   that those separate role images serve traffic.
 - `diarizer/batch_pipeline_runtime.py:259` builds `Pump` with a direct
