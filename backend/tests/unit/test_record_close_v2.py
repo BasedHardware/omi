@@ -116,10 +116,13 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
         current_conversation_id='conversation',
         active_ref=active,
         config_overrides={'uid': 'owner', 'sample_rate': 16000, 'max_audio_buffer_size': 128},
-        deps_overrides={'get_current_conversation_id': lambda: binding['cid']},
+        deps_overrides={
+            'get_current_conversation_id': lambda: binding['cid'],
+            'finish_recording_audio': AsyncMock(side_effect=lambda cid: binding['cid'] != cid),
+        },
     )
     handler = asyncio.create_task(
-        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
+        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=3)
     )
     await session.connect()
     receiver = asyncio.create_task(session.pusher_receive())
@@ -294,7 +297,7 @@ async def test_disconnect_before_commit_preserves_the_prepared_producer(inline_s
         'owner',
         16000,
         audio_custody=1,
-        record_close_protocol=2,
+        record_close_protocol=3,
     )
     assert client.rows[path]['record_upload_sessions']
     assert not client.rows[path]['record_audio_closed']
@@ -466,10 +469,13 @@ async def _sequential_closes(inline_session, monkeypatch, *, total, limit):
         ws=Relay(),
         active_ref=active,
         config_overrides={'uid': 'owner', 'sample_rate': 16000, 'max_pending_requests': limit},
-        deps_overrides={'get_current_conversation_id': lambda: binding['cid']},
+        deps_overrides={
+            'get_current_conversation_id': lambda: binding['cid'],
+            'finish_recording_audio': AsyncMock(side_effect=lambda cid: binding['cid'] != cid),
+        },
     )
     handler = asyncio.create_task(
-        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
+        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=3)
     )
     await session.connect()
     receiver = asyncio.create_task(session.pusher_receive())
