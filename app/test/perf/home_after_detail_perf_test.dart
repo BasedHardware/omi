@@ -492,6 +492,7 @@ void main() {
                       'id': 'conversation:conv-$i',
                       'kind': 'conversation',
                       'detail_id': 'conv-$i',
+                      'sort_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
                       'started_at': _seedNow.subtract(Duration(minutes: i)).toUtc().toIso8601String(),
                       'finished_at': _seedNow.subtract(Duration(minutes: i - 1)).toUtc().toIso8601String(),
                       'title': 'Card $i',
