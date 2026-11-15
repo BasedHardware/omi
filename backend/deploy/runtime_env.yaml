@@ -424,9 +424,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-            value: 'false'
-            category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1310,9 +1308,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1702,9 +1698,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2079,9 +2073,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2419,9 +2411,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -3170,9 +3160,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-            value: 'false'
-            category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -4189,9 +4177,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4718,9 +4704,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5239,9 +5223,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5706,9 +5688,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'false'
-              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill

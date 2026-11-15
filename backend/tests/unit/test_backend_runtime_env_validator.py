@@ -4059,7 +4059,7 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_future_capture_admissions_default_off_until_reader_rollout(environment):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'ops_kill'}
+    expected = {'value': 'false', 'category': 'rollout'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
     assert len(hosts) == 5
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
