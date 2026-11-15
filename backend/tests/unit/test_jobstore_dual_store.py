@@ -826,7 +826,8 @@ def test_partial_purge_configuration_raises_instead_of_claiming_erasure(monkeypa
         dual_store.purge_owner('batch_pipeline_dev', 'synthetic')
 
 
-def test_observing_the_finish_marker_uses_the_bounded_connection_and_takes_no_lock(monkeypatch):
+@pytest.mark.parametrize('query', ['projection_finish_backfill_complete', 'projection_followup_backfill_complete'])
+def test_observing_the_marker_uses_the_bounded_connection_and_takes_no_lock(monkeypatch, query):
     from contextlib import nullcontext
 
     from database.jobstore import serving_parity
@@ -852,12 +853,7 @@ def test_observing_the_finish_marker_uses_the_bounded_connection_and_takes_no_lo
 
     store = PostgresStore('batch_pipeline_test_marker', pool=Pool(), customer_client=None)
     monkeypatch.setattr(PostgresStore, 'run', lambda *a, **k: pytest.fail('observation opened a serving transaction'))
-    assert (
-        serving_parity.query_value(
-            store, 'projection_finish_backfill_complete', (), {}, transaction=False, budget_s=1.0
-        )
-        is True
-    )
+    assert serving_parity.query_value(store, query, (), {}, transaction=False, budget_s=1.0) is True
     assert any('control' in s or 'docs' in s for s in statements)
     assert not any('FOR UPDATE' in s for s in statements)
 
