@@ -72,3 +72,17 @@ Cache cards separately from detail, scoped to account and policy. Older pages ne
 Test grouped/hidden and dense/sparse history, equal timestamps, deleted cursor anchors, late imports, ownership changes, partial results/retries, edit/delete races, access changes, account switches and detail hydration. Assert no generation from scroll/prefetch and no transcript/member hydration in the steady-state feed path. Measure source/member reads, bytes, first-card latency, visible cards and repeated requests. Maintain bounded recovery outside passive reads. Backend deploy and mobile distribution are separately verified; a merged PR is not a live release.
 
 Aggregate counters `omi_home_feed_work_total` report source documents, cards and payload bytes; `omi_home_feed_requests_total` and `omi_home_feed_seconds` report request outcomes and latency. `omi_home_feed_preparation_documents_total` separates compatibility metadata/member reads, projection writes and bytes. Labels contain no account IDs or content. Ratios compare work per card and request across equivalent traffic; smaller field projections alone do not reduce Firestore document-read billing. One-time preparation and ongoing invalidation writes must be included before claiming net savings.
+
+
+Under HOME_STEP_PROJECTION, uncomposed and live episodes keep their retained
+recordings as compact standalone cards. READY notes are immediately readable;
+the app folds only today's pending recording cards into one Processing row
+under Listening. Composition replaces those recording cards with the compact
+episode card. Preparation remains fenced: GET refuses every partial generation,
+so no intermediate chunk can publish both representations. This uses existing
+card fields and never adds member IDs or transcript/notes hydration to Home GET.
+The preparation control and per-episode progress record the projection policy;
+a policy change requires a fully prepared replacement before serving resumes.
+Disabling HOME_STEP_PROJECTION restores grouped compact preparation. Pending
+collection Delete uses only its displayed recording IDs; full finished episode
+Delete still waits for authoritative opened detail membership.

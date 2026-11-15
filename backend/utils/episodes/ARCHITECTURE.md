@@ -586,3 +586,21 @@ The unlabeled overdue-read counter counts observations, not unique members.
 Its info alert is staged beside the existing batch timeliness rules; idle
 members remain covered by queue timeliness monitoring. No production alert
 or runtime configuration is changed here.
+## One Home processing row (owner ruling, 2026-11-15)
+
+Home shows at most one processing row directly below the live episode, or at
+the top of Today without live capture. It represents every pending recording
+and closed episode for that day, even across finished rows. Finished episodes
+keep their own rows; terminal failures never enter the processing aggregate.
+The aggregate's page must retain links to every source episode and recording.
+
+This is a client presentation contract. The episode API preserves distinct
+episode IDs and membership, and the conversation list preserves `episode_id`.
+Released clients reconstruct owners from those fields and sort by recording
+time independently of server response order. Rewriting them into a synthetic
+owner would also change detail, delete and acknowledgement semantics. A blank
+client aggregate must not resolve its page to the first overlapping episode:
+that would lose the other members. Server queue and compose waits can expose
+more pending objects, but cannot enforce this display rule on an old client.
+`tests/unit/test_home_pending_identity_contract.py` pins source identity and
+step preservation; Flutter Home tests own aggregation, placement and reachability.
