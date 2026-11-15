@@ -13,7 +13,7 @@ from typing import Any
 from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
-from config.record_latency import recent_native_record, record_notes_eager_enabled
+from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
 from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
@@ -43,6 +43,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
@@ -398,16 +399,39 @@ class ProjectionStore:
                 session.job.get('record_notes_after_complete') is True
                 or session.ledger.get('record_notes_after_complete') is True
             )
-            if complete_notes or record_notes_eager_enabled() and recent_native_record(session.job, now):
+            if complete_notes or record_notes_eager_enabled() and recent_native_record_notes(session.job, now):
                 # One recording-wide dispatch is owned by complete(), after
                 # every sibling receipt is ready in that same transaction.
-                if not complete_notes:
-                    # Upgrade an unstamped in-flight binding once, using the
-                    # ledger snapshot prepare() already read. All siblings
-                    # keep this owner across age/switch changes.
-                    transaction.update(session.ledger_ref, {'record_notes_after_complete': True})
-                receipt.update(state='ready', record_notes_deferred=True)
-                return None, True, session.write_receipt(transaction, receipt)
+                # A missing/held sibling must not strand this owner forever.
+                # Reuse the normal settle deadline for one durable fallback
+                # per canonical output; completion can advance it to now.
+                # Do not renew the fallback as each later sibling projects.
+                prepared = set(session.ledger.get('record_notes_fallback_outputs') or [])
+                remaining = [cid for cid in output_ids if cid not in prepared]
+                result = None
+                if remaining:
+                    output_id = remaining[0]
+                    result = outbox.enqueue(
+                        reprocess.key(binding.owner_id, output_id),
+                        binding.owner_id,
+                        {'conversation_id': output_id, 'language': language},
+                        now + min(settle_seconds(), MAX_HOLD_SECONDS),
+                        tx=_ClientTransaction(self.client, transaction),
+                        now=now,
+                        coalesce='min',
+                        snapshot_summary=True,
+                        eager_if_unheld=True,
+                    )
+                    transaction.update(
+                        session.ledger_ref,
+                        {
+                            'record_notes_after_complete': True,
+                            'record_notes_fallback_outputs': sorted(prepared | {output_id}),
+                        },
+                    )
+                finished = len(remaining) <= 1
+                receipt.update(state='ready' if finished else 'persisted', record_notes_deferred=True)
+                return result, finished, session.write_receipt(transaction, receipt)
             backfill = session.job.get('priority') != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
@@ -799,7 +823,7 @@ class ProjectionStore:
                     hold = row.get('sync_processing_hold') or {}
                     eager = (
                         record_notes_eager_enabled()
-                        and recent_native_record(session.job, now)
+                        and recent_native_record_notes(session.job, now)
                         and not hold.get('held')
                         and bool(row.get('record_audio_closed'))
                         and not row.get('record_audio_partial')

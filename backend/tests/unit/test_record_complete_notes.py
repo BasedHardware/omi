@@ -1,4 +1,4 @@
-"""A sealed recording produces one notes obligation after all sibling receipts."""
+"""Record completion advances one bounded, coalesced notes obligation."""
 
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -108,24 +108,25 @@ def recording(monkeypatch, request):
 
 
 @pytest.mark.parametrize('recording', [1, 2, 128], indirect=True)
-def test_complete_binding_has_one_outbox_revision_independent_of_sibling_count(recording):
+def test_complete_binding_has_one_fallback_and_completion_update_independent_of_sibling_count(recording):
     f = recording
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
-    # Every projected unit must leave notes undispatched. Probe completion
+    # Siblings share one delayed fallback and cannot create immediate notes. Probe completion
     # with first/middle/last missing receipts, then the full 128-sibling set;
     # replaying the same incomplete scan after every unit adds no coverage.
     count = len(f.binding.segment_ids)
     probes = {0, count // 2, max(0, count - 2), count - 1}
     for index, sid in enumerate(f.binding.segment_ids):
         f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
-        assert not row.get().exists
+        assert row.get().to_dict()['version'] == 1
+        assert row.get().to_dict()['due_at'] > NOW
         if index in probes:
             result = f.store.complete(sid, f.binding, NOW, f.accounting, policy=POLICY)
             if index + 1 < count:
                 assert result is None
-    assert result and row.get().to_dict()['version'] == 1
+    assert result and row.get().to_dict()['version'] == 2
     f.store.complete(sid, f.binding, NOW + 1, f.accounting, policy=POLICY)
-    assert row.get().to_dict()['version'] == 1
+    assert row.get().to_dict()['version'] == 2
 
 
 def test_siblings_keep_completion_owner_across_age_and_switch_changes(recording, monkeypatch):
@@ -135,9 +136,9 @@ def test_siblings_keep_completion_owner_across_age_and_switch_changes(recording,
     later = NOW + 1801
     f.store.mark_enrichment('last', f.binding, later, 'capture', 'en', policy=POLICY)
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
-    assert not row.get().exists
+    assert row.get().to_dict()['version'] == 1
     assert f.store.complete('last', f.binding, later, f.accounting, policy=POLICY)
-    assert row.get().to_dict()['version'] == 1 and row.get().to_dict()['due_at'] > later
+    assert row.get().to_dict()['version'] == 2
 
 
 def test_size_rollover_keeps_one_obligation_per_distinct_output_without_read_after_write(recording):
@@ -154,9 +155,9 @@ def test_size_rollover_keeps_one_obligation_per_distinct_output_without_read_aft
     assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
     for canonical in ('capture', 'split'):
         ref = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, canonical))
-        assert ref.get().to_dict()['version'] == 1
+        assert ref.get().to_dict()['version'] == 2
     assert f.store.complete('first', f.binding, NOW + 1, f.accounting, policy=POLICY)
-    assert all(data.get('version') == 1 for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION)
+    assert all(data.get('version') == 2 for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION)
 
 
 @pytest.mark.parametrize('recording', [1], indirect=True)
@@ -170,11 +171,11 @@ def test_large_output_set_checkpoints_without_repeating_notes_after_restart(reco
     f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
     assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
     assert len(f.ledger.get().to_dict()['record_notes_prepared_outputs']) == 128
-    assert len([path for path in f.client.rows if path[0] == reprocess.COLLECTION]) == 128
+    assert len([path for path in f.client.rows if path[0] == reprocess.COLLECTION]) == 129
     assert f.store.ref('results', 'first').get().to_dict()['projection_state'] == 'ready'
     assert f.store.complete('first', f.binding, NOW + 1, f.accounting, policy=POLICY)
     rows = [data for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION]
-    assert len(rows) == 129 and all(row['version'] == 1 for row in rows)
+    assert len(rows) == 129 and all(row['version'] == 2 for row in rows)
 
 
 def test_eager_completion_reuses_visible_rows_with_a_decision_only_privacy_guard(recording, monkeypatch):
@@ -198,10 +199,10 @@ def test_eager_completion_reuses_visible_rows_with_a_decision_only_privacy_guard
     row = (
         f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture')).get().to_dict()
     )
-    assert row['version'] == 1 and row['due_at'] == NOW
+    assert row['version'] == 2 and row['due_at'] == NOW
 
 
-def test_two_siblings_no_notes_until_both_ready_then_one_durable_refresh(recording, monkeypatch):
+def test_two_siblings_no_immediate_notes_until_both_ready_then_one_completion_refresh(recording, monkeypatch):
     f = recording
     monkeypatch.setenv('SYNC_TASKS_QUEUE', 'synthetic-notes')
     monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://synthetic.invalid/v2/sync-jobs/run')
@@ -211,19 +212,20 @@ def test_two_siblings_no_notes_until_both_ready_then_one_durable_refresh(recordi
     # A later ready receipt cannot enqueue notes while the earlier one is unready.
     f.store.mark_enrichment('last', f.binding, NOW, 'capture', 'en', policy=POLICY)
     assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY) is None
-    assert not row.get().exists
-    f.wake.assert_not_called()
+    fallback = row.get().to_dict()
+    assert fallback['version'] == 1 and fallback['due_at'] > NOW
+    assert f.wake.call_count == 1  # Delayed fallback, never an immediate wake.
     f.store.mark_enrichment('first', f.binding, NOW + 1, 'capture', 'en', policy=POLICY)
-    assert not row.get().exists
+    assert row.get().to_dict() == fallback
     assert f.store.complete('first', f.binding, NOW + 1, f.accounting, policy=POLICY)
     saved = row.get().to_dict()
-    assert saved['version'] == 1 and saved['due_at'] == NOW + 1
+    assert saved['version'] == 2 and saved['due_at'] == NOW + 1
     # The sibling's followup and a retry both replay the completed ledger.
     for sid in f.binding.segment_ids:
         f.store.mark_enrichment(sid, f.binding, NOW + 2, 'capture', 'en', policy=POLICY)
         assert f.store.complete(sid, f.binding, NOW + 2, f.accounting, policy=POLICY)
     assert row.get().to_dict() == saved
-    assert f.wake.call_count == 1
+    assert f.wake.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -244,19 +246,88 @@ def test_complete_record_respects_holds_and_toggle_or_age_change(recording, monk
     }.get(hold, {})
     f.client.rows[f.conversation.path].update(patch)
     if hold in {'sync', 'merge'}:
-        row.create(
-            {
-                'uid': f.binding.owner_id,
-                'conversation_id': 'capture',
-                'version': 1,
-                'summary_seen': True,
-                'first_pending_at': NOW,
-                'due_at': NOW + 900,
-                f'{hold}_hold': True,
-            }
-        )
+        f.client.rows[row.path] = {
+            'uid': f.binding.owner_id,
+            'conversation_id': 'capture',
+            'version': 1,
+            'summary_seen': True,
+            'first_pending_at': NOW,
+            'due_at': NOW + 900,
+            f'{hold}_hold': True,
+        }
     if hold == 'off':
         monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
     now = NOW + (1801 if hold == 'aged' else 1)
     assert f.store.complete('last', f.binding, now, f.accounting, policy=POLICY)
-    assert row.get().to_dict()['due_at'] > now
+    if hold == 'aged':
+        assert row.get().to_dict()['due_at'] == NOW + 120
+    else:
+        assert row.get().to_dict()['due_at'] > now
+
+
+@pytest.mark.parametrize('end_lag,immediate', [(900, True), (3 * 86400, False)])
+def test_notes_urgency_uses_recording_end_with_fresh_merge_off(recording, monkeypatch, end_lag, immediate):
+    f = recording
+    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', 'false')
+    for sid in f.binding.segment_ids:
+        f.client.rows[f.store.ref('jobs', sid).path].update(fresh_capture=False, record_finished_at=NOW - end_lag)
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    assert (row.get().to_dict()['due_at'] == NOW) is immediate
+
+
+@pytest.mark.parametrize('sibling_state', ['held', 'dead', 'missing'])
+@pytest.mark.parametrize('summary_seen', [False, True])
+def test_completion_marker_has_one_durable_deadline_when_sibling_cannot_arrive(
+    recording, monkeypatch, sibling_state, summary_seen
+):
+    f = recording
+    monkeypatch.setenv('SYNC_REPROCESS_SETTLE_SECONDS', '600')
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'synthetic-notes')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://synthetic.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    if summary_seen:
+        row.create(
+            {
+                'uid': f.binding.owner_id,
+                'conversation_id': 'capture',
+                'summary_seen': True,
+                'first_pending_at': NOW,
+                'version': 0,
+                'due_at': NOW + 600,
+                'task_due_at': NOW + 600,
+                'task_token': 'a' * 32,
+                'dispatch': reprocess.dispatch_binding(),
+            }
+        )
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    fallback = row.get().to_dict()
+    deadline = NOW + (600 if summary_seen else 120)
+    assert fallback['version'] == 1 and fallback['due_at'] == deadline
+    assert fallback['task_due_at'] == deadline
+    assert f.wake.call_count == (0 if summary_seen else 1)
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    if sibling_state == 'missing':
+        del f.client.rows[f.store.ref('results', 'last').path]
+    else:
+        f.client.rows[f.store.ref('jobs', 'last').path].update(
+            state='quarantined' if sibling_state == 'held' else 'dead',
+            recovery_state='held',
+            dead_letter_reason='held_expired',
+            merge_pending=False,
+        )
+    assert f.store.complete('first', f.binding, deadline, f.accounting, policy=POLICY) is None
+    f.store.mark_enrichment('first', f.binding, deadline + 1, 'capture', 'en', policy=POLICY)
+    assert row.get().to_dict() == fallback
+    assert f.ledger.get().to_dict()['record_notes_fallback_outputs'] == ['capture']
+
+
+def test_flag_off_before_first_projection_still_initializes_marked_record_deadline(recording, monkeypatch):
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    f = recording
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    assert row.get().to_dict()['due_at'] == NOW + 120
+    assert f.ledger.get().to_dict()['record_notes_fallback_outputs'] == ['capture']

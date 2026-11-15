@@ -135,6 +135,9 @@ def test_only_recent_sealed_native_records_enqueue_notes_without_settle(monkeypa
     }
     if case == 'unstamped':
         session.job.pop('record_finished_at')
+    session.ledger = {}
+    session.ledger_ref = client.collection('ledgers').document('content')
+    session.ledger_ref.create({})
     session.prepare.side_effect = lambda tx, **_: receipt_ref.get(transaction=tx)
     session.guard.side_effect = lambda tx, _: receipt_ref.get(transaction=tx)
     session.receipt.return_value = {'state': 'persisted'}
@@ -159,8 +162,10 @@ def test_only_recent_sealed_native_records_enqueue_notes_without_settle(monkeypa
     # Refreshes keep the full settle. The sealed-record wake removes both.
     delay = 600 if summary_seen else 120
     if case == 'recent':
-        # The receipt is ready, but only content completion may create notes.
-        assert (row or {}).get('version', 0) == int(summary_seen)
+        # A delayed fallback survives a missing sibling; only completion
+        # may advance this obligation to now.
+        assert row['version'] == 1 + int(summary_seen)
+        assert row['due_at'] == NOW + (300 if summary_seen else delay)
         assert receipt_ref.get().to_dict()['record_notes_deferred'] is True
     else:
         assert row['due_at'] == NOW + delay
