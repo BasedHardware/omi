@@ -129,6 +129,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/monitoring/notifications/',
     'backend/charts/monitoring/alert-rules.json',
     'backend/charts/monitoring/live-alert-gate.json',
+    'backend/charts/monitoring/provisioning-scopes.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
     'backend/charts/parakeet/templates/servicemonitor.yaml',
 )
@@ -326,6 +327,21 @@ AREA_TESTS = (
         ),
         ('backend/database/batch_pipeline_*.py',),
         LIFECYCLE_INVARIANT_TESTS,
+    ),
+    (
+        # Monitoring provisioning scopes (SCA-2119): a change to the scope file
+        # or the provisioners that read it runs their contract tests.
+        (
+            'backend/scripts/provision_monitoring_alerts.py',
+            'backend/scripts/provision_grafana_dashboards.py',
+            'backend/scripts/monitoring_scope.py',
+            'backend/charts/monitoring/provisioning-scopes.json',
+        ),
+        (),
+        (
+            'tests/unit/test_provision_monitoring_alerts.py',
+            'tests/unit/test_provision_grafana_dashboards.py',
+        ),
     ),
     (
         ('backend/charts/incluster-guards/',),

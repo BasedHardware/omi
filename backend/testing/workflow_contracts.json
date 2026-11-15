@@ -862,7 +862,9 @@
         "backend/charts/monitoring/gmp/**",
         "backend/scripts/monitoring_gmp_shadow.py",
         "backend/charts/monitoring/gmp-query-migration-inventory.json",
-        "backend/charts/monitoring/gmp-shadow-mappings.json"
+        "backend/charts/monitoring/gmp-shadow-mappings.json",
+        "backend/scripts/monitoring_scope.py",
+        "backend/charts/monitoring/provisioning-scopes.json"
       ],
       "tests": [
         "tests/unit/test_provision_grafana_dashboards.py",
@@ -879,7 +881,8 @@
         "dashboard imports preserve folders and authenticated requests never follow redirects",
         "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",
         "canaries are installed, read back and queried before KeepLast business updates",
-        "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover"
+        "shadow comparison rejects missingness, nonfinite values and redirected credentials; it never authorizes cutover",
+        "a scoped production dispatch writes only the dashboards and rules its reviewed scope selects, never widens to the allowlist, Business boards or unrelated definitions, and backs up only what it can change"
       ]
     },
     {

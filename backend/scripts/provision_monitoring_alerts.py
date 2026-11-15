@@ -3,6 +3,13 @@
 
 Read-back compares all managed definition fields, including paused state and
 notification timing. Runtime IDs and update timestamps are not configuration.
+
+``--scope`` narrows a production dispatch to one reviewed subset from
+``backend/charts/monitoring/provisioning-scopes.json``: only those UIDs are
+written and verified, out-of-scope live rules are reported as retained rather
+than drift, and the rollback backup holds only the definitions the scope
+touches. Everything else, including the default whole-export path, is
+unchanged.
 """
 
 from __future__ import annotations
@@ -19,6 +26,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import monitoring_scope  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 RULES = ROOT / 'backend/charts/monitoring/alert-rules.json'
@@ -207,7 +217,7 @@ class Grafana:
         return {} if payload == [] else index_rules(payload)
 
 
-def drift(desired: dict[str, dict], live: dict[str, dict]) -> list[str]:
+def drift(desired: dict[str, dict], live: dict[str, dict], *, report_out_of_scope: bool = True) -> list[str]:
     result = []
     for uid, rule in sorted(desired.items()):
         if uid not in live:
@@ -217,8 +227,9 @@ def drift(desired: dict[str, dict], live: dict[str, dict]) -> list[str]:
             keys = [key for key in FIELDS if want.get(key) != have.get(key)]
             if keys:
                 result.append(f'{uid}: divergent fields: {",".join(keys)}')
-    for uid in sorted(live.keys() - desired.keys()):
-        result.append(f'{uid}: live but uncommitted (retained)')
+    if report_out_of_scope:
+        for uid in sorted(live.keys() - desired.keys()):
+            result.append(f'{uid}: live but uncommitted (retained)')
     return result
 
 
@@ -284,13 +295,25 @@ def probe_datasources(api: Grafana, rules: dict[str, dict]) -> list[str]:
     return failures
 
 
-def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = None) -> list[str]:
+def reconcile(
+    api: Grafana,
+    desired: dict[str, dict],
+    *,
+    backup: Path | None = None,
+    scope: str | None = None,
+    canaries: dict[str, dict] | None = None,
+) -> list[str]:
     live = api.rules()
     if backup is None:
-        return drift(desired, live)
+        return drift(desired, live, report_out_of_scope=scope is None)
+    scoped = scope is not None
+    # A scope applies only its own UIDs, so the KeepLast canaries come from the
+    # committed export instead of the scope. They are verified in place and
+    # never written by a scoped run.
+    if canaries is None:
+        canaries = {uid: desired[uid] for uid in CANARY_UIDS if uid in desired}
     needs_canaries = any(rule.get('execErrState') == 'KeepLast' for rule in desired.values())
-    canaries = {uid: desired[uid] for uid in CANARY_UIDS if uid in desired}
-    if needs_canaries and len(canaries) != len(CANARY_UIDS):
+    if needs_canaries and set(canaries) != set(CANARY_UIDS):
         raise ValueError('KeepLast requires every committed datasource canary')
     for rule in canaries.values():
         if (
@@ -310,12 +333,31 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         raise ValueError('Telegram receiver is missing or resolve notifications disabled')
     for folder in sorted({rule['folderUID'] for rule in desired.values()}):
         api.request('/api/folders/' + urllib.parse.quote(folder, safe=''))
+    if scoped and needs_canaries:
+        # Read-only prerequisite: the installed canaries must already match the
+        # committed definitions, so a broken datasource cannot leave the scoped
+        # KeepLast rules retaining their last state.
+        stale = [
+            uid
+            for uid, rule in sorted(canaries.items())
+            if uid not in live or comparable(live[uid]) != comparable(rule)
+        ]
+        if stale:
+            return [f'{uid}: scoped apply needs the committed datasource canary installed unchanged' for uid in stale]
+        failures = probe_datasources(api, canaries)
+        if failures:
+            return failures
     # Grafana forbids mixing API- and UI-provisioned rules in a group. Preserve
     # each existing group's provenance; new groups are API-managed. File-owned
     # resources require their owning provisioner, never partial API takeover.
+    # Only groups this run can write are inspected, so a scoped dispatch is not
+    # blocked by an unrelated group elsewhere in the live export.
+    groups = {(rule['folderUID'], rule['ruleGroup']) for rule in desired.values()}
     provenance = {}
     for rule in live.values():
         group = (rule.get('folderUID'), rule.get('ruleGroup'))
+        if group not in groups:
+            continue
         value = rule.get('provenance', '')
         if group in provenance and provenance[group] != value:
             raise ValueError('live rule group has mixed provenance')
@@ -332,12 +374,21 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
         if uid in live and target != current:
             raise ValueError(f'{uid}: moving rule across provenance boundaries requires separate migration')
         planned.append((uid, rule, target))
-    # Exclusive creation refuses symlinks/overwrites and preserves the pre-write state.
+    # Exclusive creation refuses symlinks/overwrites and preserves the pre-write
+    # state. A scoped backup holds only the definitions this run can change, so
+    # a rollback restores exactly those and leaves every other rule alone.
+    snapshot = (
+        {
+            'scope': scope,
+            'rules': [live[uid] for uid in sorted(desired) if uid in live],
+            'created_uids': sorted(desired.keys() - live.keys()),
+        }
+        if scoped
+        else {'rules': list(live.values()), 'created_uids': sorted(desired.keys() - live.keys())}
+    )
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as handle:
-        json.dump(
-            {'rules': list(live.values()), 'created_uids': sorted(desired.keys() - live.keys())}, handle, indent=2
-        )
+        json.dump(snapshot, handle, indent=2)
         handle.flush()
         os.fsync(handle.fileno())
 
@@ -349,21 +400,31 @@ def reconcile(api: Grafana, desired: dict[str, dict], *, backup: Path | None = N
 
     # Install and verify replacement pages before any business rule can retain
     # its last state. A failed probe leaves business definitions untouched.
-    apply_rules(item for item in planned if item[0] in canaries)
-    if canaries:
-        current = api.rules()
-        failures = [
-            f'{uid}: canary readback differs'
-            for uid, rule in canaries.items()
-            if uid not in current or comparable(current[uid]) != comparable(rule)
-        ]
-        if failures:
-            return failures
-        failures = probe_datasources(api, canaries)
-        if failures:
-            return failures
+    if not scoped:
+        apply_rules(item for item in planned if item[0] in canaries)
+        if canaries:
+            current = api.rules()
+            failures = [
+                f'{uid}: canary readback differs'
+                for uid, rule in canaries.items()
+                if uid not in current or comparable(current[uid]) != comparable(rule)
+            ]
+            if failures:
+                return failures
+            failures = probe_datasources(api, canaries)
+            if failures:
+                return failures
     apply_rules(item for item in planned if item[0] not in canaries)
-    return drift(desired, api.rules())
+    return drift(desired, api.rules(), report_out_of_scope=not scoped)
+
+
+def scoped_rules(rules: dict[str, dict], scope: monitoring_scope.Scope) -> dict[str, dict]:
+    """The scope's committed definitions in source order; fail closed on gaps."""
+    uids = monitoring_scope.select_uids(scope)
+    missing = [uid for uid in uids if uid not in rules]
+    if missing:
+        raise ValueError(f'{scope.name}: scope rules absent from the combined export: {",".join(missing)}')
+    return {uid: rules[uid] for uid in uids}
 
 
 def main() -> int:
@@ -376,10 +437,14 @@ def main() -> int:
     parser.add_argument('--lint', action='store_true')
     parser.add_argument('--regenerate', action='store_true', help='offline: rebuild combined export from split sources')
     parser.add_argument('--probe-datasources', action='store_true', help='read-only canary queries through Grafana')
+    parser.add_argument(
+        '--scope',
+        help='apply or check only the named reviewed scope from backend/charts/monitoring/provisioning-scopes.json',
+    )
     args = parser.parse_args()
     try:
         if args.regenerate:
-            if args.apply or args.backup_file or args.probe_datasources:
+            if args.apply or args.backup_file or args.probe_datasources or args.scope:
                 raise ValueError('regeneration is offline only')
             regenerate_export(args.rules)
             print(f'Regenerated {len(load_rules(args.rules))} combined/split alert definitions')
@@ -387,8 +452,16 @@ def main() -> int:
         rules = load_rules(args.rules)
         if args.probe_datasources and (args.lint or args.apply or args.backup_file):
             raise ValueError('datasource probes are read-only and cannot be combined with other modes')
+        selected = scoped_rules(rules, monitoring_scope.resolve(args.scope)) if args.scope else None
         if args.lint:
-            print(f'Validated {len(rules)} combined/split production alert definitions')
+            # Offline: every scope must resolve against the real trees and the
+            # committed export, so a renamed source or stale UID fails CI.
+            for scope in monitoring_scope.load().values():
+                scoped_rules(rules, scope)
+            print(
+                f'Validated {len(rules)} combined/split production alert definitions '
+                f'and {len(monitoring_scope.load())} monitoring scope(s)'
+            )
             return 0
         if args.apply != (args.backup_file is not None):
             raise ValueError('--apply requires --backup-file; backup is forbidden for read-only checks')
@@ -396,18 +469,25 @@ def main() -> int:
         if not token:
             raise ValueError(f'{args.token_env} is empty')
         api = Grafana(args.grafana_url, token)
+        desired = selected if selected is not None else rules
+        if selected is not None:
+            print(f'SCOPE {args.scope}: {len(selected)} rule(s): {",".join(selected)}')
+        canaries = {uid: rules[uid] for uid in CANARY_UIDS if uid in rules} if selected is not None else None
         differences = (
-            probe_datasources(api, rules) if args.probe_datasources else reconcile(api, rules, backup=args.backup_file)
+            probe_datasources(api, desired)
+            if args.probe_datasources
+            else reconcile(api, desired, backup=args.backup_file, scope=args.scope, canaries=canaries)
         )
         for difference in differences:
             print('DRIFT ' + difference)
         if differences:
             return 1
-        print(
-            'Canary query probes passed'
-            if args.probe_datasources
-            else f'Verified {len(rules)} production alert definitions; no drift'
-        )
+        if args.probe_datasources:
+            print('Canary query probes passed')
+        elif args.scope:
+            print(f'Verified {len(desired)} {args.scope}-scoped production alert definitions; no drift')
+        else:
+            print(f'Verified {len(rules)} production alert definitions; no drift')
         return 0
     except (ValueError, OSError):
         # Do not expose API bodies, credentials, annotations, or local file contents.

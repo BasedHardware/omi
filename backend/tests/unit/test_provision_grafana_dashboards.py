@@ -285,3 +285,47 @@ def test_invalid_later_source_prevents_all_reads_and_writes(cli, monkeypatch):
 def test_json_numeric_equivalence_preserves_boolean_distinction():
     assert s.desired_matches({'field': 1.0}, {'field': 1})
     assert not s.desired_matches({'field': True}, {'field': 1})
+
+
+# SCA-2119: a scoped production dispatch writes only the boards its reviewed
+# scope names, records its scope in the rollback snapshot and never falls back
+# to the whole directory or the allowlist.
+
+
+def scope(cli, name, filenames):
+    return s.monitoring_scope.Scope(name, 'reviewed subset', tuple(cli / item for item in filenames), ())
+
+
+def test_scope_provisions_only_its_dashboard_and_records_it(cli, monkeypatch):
+    (cli / 'other.json').write_text(json.dumps(dict(DESIRED, uid='other')))
+    monkeypatch.setattr(sys, 'argv', [*sys.argv, '--scope', 'census'])
+    monkeypatch.setattr(s.monitoring_scope, 'resolve', lambda name, **kwargs: scope(cli, name, ['overview.json']))
+    requests = api(monkeypatch, [served(), {'status': 'success', 'version': 5}, served(5)])
+    assert s.main() == 0
+    assert len(requests) == 3
+    assert all('other' not in request.full_url for request in requests)
+    assert json.loads((cli / 'backup').read_text())['scope'] == 'census'
+
+
+def test_scope_and_allowlist_cannot_be_combined(cli, monkeypatch, capsys):
+    monkeypatch.setattr(sys, 'argv', [*sys.argv, '--allowlist', 'overview.json', '--scope', 'census'])
+    assert s.main() == 1
+    assert 'mutually exclusive' in capsys.readouterr().err
+
+
+def test_scoped_dashboard_absent_from_the_directory_fails_before_any_request(cli, monkeypatch, capsys):
+    monkeypatch.setattr(sys, 'argv', [*sys.argv, '--scope', 'census'])
+    monkeypatch.setattr(s.monitoring_scope, 'resolve', lambda name, **kwargs: scope(cli, name, ['missing.json']))
+    assert s.main() == 1
+    assert 'absent from the provisioning directory' in capsys.readouterr().err
+    assert not (cli / 'backup').exists()
+
+
+def test_unknown_scope_fails_closed(cli, monkeypatch, capsys):
+    # The scope file itself must resolve against this directory before the name
+    # is looked up, so give the tree the board the shipped census scope names.
+    (cli / 'batch-stuck-census.json').write_text(json.dumps(dict(DESIRED, uid='omi-batch-stuck-census')))
+    monkeypatch.setattr(sys, 'argv', [*sys.argv, '--scope', 'not-a-scope'])
+    assert s.main() == 1
+    assert 'unknown monitoring scope' in capsys.readouterr().err
+    assert not (cli / 'backup').exists()

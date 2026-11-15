@@ -162,7 +162,19 @@ alert or dashboard to production.
    `pipeline_ledger` / `memory_outbox` need their collection-group twins.
 2. Apply the scheduler job `batch-stock-census` (enabled every 10 minutes).
 3. Apply the Grafana alert export and the `omi-batch-stuck-census` dashboard
-   through the normal monitoring workflow.
+   through the normal monitoring workflow. A full production dispatch also
+   applies unrelated boards and rules, so the census is provisioned with the
+   reviewed `census` scope instead: dispatch
+   `grafana_dashboard_provisioning.yml` with `environment=prod` and
+   `scope=census`. That scope resolves from
+   `backend/charts/monitoring/provisioning-scopes.json` to this dashboard and
+   to the 29 rules `alerts/batch-census.json` contributes (27 age rules and two
+   blind rules); it skips the Business boards, writes no other board, rule or
+   folder, and its rollback backup holds only the definitions it can change.
+   The dispatch prints `SCOPE census: …` with the selected dashboard UIDs and
+   rule UIDs, then verifies each installed UID by read-back. Roll back a scoped
+   apply by restoring exactly those definitions from the run's
+   `grafana-dashboard-backup-*` / `grafana-alert-backup-*` artifacts.
 4. Read back one pass: the dashboard's "last completed census pass" is under
    10 minutes and the "stocks with a fresh sample" count equals
    `omi_batch_pipeline_census_registered_stocks`.

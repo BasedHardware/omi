@@ -1,0 +1,7 @@
+{
+  "census": {
+    "description": "Stuck-state census only: the omi-batch-stuck-census dashboard and the batch-census alert source the registry renders (27 age rules plus 2 blind rules). Never selects another dashboard, rule, folder or Business board (SCA-2119).",
+    "dashboard_files": ["batch-stuck-census.json"],
+    "alert_sources": ["alerts/batch-census.json"]
+  }
+}

@@ -12,6 +12,11 @@ the directory:
    new dashboard is rejected rather than silently ignored.
 3. Persist every pre-write dashboard/meta snapshot in an exclusive mode-0600 backup.
 4. Verify desired content and the preserved folder after each POST; stop on failure.
+
+``--scope`` selects one reviewed subset from
+backend/charts/monitoring/provisioning-scopes.json instead of the whole
+allowlist, so a scoped production dispatch writes only the boards it names.
+The default path and every unselected dashboard are unchanged.
 """
 
 from __future__ import annotations
@@ -25,6 +30,9 @@ import urllib.error
 import urllib.request
 import urllib.parse
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import monitoring_scope  # noqa: E402
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -103,11 +111,13 @@ def desired_matches(desired, served, path=()):
     return type(desired) is type(served) and desired == served
 
 
-def persist_backup(path, existing, new_uids, source_sha):
+def persist_backup(path, existing, new_uids, source_sha, scope=None):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as handle:
         json.dump(
-            {'source_sha': source_sha, 'dashboards': existing, 'created_uids': sorted(new_uids)}, handle, indent=2
+            {'source_sha': source_sha, 'scope': scope, 'dashboards': existing, 'created_uids': sorted(new_uids)},
+            handle,
+            indent=2,
         )
         handle.flush()
         os.fsync(handle.fileno())
@@ -126,7 +136,15 @@ def main() -> int:
         help='New exclusive rollback snapshot; persisted before any dashboard POST',
     )
     parser.add_argument('--allowlist', default='', help='Comma-separated filenames; empty = all dashboards')
+    parser.add_argument(
+        '--scope',
+        default='',
+        help='Reviewed scope from backend/charts/monitoring/provisioning-scopes.json; cannot be combined with --allowlist',
+    )
     args = parser.parse_args()
+    if args.scope and args.allowlist:
+        print('FAIL: --scope and --allowlist are mutually exclusive', file=sys.stderr)
+        return 1
     token = os.environ.get(args.token_env) or ''
     if not token:
         print(f'FAIL: {args.token_env} is empty', file=sys.stderr)
@@ -136,7 +154,19 @@ def main() -> int:
         print('FAIL: expected the production or development HTTPS Grafana endpoint', file=sys.stderr)
         return 1
     files = sorted(args.dashboards_dir.rglob('*.json'))
-    if args.allowlist:
+    scope = None
+    if args.scope:
+        try:
+            scope = monitoring_scope.resolve(args.scope, dashboards=args.dashboards_dir)
+        except (OSError, ValueError) as exc:
+            print(f'FAIL: {exc}', file=sys.stderr)
+            return 1
+        selected = {path.resolve() for path in scope.dashboards}
+        files = [path for path in files if path.resolve() in selected]
+        if len(files) != len(selected):
+            print('FAIL: scoped dashboards are absent from the provisioning directory', file=sys.stderr)
+            return 1
+    elif args.allowlist:
         allowed = {name.strip() for name in args.allowlist.split(',') if name.strip()}
         files = [path for path in files if path.name in allowed]
         if {path.name for path in files} != allowed:
@@ -179,7 +209,9 @@ def main() -> int:
                     raise ValueError('invalid existing folder metadata')
                 snapshots[uid] = existing
             planned.append((path, uid, dashboard, folder_uid))
-        persist_backup(args.backup_file, snapshots, new_uids, args.source_sha)
+        persist_backup(args.backup_file, snapshots, new_uids, args.source_sha, args.scope or None)
+        if scope is not None:
+            print(f'SCOPE {scope.name}: {len(planned)} dashboard(s): {",".join(uid for _, uid, _, _ in planned)}')
         # Abort immediately on a failed POST/readback; later dashboards remain untouched.
         for path, uid, dashboard, folder_uid in planned:
             _, body = _post_dashboard(base, token, dashboard, args.source_sha, folder_uid)
@@ -222,7 +254,7 @@ def main() -> int:
     except (OSError, ValueError, KeyError, TypeError):
         print('FAIL: dashboard source, backup, transport or read-back validation failed', file=sys.stderr)
         return 1
-    print(f'Provisioned {len(planned)} dashboard(s) to {base}')
+    print(f'Provisioned {len(planned)} dashboard(s) to {base}' + (f' for scope {args.scope}' if args.scope else ''))
     return 0
 
 
