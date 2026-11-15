@@ -19,6 +19,14 @@ from database.firestore_document_probe import (
 from database import record_token_lease_metrics as lease_metrics
 from config.record_seal_rules import token_lease_mode
 
+from utils.observability.reasons import (
+    ReasonFamily,
+    RecordSealRepairRunOutcome,
+    RecordSealRepairRunStage,
+    reason_label,
+    reason_values,
+)
+
 logger = logging.getLogger(__name__)
 COLLECTORS = (
     FIRESTORE_BILLED_READS,
@@ -65,13 +73,19 @@ REPAIR_RUN_OUTCOMES = Counter(
     ('outcome', 'phase'),
     registry=None,
 )
-REPAIR_RUN_PHASES = frozenset({'prepass', 'setup', 'discovery', 'rows', 'checkpoint', 'overall'})
+REPAIR_RUN_PHASES = reason_values(RecordSealRepairRunStage)
+REPAIR_RUN_OUTCOME_VALUES = reason_values(RecordSealRepairRunOutcome)
 
 
 def record_repair_run_outcome(outcome, phase):
-    if outcome not in {'complete', 'incomplete'} or phase not in REPAIR_RUN_PHASES:
+    if outcome not in REPAIR_RUN_OUTCOME_VALUES or phase not in REPAIR_RUN_PHASES:
         raise ValueError('invalid repair run outcome labels')
-    REPAIR_RUN_OUTCOMES.labels(outcome=outcome, phase=phase).inc()
+    REPAIR_RUN_OUTCOMES.labels(
+        outcome=reason_label(
+            ReasonFamily.RECORD_SEAL_REPAIR, RecordSealRepairRunOutcome(outcome), RecordSealRepairRunOutcome
+        ),
+        phase=reason_label(ReasonFamily.RECORD_SEAL_REPAIR, RecordSealRepairRunStage(phase), RecordSealRepairRunStage),
+    ).inc()
 
 
 def _emit(payload, level=logging.INFO):

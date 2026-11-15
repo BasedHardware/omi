@@ -266,3 +266,28 @@ def test_row_child_escape_does_not_count_a_coordinator_run(cron, monkeypatch, ex
     assert job.main() == exit_code
     assert not any(row.get('repair_run_summary') for row in cron)
     assert not [s for f in export.REPAIR_RUN_OUTCOMES.collect() for s in f.samples]
+
+
+def test_repair_outcome_labels_use_reason_enum_members(cron, monkeypatch):
+    from utils.observability import firestore_probe_export as export
+    from utils.observability.reasons import ReasonFamily, RecordSealRepairRunOutcome, RecordSealRepairRunStage
+
+    label = Mock(wraps=export.reason_label)
+    monkeypatch.setattr(export, 'reason_label', label)
+    export.record_repair_run_outcome('incomplete', 'prepass')
+    assert label.call_args_list[0].args == (
+        ReasonFamily.RECORD_SEAL_REPAIR,
+        RecordSealRepairRunOutcome.INCOMPLETE,
+        RecordSealRepairRunOutcome,
+    )
+    assert label.call_args_list[1].args == (
+        ReasonFamily.RECORD_SEAL_REPAIR,
+        RecordSealRepairRunStage.PREPASS,
+        RecordSealRepairRunStage,
+    )
+    assert export.REPAIR_RUN_PHASES == {'prepass', 'setup', 'discovery', 'rows', 'checkpoint', 'overall'}
+    assert export.REPAIR_RUN_OUTCOME_VALUES == {'complete', 'incomplete'}
+    for outcome, phase in [('unknown', 'overall'), ('complete', 'unknown')]:
+        with pytest.raises(ValueError):
+            export.record_repair_run_outcome(outcome, phase)
+    assert label.call_count == 2
