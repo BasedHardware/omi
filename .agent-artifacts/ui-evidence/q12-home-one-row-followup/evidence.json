@@ -23,9 +23,10 @@
       "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-15T16:42:21Z",
-  "render_source_head": "6c9c646745e04ba04b14572803331f80b1a98461",
+  "captured_at_utc": "2026-11-15T17:40:48Z",
+  "render_source_head": "306ed34d48fc6ce0e971935acec3f603de05d5a9",
   "merged_origin_main": "fd66e7f3310935adfa203ef68e15d3f7cf9e007a",
+  "flutter_sdk": "3.44.5 (CI and release pin)",
   "before_ui_ref": "3581ad2fb6e5012ede9dd34b03fbf76bdf913855",
   "source_blobs": {
     "app/lib/pages/conversations/conversations_page.dart": "63c62e6752578a629d8156dee390b2104027f58f",
