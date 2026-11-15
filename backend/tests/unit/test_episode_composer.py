@@ -803,8 +803,8 @@ def test_real_finalized_evidence_is_deferred_then_recomposed(store, monkeypatch,
     assert (UID, 'ep1') in composer._deferred
     assert store.episode['compose_pending_since']
     # Simulate the due tick after a full quiet window, without sleeping or changing recorded boundaries.
-    store.episode['compose_pending_since'] -= timedelta(minutes=11)
-    store.episode['compose_activity_at'] -= timedelta(minutes=11)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
     composer._deferred[(UID, 'ep1')] = (0, c)
     composer._schedule_due()
     assert len(calls) == 2
@@ -821,7 +821,11 @@ def test_background_settles_without_claiming_lease_or_holding_worker(store, monk
     assert composer.schedule(UID, 'ep1', collaborators=c)
     assert not calls and not composer._inflight
     assert 'compose_lease' not in store.episode
-    assert 590 < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic() <= 600
+    assert (
+        config.COMPOSER_SETTLE_SECONDS - 10
+        < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic()
+        <= config.COMPOSER_SETTLE_SECONDS
+    )
     assert store.episode['compose_activity_at'] >= store.episode['compose_pending_since']
 
 
@@ -894,8 +898,8 @@ def test_failed_pending_write_still_schedules_and_eventually_composes(store, mon
     if failure == 'gate_only':
         # Once metadata writes recover, the scheduled worker durably retains its retry.
         assert len(calls) == 1 and composer._deferred and store.episode['compose_pending_since']
-        store.episode['compose_pending_since'] -= timedelta(minutes=11)
-        store.episode['compose_activity_at'] -= timedelta(minutes=11)
+        store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
         composer._deferred[(UID, 'ep1')] = (0, c)
         composer._schedule_due()
     else:
@@ -926,20 +930,24 @@ def test_new_speech_extends_quiet_window_but_preserves_first_pending_time(store,
     c = _c()
     _schedule_seam(store, monkeypatch)
     composer.schedule(UID, 'ep1', collaborators=c)
-    store.episode['compose_pending_since'] -= timedelta(minutes=20)
-    store.episode['compose_activity_at'] -= timedelta(minutes=2)
+    # Leave less than a quiet window until the original cap, so new speech cannot renew it.
+    remaining = config.COMPOSER_SETTLE_SECONDS / 2
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS - remaining)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS / 5)
+    activity = store.episode['compose_activity_at']
     first = store.episode['compose_pending_since']
     store.rows['c1']['transcript_segments'][0]['text'] += ' Late words.'
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
     assert store.episode['compose_pending_since'] == first
-    assert 299 < composer.settle_delay(store.episode) <= 300
+    assert store.episode['compose_activity_at'] > activity
+    assert remaining - 1 < composer.settle_delay(store.episode) <= remaining
 
 
 def test_continuous_upload_pays_at_max_latency_cap(store):
     calls = []
     c = _c(calls=calls)
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
-    store.episode['compose_pending_since'] -= timedelta(minutes=26)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
     store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'composed'
     assert len(calls) == 1
@@ -949,7 +957,7 @@ def test_pending_window_survives_process_local_queue_loss(store, monkeypatch):
     calls = []
     c = _c(calls=calls)
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
-    store.episode['compose_pending_since'] -= timedelta(minutes=26)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
     composer._deferred.clear()  # A new process has no local queue.
     _schedule_seam(store, monkeypatch)
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
@@ -992,17 +1000,21 @@ def test_later_trigger_after_restart_preserves_pending_cap_despite_new_speech(st
     store.rows['c1']['transcript_segments'][0]['text'] += ' Late speech.'
     _schedule_seam(store, monkeypatch)
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
-    store.episode['compose_pending_since'] -= timedelta(minutes=20)
-    store.episode['compose_activity_at'] -= timedelta(minutes=2)
+    # Leave less than a quiet window until the original cap, so new speech cannot renew it.
+    remaining = config.COMPOSER_SETTLE_SECONDS / 2
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS - remaining)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS / 5)
+    activity = store.episode['compose_activity_at']
     first = store.episode['compose_pending_since']
     for state in (composer._deferred, composer._recent, composer._inflight, composer._rerun, composer._foreground):
         state.clear()
     store.rows['c1']['transcript_segments'][0]['text'] += ' Still uploading.'
     composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'])
     assert len(calls) == 1 and store.episode['compose_pending_since'] == first
-    assert 299 < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic() <= 300
+    assert store.episode['compose_activity_at'] > activity
+    assert remaining - 1 < composer._deferred[(UID, 'ep1')][0] - composer.time.monotonic() <= remaining
     # The recovered worker pays at the persisted cap even if activity is still recent.
-    store.episode['compose_pending_since'] -= timedelta(minutes=6)
+    store.episode['compose_pending_since'] -= timedelta(seconds=remaining + 60)
     composer._deferred[(UID, 'ep1')] = (0, c)
     composer._schedule_due()
     assert len(calls) == 2 and store.episode['compose_pending_since'] is None and not composer._deferred
@@ -1069,8 +1081,8 @@ def test_racing_paid_background_call_waits_before_retry(store, monkeypatch, outc
     calls = []
     c = _c(calls=calls)
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
-    store.episode['compose_pending_since'] -= timedelta(minutes=11)
-    store.episode['compose_activity_at'] -= timedelta(minutes=11)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
     composer._deferred.clear()
     _schedule_seam(store, monkeypatch)
     if outcome == 'kept_pending':
@@ -1172,7 +1184,7 @@ def test_superseded_at_latency_cap_still_waits_before_next_paid_attempt(store, m
     calls = []
     c = _c(calls=calls)
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
-    store.episode['compose_pending_since'] -= timedelta(minutes=26)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
     composer._deferred.clear()
     _schedule_seam(store, monkeypatch)
 
@@ -1183,7 +1195,7 @@ def test_superseded_at_latency_cap_still_waits_before_next_paid_attempt(store, m
 
     assert composer.schedule(UID, 'ep1', collaborators=_c(invoke=invoke))
     assert len(calls) == 1 and composer._deferred
-    assert 590 < composer.settle_delay(store.episode) <= 600
+    assert config.COMPOSER_SETTLE_SECONDS - 10 < composer.settle_delay(store.episode) <= config.COMPOSER_SETTLE_SECONDS
 
 
 def test_off_restores_immediate_superseded_retry(store, monkeypatch):
@@ -1240,8 +1252,8 @@ def test_legacy_changed_fingerprint_composes_once_then_uses_narrow_gate(store, c
     # The legacy full hash cannot distinguish these two cases: never drop real late speech.
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'settling'
     assert len(calls) == 1
-    store.episode['compose_pending_since'] -= timedelta(minutes=11)
-    store.episode['compose_activity_at'] -= timedelta(minutes=11)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
     assert composer.compose(UID, 'ep1', collaborators=c, background=True) == 'composed'
     assert len(calls) == 2 and store.episode['composed_evidence']
     store.rows['c1']['structured']['overview'] = 'Another label-only reprocess'
@@ -1721,7 +1733,8 @@ def test_waits_for_completed_member_with_pending_transcript_and_recovers_after_r
     assert calls == []
     assert store.episode['compose_pending_since'] >= now
     assert not composer.needs_compose(store.episode)
-    assert 21590 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= 21600
+    wait_seconds = config.episode_compose_transcript_wait_seconds()
+    assert wait_seconds - 10 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= wait_seconds
     composer._deferred.clear()  # A restarted process recovers the persisted debt on read.
     assert not composer.needs_compose(store.episode)
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
@@ -1825,13 +1838,16 @@ def test_receipt_promotes_real_deferred_wait_without_a_home_request(store, monke
     c = _c(calls=calls)
     store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
     assert composer.schedule(UID, 'ep1', collaborators=c)
-    assert composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() > 21000
+    assert (
+        composer._deferred[UID, 'ep1'][0] - composer.time.monotonic()
+        > config.episode_compose_transcript_wait_seconds() - 10
+    )
     store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
     composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=store.rows['c2'], transcript_updated=True)
     assert store.episode['compose_transcript_wait_until'] is None
     assert 0 < composer._deferred[UID, 'ep1'][0] - composer.time.monotonic() <= config.COMPOSER_SETTLE_SECONDS
-    store.episode['compose_pending_since'] -= timedelta(minutes=26)
-    store.episode['compose_activity_at'] -= timedelta(minutes=26)
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
     composer._deferred[UID, 'ep1'] = (0, c)
     composer._schedule_due()
     assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1', 'c2']
@@ -1868,8 +1884,8 @@ def test_transcript_receipt_refreshes_notes_only_if_they_finish_after_compose(
 
     def finish_compose():
         # Deliver the existing timer after its quiet window; no Home read is required.
-        store.episode['compose_pending_since'] -= timedelta(minutes=11)
-        store.episode['compose_activity_at'] -= timedelta(minutes=11)
+        store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+        store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
         composer._deferred[UID, 'ep1'] = (0, c)
         composer._schedule_due()
         assert len(calls) == 1
@@ -1922,7 +1938,8 @@ def test_home_active_wait_eliminates_redundant_composer_reads(store, monkeypatch
 
 @pytest.mark.parametrize('expired,disabled', [(True, False), (False, True)])
 def test_pending_transcript_wait_is_bounded_and_can_be_disabled(store, monkeypatch, expired, disabled):
-    pending = datetime.now(timezone.utc) - timedelta(hours=7 if expired else 1)
+    wait_seconds = config.episode_compose_transcript_wait_seconds()
+    pending = datetime.now(timezone.utc) - timedelta(seconds=wait_seconds + 60 if expired else wait_seconds / 2)
     store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=pending)
     if disabled:
         monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV, 'false')
@@ -1937,6 +1954,39 @@ def test_pending_transcript_of_excluded_member_does_not_block(store, hidden):
     else:
         store.rows['c2'][hidden] = True
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+
+
+def test_expired_transcript_wait_composes_then_late_receipt_recomposes_exactly_once(store, monkeypatch):
+    clock = [datetime.now(timezone.utc)]
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    monkeypatch.setattr(composer, 'datetime', Clock)
+    calls = []
+    c = _c(calls=calls)
+    member = store.rows['c2']
+    member.update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert not calls
+    clock[0] += timedelta(seconds=config.episode_compose_transcript_wait_seconds() + 60)
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    assert len(calls) == 1 and 'The late launch details.' not in calls[0][1][1]
+    # Exercise the real receipt scheduler, including catch-up for an old partial summary.
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: True)
+    member['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert len(calls) == 1 and composer._deferred
+    store.episode['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    store.episode['compose_activity_at'] -= timedelta(seconds=config.COMPOSER_SETTLE_SECONDS + 60)
+    composer._deferred[UID, 'ep1'] = (0, c)
+    composer._schedule_due()
+    assert len(calls) == 2 and 'The late launch details.' in calls[1][1][1]
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert len(calls) == 2 and not composer._deferred
 
 
 def test_projected_transcript_rearms_already_composed_old_episode_before_enrichment(store, monkeypatch):
@@ -1962,9 +2012,14 @@ def test_projected_transcript_rearms_already_composed_old_episode_before_enrichm
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize('raw,expected', [('1800', 1800), ('-1', 0), ('999999', 86400), ('bad', 21600)])
+@pytest.mark.parametrize(
+    'raw,expected', [(None, 1200), ('1800', 1800), ('21600', 21600), ('-1', 0), ('999999', 86400), ('bad', 1200)]
+)
 def test_transcript_wait_config_is_bounded(monkeypatch, raw, expected):
-    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raw)
+    if raw is None:
+        monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', raw)
     assert config.episode_compose_transcript_wait_seconds() == expected
 
 
@@ -2104,6 +2159,18 @@ def test_transcript_wait_tracks_every_pending_blocker(store):
         member.update(transcript_segments=[], home_transcription_pending_at=pending)
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
     assert store.episode['compose_transcript_wait_members'] == ['c1', 'c2']
+
+
+def test_wait_stored_under_a_longer_limit_ends_at_the_current_limit(store, monkeypatch):
+    """Lowering the limit releases episodes that were already waiting under the old one."""
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '21600')
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert not composer.needs_compose(store.episode)
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')
+    assert not composer.needs_compose(store.episode)  # still inside the new limit
+    store.episode['compose_transcript_wait_started_at'] -= timedelta(seconds=1201)
+    assert composer.needs_compose(store.episode)
 
 
 def test_disabling_transcript_wait_bypasses_persisted_blocker_suppression(store, monkeypatch):

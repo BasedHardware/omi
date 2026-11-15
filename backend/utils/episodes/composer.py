@@ -782,6 +782,15 @@ def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
     return owner._named_segments(uid, _segments(row), c)
 
 
+def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
+    """A wait persisted under a longer limit never outlives the current limit."""
+    until = _utc(episode.get('compose_transcript_wait_until'))
+    started = _utc(episode.get('compose_transcript_wait_started_at'))
+    if until and started:
+        return min(until, started + timedelta(seconds=episode_compose_transcript_wait_seconds()))
+    return until
+
+
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
     pending = _utc(row.get('home_transcription_pending_at')) or _utc(row.get('episode_transcription_pending_at'))
     if episode_compose_transcript_wait_enabled() and pending and not _segments(row):
@@ -1603,7 +1612,7 @@ def needs_compose(
         (at for at in (_utc(episode.get('composed_at')), _utc(episode.get('composed_transcript_updated_at'))) if at),
         default=None,
     )
-    wait_until = _utc(episode.get('compose_transcript_wait_until'))
+    wait_until = _stored_wait_until(episode)
     wait_started = _utc(episode.get('compose_transcript_wait_started_at'))
     if episode_compose_transcript_wait_enabled() and wait_until and wait_until > datetime.now(timezone.utc):
         retained = sorted(_retained_ids(episode))
@@ -1839,7 +1848,7 @@ def schedule_for_conversation(
                 or (row is not None and (hidden_member(dict(row)) or not conversations_db.is_visible_conversation(row)))
             ):
                 return
-            wait_until = _utc(episode.get('compose_transcript_wait_until'))
+            wait_until = _stored_wait_until(episode)
             blockers = episode.get('compose_transcript_wait_members')
             if (
                 episode_compose_transcript_wait_enabled()
