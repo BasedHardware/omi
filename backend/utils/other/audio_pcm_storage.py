@@ -23,6 +23,34 @@ for _result in ('disabled', 'ineligible', 'busy', 'deadline', 'not_smaller', 'en
     # Expose the bounded outcome children for baseline scrapes. The canary
     # also checks absolute mismatch counts to catch errors before first scrape.
     DECISIONS.labels(_result).inc(0)
+
+# Diagnostics only: these split the optional step into its two children so a
+# latency question can be answered without guessing. They never feed the
+# p99 guard, which stays on STORAGE_SECONDS above, and they are not a bound.
+# `child_result` is that child's own outcome, not the call's final decision.
+STAGE_SECONDS = Histogram(
+    'omi_audio_pcm_storage_stage_seconds',
+    'Wall time of one optional codec child that actually ran, by stage and child outcome',
+    ['stage', 'child_result'],
+    buckets=(0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2),
+)
+# Only for a child killed by its own timeout: full stage wall time beyond the
+# granted timeout. That span is startup, cleanup, and any descheduling, so this
+# is a diagnostic of overshoot, never a pure startup cost or a wall-clock bound.
+STAGE_TIMEOUT_OVERSHOOT_SECONDS = Histogram(
+    'omi_audio_pcm_storage_stage_timeout_overshoot_seconds',
+    'Timed-out child wall time beyond its granted timeout, by stage',
+    ['stage'],
+    buckets=(0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2),
+)
+for _stage in ('encode', 'decode'):
+    for _child_result in ('success', 'timeout', 'error'):
+        # Pre-created so increase() sees a first burst; never observed at zero,
+        # because that would fabricate a sample. Eight children: at most 96 new
+        # series per pod with buckets, +Inf, _sum, _count and _created.
+        STAGE_SECONDS.labels(stage=_stage, child_result=_child_result)
+    STAGE_TIMEOUT_OVERSHOOT_SECONDS.labels(stage=_stage)
+
 # One codec child per process. Two children share one vCPU on the pusher pod and
 # doubled every call's wall time, which is what broke the 0.5 s p99 guard there;
 # a single slot gives the running child the whole slice and reports the rest busy.
@@ -55,6 +83,7 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
     """
     result = 'disabled'
     payload, codec = pcm, 'pcm16'
+    samples = None
     if os.getenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'true').strip().lower() != 'true':
         DECISIONS.labels(result).inc()
         return payload, codec
@@ -63,6 +92,9 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
     elif not _ENCODERS.acquire(blocking=False):
         result = 'busy'
     else:
+        # Allocated only once a child can run, so the disabled/ineligible/busy
+        # paths keep their current cost. At most two entries, flushed at the tail.
+        samples = []
         try:
             INPUT_BYTES.inc(len(pcm))
             deadline = time.monotonic() + _TOTAL_BUDGET_SECONDS
@@ -72,6 +104,10 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
             if encode_timeout <= 0:
                 result = 'deadline'
             else:
+                # Timed around the child only; the granted timeout is already
+                # decided above, so this read cannot change it.
+                encode_started = time.monotonic()
+                encode_outcome = 'success'
                 try:
                     encoded = subprocess.run(
                         common
@@ -108,9 +144,12 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                     ).stdout
                 except subprocess.TimeoutExpired:
                     # A child killed by our own budget is a deadline, not a codec fault.
+                    encode_outcome = 'timeout'
                     result = 'deadline' if encode_timeout < _TIMEOUT_SECONDS else 'encoder_error'
                 except (OSError, subprocess.SubprocessError):
+                    encode_outcome = 'error'
                     result = 'encoder_error'
+                samples.append(('encode', time.monotonic() - encode_started, encode_outcome, encode_timeout))
             if encoded is not None:
                 result = 'not_smaller'
                 if encoded and len(encoded) * 100 <= len(pcm) * 95:
@@ -118,6 +157,8 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                     if decode_timeout <= 0:
                         result = 'deadline'
                     else:
+                        decode_started = time.monotonic()
+                        decode_outcome = 'success'
                         try:
                             decoded = subprocess.run(
                                 common + ['-f', 'flac', '-i', 'pipe:0', '-f', 's16le', '-c:a', 'pcm_s16le', 'pipe:1'],
@@ -128,16 +169,25 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                                 timeout=decode_timeout,
                             ).stdout
                         except subprocess.TimeoutExpired:
+                            decode_outcome = 'timeout'
                             result = 'deadline' if decode_timeout < _TIMEOUT_SECONDS else 'encoder_error'
                         except (OSError, subprocess.SubprocessError):
+                            decode_outcome = 'error'
                             result = 'encoder_error'
                         else:
                             result = 'mismatch'
                             if decoded == pcm:
                                 payload, codec, result = encoded, 'flac', 'flac'
                                 SAVED_BYTES.inc(len(pcm) - len(encoded))
+                        samples.append(('decode', time.monotonic() - decode_started, decode_outcome, decode_timeout))
         finally:
             _ENCODERS.release()
+    # Flushed only after the codec slot is released, so the observations stay out
+    # of the subprocess and deadline sequence.
+    for stage, elapsed, child_result, granted in samples or ():
+        STAGE_SECONDS.labels(stage=stage, child_result=child_result).observe(elapsed)
+        if child_result == 'timeout':
+            STAGE_TIMEOUT_OVERSHOOT_SECONDS.labels(stage=stage).observe(max(0.0, elapsed - granted))
     if result == 'deadline':
         # Shared resilience telemetry: the optional representation was skipped and
         # custody continues with original PCM. The domain counter below stays.

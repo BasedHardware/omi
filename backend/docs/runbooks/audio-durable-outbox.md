@@ -102,6 +102,64 @@ unless an independent metric is identified; record downstream backpressure
 separately with existing custody meters. Net dollar savings remain
 uncredited until actual eligible byte savings and compute cost are measured.
 
+### Optional codec stage diagnostics
+
+`omi_audio_pcm_storage_seconds` times the whole optional step, so it cannot say
+which child consumed the time. Two diagnostic histograms split it. They are
+diagnostics only: they never feed the p99 guard above, they are not an
+acceptance denominator, and they cannot pass a canary.
+
+| metric | labels | meaning |
+| --- | --- | --- |
+| `omi_audio_pcm_storage_stage_seconds` | `stage={encode,decode}`, `child_result={success,timeout,error}` | wall time of one child that actually ran |
+| `omi_audio_pcm_storage_stage_timeout_overshoot_seconds` | `stage={encode,decode}` | only for a child killed by its own timeout: full stage wall time beyond the granted timeout |
+
+`child_result` is that child's own outcome, not the call's terminal decision: a
+`success` encode on a call that later keeps PCM still reports `success`. `error`
+is the existing handled `OSError`/`SubprocessError` path. The overshoot span
+contains startup, cleanup and any thread descheduling or timeout overshoot, so
+it is an overshoot diagnostic, not a pure process-start cost and not a
+wall-clock bound.
+
+Both metrics use fixed buckets `(.005,.01,.05,.1,.25,.5,1,2)`. A pod exposes 88
+new series here with the pinned client (`prometheus-client==0.21.1`):
+eight pre-created children (`stage_seconds` 2x3,
+`stage_timeout_overshoot_seconds` 2) at 11 series each -- eight buckets, `+Inf`,
+`_sum`, `_count`. A client that also emits `_created` per child would make that
+96; the owner's ceiling of 96 series per pod covers both. Children are
+pre-created and never observed at
+zero, so `increase()` can see a first burst without a fabricated sample. The
+cost is one clock read and one local tuple append per child that runs, plus the
+flush after the slot is released; disabled, ineligible and busy calls allocate
+nothing and observe nothing. No per-request, content, size or account label is
+attached.
+
+Read them with the same pinned endpoints, window and selector as the guard,
+replacing `JOB` with the one surface job (`prod-omi-pusher` for the pusher's
+`pusher-metrics` target) and keeping `namespace="prod-omi-backend"`:
+
+```promql
+histogram_quantile(0.5, sum by (le) (rate(omi_audio_pcm_storage_stage_seconds_bucket{namespace="prod-omi-backend",job="JOB",stage="encode"}[5m])))
+histogram_quantile(0.99, sum by (le) (rate(omi_audio_pcm_storage_stage_seconds_bucket{namespace="prod-omi-backend",job="JOB",stage="decode"}[5m])))
+sum by (stage, child_result) (increase(omi_audio_pcm_storage_stage_seconds_count{namespace="prod-omi-backend",job="JOB"}[5m]))
+histogram_quantile(0.99, sum by (le) (rate(omi_audio_pcm_storage_stage_timeout_overshoot_seconds_bucket{namespace="prod-omi-backend",job="JOB",stage="encode"}[5m])))
+sum by (stage) (increase(omi_audio_pcm_storage_stage_timeout_overshoot_seconds_count{namespace="prod-omi-backend",job="JOB"}[5m]))
+resets(omi_audio_pcm_storage_stage_seconds_count{namespace="prod-omi-backend",job="JOB"}[5m])
+```
+
+Stage series are empty on a surface whose compression flag is `false`, because
+no child runs: absent stage data means no encoding was attempted, not a fast
+encode. Missing observations, a scrape gap, a counter reset or a target that
+stopped reporting are UNKNOWN, never a zero-valued pass. Do not read an
+aggregate whole-helper-minus-stage difference as an exact admitted-attempt
+overhead: the populations differ (the helper histogram also times calls that
+spawn no child), the two histograms use different monotonic clocks, the stage
+flush happens after the slot release, and scrape-window boundaries differ. Treat
+any such difference as an approximate diagnostic. Final disposition is still
+the guard above; return stage findings to the owner for behavioural design
+rather than changing a threshold, a bucket, an eligibility rule or the guard
+population here.
+
 This switch is the sole custody kill switch. `AUDIO_ARCHIVE_LIVE_ENABLED`
 controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
