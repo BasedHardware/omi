@@ -1256,10 +1256,15 @@ def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
     deploy_step = next(step for step in steps if step.get('id') == 'deploy-backend-sync-backfill')
     assert '${{ inputs.backfill_env_vars }}' in clone_step['env']['ENV_OVERLAY']
     assert deploy_step['with']['env_vars'] == '${{ steps.backfill-runtime.outputs.env_vars }}'
-    assert (
-        'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}'
-        in DEPLOY_BACKEND_STACK_ACTION.read_text()
+    worker = next(
+        step
+        for step in yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text())['runs']['steps']
+        if step.get('id') == 'sync-backfill'
     )
+    assert worker['with']['backfill_env_vars'].splitlines() == [
+        '${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}',
+        'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}',
+    ]
     source = {
         'spec': {
             'template': {
