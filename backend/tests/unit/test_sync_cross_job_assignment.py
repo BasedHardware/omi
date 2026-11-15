@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.stt import allowance_session  # noqa: F401 - retain scopes across legacy package stubs
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
 from utils.sync.absorption_metrics import record_assignment_metrics
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
