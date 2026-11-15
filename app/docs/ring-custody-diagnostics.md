@@ -42,3 +42,26 @@ reported separately. Nothing changes mark acceptance.
 
 Rollback: revert the diagnostics commit. This removes only observations/export;
 it does not alter files, clocks, identities, proof validation or device progress.
+
+The same section includes `local_recording_inventory`. It snapshots active,
+retired and foreign memory metadata, then reads main/backup/quarantine/temp JSON,
+batch journals, ownership receipt counts, legacy pending-file/job preferences and
+recorded boot quarantine/recovery results. It never calls a loader, migration,
+recovery, owner resolver, saver or intake. Preference reads bypass validating
+getters that can quarantine. File metadata and JSON bytes are read asynchronously
+without acquiring the WAL save/custody locks; JSON parsing and correlation use
+`offUiIsolate` (the 16,000-row fixture asserts no inline fallback).
+
+Directory totals cover generated `audio_*` bin/part/torn/WAV files. All regular
+files are statted so a referenced historical filename outside that pattern is
+not falsely called missing. No audio bytes are read. References are the union
+of readable indexes/journals/legacy lists and memory snapshots, including backups;
+bucket row/audio totals can overlap and are not unique-audio totals. Unreadable
+or concurrently changed metadata makes orphan certainty false. The census is a
+best-effort observation while capture/uploads can continue, not an atomic backup
+or a reindex operation. Disk birth/creation times are not recorded by the WAL
+schema or available in portable Dart FileStat, so creation fields are explicitly
+null; modification and metadata-change times are labelled separately. No IDs,
+paths, filenames, raw index rows or owner values enter the JSON. Known schema
+buckets share one physical index; foreign/current/legacy/unstamped owner counts
+are categorical only, not per-account identifiers.

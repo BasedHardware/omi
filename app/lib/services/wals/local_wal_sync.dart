@@ -9,6 +9,7 @@ import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'native_custody_diagnostics.dart';
 import 'ring_custody_diagnostics.dart';
+import 'recording_inventory.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/watch_live_coverage.dart';
@@ -1865,6 +1866,27 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
     return _publishedWals!;
   }
+
+  /// Synchronous metadata snapshot only: no lock, flush, load, repair or save.
+  /// Export aggregation/JSON decoding happens off the UI isolate.
+  Map<String, List<RecordingInventoryRow>> get recordingInventorySnapshot => {
+        for (final bucket in [('active', _wals), ('retired', _retiredWals), ('foreign', _foreignWals)])
+          bucket.$1: [
+            for (final wal in bucket.$2)
+              RecordingInventoryRow(
+                  status: wal.status.name,
+                  captureSeconds: wal.timerStart,
+                  audioSeconds: wal.totalFrames > 0
+                      ? wal.totalFrames / wal.codec.getFramesPerSecond()
+                      : wal.seconds >= 0
+                          ? wal.seconds.toDouble()
+                          : null,
+                  indexBytes: wal.storageTotalBytes.clamp(0, 1 << 62),
+                  disk: wal.storage == WalStorage.disk,
+                  filePath: wal.filePath ?? (wal.storage == WalStorage.disk ? wal.getFileName() : null),
+                  owner: wal.ownerUid),
+          ],
+      };
 
   @override
   Future<void> deleteAllSyncedWals() async {
