@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import zlib
+from datetime import timedelta
 from typing import Any, Mapping, Sequence
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -18,6 +19,7 @@ from utils import encryption
 from utils.episodes.composer_default_context import ReadBudget, bounds, live, person_ids, safe_id, text, utc
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.observability.fallback import record_fallback as record_fallback
+from utils.open_loops.store import OPEN_STATUSES
 
 
 def _root(uid: str, firestore_client: Any = None) -> Any:
@@ -90,6 +92,7 @@ def calendar(
     query = (
         _root(uid, firestore_client)
         .collection('meetings')
+        .where(filter=FieldFilter('start_time', '>=', start - timedelta(days=1)))
         .where(filter=FieldFilter('start_time', '<', end))
         .order_by('start_time', direction='DESCENDING')
     )
@@ -134,9 +137,8 @@ def prior(
             [
                 'started_at',
                 'finished_at',
-                'structured',
-                'transcript_segments',
-                'transcript_segments_compressed',
+                'structured.title',
+                'structured.overview',
                 'manual_speaker_assignments',
                 'manual_speaker_assignments_compressed',
                 'deleted',
@@ -150,18 +152,34 @@ def prior(
     )
     result = []
     excluded = {row.get('id') for row in members}
-    for row in _query(query, 16, budget):
+    for row in _query(query, 12, budget):
         if not live(row) or row.get('discarded') or row['id'] in excluded:
             continue
-        # Inline legacy segments and durable manual identity receipts suffice.
-        # Never fetch a transcript pointer's GCS payload for background matching.
-        raw = row.get('transcript_segments')
-        segments = [] if isinstance(raw, Mapping) else _json(raw, uid, bool(row.get('transcript_segments_compressed')))
+        # The durable identity receipt is a compact assignment projection.
+        # Do not fetch/decode transcript text or a GCS pointer for matching.
         receipt = _json(
             row.get('manual_speaker_assignments'), uid, bool(row.get('manual_speaker_assignments_compressed'))
         )
-        segments = segments if isinstance(segments, list) else []
-        if isinstance(receipt, dict):
+        segments = []
+        if isinstance(receipt, Mapping):
+            for group in ('speakers', 'segments', 'voices'):
+                for key, decision in (receipt.get(group) or {}).items():
+                    if not isinstance(decision, Mapping):
+                        continue
+                    seed = {
+                        'id': key,
+                        'speaker_id': decision.get('speaker_id', -1),
+                        'speaker_id_scope': decision.get('speaker_id_scope'),
+                    }
+                    if group == 'speakers':
+                        try:
+                            seed['speaker_id'] = int(key)
+                        except ValueError:
+                            continue
+                    elif group == 'voices':
+                        scope, label = json.loads(key)
+                        seed.update(speaker_id_scope=scope, speaker=label)
+                    segments.append(seed)
             segments = apply_manual_assignments(segments, receipt)
         shared = sorted(set(person_ids([{'transcript_segments': segments}])) & set(ids))
         if not shared:
@@ -190,14 +208,16 @@ def actions(
     prior_rows: Sequence[Mapping[str, Any]],
     budget: ReadBudget,
     *,
+    member_ids: Sequence[str] = (),
     firestore_client: Any = None,
 ) -> list[dict]:
-    if not ids and not prior_rows:
+    if not ids and not prior_rows and not member_ids:
         return []
     root = _root(uid, firestore_client)
     control = _get(root.collection('task_intelligence_control').document('state'), budget)
     generation = control.get('account_generation', 0)
-    conversation_ids = {row['conversation_id'] for row in prior_rows}
+    prior_ids = [safe_id(row.get('conversation_id')) for row in prior_rows]
+    conversation_ids = list(dict.fromkeys(pid for pid in [*member_ids, *prior_ids] if safe_id(pid)))
     names = {
         text(value).casefold()
         for row in people_rows
@@ -211,14 +231,40 @@ def actions(
         bound_people = set(row.get('person_ids') or []) | {row.get('person_id'), row.get('assignee_person_id')}
         description = (text(row.get('description') or row.get('what'), 1500) + ' ' + text(row.get('who'))).casefold()
         return bool(
-            conversation_ids & references
+            set(conversation_ids) & references
             or set(ids) & bound_people
             or any(re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', description) for name in names)
         )
 
-    for row in _query(root.collection('action_items').where(filter=FieldFilter('completed', '==', False)), 7, budget):
+    # Relation first, then the small candidate cap. IN + same-field order
+    # uses that field's automatic single-field index, never a composite.
+    candidates = {}
+    batches = [conversation_ids[i : i + 30] for i in range(0, min(len(conversation_ids), 90), 30)]
+    for index, batch in enumerate(batches):
+        limit = 8 // len(batches) + (index < 8 % len(batches))
+        query = (
+            root.collection('action_items')
+            .where(filter=FieldFilter('conversation_id', 'in', batch))
+            .order_by('conversation_id', direction='DESCENDING')
+        )
+        for row in _query(query, limit, budget):
+            candidates.setdefault(row['id'], row)
+    if ids:
+        query = (
+            root.collection('action_items')
+            .where(filter=FieldFilter('person_id', 'in', list(ids)[:6]))
+            .order_by('person_id', direction='DESCENDING')
+        )
+        for row in _query(query, 3, budget):
+            candidates.setdefault(row['id'], row)
+        # Name-only legacy tasks have no indexed person field. A tiny recent
+        # window supplies best-effort name matches after exact linked queries.
+        for row in _query(root.collection('action_items').order_by('created_at', direction='DESCENDING'), 2, budget):
+            candidates.setdefault(row['id'], row)
+    for row in candidates.values():
         if (
             live(row)
+            and row.get('completed') is False
             and row.get('account_generation', 0) == generation
             and row.get('status') not in {'completed', 'cancelled', 'done'}
             and related(row)
@@ -230,9 +276,15 @@ def actions(
                     'due': text(row.get('due_at'), 60),
                 }
             )
-    for raw in _query(root.collection('open_loops').where(filter=FieldFilter('status', '==', 'open')), 8, budget):
+    for raw in _query(
+        root.collection('open_loops')
+        .where(filter=FieldFilter('status', 'in', sorted(OPEN_STATUSES)))
+        .order_by('status', direction='ASCENDING'),
+        8,
+        budget,
+    ):
         row = _json(raw.get('data'), uid, bool(raw.get('data_compressed')))
-        if isinstance(row, Mapping) and live(raw) and live(row) and row.get('status') == 'open' and related(row):
+        if isinstance(row, Mapping) and live(raw) and live(row) and row.get('status') in OPEN_STATUSES and related(row):
             result.append(
                 {
                     'source': f'stored open loop: open_loops/{raw["id"]}',

@@ -67,14 +67,32 @@ def store():
             # Actual SDK FieldFilter protobuf operators.
             field, op, value = item.field.field_path, item.op, item.value
             operand = getattr(value, value._pb.WhichOneof('value_type'))
+            if op == 8:
+                operand = [v.string_value for v in value.array_value.values]
             if op == 5:  # EQUAL
                 selected = [(key, row) for key, row in selected if row.get(field) == operand]
+            elif op == 8:  # IN
+                selected = [(key, row) for key, row in selected if row.get(field) in operand]
+            elif op == 4:  # GREATER_THAN_OR_EQUAL
+                selected = [(key, row) for key, row in selected if row.get(field) is not None and row[field] >= operand]
             elif op == 1:  # LESS_THAN
                 selected = [(key, row) for key, row in selected if row.get(field) is not None and row[field] < operand]
             else:
                 raise AssertionError(f'unhandled test filter {op}')
         for order in reversed(query._orders):
+            selected = [(key, row) for key, row in selected if order.field.field_path in row]
             selected.sort(key=lambda pair: pair[1].get(order.field.field_path), reverse=order.direction == 2)
+        if query._projection:
+            fields = {field.field_path for field in query._projection.fields}
+            assert 'transcript_segments' not in fields
+            projected = []
+            for key, row in selected:
+                data = {k: v for k, v in row.items() if k in fields}
+                for field in fields:
+                    if field.startswith('structured.') and field.split('.')[1] in row.get('structured', {}):
+                        data.setdefault('structured', {})[field.split('.')[1]] = row['structured'][field.split('.')[1]]
+                projected.append((key, data))
+            selected = projected
         return iter(snapshot(key, data) for key, data in selected[: query._limit])
 
     with patch.object(DocumentReference, 'get', autospec=True, side_effect=get), patch.object(
@@ -108,7 +126,7 @@ def populate(rows):
     }
     rows[path('conversations', 'previous')] = {
         'started_at': AT - timedelta(days=1),
-        'transcript_segments': [{'person_id': 'p1', 'text': 'We discussed a rain garden.'}],
+        'manual_speaker_assignments': {'speakers': {'1': {'person_id': 'p1', 'is_user': False}}},
         'structured': {'title': 'Garden design', 'overview': 'Avery proposed native plants.'},
     }
     rows[path('action_items', 'action')] = {
@@ -116,15 +134,16 @@ def populate(rows):
         'status': 'active',
         'conversation_id': 'previous',
         'description': 'Send the plan to Avery',
+        'created_at': AT,
     }
     rows[path('open_loops', 'loop')] = {
-        'status': 'open',
+        'status': 'opened',
         'data_compressed': True,
         'data': encryption.encrypt(
             zlib.compress(
                 json.dumps(
                     {
-                        'status': 'open',
+                        'status': 'opened',
                         'what': 'Avery to send planting costs',
                         'who': 'Avery',
                         'source_conversation_ids': ['previous'],
@@ -200,7 +219,11 @@ def test_render_caps_characters_and_utf8_bytes(value):
     block = context.render({heading: [{'name': value * 10000}] for heading in context.HEADINGS})
     assert len(block) <= context.MAX_BYTES and len(block.encode()) <= context.MAX_BYTES
     assert block.startswith('BACKGROUND') and 'cannot establish' in block
-    assert block.index(context.HEADINGS[0]) < block.index(context.HEADINGS[1])
+    assert 'truncated' in block
+    assert value * 10000 not in block
+    for line in block.splitlines():
+        if line.startswith('{'):
+            json.loads(line)
 
 
 def test_switch_off_calls_original_gather_exactly(monkeypatch):
@@ -283,7 +306,7 @@ def test_prior_is_time_ordered_bounded_and_excludes_current_members(store):
     for index in range(20):
         rows[path('conversations', f'prior-{index:02}')] = {
             'started_at': AT - timedelta(days=index + 1),
-            'transcript_segments': [{'person_id': 'p1'}],
+            'manual_speaker_assignments': {'speakers': {'1': {'person_id': 'p1', 'is_user': False}}},
             'structured': {'title': str(index), 'overview': 'summary' * 400},
         }
     result = sources.prior(UID, MEMBERS, ['p1'], budget(), firestore_client=client)
@@ -350,10 +373,16 @@ def test_full_candidate_windows_stay_under_read_cap(store, monkeypatch):
             'start_time': AT,
             'end_time': AT + timedelta(minutes=30),
         }
-        rows[path('action_items', f'a{index}')] = {'completed': False, 'person_id': 'p0', 'description': 'Follow up'}
+        rows[path('action_items', f'a{index}')] = {
+            'completed': False,
+            'person_id': 'p0',
+            'conversation_id': 'current',
+            'created_at': AT,
+            'description': 'Follow up',
+        }
         rows[path('open_loops', f'l{index}')] = {
-            'status': 'open',
-            'data': {'status': 'open', 'person_id': 'p0', 'what': 'Question'},
+            'status': 'opened',
+            'data': {'status': 'opened', 'person_id': 'p0', 'what': 'Question'},
         }
     members = [{**MEMBERS[0], 'transcript_segments': [{'person_id': pid} for pid in ids]}]
     monkeypatch.setattr(
@@ -362,8 +391,7 @@ def test_full_candidate_windows_stay_under_read_cap(store, monkeypatch):
     read_budget = budget()
     sections = context.collect(UID, members, read_budget, sources=sources)
     assert len(sections) == 4
-    assert read_budget.reads == 46 < context.MAX_READS == 48
-    read_budget.reserve(2)
+    assert read_budget.reads == context.MAX_READS == 48
     with pytest.raises(RuntimeError, match='read cap'):
         read_budget.reserve(1)
 
@@ -473,3 +501,55 @@ def test_memory_keeps_full_budget_and_defaults_use_only_remaining_time(store, mo
     result = context.gather_with_defaults(UID, MEMBERS, memory, 'fallback')
     assert all(heading in result[1] for heading in context.HEADINGS)
     assert 'memory block' in result[1]
+
+
+@pytest.mark.parametrize('status', sorted(sources.OPEN_STATUSES))
+def test_real_stored_open_loop_statuses_match(store, status):
+    client, rows, _ = store
+    rows[path('open_loops', 'loop')] = {
+        'status': status,
+        'data': {'status': status, 'person_id': 'p1', 'what': 'Send estimate'},
+    }
+    result = sources.actions(UID, ['p1'], [], [], budget(), firestore_client=client)
+    assert any('open loop' in row['source'] for row in result)
+
+
+def test_current_and_prior_conversation_links_precede_unrelated_tasks(store):
+    client, rows, _ = store
+    for i in range(20):
+        rows[path('action_items', f'unrelated-{i}')] = {
+            'completed': False,
+            'conversation_id': 'elsewhere',
+            'created_at': AT,
+            'description': 'Unrelated',
+        }
+    for cid in ['current', 'previous']:
+        rows[path('action_items', cid)] = {'completed': False, 'conversation_id': cid, 'description': 'Send estimate'}
+    result = sources.actions(
+        UID, [], [], [{'conversation_id': 'previous'}], budget(), member_ids=['current'], firestore_client=client
+    )
+    assert len(result) == 2
+
+
+def test_render_never_splits_a_row_and_reports_omissions():
+    row = {'description': 'complete fact', 'source': 'stored action'}
+    block = context.render({context.HEADINGS[0]: [{'description': '🌿' * 3000}, row]})
+    assert 'truncated' in block and 'complete fact' in block
+    assert [json.loads(line) for line in block.splitlines() if line.startswith('{')] == [row]
+    assert len(block.encode()) <= context.MAX_BYTES
+
+
+def test_prior_deadline_reserves_actions_time(monkeypatch):
+    fake = create_autospec(sources, spec_set=True)
+    seen = []
+    for name in ('people', 'calendar', 'actions'):
+        getattr(fake, name).return_value = []
+
+    def prior(uid, members, ids, budget, *, firestore_client=None):
+        seen.append(budget.deadline - budget.section_deadline)
+        raise TimeoutError('prior deadline')
+
+    fake.prior.side_effect = prior
+    sections = context.collect(UID, MEMBERS, budget(), sources=fake)
+    assert seen[0] >= context.SECTION_SECONDS
+    assert context.HEADINGS[3] in sections

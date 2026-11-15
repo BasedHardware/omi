@@ -110,19 +110,32 @@ def render(sections: Mapping[str, Sequence[Mapping[str, Any]]]) -> str:
     UTF-8 byte count. The cap includes provenance, headings and separators.
     """
     blocks = [BACKGROUND.rstrip()]
-    # Per-section ceilings leave space for lower-priority sections, even when a
-    # person's stored description is unusually long.
+    marker = '[BACKGROUND truncated: additional complete rows omitted.]'
+    truncated = False
+    # Reserve the final marker and join separator before appending any row.
+    remaining = MAX_BYTES - 2 - len((blocks[0] + '\n\n' + marker).encode('utf-8'))
     for heading, allowance in zip(HEADINGS, (1700, 1000, 1100, 700)):
-        rows = sections.get(heading)
+        rows = sections.get(heading) or []
         if not rows:
             continue
-        body = '\n'.join(json.dumps(row, ensure_ascii=False, default=str) for row in rows)
-        bounded = body.encode('utf-8')[:allowance].decode('utf-8', errors='ignore')
-        blocks.append(f'{heading} (background only):\n{bounded}')
-    if len(blocks) == 1:
-        return ''
-    # Reserve the separator used when this block precedes existing memories.
-    return '\n\n'.join(blocks).encode('utf-8')[: MAX_BYTES - 2].decode('utf-8', errors='ignore')
+        label = f'{heading} (background only):'
+        complete = []
+        used = 0
+        for row in rows:
+            serialized = json.dumps(row, ensure_ascii=False, default=str)
+            size = len(serialized.encode('utf-8')) + 1
+            if used + size > allowance or len(label.encode()) + 2 + used + size > remaining:
+                truncated = True
+                continue
+            complete.append(serialized)
+            used += size
+        if complete:
+            block = label + '\n' + '\n'.join(complete)
+            blocks.append(block)
+            remaining -= len(block.encode('utf-8')) + 2
+    if truncated:
+        blocks.append(marker)
+    return '\n\n'.join(blocks) if len(blocks) > 1 else ''
 
 
 @dataclass
@@ -175,10 +188,16 @@ def collect(
             lambda: sources.people(uid, ids, budget),
             lambda: sources.calendar(uid, members, budget),
             lambda: sources.prior(uid, members, ids, budget),
-            lambda: sources.actions(uid, ids, people, prior, budget),
+            lambda: sources.actions(
+                uid, ids, people, prior, budget, member_ids=[row['id'] for row in members if safe_id(row.get('id'))]
+            ),
         ),
     ):
-        budget.section_deadline = min(budget.deadline, time.monotonic() + SECTION_SECONDS)
+        now = time.monotonic()
+        ceiling = budget.deadline
+        if heading == HEADINGS[2]:
+            ceiling -= min(SECTION_SECONDS, max(0.0, (budget.deadline - now) / 2))
+        budget.section_deadline = min(ceiling, now + (2.0 if heading == HEADINGS[3] else SECTION_SECONDS))
         try:
             budget.check()
             rows = loader()

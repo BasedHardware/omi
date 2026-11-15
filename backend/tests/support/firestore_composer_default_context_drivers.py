@@ -24,7 +24,13 @@ def entries():
         ),
         DriverEntry(
             PREFIX + 'actions',
-            base={'uid': SHAPE_UID, 'ids': ['person-1'], 'people_rows': [], 'prior_rows': []},
+            base={
+                'uid': SHAPE_UID,
+                'ids': ['person-1'],
+                'people_rows': [],
+                'prior_rows': [{'conversation_id': 'prior'}],
+                'member_ids': ['current'],
+            },
             neutrals={'budget': budget()},
         ),
         CoveredByEntry(

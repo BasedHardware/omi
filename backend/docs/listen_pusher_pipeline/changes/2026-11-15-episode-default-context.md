@@ -36,3 +36,21 @@ Firestore nanosecond-timestamp regression, section failure isolation, full-cap
 saturation, byte bounds, off parity, reset/deletion and owner scoping. The
 quality-push run record owns the timestamped owner-only coverage counts and
 cost model; no live summary improvement or deployed behavior is claimed here.
+
+Review corrections: open loops use the store's OPEN_STATUSES in both the
+query and decoded-row validation. Current-member and surfaced-prior conversation
+links are queried before person IDs and a small recent name-only fallback; all
+queries order on their own indexed field. Conversation links are split into
+at most three batches of30 with8 total candidates, exact-person candidates3,
+recent name candidates2, loops8 and control1. People6, calendar8 and prior12
+bring the total to48 reads (additional to the sibling's640). Prior matching
+projects only manual assignment receipts and structured.title/overview, never
+transcripts; automatic-only identities without receipts do not match history.
+The prior section reserves up to1.25s for actions; actions may use up to2s of
+the same remaining absolute deadline. The total gather remains8s.
+
+Calendar start_time is bounded from one day before episode start to episode
+end, ordered descending on start_time. Both ranges use that one automatic
+single-field index. Meetings beginning more than a day earlier and dense
+windows beyond8 candidates are outside this bounded lookup. Rendering appends
+only complete JSON rows, emits an omission marker, and remains4800 bytes.
