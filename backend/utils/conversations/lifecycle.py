@@ -31,6 +31,8 @@ from utils.conversations import merge_conversations_job
 
 from database import conversations as conversations_db
 from database import no_speech_terminal as no_speech_terminal_db
+from database import pipeline_ledger
+from database._client import get_firestore_client
 from utils.conversations.no_speech_restore import restore_no_speech_capture as restore_no_speech_capture
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
@@ -1214,6 +1216,7 @@ def request_finalization(
     # The outbox transaction is the authoritative acceptance boundary. Count
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
+        _record_ledger_end(uid, conversation_id, trigger, firestore_client)
         record_journey_accepted('capture_finalization')
         record_client_journey_accepted(
             'conversation_finalization',
@@ -1308,6 +1311,51 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
     }
 
 
+# The end that fired, typed for the ledger. A bare capture end (a socket
+# closing) is not user intent and stays unknown; only an explicit client
+# finalize is the user's, and server recovery is the silence backstop.
+_TRIGGER_END_TYPES = {
+    ProcessingTrigger.CLIENT_FINALIZE: 'user_initiated',
+    ProcessingTrigger.SERVER_RECOVERY: 'silence_backstop',
+    ProcessingTrigger.CAPTURE_END: 'unknown',
+}
+
+
+def _record_ledger_end(uid: str, conversation_id: str, trigger: Any, firestore_client: Any) -> None:
+    """Stamp the ledger with the server-known end at the instant its intent is accepted."""
+    end_type = _TRIGGER_END_TYPES.get(trigger)
+    if end_type is None:
+        return  # Reprocess, merge and backfill triggers are not ends of a recording.
+    now = datetime.now(timezone.utc).timestamp()
+    pipeline_ledger.record_end(
+        uid, conversation_id, end_type=end_type, end_at=now, end_observed_at=now, firestore_client=firestore_client
+    )
+
+
+def _ledger_terminal(
+    uid: str, conversation_id: str, stage: str, *, firestore_client: Any = None, **fields: Any
+) -> None:
+    """Record a reversible hide as the capture's ledger terminal, after the real close commits.
+
+    Fenced like every ledger write: nothing is written for a conversation
+    deleted since the close, or for an account being wiped. A later restore
+    needs no ledger undo: the restored capture's next real transition re-opens
+    the row with its own higher source revision.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    pipeline_ledger.advance(
+        uid,
+        conversation_id,
+        stage,
+        reason=stage,
+        source_ref=user_ref.collection('conversations').document(conversation_id),
+        owner_ref=user_ref,
+        firestore_client=client,
+        **fields,
+    )
+
+
 def close_stuck_backfill_noise(
     uid: str,
     conversation_id: str,
@@ -1319,7 +1367,7 @@ def close_stuck_backfill_noise(
     firestore_client: Any = None,
 ) -> str:
     """Lifecycle owner for the operator's approved metadata-only close."""
-    return stuck_backfill_db.close_noise(
+    committed = stuck_backfill_db.close_noise(
         uid,
         conversation_id,
         expected_revision=expected_revision,
@@ -1328,6 +1376,8 @@ def close_stuck_backfill_noise(
         run_id=run_id,
         firestore_client=firestore_client,
     )
+    _ledger_terminal(uid, conversation_id, pipeline_ledger.NOISE, firestore_client=firestore_client)
+    return committed
 
 
 def restore_stuck_backfill_noise(
@@ -1365,7 +1415,7 @@ def close_no_speech_capture(
     retained audio. Audio and content are untouched; the marker records the
     prior lifecycle fields for the operator undo.
     """
-    return no_speech_terminal_db.close_no_speech(
+    committed = no_speech_terminal_db.close_no_speech(
         uid,
         conversation_id,
         expected_revision=expected_revision,
@@ -1375,3 +1425,13 @@ def close_no_speech_capture(
         firestore_client=firestore_client,
         expected_privacy_generation=expected_privacy_generation,
     )
+    _ledger_terminal(
+        uid,
+        conversation_id,
+        pipeline_ledger.NO_SPEECH,
+        firestore_client=firestore_client,
+        speech_seconds=speech_seconds,
+        has_speech=False,
+        speech_basis='vad',
+    )
+    return committed

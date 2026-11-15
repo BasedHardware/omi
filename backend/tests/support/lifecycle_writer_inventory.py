@@ -1,6 +1,25 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Census response metadata only; no lifecycle document writes.
+    'utils/sync/batch_census.py': [
+        (
+            'snapshot',
+            'status',
+            "OUTCOME_DISABLED; literal aliases=[('OUTCOME_DISABLED', ('disabled',))]",
+            ('failed', 'status', 'stocks', 'units'),
+        ),
+        ('snapshot', 'status', 'outcome', ('failed', 'status', 'stocks', 'units')),
+    ],
+    'database/batch_pipeline_allowance_hold.py': [
+        (
+            'park',
+            'state',
+            "STATE; literal aliases=[('STATE', ('allowance_held',))]",
+            ('allowance_held_at', 'merge_pending', 'state'),
+        ),
+        ('restore_retry', 'state', "'retry'", ('available_at', 'lease_until', 'merge_pending', 'state', 'token')),
+    ],
     # Shadow allowance operation lifecycle, separate from audio custody.
     'database/free_allowance_leases.py': [
         ('reserve.commit.record', 'status', "'active'", ('had_refusal', 'has_hold', 'last_reason', 'months', 'status')),
@@ -1997,13 +2016,13 @@ FIELD_SITES = {
             'mark_record_upload_failed.commit',
             'record_audio_closed',
             'False',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         (
             'mark_record_upload_failed.commit',
             'record_upload_failed',
             'True',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
@@ -2856,6 +2875,7 @@ FIELD_SITES = {
             "'ready'",
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
         ),
+        ('Scheduler.release_allowance_in_transaction', 'state', "'ready'", ('compute_decision', 'state')),
         (
             'Scheduler.requeue_quarantined_in_transaction',
             'state',

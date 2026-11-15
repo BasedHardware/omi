@@ -222,7 +222,7 @@ def commit_pcm_window(
             offset += count
     else:
         pack.append(pcm, conversation_id, start, len(pcm) // 2)
-    raw, metadata = pack.encoded(preserve_pcm=True)
+    raw, metadata = pack.encoded(preserve_pcm=True, compact_custody_pcm=True)
     if framed:
         metadata.update(frame_schema=FRAME_SCHEMA, gap_count=sum(frame['gap_before'] for frame in frames))
     metadata.update(

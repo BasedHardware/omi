@@ -247,7 +247,7 @@ def test_pl363_transient_audio_failure_remains_retryable_not_permanent_custody(s
     second.assert_not_called()
 
 
-@pytest.mark.parametrize('method', ['hold_invalid_manifest', 'hold_duration_limit'])
+@pytest.mark.parametrize('method', ['hold_invalid_manifest', 'hold_input_missing', 'hold_duration_limit'])
 @pytest.mark.parametrize('change', ['token', 'audio', 'running', 'lease', 'result', 'privacy'])
 def test_pl105_pl363_refusal_cannot_settle_a_foreign_or_started_epoch(store_backend, method, change):
     h = store_backend

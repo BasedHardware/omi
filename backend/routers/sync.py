@@ -54,6 +54,8 @@ from models.sync_job_status import (
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
+    SyncCaptureEndRequest,
+    SyncCaptureEndResponse,
     SyncUploadHoldReleaseResponse,
 )
 from routers.batch_pipeline import enrichment_response
@@ -61,6 +63,9 @@ from database import conversations as conversations_db
 from database import record_audio as record_audio_db
 from config import record_seal_rules as record_lease
 from utils.sync import record_token_lease as custody_lease
+from utils.sync import capture_end
+from database import capture_end as capture_end_db
+from database import pipeline_ledger
 from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
@@ -256,7 +261,7 @@ from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
-from utils.sync import cap_hold_redrive
+from utils.sync import batch_census, cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +380,58 @@ async def create_sync_capture_manifest(
         uid=uid,
     )
     return SyncCaptureManifestResponse(manifest=manifest)
+
+
+def _store_capture_end(uid: str, recording_session_id: str, marker: dict) -> str:
+    outcome, conversation_id = capture_end_db.store(uid, recording_session_id, marker)
+    if outcome == 'stored' and conversation_id:
+        # Fail-open measurement: the marker is already durable on the session.
+        pipeline_ledger.record_end(
+            uid,
+            conversation_id,
+            end_type=marker['end_type'],
+            end_at=marker['end_at'],
+            end_observed_at=marker['end_observed_at'],
+            last_speech_at=marker['last_speech_at'],
+        )
+    return outcome
+
+
+@router.post('/v2/sync-capture-end', response_model=SyncCaptureEndResponse)
+async def record_sync_capture_end(
+    payload: SyncCaptureEndRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """The phone states that a recording ended and how much of it is uploaded.
+
+    Stored on the recording's own session document. It lets notes start once
+    the recording's speech has landed, without the arrival-quiet wait. It never
+    changes custody and never deletes or finalizes anything itself.
+    """
+    if not capture_end.enabled():
+        capture_end.record_received(payload.end_type, 'disabled')
+        return SyncCaptureEndResponse(accepted=False)
+    try:
+        marker = capture_end.normalize(
+            end_type=payload.end_type,
+            last_speech_at=payload.last_speech_at,
+            end_decided_at=payload.end_decided_at,
+            sent_at=payload.sent_at,
+            pending_wals=payload.pending_wals,
+            received_at=time.time(),
+        )
+    except ValueError as e:
+        capture_end.record_received(payload.end_type, 'invalid')
+        raise HTTPException(status_code=422, detail='Invalid capture end') from e
+    try:
+        outcome = await run_blocking(db_executor, _store_capture_end, uid, payload.recording_session_id, marker)
+    except Exception as e:
+        logger.error('sync capture end unavailable uid=%s error=%s', uid, type(e).__name__)
+        raise HTTPException(status_code=503, detail='Capture end is temporarily unavailable') from e
+    capture_end.record_received(marker['end_type'], outcome)
+    # No session yet: no upload for this recording has been bound. The phone's
+    # resend after its last accepted file covers that case.
+    return SyncCaptureEndResponse(accepted=outcome != 'unbound', retry=outcome == 'unbound')
 
 
 class AudioDownloadPendingResponse(BaseModel):
@@ -650,6 +707,7 @@ async def sync_local_files_v2(
     x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
     x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
+    x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -661,6 +719,10 @@ async def sync_local_files_v2(
     upload_filenames = [f.filename or '' for f in files]
     repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
+    # Measurement only: how long the oldest file waited on the phone, and why.
+    capture_end.observe_trace(
+        x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None, received_at=capture_received_at
+    )
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
     except EmptySyncUpload:
@@ -3874,3 +3936,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 @read_origin('job:cap_hold_recovery')
 async def sweep_cap_hold_recovery(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     return await cap_hold_redrive.sweep()
+
+
+@router.post('/v2/batch-census/run', include_in_schema=False)
+@read_origin('job:batch_census')
+async def run_batch_census(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Exact per-stock counts and oldest ages for the batch census registry."""
+    return JSONResponse(status_code=200, content=await batch_census.snapshot())
