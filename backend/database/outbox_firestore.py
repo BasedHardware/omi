@@ -27,6 +27,8 @@ import functools
 import logging
 
 from database.outbox import Claim, EnqueueResult, Outbox, OutboxKind, Outcome, SweepCounts
+from config.record_latency import record_notes_eager_enabled
+from database import record_notes_hold
 
 logger = logging.getLogger(__name__)
 
@@ -235,10 +237,12 @@ class FirestoreEnrichmentOutbox:
             if producer:
                 # Sidecar metadata stays on the durable row, outside the <=4 KiB claim payload.
                 producers = {} if old and old.get('dormant') else dict(new.get('record_notes_producers') or {})
-                from database.record_notes_hold import merge_producers
-
-                producers = merge_producers(producers, {producer['conversation_id']: producer.get('revision')})
+                producers = record_notes_hold.merge_producers(
+                    producers, {producer['conversation_id']: producer.get('revision')}
+                )
                 new['record_notes_producers'] = producers
+            elif old and old.get('dormant'):
+                new.pop('record_notes_producers', None)
             provenance = payload.get('record_notes_processing_hold')
             if isinstance(provenance, dict):
                 # Carry provenance without treating a notes wake as new content.
@@ -326,9 +330,7 @@ class FirestoreEnrichmentOutbox:
             if row['due_at'] > now and (not outbox.effects_may_run_early(row) or not enabled(row['uid'])):
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (Outcome.DEFERRED, row)
-            if row.get('record_notes_producers'):
-                from database import record_notes_hold
-
+            if record_notes_eager_enabled() and row.get('record_notes_producers'):
                 status, blocked = record_notes_hold.admit(row, self._client(), now=now)
                 if status == 'stale':
                     expired_sources.extend(blocked)
@@ -344,8 +346,6 @@ class FirestoreEnrichmentOutbox:
         outcome, row = self._mutate(row_id, claim)
         outbox.record_summary_stamps(stamps)
         if expired_sources:
-            from database import record_notes_hold
-
             record_notes_hold.record_timeout(self._client(), claim_owner[0], expired_sources, now=now)
         if row is None:
             assert outcome is not None
@@ -417,8 +417,9 @@ class FirestoreEnrichmentOutbox:
                         dispatch=None,
                         summary_repair=False,
                         summary_expected_revision=None,
-                        record_notes_producers={},
                     )
+                    if 'record_notes_producers' in settled:
+                        settled['record_notes_producers'] = {}
                     settled.pop('summary_seen_by', None)
                     settled.pop(SUPERSEDE_STREAK_FIELD, None)  # a dormant receipt ends the episode
                     return settled, (True, None)

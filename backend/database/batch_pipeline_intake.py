@@ -199,7 +199,8 @@ def admit(
                     job['record_finished_at'] = finished
                     # All siblings retain this dispatch owner even if the
                     # recording ages out or the urgency switch changes later.
-                    job['record_notes_after_complete'] = not binding.partial_record and record_notes_eager_enabled()
+                    if not binding.partial_record and record_notes_eager_enabled():
+                        job['record_notes_after_complete'] = True
                     if record_fresh_merge_enabled():
                         # Seal/staging latency must not demote a new recording
                         # behind this owner's unresolved historical captures.

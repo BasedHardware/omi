@@ -104,7 +104,7 @@ env:
   - name: RECORD_FRESH_MERGE_ENABLED
     value: 'false'
   - name: RECORD_NOTES_EAGER_ENABLED
-    value: 'true'
+    value: 'false'
   - name: RECORD_FOLLOWUP_WAKE_ENABLED
     value: 'true'
   - name: RECORD_SEAL_WAKE_PRESERVED_ENABLED

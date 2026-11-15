@@ -1,6 +1,12 @@
 """Delivery must not buy notes while a recording's new upload is unresolved."""
 
 from types import SimpleNamespace
+from dataclasses import replace
+
+from config.record_audio import require_record_audio_barrier
+from database.batch_pipeline_intake import admit
+from database import record_notes_hold
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from unittest.mock import Mock
 
 import pytest
@@ -16,6 +22,10 @@ from utils.workers.consumer import run_push
 
 @pytest.fixture(params=['consumer', 'legacy'])
 def delivery(recording, monkeypatch, request):
+    return make_delivery(recording, monkeypatch, request.param)
+
+
+def make_delivery(recording, monkeypatch, adapter_kind):
     f = recording
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
@@ -42,7 +52,10 @@ def delivery(recording, monkeypatch, request):
     monkeypatch.setattr(reprocess, '_enqueue', Mock())
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: f.client)
     f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
-    assert ref.get().to_dict()['record_notes_producers'] == {'capture': 1}
+    if ref.get().to_dict().get('record_notes_producers'):
+        assert ref.get().to_dict()['record_notes_producers'] == {
+            'capture': f.client.rows[f.store.ref('jobs', 'first').path].get('record_input_upload_revision')
+        }
     clock = [NOW + 120]
     monkeypatch.setattr(consumer.time, 'time', lambda: clock[0])
     paid = Mock(return_value=SimpleNamespace(structured={'overview': 'Complete synthetic transcript'}))
@@ -51,7 +64,7 @@ def delivery(recording, monkeypatch, request):
     def deliver(at):
         clock[0] = at
         token = ref.get().to_dict()['task_token']
-        if request.param == 'legacy':
+        if adapter_kind == 'legacy':
             status = reprocess.run(key, token, worker._callback(), now=at)
             return SimpleNamespace(outcome='done' if status == 'processed' else status)
         return run_push(worker, adapter, key, token, now=at)
@@ -202,3 +215,121 @@ def test_fallback_refresh_rechecks_canonical_hold_before_any_sibling_completion(
     assert d.deliver(NOW + 600).outcome == 'deferred'
     assert d.ref.get().to_dict()['due_at'] == NOW + 700
     paid.assert_not_called()
+
+
+@pytest.mark.parametrize('adapter_kind', ['consumer', 'legacy'])
+def test_lease_off_intake_projection_delivery_reproduces_missing_revision(recording, monkeypatch, adapter_kind):
+
+    f = admit_lease_off(recording, monkeypatch, eager='true')
+    d = make_delivery(f, monkeypatch, adapter_kind)
+    f.store.mark_enrichment('last', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    assert f.conversation.get().to_dict()['record_upload_revision'] == 1
+    assert d.ref.get().to_dict()['record_notes_producers'] == {'capture': None}
+    assert d.deliver(NOW + 120).outcome == 'deferred'
+    d.paid.assert_not_called()
+
+
+def admit_lease_off(recording, monkeypatch, *, eager):
+    f = recording
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    if eager is None:
+        monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', eager)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', f.binding.owner_id)
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    source = f.conversation.get().to_dict()
+    intake = MemoryStore()
+    intake.rows['conversations', f'{f.binding.owner_id}/capture'] = source
+    works = [
+        replace(item(sid, owner=f.binding.owner_id, capture=NOW - 2000 + i), privacy_generation=0)
+        for i, sid in enumerate(f.binding.segment_ids)
+    ]
+    admit(intake, works, f.binding, NOW, namespace='record_notes', record_barrier=require_record_audio_barrier(source))
+    for sid in f.binding.segment_ids:
+        job = intake.rows['jobs', sid]
+        assert 'record_input_upload_revision' not in job
+        job['result'] = f.client.rows[f.store.ref('results', sid).path]['result']
+        f.client.rows[f.store.ref('jobs', sid).path] = job
+    return f
+
+
+@pytest.mark.parametrize('adapter_kind', ['consumer', 'legacy'])
+@pytest.mark.parametrize('eager', [None, 'false'])
+@pytest.mark.parametrize('retired_hold', [None, 'sync_hold', 'merge_hold'])
+def test_notes_off_matches_main_intake_enqueue_delivery_with_lease_off(
+    recording, monkeypatch, adapter_kind, eager, retired_hold
+):
+    f = admit_lease_off(recording, monkeypatch, eager=eager)
+    for sid in f.binding.segment_ids:
+        job = f.client.rows[f.store.ref('jobs', sid).path]
+        assert 'record_notes_after_complete' not in job
+        assert 'record_input_upload_revision' not in job
+    key = reprocess.key(f.binding.owner_id, 'capture')
+    ref = f.client.collection(reprocess.COLLECTION).document(key)
+    if retired_hold:
+        ref.create(
+            {
+                'version': 1,
+                'dormant': True,
+                'due_at': None,
+                'summary_seen': True,
+                retired_hold: True,
+                'record_notes_producers': {'retired-capture': None},
+            }
+        )
+    fence = Mock(side_effect=AssertionError('ordinary main obligation must not enter cut-2 producer fence'))
+    monkeypatch.setattr(record_notes_hold, 'admit', fence)
+    d = make_delivery(f, monkeypatch, adapter_kind)
+    f.store.mark_enrichment('last', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    row = ref.get().to_dict()
+    assert not row.get('record_notes_producers')
+    assert 'record_notes_fallback_outputs' not in f.ledger.get().to_dict()
+    assert 'record_notes_after_complete' not in f.ledger.get().to_dict()
+    assert row['due_at'] > NOW
+    assert d.deliver(row['due_at']).outcome == 'done'
+    d.paid.assert_called_once()
+    fence.assert_not_called()
+    assert not ref.get().to_dict().get('record_notes_producer_timeout_at')
+
+
+@pytest.mark.parametrize('adapter_kind', ['consumer', 'legacy'])
+@pytest.mark.parametrize('eager', [None, 'false'])
+@pytest.mark.parametrize('marker', ['job', 'ledger', 'outbox', 'all'])
+def test_notes_off_ignores_all_preexisting_completion_and_producer_markers(
+    recording, monkeypatch, adapter_kind, eager, marker
+):
+    f = recording
+    for sid in f.binding.segment_ids:
+        job = f.client.rows[f.store.ref('jobs', sid).path]
+        job.pop('record_notes_after_complete', None)
+        if marker in {'job', 'all'}:
+            job['record_notes_after_complete'] = True
+    if marker in {'ledger', 'all'}:
+        f.client.rows[f.ledger.path]['record_notes_after_complete'] = True
+    if eager is None:
+        monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', eager)
+    d = make_delivery(f, monkeypatch, adapter_kind)
+    assert 'record_notes_fallback_outputs' not in f.ledger.get().to_dict()
+    for sid in f.binding.segment_ids[1:]:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    if marker in {'outbox', 'all'}:
+        f.client.rows[d.ref.path]['record_notes_producers'] = {'capture': None}
+    # A receipt written before rollback must not revive the completion path.
+    for sid in f.binding.segment_ids:
+        f.client.rows[f.store.ref('results', sid).path]['projection']['record_notes_deferred'] = True
+    before = d.ref.get().to_dict()
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    assert d.ref.get().to_dict() == before  # No completion refresh, even with old receipts/markers.
+    f.client.rows[d.ref.path]['record_notes_producers'] = {'capture': None}
+    f.client.rows[f.conversation.path].update(record_audio_closed=False, record_upload_sessions={'late': True})
+    fence = Mock(side_effect=AssertionError('cut 2 off must ignore old producer markers'))
+    monkeypatch.setattr(record_notes_hold, 'admit', fence)
+    assert d.deliver(before['due_at']).outcome == 'done'
+    d.paid.assert_called_once()
+    fence.assert_not_called()

@@ -16,19 +16,18 @@ those intervals cannot be separated honestly. `timing_store` identifies the
 audio clock domain, not a timing trace. The consenting owner had no recordings
 ending after the cutoff and no ledger transitions in that window.
 
-Cuts 1–3 default on with explicit kill switches. Cut 4 defaults off in code:
+Cuts 1 and 3 default on. Cuts 2 and 4 default off in code and have explicit false dev/prod CPU bindings:
 
 - Admission records the already-read conversation end as `record_finished_at`
   for native recordings ended within 30 minutes. `RECORD_FRESH_MERGE_ENABLED`
   stamps all their siblings fresh only when explicitly true, including the first unit of a long capture.
   The existing fresh-first merge, predecessor chain, late-capture handling,
   provider backlog gate, privacy and sibling fences remain authoritative.
-- `RECORD_NOTES_EAGER_ENABLED` enqueues recent, non-partial native record notes
-  immediately and brings an existing later obligation forward through the
-  outbox's existing `min` coalescing. The previous 600-second settle is already
-  clipped to 120 seconds for first-summary debt; refreshes retain 600 seconds.
-  Consumer-side processing holds, existing leases and revision fences still
-  decide whether processing may run.
+- `RECORD_NOTES_EAGER_ENABLED` is staged OFF. Off writes no completion-owner
+  marker, creates no fallback and uses the main settle and delivery paths.
+  The opt-in implementation must first prove lease-mode-off revision custody,
+  reopened-record delivery safety, canonical holds and the paid-run bound.
+  The lease-off producer revision is currently a known opt-in blocker.
 - `RECORD_FOLLOWUP_WAKE_ENABLED` hands a successfully projected, recent,
   single-unit native recording directly to the existing bounded follow-up
   slots. It does not wait for another discovery sweep. Multipart, partial and
@@ -42,7 +41,7 @@ All four accept false/off/0/no as rollback. Turning off fresh classification
 only affects new admissions; already-stamped jobs keep their immutable class.
 See the [post-seal scheduling contract](../../listen_pusher_pipeline.mdx#recent-record-post-seal-scheduling).
 
-There are no new queries, timers, scans, or shorter polling cadences: zero new
+With cuts 2 and 4 off there are no new queries, timers, scans, or shorter polling cadences: zero new
 periodic Firestore reads/hour. The same reads/writes perform admission and
 follow-up processing earlier. Moving an existing outbox obligation earlier can
 leave its old task to fail its existing stale-token checks; the net production
@@ -75,34 +74,35 @@ accounts and strict transaction ordering; the owner-drain suite exercises the
 actual projection walk, bounded scheduler and follow-up handoff.
 
 
-## FIX-FIRST corrections (2026-11-14)
+## Staged enablement after review (2026-11-15)
 
-The fresh head-wait bypass now checks all earlier siblings in the same immutable
-native-record binding inside the committing transaction. A later ready sibling
-cannot commit until each predecessor is committed; unrelated older stock can
-still be passed through the existing fresh-first machinery. The check covers
-both transactional and fallback fresh selection and recovery release.
+Only cuts 1 and 3 and stage instrumentation ship enabled. Turning notes off
+ignores completion-owner markers during projection; already-created cut-2
+producer maps are ignored by both consumers while off. Ordinary main settle
+obligations carry no cut-2 producer map, never call that fence, and never gain
+its deferral or dormancy outcome. Dormant receipt reuse drops retired producer
+metadata. The dormant active-hold bug fix remains in place.
 
-Notes dispatch is owned by recording completion, after every sibling projection
-receipt is ready. Admission stamps that durable owner on every recent full-record
-sibling; an unstamped in-flight binding gets a one-time ledger upgrade on its
-first eligible receipt. Aging out or changing the urgency switch cannot return
-later siblings to per-unit dispatch. Completion replay creates no new outbox
-revision. Applicable producer, processing, sync and merge holds retain settle.
-The normal one-conversation recording creates one automatic notes obligation,
-even with 128 units: zero extra notes runs from sibling count. A true size
-rollover into K distinct conversations requires K obligations, one per output,
-prepared before any outbox writes. Model/tool turns and provider/empty-output
-retries within those runs retain existing budgets; this change does not claim
-an absolute cap on all paid model calls for a recording.
+The sibling guard and bounded bypass are gated together behind cut 4. Off
+returns before any predecessor lookup and never issues the new ready query;
+main's existing merge selection and partial completion remain in effect.
+Cuts 1 and 3 do not read either staged switch. Stage clocks still piggyback the
+existing writes and retain the existing recording-end clock.
 
-All four independent controls have rendered true/false bindings on both dev
-and prod CPU serving hosts and the dedicated worker chart. Fresh stamping is
-explicitly staged OFF in both deployed environments; the other three cuts stay ON. The helper flag
-budget adds four owned registry exceptions reviewed by 2026-12-14, leaving the
-seeded budget at 161. The worker must include the unconditional sibling guard
-before the fresh-classification change activates on CPU hosts; no GPU image
-change or deployment is authorized in this lane.
+All four controls retain explicit bindings on dev/prod Cloud Run backend,
+backend-integration, backend-sync, backend-sync-backfill and GKE backend-listen.
+Dedicated GPU merge reads cut 4 only; its chart also binds that guard explicitly false. The helper flag
+budget retains four owned exceptions and the seeded limit of 161. The lead
+must verify every CPU/GPU merge writer has the sibling guard before enabling
+cut 4, and prove lease-off intake through notes delivery, reopen safety and paid
+run bounds before enabling cut 2. The revision must be snapshotted regardless
+of token-lease mode, and custody reads must share the outbox claim transaction. Image-only listen rolls default both off when
+unset; explicit live true values still require readback. No GPU image change.
+
+The earlier 114-second arithmetic budget assumed eager notes. It does not apply
+to tonight's staged configuration: main's first-summary deadline remains 120
+seconds and refresh settle remains 600 seconds, plus holds and compute. There
+is no new two-minute production acceptance claim.
 
 New measurement fields and their write costs:
 

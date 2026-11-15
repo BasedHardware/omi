@@ -23,6 +23,7 @@ POLICY = ProjectionPolicy()
 @pytest.fixture
 def recording(monkeypatch, request):
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'true')
     monkeypatch.setenv('SYNC_TASKS_QUEUE', '')
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', '')
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
@@ -129,14 +130,14 @@ def test_complete_binding_has_one_fallback_and_completion_update_independent_of_
     assert row.get().to_dict()['version'] == 2
 
 
-def test_siblings_keep_completion_owner_across_age_and_switch_changes(recording, monkeypatch):
+def test_switch_off_uses_normal_settle_despite_admitted_completion_owner(recording, monkeypatch):
     f = recording
     f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
     monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
     later = NOW + 1801
     f.store.mark_enrichment('last', f.binding, later, 'capture', 'en', policy=POLICY)
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
-    assert row.get().to_dict()['version'] == 1
+    assert row.get().to_dict()['version'] == 2
     assert f.store.complete('last', f.binding, later, f.accounting, policy=POLICY)
     assert row.get().to_dict()['version'] == 2
 
@@ -324,13 +325,13 @@ def test_completion_marker_has_one_durable_deadline_when_sibling_cannot_arrive(
     assert f.ledger.get().to_dict()['record_notes_fallback_outputs'] == ['capture']
 
 
-def test_flag_off_before_first_projection_still_initializes_marked_record_deadline(recording, monkeypatch):
+def test_flag_off_before_first_projection_uses_main_settle_without_fallback_marker(recording, monkeypatch):
     monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
     f = recording
     f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
     assert row.get().to_dict()['due_at'] == NOW + 120
-    assert f.ledger.get().to_dict()['record_notes_fallback_outputs'] == ['capture']
+    assert 'record_notes_fallback_outputs' not in f.ledger.get().to_dict()
 
 
 @pytest.mark.parametrize('quiet,remaining', [(120, 0), (300, 50), (600, 350)])
@@ -439,7 +440,8 @@ def test_held_refresh_completion_moves_an_earlier_fallback_to_canonical_deadline
 
 @pytest.mark.parametrize('recording', [3], indirect=True)
 @pytest.mark.parametrize('recovery', ['failed_held', 'disabled'])
-def test_terminal_record_unit_allows_suffix_to_merge_and_complete_partial(recording, recovery):
+def test_terminal_record_unit_allows_suffix_to_merge_and_complete_partial(recording, recovery, monkeypatch):
+    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', 'true')
     from database.batch_pipeline_projection import held_without_recovery
     from tests.unit.test_batch_pipeline_scheduler import MemoryStore
     from utils.batch_pipeline.scheduler import Scheduler

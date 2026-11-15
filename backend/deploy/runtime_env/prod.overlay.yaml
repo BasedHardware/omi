@@ -49,7 +49,7 @@ overlay:
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
         RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
-        RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
         RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
         RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
@@ -562,7 +562,7 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
-          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -935,7 +935,7 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
-          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -1345,7 +1345,7 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
-          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -1704,7 +1704,7 @@ overlay:
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
-          RECORD_NOTES_EAGER_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}

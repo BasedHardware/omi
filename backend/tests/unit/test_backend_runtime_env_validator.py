@@ -196,7 +196,7 @@ def with_memory_env(payload: str) -> str:
     memory_env = '''\
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
-        {"name": "RECORD_NOTES_EAGER_ENABLED", "value": "true"},
+        {"name": "RECORD_NOTES_EAGER_ENABLED", "value": "false"},
         {"name": "RECORD_FOLLOWUP_WAKE_ENABLED", "value": "true"},
         {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
@@ -3968,7 +3968,7 @@ def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
     assert len(hosts) == 5
     for host in hosts:
         for key in flags:
-            value = 'false' if key == 'RECORD_FRESH_MERGE_ENABLED' else 'true'
+            value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
             assert host['env'][key] == {'value': value, 'category': 'ops_kill'}
             assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': value}]
 

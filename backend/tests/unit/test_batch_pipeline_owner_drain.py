@@ -21,6 +21,10 @@ import pytest_asyncio
 from config.batch_pipeline import projection_drain_claim_aware_enabled, projection_prefetch_depth
 from config.policy.kill_switches import KILL_SWITCHES
 from database import conversations as conversations_db
+from database.batch_pipeline_intake import admit
+from dataclasses import replace
+from datetime import datetime, timezone
+from tests.unit.test_batch_pipeline_scheduler import item
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -1928,3 +1932,43 @@ async def test_live_target_defer_refusal_preserves_active_rerequest(monkeypatch,
     # re-request alone produced the second turn.
     assert not list(projector.drain_requests)
     drains.close()
+
+
+@pytest.mark.asyncio
+async def test_real_intake_with_fresh_merge_off_still_wakes_recent_record_followup(monkeypatch):
+    monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', BURST)
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    now = 100_000.0
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 1)
+    sid = ids[0]
+    binding = replace(log.bindings[sid], record_origin=True, native_record=True, target_conversation_id='capture')
+    intake = MemoryStore()
+    intake.rows['conversations', f'{BURST}/capture'] = {
+        'status': 'completed',
+        'record_audio_closed': True,
+        'record_lane_owner': 'batch_sync_v1',
+        'record_upload_revision': 1,
+        'finished_at': datetime.fromtimestamp(now - 900, timezone.utc),
+    }
+    work = replace(item(sid, owner=BURST, capture=now - 2000, duration=60), privacy_generation=0)
+    admit(intake, [work], binding, now, namespace='test')
+    admitted = intake.rows['jobs', sid]
+    assert admitted['fresh_capture'] is False
+    assert 'record_notes_after_complete' not in admitted
+    log.jobs[sid].update(admitted)
+    log.bindings[sid] = binding
+    projector = projector_for(log)
+    # Keep the existing hermetic persist seam; urgency reads the real admitted job.
+    projector.assign_record_silence = lambda work, binding, session, **_: session.persist_empty()
+    projector.clock = lambda: now
+    projector.start_followups = AsyncMock()
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+    finally:
+        drains.close()

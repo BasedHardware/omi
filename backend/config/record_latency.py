@@ -29,7 +29,7 @@ def record_fresh_merge_enabled() -> bool:
 
 
 def record_notes_eager_enabled() -> bool:
-    return default_on(_NOTES_EAGER_ENV)
+    return default_off(_NOTES_EAGER_ENV)
 
 
 def record_followup_wake_enabled() -> bool:
@@ -41,7 +41,7 @@ def record_seal_wake_preserved_enabled() -> bool:
 
 
 def recent_native_record(job: dict, now: float) -> bool:
-    return job.get('fresh_capture') is True and recent_native_record_notes(job, now)
+    return recent_native_record_notes(job, now)
 
 
 def recent_native_record_notes(job: dict, now: float) -> bool:

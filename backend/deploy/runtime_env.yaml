@@ -374,7 +374,7 @@ environments:
             value: 'false'
             category: ops_kill
           RECORD_NOTES_EAGER_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_FOLLOWUP_WAKE_ENABLED:
             value: 'true'
@@ -1185,7 +1185,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -1538,7 +1538,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -1876,7 +1876,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -2177,7 +2177,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -2888,7 +2888,7 @@ environments:
             value: 'false'
             category: ops_kill
           RECORD_NOTES_EAGER_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_FOLLOWUP_WAKE_ENABLED:
             value: 'true'
@@ -3829,7 +3829,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -4315,7 +4315,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -4794,7 +4794,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'
@@ -5218,7 +5218,7 @@ environments:
               value: 'false'
               category: ops_kill
             RECORD_NOTES_EAGER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_FOLLOWUP_WAKE_ENABLED:
               value: 'true'

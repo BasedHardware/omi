@@ -14,6 +14,9 @@ from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from utils.enrichment import outbox as reprocess
+from database.outbox_firestore import FirestoreEnrichmentOutbox
+from config.sync_reprocess import settle_seconds
 from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
 from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_policy import load_stage_policy
@@ -384,9 +387,6 @@ class ProjectionStore:
         part_index=None,
         policy=None,
     ):
-        from config.sync_reprocess import settle_seconds
-        from database.outbox_firestore import FirestoreEnrichmentOutbox
-        from utils.enrichment import outbox as reprocess
 
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
@@ -405,7 +405,7 @@ class ProjectionStore:
                 session.job.get('record_notes_after_complete') is True
                 or session.ledger.get('record_notes_after_complete') is True
             )
-            if complete_notes or record_notes_eager_enabled() and recent_native_record_notes(session.job, now):
+            if record_notes_eager_enabled() and (complete_notes or recent_native_record_notes(session.job, now)):
                 # One recording-wide dispatch is owned by complete(), after
                 # every sibling receipt is ready in that same transaction.
                 # A missing/held sibling must not strand this owner forever.
@@ -485,7 +485,6 @@ class ProjectionStore:
     def _backfill_dispatch() -> dict[str, str] | None:
         """A backfill unit keeps the backfill queue binding on a new obligation (None: host binding)."""
         from utils.cloud_tasks import is_sync_backfill_routing_enabled
-        from utils.enrichment import outbox as reprocess
 
         if not is_sync_backfill_routing_enabled():
             return None
@@ -816,13 +815,11 @@ class ProjectionStore:
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
             if (
-                not source_deleted
+                record_notes_eager_enabled()
+                and not source_deleted
                 and any(receipt.get('record_notes_deferred') for receipt in receipts)
                 and (new or updated)
             ):
-                from config.sync_reprocess import settle_seconds
-                from database.outbox_firestore import FirestoreEnrichmentOutbox
-                from utils.enrichment import outbox as reprocess
 
                 outbox = FirestoreEnrichmentOutbox(self.client)
                 notes_writes = []

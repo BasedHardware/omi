@@ -40,6 +40,8 @@ from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from utils.sync import processing_hold
 
+from config.record_latency import record_notes_eager_enabled
+from database import record_notes_hold
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
@@ -628,9 +630,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
-        if row.get('record_notes_producers'):
-            from database import record_notes_hold
-
+        if record_notes_eager_enabled() and row.get('record_notes_producers'):
             status, blocked = record_notes_hold.admit(row, get_firestore_client(), now=current)
             if status == 'stale':
                 expired_sources.extend(blocked)
@@ -647,8 +647,6 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     status, row = _mutate(document_id, claim)
     record_summary_stamps(stamps)
     if expired_sources:
-        from database import record_notes_hold
-
         record_notes_hold.record_timeout(get_firestore_client(), claim_owner[0], expired_sources, now=current)
     if status == 'deferred':
         assert row is not None
@@ -851,8 +849,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     dispatch=None,
                     summary_repair=False,
                     summary_expected_revision=None,
-                    record_notes_producers={},
                 )
+                if 'record_notes_producers' in settled:
+                    settled['record_notes_producers'] = {}
                 return settled, None
             return None, None
         pending = dict(old)

@@ -13,6 +13,7 @@ from config.batch_pipeline import (
     recovered_merge_release_enabled,
 )
 from config.policy.kill_switches import kill_switch
+from config.record_latency import record_fresh_merge_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline import backlog_release
@@ -118,6 +119,8 @@ def _awaiting_projection(tx, owner: dict) -> int:
 
 def _record_sibling_pending(tx, job: dict) -> bool:
     """Every merge route preserves the immutable native recording's unit order."""
+    if not record_fresh_merge_enabled():
+        return False
     binding = job.get('projection_binding') or {}
     if binding.get('native_record') is not True:
         return False

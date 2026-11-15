@@ -59,6 +59,8 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Staged ordering guard; enable on every merge writer before CPU fresh admission.
+  RECORD_FRESH_MERGE_ENABLED: false
   # Post-seal rollback controls, shared with the CPU serving hosts.
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true

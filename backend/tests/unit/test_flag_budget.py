@@ -311,7 +311,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
         assert flag['kind'] == 'env'
         assert 'backend' in flag['surfaces']
-        if name == 'RECORD_FRESH_MERGE_ENABLED':
+        if name in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'}:
             # Image-only GKE rolls do not install an explicit false binding.
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'

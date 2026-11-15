@@ -531,4 +531,5 @@ def test_post_seal_controls_are_listen_only_rendered_bindings(environment, prefl
     assert set(flags).isdisjoint(preflight.literal_pusher_values(preflight.rendered_pusher_deployment(environment)))
     expected = dict.fromkeys(flags, 'true')
     expected['RECORD_FRESH_MERGE_ENABLED'] = 'false'
+    expected['RECORD_NOTES_EAGER_ENABLED'] = 'false'
     assert {key: listen[key] for key in flags} == expected

@@ -1503,11 +1503,15 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
         if chart == 'batch-pipeline-worker':
-            assert set(flags).isdisjoint(env)  # Dedicated GPU runtime has no admission/projection readers.
+            assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
+            assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
             continue
         for key in flags:
             expected = (
-                'false' if mode == 'disabled' or (mode == 'staged' and key == 'RECORD_FRESH_MERGE_ENABLED') else 'true'
+                'false'
+                if mode == 'disabled'
+                or (mode == 'staged' and key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'})
+                else 'true'
             )
             assert env[key] == expected
 

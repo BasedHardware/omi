@@ -9831,39 +9831,39 @@ compute savings for protected cases. Existing general floor behavior remains.
 
 ## Recent record post-seal scheduling
 
-`RECORD_FRESH_MERGE_ENABLED`, `RECORD_NOTES_EAGER_ENABLED`,
-`RECORD_FOLLOWUP_WAKE_ENABLED`, and `RECORD_SEAL_WAKE_PRESERVED_ENABLED`
-default on. Explicit `false`, `off`, `0`, or `no` disables each independently.
-Native record admission persists `record_finished_at` from the already-read
-conversation when its end is no more than 1,800 seconds old and is not in the
-future. The fresh-merge switch uses that recording end for every sibling's
-`fresh_capture` class, retaining the existing fresh-first ordering protocol.
-The fresh-first merge path never skips an uncommitted earlier sibling in the
-same immutable native-record binding, including after the head wait expires.
-Recent, fresh, non-partial native records mark per-unit notes receipts without
-creating per-unit outbox revisions. The content-completion transaction checks
-all sibling receipts, then creates one durable notes refresh for the complete
-recording. It uses current time with `min` coalescing only when the recording's
-producer barrier and processing holds are clear; otherwise it retains the
-settle/coalescing policy. Existing outbox sync/merge holds cannot be shortened.
-An in-flight flag change or a recording aging out still delivers the durable
-notes obligation through normal settle. Completion replay creates no new
-refresh. Older, unstamped, partial and upload work retain their existing policy.
-All privacy, custody, revision and lease fences still apply. Successfully projected recent
-single-unit records wake the existing follow-up slots immediately. A concurrent
-seal due-now wake survives an earlier intake attempt's stale barrier refusal.
-No polling cadence or queue capacity changes. Disabling a switch restores its
-previous scheduling behavior; already-stamped admission metadata is retained.
+`RECORD_SEAL_WAKE_PRESERVED_ENABLED` and `RECORD_FOLLOWUP_WAKE_ENABLED`
+default on. Explicit false/off/0/no disables either independently. A concurrent
+seal wake survives an intake refusal, and eligible recent single-unit native
+records wake the existing bounded follow-up slots. These paths and all stage
+clocks operate independently of the staged notes and fresh-merge features.
+
+`RECORD_NOTES_EAGER_ENABLED` and `RECORD_FRESH_MERGE_ENABLED` default off in
+code and are explicitly false on dev/prod CPU runtime bindings. With notes off,
+admission writes no completion owner and projection uses the existing per-unit
+settle path, even for an earlier completion marker. It creates no fallback or
+producer revision obligation. Both delivery adapters apply the new producer
+fence only to obligations carrying cut-2 producer metadata; ordinary settle
+obligations retain their existing delivery, including dormant receipt reuse.
+With notes off, pre-existing producer maps are also ignored by both delivery adapters.
+
+With fresh merge off, the sibling guard returns before reading predecessors,
+and the sibling bypass query is never used. Merge selection is the main path,
+including ordinary ready suffixes behind quarantined units. Enabling cut 4
+activates the sibling guard and its bounded independent-record bypass together.
+The recording end is retained in `record_finished_at` independently of both
+staged flags. No privacy, custody or provider backlog gate changes.
+
+Ramp cut 2 only after the lead has end-to-end evidence for lease-mode-off
+revision snapshots, reopen/reseal/projection delivery, canonical processing
+holds and the paid-run bound, then explicitly sets true on CPU readers.
+The current opt-in lease-off path is a known blocker: its producer revision is
+missing. Ramp cut 4 only when every CPU and GPU merge writer is at a verified
+sibling-guard image, then explicitly set true on the admission/merge readers.
+No GPU image roll is authorized tonight. GKE image-only rolls with absent env
+keep both staged cuts off; cuts 1 and 3 stay on. Existing explicit true live
+values must be read back and removed or set false before that staged rollout.
 
 [Measurement, costs and verification](listen_pusher_pipeline/changes/2026-11-14-record-post-seal-latency.md).
-
-All four controls have literal default-on bindings on the dev/prod Cloud Run
-`backend`, `backend-integration`, `backend-sync`, and `backend-sync-backfill`
-services and GKE `backend-listen`, plus overridable worker-chart values on the
-batch worker. They are listen-only in the pusher cohost contract: pusher retains
-and seals audio, and does not execute these batch scheduling paths. A worker
-running the sibling guard is required before activating fresh stamping on CPU
-hosts. This source change does not change or deploy a GPU worker image.
 
 Stage timestamps reuse existing writes: `record_sealed_at` on the conversation
 at actual barrier closure (pusher/repair/orphan); `record_intake_claimed_at` on

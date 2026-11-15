@@ -25,7 +25,7 @@ NOW = 100_000.0
     'reader,name,default',
     [
         (record_latency.record_fresh_merge_enabled, 'RECORD_FRESH_MERGE_ENABLED', False),
-        (record_latency.record_notes_eager_enabled, 'RECORD_NOTES_EAGER_ENABLED', True),
+        (record_latency.record_notes_eager_enabled, 'RECORD_NOTES_EAGER_ENABLED', False),
         (record_latency.record_followup_wake_enabled, 'RECORD_FOLLOWUP_WAKE_ENABLED', True),
         (record_latency.record_seal_wake_preserved_enabled, 'RECORD_SEAL_WAKE_PRESERVED_ENABLED', True),
     ],
@@ -183,6 +183,7 @@ def test_only_recent_sealed_native_records_enqueue_notes_without_settle(monkeypa
 @pytest.mark.parametrize('transactional', [False, True])
 @pytest.mark.parametrize('older_stock', [False, True])
 def test_expired_head_wait_never_bypasses_an_unready_record_sibling(monkeypatch, transactional, older_stock):
+    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', 'true')
     from dataclasses import asdict
 
     monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', str(transactional).lower())
@@ -279,7 +280,7 @@ def test_image_only_process_without_fresh_merge_env_is_inert(monkeypatch, proces
     assert record_latency.record_fresh_merge_enabled() is False
 
 
-@pytest.mark.parametrize('fresh_merge', [False, True])
+@pytest.mark.parametrize('fresh_merge', [True])
 @pytest.mark.parametrize('fresh_class', [False, True])
 def test_recovering_record_sibling_does_not_block_an_independent_record(monkeypatch, fresh_merge, fresh_class):
     from dataclasses import asdict
@@ -314,6 +315,7 @@ def test_sibling_probe_advances_full_held_pages_across_merge_instances(monkeypat
     from dataclasses import asdict
     from utils.batch_pipeline.scheduler import owner_key
 
+    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')
     store = MemoryStore()
@@ -342,3 +344,40 @@ def test_sibling_probe_advances_full_held_pages_across_merge_instances(monkeypat
     assert merged and merged['segment_id'] == 'y'
     assert 'record_sibling_cursor' not in store.rows['owners', owner_key('owner')]
     assert store.rows['jobs', 'x2']['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('switch', [None, 'false'])
+@pytest.mark.parametrize('recovery', ['running', 'failed_held', 'normal'])
+def test_fresh_merge_off_preserves_main_selection_without_sibling_reads(monkeypatch, switch, recovery):
+    from dataclasses import asdict
+
+    if switch is None:
+        monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', switch)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    binding = ProjectionBinding('owner', 'x', 'x-content', ('x1', 'x2'), native_record=True)
+    for i, sid in enumerate(('x1', 'x2', 'y')):
+        queue.enqueue(item(sid, owner='owner', capture=NOW - 100 + i), NOW)
+    for sid in ('x1', 'x2'):
+        store.rows['jobs', sid]['projection_binding'] = asdict(binding)
+    store.rows['jobs', 'x1'].update(state='quarantined', merge_pending=False, recovery_state=recovery)
+    if recovery == 'normal':
+        store.rows['jobs', 'x1'].update(
+            state='result_ready',
+            merge_pending=True,
+            ready_at=NOW,
+            result=WorkResult('x1', 'gs://synthetic/result').to_dict(),
+        )
+    for sid in ('x2', 'y'):
+        store.rows['jobs', sid].update(
+            state='result_ready', ready_at=NOW, result=WorkResult(sid, 'gs://synthetic/result').to_dict()
+        )
+    store.ready_pending = Mock(side_effect=AssertionError('cut 4 off must not query sibling bypass'))
+    first = OrderedMerge(store).commit_next('owner', NOW)
+    assert first and first['segment_id'] == ('x1' if recovery == 'normal' else 'x2')
+    if recovery == 'normal':
+        assert OrderedMerge(store).commit_next('owner', NOW)['segment_id'] == 'x2'
+    assert OrderedMerge(store).commit_next('owner', NOW)['segment_id'] == 'y'
+    store.ready_pending.assert_not_called()
