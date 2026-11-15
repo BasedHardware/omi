@@ -4163,6 +4163,7 @@ class TestV2EndpointExecution:
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            module.retained_source_offsets = MagicMock(return_value={})  # Fake staged paths have no source bytes.
             gc.collect()
             yield saved, jobs, module
         finally:

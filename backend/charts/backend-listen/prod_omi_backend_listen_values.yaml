@@ -165,6 +165,8 @@ env:
     value: "7200"
   - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
     value: "true"
+  - name: SYNC_FUTURE_CAPTURE_CLAMP_ENABLED
+    value: 'false'
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED

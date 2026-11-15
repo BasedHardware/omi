@@ -75,6 +75,7 @@ def _canonical(path: str) -> bytes:
 
 # Server-held WAV (the cap-hold adapter) takes the same canonicalization as uploads.
 canonical_pcm = _canonical
+validated_frame_count = _frame_count
 
 
 def decode_units(

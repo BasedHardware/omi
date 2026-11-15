@@ -255,13 +255,20 @@ class FirestoreTransaction:
             if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
             job = self.get('jobs', key) if table == 'results' else value
-            identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
+            identity = (
+                job['owner_id'],
+                job.get('conversation_id'),
+                job.get('capture_source_conversation_id'),
+                job.get('privacy_generation'),
+            )
             if identity in guarded:
                 continue
             guarded.add(identity)
             generation = self.check_privacy(
                 job['owner_id'],
-                conversation_ids=(job['conversation_id'],) if job.get('conversation_id') else (),
+                conversation_ids=tuple(
+                    value for value in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if value
+                ),
                 expected_generation=job.get('privacy_generation'),
             )
             if table == 'jobs' and value.get('privacy_generation') is None:
@@ -433,6 +440,8 @@ class FirestoreStore:
             binding = normalized_binding(job['projection_binding'])
             ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
             ids.extend(job.get('conversation_ids') or [])
+            if job.get('capture_source_conversation_id'):
+                ids.append(job['capture_source_conversation_id'])
             try:
                 assert_batch_write_allowed(
                     self.client,
@@ -498,6 +507,7 @@ class FirestoreStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         return projection_page(
@@ -507,6 +517,7 @@ class FirestoreStore:
             after=after,
             states=states,
             due_before=due_before,
+            exclude_async=exclude_async,
             followup_due_before=followup_due_before,
         )
 
@@ -526,6 +537,7 @@ def projection_page(
     after: tuple | None = None,
     states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
     due_before: float | None = None,
+    exclude_async: bool = False,
     followup_due_before: float | None = None,
 ) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
@@ -544,7 +556,9 @@ def projection_page(
     ``projection_finish_due_at`` has passed. That field leads the ordering
     because Firestore serves a range filter on the first ordered field only, so
     the cursor becomes ``(due_at, committed_at, key)`` and a seed
-    ``(due_at,)`` starts at that clock.
+    ``(due_at,)`` starts at that clock. ``exclude_async`` adds a lower bound
+    on that same field, excluding negative async ownership hints. Without a
+    clock ordering the option is inert and the legacy page stays unchanged.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
@@ -563,6 +577,8 @@ def projection_page(
             .order_by('committed_at')
             .order_by('__name__')
         )
+    if exclude_async and due_before is not None:
+        query = query.where(PROJECTION_FINISH_DUE_FIELD, '>=', 0.0)
     seeded = after is not None and len(after) == 2 and after[1] == ''
     if cutoff is not None:
         if after is not None and len(after) == 3:

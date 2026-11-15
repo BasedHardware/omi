@@ -451,7 +451,7 @@ class StrictFirestore:
         references: list[StrictFirestoreDocument],
         *,
         field_paths: list[str] | None = None,
-        transaction: StrictFirestoreTransaction,
+        transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
         # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
         if field_paths is not None and field_paths != ['folder_id']:

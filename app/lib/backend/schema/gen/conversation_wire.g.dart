@@ -1106,6 +1106,7 @@ class GeneratedConversation {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimeTrust;
   final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
@@ -1175,6 +1176,7 @@ class GeneratedConversation {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimeTrust,
     this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
@@ -1246,6 +1248,7 @@ class GeneratedConversation {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimeTrust: _readFieldValue<String>(_readField(json, const ["capture_time_trust"]), "capture_time_trust", _readString, requiredField: false, nullable: true),
       captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
@@ -1318,6 +1321,7 @@ class GeneratedConversation {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_time_trust': captureTimeTrust,
       'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
@@ -1610,6 +1614,7 @@ class GeneratedConversationSearchItem {
   final String? callPlatform;
   final String? captureCoverage;
   final GeneratedCaptureGroup? captureGroup;
+  final String? captureTimeTrust;
   final String? captureTimezone;
   final String? clientDeviceId;
   final String? clientPlatform;
@@ -1680,6 +1685,7 @@ class GeneratedConversationSearchItem {
     this.callPlatform,
     this.captureCoverage,
     this.captureGroup,
+    this.captureTimeTrust,
     this.captureTimezone,
     this.clientDeviceId,
     this.clientPlatform,
@@ -1752,6 +1758,7 @@ class GeneratedConversationSearchItem {
       callPlatform: _readFieldValue<String>(_readField(json, const ["call_platform"]), "call_platform", _readString, requiredField: false, nullable: true),
       captureCoverage: _readFieldValue<String>(_readField(json, const ["capture_coverage"]), "capture_coverage", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
+      captureTimeTrust: _readFieldValue<String>(_readField(json, const ["capture_time_trust"]), "capture_time_trust", _readString, requiredField: false, nullable: true),
       captureTimezone: _readFieldValue<String>(_readField(json, const ["capture_timezone"]), "capture_timezone", _readString, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
@@ -1825,6 +1832,7 @@ class GeneratedConversationSearchItem {
       'call_platform': callPlatform,
       'capture_coverage': captureCoverage,
       'capture_group': captureGroup?.toJson(),
+      'capture_time_trust': captureTimeTrust,
       'capture_timezone': captureTimezone,
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
