@@ -16,6 +16,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
@@ -310,7 +311,7 @@ void main() {
   }
 
   for (final brightness in [Brightness.light, Brightness.dark]) {
-    testWidgets('Home shows one row per stage, with no parts count (${brightness.name})', (tester) async {
+    testWidgets('Home labels pending count and keeps duration on finished rows (${brightness.name})', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       tester.view.physicalSize = const Size(393, 300);
       tester.view.devicePixelRatio = 1;
@@ -320,7 +321,11 @@ void main() {
       await _pump(tester, done, brightness,
           home: Scaffold(
               body: Column(children: [
-            ProcessingConversationRow(conversation: _rowFor(writing), episode: writing),
+            ProcessingConversationRow(
+                conversation: _rowFor(writing),
+                episode: writing,
+                step: HomeStep.writingNotes,
+                count: writing.members.length),
             ConversationListItem(
                 key: const ValueKey('finished'),
                 conversation: _rowFor(done),
@@ -328,8 +333,9 @@ void main() {
                 conversationIdx: -1,
                 homeEpisode: done),
           ])));
-      expect(find.textContaining('Writing notes…'), findsOneWidget);
-      expect(find.textContaining('1h 36m'), findsOneWidget);
+      expect(find.text('Writing notes… · 2 recordings'), findsOneWidget);
+      expect(find.textContaining('1h 36m'), findsNothing, reason: 'recording duration is not processing age');
+      expect(find.textContaining('2h 40m'), findsOneWidget, reason: 'finished rows retain their recording duration');
       expect(find.textContaining('parts'), findsNothing);
       expect(tester.takeException(), isNull);
       await _capture(tester, '00${brightness == Brightness.light ? 3 : 4}-mobile-ios-home-rows-${brightness.name}.png');
