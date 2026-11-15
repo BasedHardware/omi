@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "ההתחברות עם Apple לא הצליחה. נסו שוב או המשיכו עם Google.",
     "authFailedToRetrieveToken": "כישלון בשליפת אסימון firebase, אנא נסה שוב.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -12210,5 +12211,6 @@
     "monthlySwitchDeclined": "התשלום נדחה. התוכנית שלך לא השתנתה.",
     "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
-    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש."
+    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
+    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב."
 }

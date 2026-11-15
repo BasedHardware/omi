@@ -150,6 +150,8 @@ def _register_batch_artifact(
             value
             for value in (
                 job.get('conversation_id'),
+                job.get('capture_source_conversation_id'),
+                getattr(item, 'capture_source_conversation_id', None),
                 binding.get('target_conversation_id'),
                 getattr(item, 'conversation_id', None),
             )
@@ -485,7 +487,11 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             store.client,
             transaction,
             item.owner_id,
-            conversation_ids=(item.conversation_id,) if item.conversation_id else (),
+            conversation_ids=tuple(
+                value
+                for value in (item.conversation_id, getattr(item, 'capture_source_conversation_id', None))
+                if value
+            ),
             expected_generation=item.privacy_generation,
             snapshots=None if decision_only else loaded,
             read_budget=read_budget,

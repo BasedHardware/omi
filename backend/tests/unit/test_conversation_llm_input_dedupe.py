@@ -50,6 +50,42 @@ def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
     assert generate.call_count == 7
 
 
+@pytest.mark.parametrize('words,scaled,regenerates', [(200, True, False), (6000, False, False), (6000, True, True)])
+def test_notes_v4_only_rebuys_old_checkpoint_when_scaled_packet_changes(
+    enabled, monkeypatch, words, scaled, regenerates
+):
+    from models.structured import Structured
+
+    monkeypatch.setattr(dedupe, 'noise_skip_enabled', lambda: True)
+    monkeypatch.setenv('CONVERSATION_NOTES_SCALED_DETAIL_ENABLED', str(scaled).lower())
+    prefix = {'context': 'FULL TRANSCRIPT\n' + 'detail ' * words}
+    captured = []
+    fingerprint = dedupe.fingerprint
+
+    def capture(feature, inputs):
+        captured.append(inputs)
+        return fingerprint(feature, inputs)
+
+    monkeypatch.setattr(dedupe, 'fingerprint', capture)
+    generate = Mock(return_value=Structured(title='Saved title', overview='Saved summary'))
+    hashes = {}
+    dedupe.notes('u', enabled, prefix, generate, hashes)
+    inputs_v3 = {key: value for key, value in captured[-1].items() if key != 'scaled_detail'}
+    v3 = 'notes-3:' + dedupe.stable_implementation('notes').split(':', 1)[1]
+    row = {
+        **hashes,
+        dedupe.NOTES_HASH: dedupe._fingerprint('notes', inputs_v3, v3),
+        'structured': generate.return_value.model_dump(),
+    }
+    monkeypatch.setattr(dedupe, '_stored', lambda *_a, **_kw: row)
+    generate.reset_mock()
+    updated = {}
+    dedupe.notes('u', enabled, prefix, generate, updated)
+    assert generate.call_count == int(regenerates)
+    assert ('scaled_detail' in captured[-1]) is regenerates
+    assert updated[dedupe.NOTES_HASH] == fingerprint('notes', captured[-1])
+
+
 def test_failed_notes_do_not_stamp_hash(enabled):
     hashes = {}
     with pytest.raises(RuntimeError):

@@ -256,11 +256,14 @@ def restore_snapshot(
     fetcher: FetchService = _fetch_service,
     remove_tag: str | None = None,
     delete_missing: bool = False,
+    exclude_services: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Restore and observe every recorded route, retaining bounded evidence."""
     project = cast(str, snapshot['project'])
     region = cast(str, snapshot['region'])
     services = cast(Mapping[str, Any], snapshot['services'])
+    if tuple(exclude_services) not in ((), ('backend-integration',)) or set(exclude_services) - set(services):
+        raise ValueError('invalid excluded restore service')
     missing_services = snapshot.get('missing_services', [])
     if not isinstance(missing_services, list) or any(
         not isinstance(item, str) or not item for item in missing_services
@@ -279,6 +282,8 @@ def restore_snapshot(
     execute = runner or (lambda command: subprocess.run(command, check=True, capture_output=True, text=True))
     results: dict[str, dict[str, Any]] = {}
     for service, raw_service_snapshot in services.items():
+        if service in exclude_services:
+            continue
         if not isinstance(service, str) or not service:
             raise ValueError('traffic snapshot contains an invalid service name')
         if not isinstance(raw_service_snapshot, Mapping):
@@ -346,6 +351,7 @@ def restore_snapshot(
         'scope': 'backend Cloud Run traffic restoration',
         'snapshot_sha256': _snapshot_digest(snapshot),
         'result': 'pass' if not failures else 'fail',
+        'excluded_services': list(exclude_services),
         'failed_services': failures,
         'services': results,
         'deleted_services': deleted,
@@ -376,6 +382,7 @@ def main() -> int:
     restore.add_argument('--evidence-path', type=Path, required=True)
     restore.add_argument('--remove-tag')
     restore.add_argument('--delete-missing', action='store_true')
+    restore.add_argument('--exclude-service', action='append', default=[])
     args = parser.parse_args()
     try:
         if args.command == 'capture':
@@ -393,6 +400,7 @@ def main() -> int:
             snapshot,
             remove_tag=args.remove_tag,
             delete_missing=args.delete_missing,
+            exclude_services=args.exclude_service,
         )
         _write_json(args.evidence_path, evidence)
         print(json.dumps(evidence, indent=2, sort_keys=True))

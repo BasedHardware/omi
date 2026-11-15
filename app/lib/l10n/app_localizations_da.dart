@@ -7016,6 +7016,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunne ikke logge ind med Apple, prøv venligst igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Log ind med Apple virkede ikke. Prøv igen, eller fortsæt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunne ikke hente Firebase-token, prøv venligst igen.';
 
   @override
@@ -15445,4 +15448,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Fornyes månedligt.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
 }

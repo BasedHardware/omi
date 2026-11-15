@@ -1516,6 +1516,7 @@ export interface Conversation {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
   capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -1730,6 +1731,7 @@ export interface ConversationSearchItem {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
   capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -3239,6 +3241,41 @@ export interface HiddenNoiseCountsResponse {
 export interface HiddenNoiseDayCount {
   count: number;
   date: string;
+}
+
+export interface HomeFeedCard {
+  detail_id: string;
+  emoji?: string;
+  finished_at?: string | null;
+  has_tasks?: boolean;
+  home_step?: string | null;
+  id: string;
+  is_locked?: boolean;
+  kind: "episode" | "conversation";
+  member_count?: number;
+  preview?: string;
+  revision: string;
+  sort_at: string;
+  sources?: Array<string>;
+  starred?: boolean;
+  started_at?: string | null;
+  status: string;
+  summary_available?: boolean;
+  title?: string;
+}
+
+export interface HomeFeedPreparationResponse {
+  has_more: boolean;
+  processed: number;
+  ready: boolean;
+}
+
+export interface HomeFeedResponse {
+  generation: string;
+  has_more?: boolean;
+  items?: Array<HomeFeedCard>;
+  next_cursor?: string | null;
+  truncated?: boolean;
 }
 
 export interface IgnoredVoice {
@@ -5719,6 +5756,20 @@ export interface SyncBatchRequest {
   items: Array<SyncBatchItem>;
 }
 
+export interface SyncCaptureEndRequest {
+  end_decided_at: number;
+  end_type: "user_initiated" | "silence_backstop" | "disconnect";
+  last_speech_at?: number | null;
+  pending_wals: number;
+  recording_session_id: string;
+  sent_at: number;
+}
+
+export interface SyncCaptureEndResponse {
+  accepted: boolean;
+  retry?: boolean;
+}
+
 export interface SyncCaptureManifestFile {
   name: string;
   sha256: string;
@@ -7085,6 +7136,9 @@ export interface OmiApiSchemas {
   "HeldAudioSummary": HeldAudioSummary;
   "HiddenNoiseCountsResponse": HiddenNoiseCountsResponse;
   "HiddenNoiseDayCount": HiddenNoiseDayCount;
+  "HomeFeedCard": HomeFeedCard;
+  "HomeFeedPreparationResponse": HomeFeedPreparationResponse;
+  "HomeFeedResponse": HomeFeedResponse;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -7421,6 +7475,8 @@ export interface OmiApiSchemas {
   "SurfaceStateRequest": SurfaceStateRequest;
   "SyncBatchItem": SyncBatchItem;
   "SyncBatchRequest": SyncBatchRequest;
+  "SyncCaptureEndRequest": SyncCaptureEndRequest;
+  "SyncCaptureEndResponse": SyncCaptureEndResponse;
   "SyncCaptureManifestFile": SyncCaptureManifestFile;
   "SyncCaptureManifestRequest": SyncCaptureManifestRequest;
   "SyncCaptureManifestResponse": SyncCaptureManifestResponse;
@@ -9997,6 +10053,26 @@ export interface OmiApiPaths {
       operationId: "append_goal_progress_event_v1_goals__goal_id__progress_events_post";
       responses: {
         "200": GoalProgressEvent;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/home/feed": {
+    get: {
+      operationId: "get_home_feed_v1_home_feed_get";
+      responses: {
+        "200": HomeFeedResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/home/feed/prepare": {
+    post: {
+      operationId: "prepare_home_feed_v1_home_feed_prepare_post";
+      responses: {
+        "200": HomeFeedPreparationResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12712,6 +12788,16 @@ export interface OmiApiPaths {
       operationId: "answer_review_item_v2_v2_review_items__item_id__answer_post";
       responses: {
         "200": ReviewAnswerReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v2/sync-capture-end": {
+    post: {
+      operationId: "record_sync_capture_end_v2_sync_capture_end_post";
+      responses: {
+        "200": SyncCaptureEndResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -17878,6 +17964,48 @@ export async function append_goal_progress_event_v1_goals__goal_id__progress_eve
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_home_feed_v1_home_feed_get(query: { limit?: number, cursor?: string | null }, header: { X_Omi_App_Channel?: string | null, authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HomeFeedResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/home/feed`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.X_Omi_App_Channel !== undefined ? { "X-Omi-App-Channel": String(header.X_Omi_App_Channel) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function prepare_home_feed_v1_home_feed_prepare_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HomeFeedPreparationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/home/feed/prepare`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -23290,6 +23418,27 @@ export async function answer_review_item_v2_v2_review_items__item_id__answer_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function record_sync_capture_end_v2_sync_capture_end_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SyncCaptureEndRequest, init?: OmiApiClientInit): Promise<SyncCaptureEndResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-capture-end`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_sync_capture_manifest_v2_sync_capture_manifest_post(header: { X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string, authorization?: string }, body: SyncCaptureManifestRequest, init?: OmiApiClientInit): Promise<SyncCaptureManifestResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-capture-manifest`;
@@ -23956,4 +24105,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 547 client methods generated.
+// Total: 550 client methods generated.

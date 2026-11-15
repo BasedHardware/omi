@@ -190,7 +190,35 @@ per-replica path. Queue age still needs a designated
 transactional job claims and recovery cadence are unchanged. See
 [Firestore spend guard](runbooks/firestore-spend-guard.md).
 
+Upload-coalescing discovery uses a separate strict namespace lease: one scanner
+per fleet, including when producers are OFF so existing holds drain. The advisory
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED` bypass does not disable this role. Ownership
+errors skip discovery; cursor, heartbeat and new claims check the acquisition
+token transactionally. Existing 120s group custody leases and privacy/erasure
+checks remain authoritative for already claimed audio. See
+[coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
+
 ## Retained seal proof rules
+
+`RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
+it). The repair coordinator borrows up to half of its existing slots for
+newest-first `record_pending` jobs enqueued 60 seconds to two hours ago, polling
+the live head every 15 seconds independently of the saved sweep frontier.
+Fresh attempts and ordinary backlog loans have a 90-second limit; fresh retry
+spacing is 120 seconds. Pending-job discovery retains half the original worker
+budget, its urgent deadline ordering and its ordinary-job reserve. Conversation
+discovery retains the other half plus unused job capacity. The checkpointed
+initial worker group starts before fresh borrowing, and idle fresh capacity
+returns to backlog work. With one worker the existing
+sweep runs alone. Successful fresh seals atomically set `available_at=0` so
+intake's due query sees them before ordinary retry wakes. Admission still checks
+the sealed barrier, retained audio, privacy generation, and provider policy.
+The seal transaction preserves live intake claims. Serving intake certifies its
+own retry clock only while fresh repair and dead-letter handling are enabled;
+disabled flags add no retry marker, and claiming removes any old marker.
+The CronJob uses minute ticks with `Forbid`, bounding scheduled restart gaps
+without overlapping repair pods. Disable the switch and restore
+`recordSealRepair.schedule="*/5 * * * *"` to restore previous scheduling.
 
 Retained admission and seal repair keep the earlier retained object's bytes on
 divergent overlaps and reference only the later object's uncovered tail. The
@@ -624,6 +652,11 @@ projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
 are audio receipts; `capture_committed` remains transcript coverage.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED` defaults to `true`; only literal `true`
+enables optional lossless FLAC for new mono PCM16 custody writes. Other values
+retain PCM. Both formats retain the same decoded samples and frame positions;
+media hashes pin stored plaintext, while `pcm_sha256` pins original samples.
+Existing FLAC readers remain available with this writer switch off.
 `AUDIO_CUSTODY_FRAMED_PERCENT` defaults to `0`, independently of archive percent.
 Admitted v2 16 kHz pusher windows retain frame starts, sample counts and gap
 markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
@@ -3251,6 +3284,19 @@ wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enric
 a 4,200-second per-recording escalation lease (maximum hold plus one quiet window);
 expired intent restores the wait. Empty-transcript process entry bypasses this notes
 gate, and scheduling deferrals propagate through donor completion unchanged.
+`HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED` defaults on for non-batch pendant members. A durable
+retry settles an idle owner through Home's activity-fenced idle-close transaction,
+including when the member is not last. Otherwise, at 180 seconds since its
+finalization job was created, its own notes may proceed while the owner stays
+live. One extra automatic paid attempt is admitted per finalization/content
+revision; retries cannot consume it twice. A failed or interrupted attempt
+recovers through ordinary closed-owner processing or explicit user reprocessing.
+Set this switch off on every finalization host to restore the original gate;
+existing permit metadata is then inert. There is no startup scan or historical
+recomposition. This is an eligibility bound checked on worker delivery, not a
+new deadline scheduler; the ordinary reconciliation interval still applies.
+The 1,800-second occasion grouping window and the composer's live refusal stay
+unchanged, so this does not promise notes within five minutes of last speech.
 Optional dependency failures preserve
 the detail read and fail eager for processing. Explicit Process Now carries
 `backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)
@@ -3269,9 +3315,24 @@ restores stored status/title at conversation API exits. Desktop batch completion
 atomically stamps `home_transcription_pending_at` and
 `home_transcription_deadline_at`. `HOME_TRANSCRIPTION_DEADLINE_SECONDS` defaults
 to 7200 (invalid, blank or nonpositive values use 7200), matching the batch SLA.
-Readers do not renew the clock. A stamped completed batch capture without
-transcript/title or a projection receipt presents `processing` / `Transcribing…`
-until the deadline, then `completed` / `Couldn't transcribe` so it stays visible.
+`HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED` defaults on. Reads compute the effective
+bound from the server's stamped pending clock plus `HOME_TRANSCRIPTION_MAX_AGE_SECONDS` (default 86400,
+invalid/nonpositive values use 86400), healing existing two-hour stamps without
+writes or additional Firestore reads. If pending_at is absent, the stamped
+deadline minus `HOME_TRANSCRIPTION_DEADLINE_SECONDS` recovers the wait start;
+creation is the fallback when both stamps are absent. Capture end never starts
+the wait: offline uploads and backfill can arrive days after capture. Readers
+and same-generation replays never renew it. A writer re-stamping pending for a
+new upload revision starts a new window bounded by 24 hours for that revision;
+there is no lifetime bound across genuinely new revisions. Set the queue
+hold switch to `off` / `false` / `0` / `no` to restore the stamped deadlines and
+two-hour unstamped fallback. Explicit failed status, dead letter and upload
+failure still fail immediately. Conversation and episode members show
+`processing` / `Transcribing…` until the effective bound; an episode consisting
+only of these captures shares their title. After the bound the conversation
+shows `completed` / `Couldn't transcribe` with `home_step=failed`; episode
+members show `failed`. Confirmed Home placement hides failures; Activity retains
+them (R-20261110-06). Queued captures suppress `summary_retryable` on the wire.
 Firestore status and custody remain unchanged; populated or unstamped rows keep
 their existing presentation. Main conversation list conditional 304 responses
 are disabled while the gate is on because expiry does not bump writer versions.
@@ -6730,6 +6791,15 @@ semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
 
+Sync accepts the released `_<timestamp>_u<ASCII decimal digits>.bin` collision
+suffix with `SYNC_COLLISION_SUFFIX_ENABLED` on by default. Only the numeric
+timestamp is parsed; raw filenames, bytes, signed claims, storage objects and
+content identities remain unchanged, so same-time siblings stay distinct.
+Clock-run markers and decoded `.wav` names retain this suffix. Set the switch
+to `false`, `0`, `off` or `no` to refuse new collision uploads; internal reads
+and decoded WAVs still drain already admitted work. The existing early-clock,
+future-skew and custody policies apply unchanged.
+
 V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill
 pacing, without treating the invalid year as a lookback age. Valid historical
@@ -6742,6 +6812,8 @@ raw filename timestamps, source order, content IDs and chunk identity stay
 unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
 jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
+
+The future-clock V2 batch extension defaults off in code and all twelve bindings until every reader and admitter is upgraded and drained. The quality lead enables everyone in one config change on the image-rollout day. Only stamps more than 24 hours ahead recover; the 600-second-to-24-hour band stays refused. Unmarked sources keep immutable owner/content receipt anchors; marked future runs preserve relative offsets. Retained provenance survives clock-window changes and missing-input repair. Untrusted parts use distinct stable identities and cannot join trusted conversations, episodes or temporal duplicate groups. Stale conversation targets are ignored for recovery. Details and ramp metrics: [future capture recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final fresh-gate decision. Reasons include `recent_legacy_capture`,
@@ -9216,7 +9288,9 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 `sync_processing_hold.pending_since` and `last_content_at` in the existing
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
-rechecks the current row before any full notes/title/memory/task work. The
+rechecks the current row before any full notes/title/memory/task work.
+`SYNC_PROCESSING_QUIET_SECONDS` tunes that quiet window per call (default 600, clamped to 120 to 600; a
+malformed value keeps the default), so clients that send no end-of-recording proof can be moved without a release. The
 shared outbox remains production/emulator-only; dev hosts keep local eager
 processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account
@@ -9257,11 +9331,38 @@ Passing the quiet deadline alone is insufficient: full processing must settle
 first. Demand priority cannot bypass this prerequisite. A new settled effects
 mark clears the deferral and uses the updated notes/transcript fingerprint.
 
-No current WAL producer provides a contiguous device upload watermark. A
-future `sync_processing_hold.upload_watermark_at`, if supplied, must pass
-`finished_at + 600 seconds`; a lagging value waits up to the same maximum hold.
-Until that producer exists, quiet time plus the hard ceiling are the available
-settling evidence; one uploaded file is never treated as a watermark.
+**End-of-recording proof (2026-11-14).** A phone that knows its recording ended says so with
+`POST /v2/sync-capture-end`: `recording_session_id`, `end_type` (`user_initiated`, `silence_backstop`,
+`disconnect`), `last_speech_at`, `end_decided_at`, `sent_at` and `pending_wals`, all device-clock epoch
+seconds and counts. `last_speech_at` is null when the phone detected no speech; such a marker types the end but can
+never prove it (`no_speech_clock`). The marker is stored as `capture_end` on the recording's own session document; it never
+creates a session, changes a binding, finalizes or deletes anything, or alters custody. A recording with no
+session document answers `accepted: false, retry: true`, and the phone resends after its last accepted file.
+
+At hold admission, a row that would otherwise wait and carries `external_data.recording_session_id` reads
+that one document. The wait is skipped, with outcome `end_proof`, only when all three hold: the marker has
+`pending_wals == 0`; `finished_at >= last_speech_at - 5 s` (assigned content reaches the phone's last
+speech); and `finished_at <= end_decided_at + 5 s` (nothing later, which would mean the recording resumed or
+the row holds another recording). Both comparisons are on the phone clock: an upload from a phone running
+ahead is stored shifted onto the server clock, the hold state keeps that shift beside the end it applies to
+(`content_clock_offset`, `content_clock_end`), and the proof adds it back before comparing. If the row's end
+has since moved for another reason the result is `clock_unknown` and the quiet rule applies. Unchanged, immaterial
+and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
+`omi_sync_capture_end_total{end_type,outcome}` counts markers and
+`omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
+`no_speech_clock`, `content_behind`, `resumed`).
+
+`SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
+reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,
+clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds` on the
+`mobile_batch_admission` status event; a phone that receives none sends no silence end.
+
+`X-Omi-Upload-Trace: sealed=<epoch>;first=<epoch>;gate=<label>;attempts=<n>` on `/v2/sync-local-files` is
+measurement only: `omi_sync_seal_to_accept_seconds{gate}` records how long the batch's oldest file waited on
+the phone and which gate held it. A malformed header is ignored.
+
+The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
+supplied it must pass `finished_at` plus the quiet window, and a lagging value waits up to the maximum hold.
 
 Rollback: set `SYNC_PROCESSING_HOLD_ENABLED=false`. New intake resumes legacy
 coalescing configuration. On its next bounded discovery pass, the sweeper
@@ -9561,8 +9662,8 @@ watcher, strict matched-load acceptance, ramp and drain sequence.
 
 `EPISODE_COMPOSE_SETTLE_ENABLED` defaults on (unset or blank). `off` restores
 full-fingerprint triggering and immediate retries. When enabled, background
-composes wait for 10 quiet minutes, with a 25-minute cap from the first pending
-arrival. Foreground read-side schedules and forced composes bypass this window.
+composes wait for `COMPOSER_SETTLE_SECONDS` (two quiet minutes), with a
+`COMPOSER_MAX_SETTLE_SECONDS` cap (five minutes) from the first pending arrival. Foreground read-side schedules and forced composes bypass this window.
 Only changed retained membership, speech text or resolved person names trigger a
 paid recompose; discard, visible notes drift and explicit regeneration remain
 repair triggers. Summaries and speaker labels remain prompt inputs, and the full
@@ -9672,6 +9773,12 @@ Claim-busy re-requests through `again` back off 5–15 seconds; productive
 `more=True` continuations retain immediate FIFO progress without the peek.
 The advisory claim and transactional ordering fences remain unchanged.
 
+`BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS` defaults to `1` (on).
+`0`, `off`, `false`, or `no`, after trimming/lowercasing, disables it. Read at
+projector/drain construction; an env-only revision is the rollback boundary.
+It adds only process-memory admission aggregates and summary logs, with no
+storage probes or scheduling changes. [Schema, bounds and readback](listen_pusher_pipeline/changes/2026-11-14-owner-drain-admission-diagnostics.md).
+
 
 ### Durable playback projection rebuild debt
 
@@ -9780,3 +9887,97 @@ or action, join speakers, or override privacy/manual-selection contracts.
 Explicit `false` (also off/0/no) restores the previous reminder-only exemption.
 Affected fleet users and extra model dollars/day are unknown; this reverses
 compute savings for protected cases. Existing general floor behavior remains.
+
+## Recent record post-seal scheduling
+
+`RECORD_SEAL_WAKE_PRESERVED_ENABLED` and `RECORD_FOLLOWUP_WAKE_ENABLED`
+default on. Explicit false/off/0/no disables either independently. A concurrent
+seal wake survives an intake refusal, and eligible recent single-unit native
+records wake the existing bounded follow-up slots. These paths and all stage
+clocks operate independently of the staged notes and fresh-merge features.
+
+`RECORD_NOTES_EAGER_ENABLED` and `RECORD_FRESH_MERGE_ENABLED` default off in
+code and are explicitly false on dev/prod CPU runtime bindings. With notes off,
+admission writes no completion owner and projection uses the existing per-unit
+settle path, even for an earlier completion marker. It creates no fallback or
+producer revision obligation. Both delivery adapters apply the new producer
+fence only to obligations carrying cut-2 producer metadata; ordinary settle
+obligations retain their existing delivery, including dormant receipt reuse.
+With notes off, pre-existing producer maps are also ignored by both delivery adapters.
+
+With fresh merge off, the sibling guard returns before reading predecessors,
+and the sibling bypass query is never used. Merge selection is the main path,
+including ordinary ready suffixes behind quarantined units. Enabling cut 4
+activates the sibling guard and its bounded independent-record bypass together.
+The recording end is retained in `record_finished_at` independently of both
+staged flags. No privacy, custody or provider backlog gate changes.
+
+Ramp cut 2 only after the lead has end-to-end evidence for lease-mode-off
+revision snapshots, reopen/reseal/projection delivery, canonical processing
+holds and the paid-run bound, then explicitly sets true on CPU readers.
+The current opt-in lease-off path is a known blocker: its producer revision is
+missing. Ramp cut 4 only when every CPU and GPU merge writer is at a verified
+sibling-guard image, then explicitly set true on the admission/merge readers.
+No GPU image roll is authorized tonight. GKE image-only rolls with absent env
+keep both staged cuts off; cuts 1 and 3 stay on. Existing explicit true live
+values must be read back and removed or set false before that staged rollout.
+
+[Measurement, costs and verification](listen_pusher_pipeline/changes/2026-11-14-record-post-seal-latency.md).
+
+Stage timestamps reuse existing writes: `record_sealed_at` on the conversation
+at actual barrier closure (pusher/repair/orphan); `record_intake_claimed_at` on
+the pending claim and every admitted sibling; `record_ready_at` at admission
+after staging; `record_first_leased_at` at the first GPU lease. No historical
+seal times are inferred. Retry leases preserve the first lease timestamp.
+Instrumentation adds zero Firestore reads and zero document writes. The Home
+list field projection includes the existing `notes_written_at` timestamp.
+`omi_record_notes_to_home_read_seconds` records a Home-ready row's first
+observation per process/notes revision (bounded local dedupe, 8,192 entries).
+It measures backend row observation, including time until a Home list request;
+it cannot establish phone rendering or a globally unique first observation.
+The metric has no account or conversation labels and performs no database IO.
+
+Size-rollover output sets prepare at most 128 notes outbox rows per completion
+pass. A non-final pass checkpoints prepared canonical IDs on the existing
+content ledger and leaves ready receipts discoverable. Completion replay skips
+those IDs, so a restart cannot multiply notes revisions. This adds one ledger
+write only for each non-final group in a recording with over 128 distinct
+output conversations; the usual single-output path is unchanged.
+
+Notes hold checks reuse the canonical conversation rows already read by content
+completion's visibility/redirect walk. They do not request full-row exports
+from the privacy guard, preserving its decision-only cache contract. A known
+input-upload revision that differs from the current sealed revision retains
+the ordinary settle policy. Privacy, generation and account fences still run
+in the completion transaction before any notes writes.
+
+The first-lease clock uses wall time inside the committing lease transaction,
+rather than the pull call's possibly older start time. Historical retries or
+admission-refunded rows lacking an original lease clock remain unknown; this
+instrumentation never invents their first lease timestamp.
+
+The Home histogram admits only recordings ended within 30 minutes and notes
+written at or after that end. Old Home history, untrusted/future end clocks and
+prior in-recording notes do not contaminate the post-seal latency cohort.
+
+### Staged source-frame close protocol
+
+`PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` remains default off. The experimental wire
+now requires `record_close_protocol=3` and an exact version-3 capability; v2
+peers keep the existing closure path. With both sides opted in, a source-frame
+reservation pins archive and relay ownership and commit joins the retired
+binding's original archive before its ordered audio watermark. Successor
+creation is not a close prerequisite. Each attempt has a five-second bound and
+the pending handshake a thirty-second deadline; expiry preserves custody fences.
+Prepared EOF/deadline recovery still blocks default-on admission. See the
+[Q12-S boundary note](./listen_pusher_pipeline/changes/2026-11-15-q12-s-source-close-boundary.md).
+
+### Episode transcript-wait repairs
+
+`EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED` defaults on: completed results with a validated STT-empty receipt covering all closed audio are settled for episode composition. Summary exhaustion, below-floor decisions or empty text alone do not qualify. The additive receipt is fenced to projection revision and pending timestamps; historical rows without proof retain the bounded wait. Off restores the prior transcript wait; late transcript evidence still schedules recomposition. The all-members-complete gate and episode boundaries are unchanged. See [rollout contract](listen_pusher_pipeline/changes/2026-11-15-episode-wait-repairs.md).
+
+`EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED` defaults on. `compose_transcript_wait_observations` is an internal member-ID map of pending-generation and first-observed timestamps. Continuing blockers retain their cap across unrelated joins; a new generation gets its own limit. New readers cap legacy waits using those observations; old images ignore the map. Off restores aggregate wait-start renewal.
+
+`EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED` defaults off: only explicit true adds atomic removal of the stub's episode/reverse references to existing guarded empty-live deletion. Dangling-ID read tolerance, membership acknowledgement and registered-audio protection stay active independently of this switch. The quality lead owns a 1% then 100% traffic ramp within 48 hours of this image serving on listen and pusher, gated on clean attach abort/409 lock-timeout logs; see the rollout contract above. This does not finish/discard a recording beyond the cleanup's preexisting status decision, change episode bounds, or repair production history.
+
+`HOME_SETTLED_EMPTY_WIRE_ENABLED` defaults on. Conversation-list and episode-member reads give an empty-title affirmative settled-empty noise row the terminal caption `No summary`, preserving `home_step=noise`, empty notes/transcript, status and action IDs. This prevents released clients' empty-title STT inference across both merged wire shapes. Off restores the prior empty-title wire. No title is persisted and actual pending transcripts remain pending.

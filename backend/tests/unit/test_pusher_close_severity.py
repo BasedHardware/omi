@@ -231,7 +231,13 @@ async def test_1012_close_then_reconnect_discards_unproven_legacy_runs_once():
     connect_count = [0]
 
     async def reconnect_to_pusher(
-        uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
     ):
         connect_count[0] += 1
         return ws if connect_count[0] == 1 else fresh

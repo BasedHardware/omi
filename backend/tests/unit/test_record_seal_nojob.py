@@ -76,7 +76,9 @@ def test_dry_run_counts_only_and_atomic_idempotent_apply(source):
     assert apply(source, result) == {'sealed_registered': 1}
     transaction = client.transactions[-1]
     assert transaction.sets[0][0] == JOB_PATH
-    assert transaction.updates == [(PATH, {'record_upload_sessions': {}, 'record_audio_closed': True})]
+    assert transaction.updates == [
+        (PATH, {'record_upload_sessions': {}, 'record_audio_closed': True, 'record_sealed_at': 1000})
+    ]
     assert client.rows[PATH]['content'] == 'untouched'
     assert client.rows[JOB_PATH]['state'] == 'record_pending'
     assert client.rows[JOB_PATH]['record_snapshot']['finished_at'] == client.rows[PATH]['finished_at']

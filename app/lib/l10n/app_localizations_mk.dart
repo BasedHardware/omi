@@ -7064,6 +7064,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава со Apple, ве молиме обидете се повторно.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Најавувањето со Apple не успеа. Обидете се повторно или продолжете со Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преземање на firebase жетон, ве молиме обидете се повторно.';
 
   @override
@@ -15518,4 +15522,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Денес платено $price. Се обновува месечно.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Списокот за обработка се промени. Прегледајте го и обидете се повторно.';
 }

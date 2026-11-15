@@ -22,6 +22,13 @@ AUDIO_TIMELINE_QUERY_PARAM = 'audio_timeline'
 AUDIO_TIMELINE_PROTOCOL = 2
 PUSHER_AUDIO_TIMELINE_ACK_OPCODE = 202
 PUSHER_AUDIO_CUSTODY_ACK_OPCODE = 203
+PUSHER_RECORD_CLOSE_ACK_OPCODE = 204
+
+
+def record_close_ack_frame() -> bytes:
+    from utils.pusher_record_close import capability_frame
+
+    return capability_frame()
 
 
 def audio_custody_ack_frame(receipt: Dict[str, Any]) -> bytes:

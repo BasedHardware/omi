@@ -53,11 +53,11 @@ def test_synthetic_product_fix(tmp_path, capsys):
     git(clone, 'read-tree', base)
     path = 'backend/database/record_audio.py'
     source = git(clone, 'show', f'{base}:{path}')
-    needle = b"        if row.get('record_upload_sessions'):\n            return 'producer_pending'"
+    needle = b"        if row.get('record_upload_sessions'):\n"
     assert source.count(needle) == 1
     patched = source.replace(
         needle,
-        b"        if row.get('record_upload_sessions'):\n            tx.update(ref, {'record_upload_sessions': {}, 'record_audio_closed': True})\n            return None",
+        b"        if row.get('record_upload_sessions'):\n            tx.update(ref, {'record_upload_sessions': {}, 'record_audio_closed': True})\n            return None\n",
     )
     blob = git(clone, 'hash-object', '-w', '--stdin', data=patched).decode()
     git(clone, 'update-index', '--add', '--cacheinfo', f'100644,{blob},{path}')
@@ -124,7 +124,7 @@ backend = pathlib.Path(sys.argv[sys.argv.index('--backend') + 1])
 worker.configure_imports(backend)
 from testing.replay_harness import runner
 from testing.replay_harness.env import replay_environment
-async def stuck(_):
+async def stuck(_, **options):
     try:
         with replay_environment() as environment:
             user = environment.harness.seed_user('timeout-proof')
@@ -141,9 +141,9 @@ async def stuck(_):
         pathlib.Path({str(unwound)!r}).write_text('cooperative exit')
 runner.run_cases = stuck
 if {hard_kill!r}:
-    async def ignore_term(request):
+    async def ignore_term(request, **options):
         asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, lambda: None)
-        return await worker.replay(request)
+        return await worker.replay(request, **options)
     worker.cooperative_replay = ignore_term
 worker.main()
 ''')

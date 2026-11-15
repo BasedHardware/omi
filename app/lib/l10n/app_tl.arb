@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Hindi gumana ang pag-sign in gamit ang Apple. Subukang muli o magpatuloy gamit ang Google.",
     "authFailedToRetrieveToken": "Nabigo ang pagkuha ng firebase token, mangyaring subukan ulit.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -12210,5 +12211,6 @@
     "monthlySwitchDeclined": "Tinanggihan ang bayad. Hindi nagbago ang plan mo.",
     "monthlySwitchUnavailable": "Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.",
     "monthlySwitchDoneTitle": "Buwanan ka na",
-    "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan."
+    "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
+    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli."
 }

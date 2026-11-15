@@ -140,12 +140,25 @@ the legacy coverage trim is deleted (plan C, C11).
 
 HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
 stores only a closed reason token, HTTP status, first refusal time and last
-attempt time. Daily attempts stop seven days after the first refusal; audio is
-retained and the aggregate counts it as reported. Restart and connectivity
-wakes respect the same persisted clock and do not reset it. Legacy refused rows
-start their window at the first recovery attempt. Each attempt uses one file so
-a request-level verdict never condemns siblings. Local-only custody stays closed;
-a held recording already submitted explicitly may recover automatically.
+attempt time. Daily attempts stop seven days after the first refusal, except
+`invalid_capture_time`: that reason retries daily during the first week, then
+no more than once every seven days indefinitely until accepted. A weekly probe
+bounds recurring full-file traffic while allowing a later server rollout to
+recover retained audio: at most five full-file probes per rolling 30 days after
+the first week (roughly 4–5 times the file size, plus request overhead). Other
+reasons keep their existing expiry. Audio and both stored clocks stay intact; after seven days the aggregate still counts the row
+as reported. Restart and connectivity wakes respect the same persisted last
+attempt. Legacy refused rows start their window at the first recovery attempt.
+Each attempt uses one file, under the existing 25-refusal-per-drain cap. Valid
+audio keeps priority, with a separate unknown-clock batch after at most 36 valid
+batch attempts. This shared budget is checkpointed on waiting WALs in the same owner
+index before each valid attempt and resets after an unknown batch enters the
+gate, so restarts cannot erase it and unknown backlog cannot monopolize uploads.
+Local-only custody stays closed; a held recording already submitted explicitly may recover
+automatically. No install migration, clock reset, or receipt is needed: an old
+invalid-date refusal automatically becomes eligible on its next weekly due date.
+`OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF=true` restores the seven-day expiry for
+this reason without changing any stored state (compile-time, default false).
 
 A framed file of at most four bytes has no audio payload and completes as a
 no-op. Larger files, including tiny compressed speech, always retain normal
@@ -195,3 +208,60 @@ another upload. Recovery does not change automatic-upload or local-only choices.
 - [x] Regression suites exercise real WAL persistence, retained bytes and repeated intake.
 - [x] Native iOS simulator persistence/reauthentication verification with disposable PCM audio, real preferences and index.
 - [ ] Store release and original-customer recording recovery, tracked separately from source verification.
+
+## End-of-recording marker
+
+`CaptureEndDetector` (`app/lib/services/capture/capture_end.dart`) keeps the last time the on-phone VAD heard
+speech and reports an end on an explicit stop (`user_initiated`), a lost or removed pendant (`disconnect`), or
+when the server-provided silence timer runs out (`silence_backstop`). `CaptureEndReporter` posts it to
+`/v2/sync-capture-end` and again when the recording's last sealed file is accepted, so the final copy says no
+file is pending. The reporter is an observer: audio up to the end that is still being written or published counts as
+pending (`MobileBatchBuffer.pendingJournalCount`), so it waits for the capture lifecycle and never drives it.
+This observer reads retained journals from disk, including failed append/seal/publish operations and prior
+processes. Losing a writer or replaying a journal cannot erase pending evidence. A retained journal stops
+counting only when the ledger reports server acceptance for that file and the current byte length matches
+the accepted length; an accepted prefix cannot hide later appends. Unreadable metadata over-counts; an
+unreadable directory omits the marker. The index separately counts every unproven row, including transport-only
+`synced` copies and terminal refusals. Counts may overlap while registering/replaying; only delay is allowed.
+An observation is bound to its account and WAL generation before queuing and rechecked after disk reads:
+logout cannot turn an emptied active index into an old recording's zero. This adds no startup index save.
+A process-wide append revision also invalidates an observation if capture writes during its asynchronous
+disk read; the end stays queued for a later accepted-file wake. Retained torn originals remain pending.
+The marker is latency information only. It never seals, uploads, deletes or releases a WAL,
+and no custody rule above reads it: a marker that is lost, refused or switched off (PostHog
+`upload_end_marker_off`) leaves the server's ordinary wait in place. It is held in memory, so an app killed
+before the resend simply takes that wait.
+
+## Standard mobile batch live-ring proof
+
+Automatic Standard batch retains the original BLE header and device at its
+routing boundary. Only a complete accepted append observes the shared live
+packet counter; a refusal falls through untouched to ordinary capture. A file
+never spans two ring incarnations or live sessions. Missing, reordered and
+fragmented packets keep the existing fail-closed behavior.
+
+`batch_live_session` is a unique session identity, not a persisted integer BLE
+epoch. `live_device_id`, `live_ring_id` and the contiguous live ordinal interval
+bind its phone samples to the pendant. At each existing one-second audio fsync,
+the journal atomically checkpoints that exact prefix. Seal fsyncs and checkpoints
+before publishing. Replay parses and fsyncs complete bytes, preserves at most the
+checkpointed ordinal prefix, and persists the recovered WAL index before it can
+publish custody. Bytes after the checkpoint remain recoverable without invented
+ordinals; a short or inconsistent prefix loses its proof.
+
+Validated mark boundaries are persisted separately as mapping evidence under the
+original session identity. They carry no reclaim authority by themselves. The
+same mark-pair/contiguous-union implementation combines them with exact indexed
+WAL references, including ordinary fallback chunks. Reconnect can complete an
+old session proof only against the same ring incarnation, existing phone bytes
+and persisted index; old ordinals never enter the new session's tracker. The
+custody validator reads the index without journal discovery. Owner/generation
+checks still fence publication and commands, and an unproven oldest prefix still
+blocks every newer range.
+
+Default-on kill switch: build with `--dart-define=OMI_BATCH_RING_PROOF_OFF=true`
+to retain today's batch behavior: no batch counter observation, live metadata,
+mapping restoration or new reclaim proof. Audio, upload choice, retry caps,
+legacy firmware, Custom STT routing and ordinary live custody are unchanged.
+Regression guard: `test/services/wals/batch_ring_proof_test.dart` (also executed
+with the real compile-time switch off).

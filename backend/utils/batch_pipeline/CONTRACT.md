@@ -684,6 +684,14 @@ queries have no ratio; stale counts/ratios expire at 120 s. The default-on
 gauges when off. Reader inventory and rollout proof requirements are recorded in
 `docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
 
+The guard has an independent 20s supervised timer using the **same maintenance
+lease**, with bounded count RPCs on the DB executor so a slow general pass cannot
+delay its refresh. Opportunistic maintenance calls share the guard's 60s cadence
+and overlap lock. `omi_batch_pipeline_fresh_guard_sample_timestamp_seconds`
+exports the query window anchor only with valid counts; compare that exact
+inclusive window using `scripts/fresh_guard_cohort.py` (stored `fresh_capture`,
+never `fresh_first` or capture age). Scrapes still perform no IO.
+
 The projection acknowledge also stamps `jobs.delivered_at` and
 `jobs.delivered_in_target` in the transaction that sets
 `projection_state=completed`. The only semantic reader is the delivered-share
@@ -695,3 +703,26 @@ acknowledge is at most 300 s after `enqueued_at`; the stamp is sticky on replay.
 Missing or failed samples never publish a healthy ratio. The default-on
 `BATCH_PIPELINE_DELIVERED_SHARE_ENABLED` kill switch suppresses the page and all
 gauges. See `docs/listen_pusher_pipeline/changes/2026-11-14-delivered-share.md`.
+
+
+### Live close abort and ended-worker ownership
+
+Close v3 may advertise `abort_to_legacy=true` in its per-connection capability ACK.
+A peer without that additive capability receives no abort. After the 30-second
+close window, listen has a separate 30-second abort window (5 seconds per attempt).
+Abort reuses source retirement, in-flight frame settlement, original archive drain,
+ordered relay flush and exact received-byte watermark checks. The pusher transfers
+its current PCM tail into durable custody before the atomic commit-or-abort choice.
+Abort only removes the prepared protocol fence: ordinary rollover, legacy close or
+EOF still supplies the close request, and the drain retains all custody checks.
+No proof or ACK by the abort deadline keeps the fence for actual EOF/proven-dead
+repair; a live timer is never abandonment proof.
+
+Eviction and prepared-only EOF share one abandonment owner per socket worker;
+all-token eviction scope subsumes the prepared subset. Four active owners remain
+the default. A FIFO holds at most 256 further workers for at most 60 seconds,
+then each admitted owner has at most 30 seconds for worker/future settlement and
+metadata attestation. Count overflow, queue expiry and unsettled/metadata deadline
+all keep the producer token fenced. The queue holds no extra drain slot or PCM
+copy. The 256 entries cover eight default 32-drain budgets for scale-down bursts;
+this is a bounded admission choice, not a measured fleet burst guarantee.

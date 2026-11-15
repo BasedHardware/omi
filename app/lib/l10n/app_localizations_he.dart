@@ -6976,6 +6976,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'כישלון בכניסה עם Apple, אנא נסה שוב.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'ההתחברות עם Apple לא הצליחה. נסו שוב או המשיכו עם Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'כישלון בשליפת אסימון firebase, אנא נסה שוב.';
 
   @override
@@ -15342,4 +15345,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price שולמו היום. מתחדש מדי חודש.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
 }

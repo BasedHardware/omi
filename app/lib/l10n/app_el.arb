@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.",
     "authenticationFailed": "Η ταυτοποίηση απέτυχε. Παρακαλώ δοκιμάστε ξανά.",
     "authFailedToSignInWithApple": "Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.",
+    "authAppleSignInFailedUseGoogle": "Η σύνδεση με Apple δεν ολοκληρώθηκε. Δοκιμάστε ξανά ή συνεχίστε με Google.",
     "authFailedToRetrieveToken": "Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.",
     "authUnexpectedErrorFirebase": "Απρόσμενο σφάλμα κατά τη σύνδεση, σφάλμα Firebase, παρακαλώ δοκιμάστε ξανά.",
     "authUnexpectedError": "Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά",
@@ -4653,5 +4654,6 @@
     "monthlySwitchDeclined": "Η πληρωμή απορρίφθηκε. Το πρόγραμμά σας δεν άλλαξε.",
     "monthlySwitchUnavailable": "Η αλλαγή δεν είναι διαθέσιμη τώρα. Ενημερώστε την κάρτα σας.",
     "monthlySwitchDoneTitle": "Είστε πλέον σε μηνιαία χρέωση",
-    "monthlySwitchDoneBody": "Πληρώθηκαν {price} σήμερα. Ανανεώνεται κάθε μήνα."
+    "monthlySwitchDoneBody": "Πληρώθηκαν {price} σήμερα. Ανανεώνεται κάθε μήνα.",
+    "processingDeleteScopeChanged": "Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά."
 }

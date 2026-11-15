@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 from utils import pusher_audio_projection
+from utils import speaker_learning_jobs
 from utils.batch_pipeline import record_projection_rebuild as projection_rebuild
 import asyncio
 from concurrent.futures import Future
@@ -16,10 +17,12 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import google.auth
 import pytest
 from starlette.websockets import WebSocketState
 from fastapi.websockets import WebSocketDisconnect
 from google.api_core.exceptions import InvalidArgument, PreconditionFailed
+from google.auth.exceptions import DefaultCredentialsError
 from google.rpc.error_details_pb2 import ErrorInfo
 from google.cloud.exceptions import NotFound
 
@@ -313,6 +316,47 @@ async def test_legacy_client_gets_no_unsolicited_audio_receipt(remote):
     await archive.append(b'\x01\x00', 'conversation', 1000, 1)
     await archive.close()
     assert not h.events and remote.list_blobs('audio-outbox/owner/')
+
+
+@pytest.mark.asyncio
+async def test_retired_archive_drain_commits_original_without_flushing_successor(remote):
+    h = host()
+    archive = LiveAudioArchive(h)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    await archive.append(b'\x02\x00', 'successor', 1001, 1, channel=1)
+    await archive.finish_recording('conversation')
+    assert not archive.uncommitted
+    assert len(h.events) == 1
+    assert read_pcm('owner', AudioReceipt(**h.events[0].receipt)) == b'\x01\x00'
+    assert bytes(archive.packs[1].data) == b'\x02\x00'
+    await archive.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_retired_archive_drain_retains_commit_and_only_copy(remote, monkeypatch):
+    archive = LiveAudioArchive(host())
+    entered, release = asyncio.Event(), asyncio.Event()
+    write = archive._write
+
+    async def blocked(*args):
+        entered.set()
+        await release.wait()
+        return await write(*args)
+
+    monkeypatch.setattr(archive, '_write', blocked)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    draining = asyncio.create_task(archive.finish_recording('conversation'))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        draining.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await draining
+        assert archive.inflight and archive.uncommitted
+        assert bytes(next(iter(archive.uncommitted.values()))[0].data) == b'\x01\x00'
+    finally:
+        release.set()
+        await archive.finish_recording('conversation')
+    assert not archive.inflight and not archive.uncommitted
 
 
 def test_conversation_deletion_refuses_new_archive_without_audio_ack(remote, monkeypatch):
@@ -1019,6 +1063,9 @@ def _legacy_chunk(remote, start, pcm, name=None, *, is_batch=True):
     blob.upload_from_string(pcm, if_generation_match=0)
 
 
+# Sixty real immutable packs plus full-minute readback is a stress proof; the
+# surrounding small-pack tests keep the same custody boundaries in fast CI.
+@pytest.mark.slow
 def test_sixty_custody_packs_and_projected_minute_publish_one_audio_file(remote):
     pcm = b'\x01\x00' * 16000
     for sequence in range(60):
@@ -1206,8 +1253,9 @@ async def test_inline_finish_waits_for_projection_and_kill_switch_keeps_backgrou
     assert client.rows[path]['record_audio_closed'] is True
     assert client.rows[path]['record_upload_sessions'] == {}
     # Fifty frames share one producer begin; neither inline nor background
-    # closure introduces frame-frequency Firestore reads.
-    assert len(client.transactions) == 3  # begin, token clear, seal
+    # closure introduces frame-frequency Firestore reads. The fourth
+    # transaction is the post-seal ledger write, not a per-frame read.
+    assert len(client.transactions) == 4  # begin, token clear, seal, ledger
 
 
 @pytest.mark.asyncio
@@ -1313,6 +1361,7 @@ async def test_projection_failure_while_inline_waits_keeps_token(inline_session,
 
 @pytest.mark.asyncio
 async def test_invalid_argument_projection_keeps_custody_and_allows_seal(inline_session, monkeypatch, caplog):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     client, path, barrier, projected = inline_session
     fail = AsyncMock(wraps=barrier.fail_recording)
     monkeypatch.setattr(barrier, 'fail_recording', fail)
@@ -1890,6 +1939,8 @@ async def test_closed_drain_capacity_and_early_shutdown_keep_tokens(inline_sessi
 async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custody(
     inline_session, monkeypatch, stage, kill_switch, abandon_cap
 ):
+    if stage == 'projection':
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     client, path, barrier, projected = inline_session
     entered = asyncio.Event()
     release = threading.Event()
@@ -2524,3 +2575,143 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
     await task
     assert failures == [('projection', 'transient')], 'only the first batch dropped'
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm, pcm]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fast', ['true', 'false'])
+async def test_close_defers_only_optional_discovery_after_verified_upload(inline_session, monkeypatch, fast):
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', fast)
+    order = []
+    original_upload = pusher.upload_audio_chunks_batch
+
+    def upload(*args, **kwargs):
+        order.append('verified_upload')
+        return original_upload(*args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    original_defer = pusher_audio_projection.PusherAudioProjection.defer_close_refresh
+
+    async def defer(self, cid, paths=None, *, closing=True):
+        if order == ['verified_upload', 'debt']:
+            return True
+        assert order == ['verified_upload']
+        assert not client.rows[path].get('record_audio_closed')
+        order.append('debt')
+        return await original_defer(self, cid, paths, closing=closing)
+
+    monkeypatch.setattr(pusher_audio_projection.PusherAudioProjection, 'defer_close_refresh', defer)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert client.rows[path]['record_audio_closed'] is True
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert order == (['verified_upload', 'debt'] if fast == 'true' else ['verified_upload'])
+
+
+def _parked_at(task) -> str:
+    """The chain of awaits a suspended task is parked on, outermost first."""
+    chain, awaited = [], task.get_coro()
+    while awaited is not None and len(chain) < 12:
+        frame = getattr(awaited, 'cr_frame', None) or getattr(awaited, 'gi_frame', None)
+        if frame is None:
+            chain.append(type(awaited).__name__)
+            break
+        chain.append(f'{frame.f_code.co_name}:{frame.f_lineno}')
+        awaited = getattr(awaited, 'cr_await', None) or getattr(awaited, 'gi_yieldfrom', None)
+    return ' <- '.join(chain)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('close_path', ['staged_v3', 'finalization', 'rollover'])
+async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
+    inline_session, monkeypatch, close_path
+):
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    # The durable queue loop sleeps this long between passes; at the real 1 s the
+    # handler's shutdown needs several wall-clock seconds and races a loaded runner.
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.001)
+    # The proof below concerns closure while the socket stays open. Teardown
+    # may take the inline-finish fallback (20 s in production); keep that and
+    # the background drain inside this test's unchanged 5 s cleanup deadline.
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
+    # No path in this test may build a real cloud client: credential discovery
+    # probes the network and its duration depends on the runner.
+    monkeypatch.setattr(google.auth, 'default', MagicMock(side_effect=DefaultCredentialsError('hermetic unit test')))
+    entered = asyncio.Event()
+    sealed = asyncio.Event()
+    disconnect = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def slow_refresh(self, *args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+        return True
+
+    monkeypatch.setattr(pusher_audio_projection.PusherAudioProjection, 'refresh', slow_refresh)
+    original = record_audio_db.seal_record_audio
+
+    def seal(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result is None:
+            loop.call_soon_threadsafe(sealed.set)
+        return result
+
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    if close_path == 'staged_v3':
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
+    # An applied refresh schedules speaker follow-ups that build real datastore
+    # clients; on CI their credential discovery outlasts this test's teardown wait.
+    monkeypatch.setattr(speaker_learning_jobs, 'run_speaker_learning_jobs', AsyncMock())
+    monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', MagicMock(return_value=False))
+    controls = [
+        struct.pack('<I', 104)
+        + json.dumps(
+            dict(conversation_id='conversation', record_close_only=True, request_id='test', phase=phase, watermark=320)
+        ).encode()
+        for phase in ('prepare', 'commit')
+    ]
+
+    if close_path == 'finalization':
+        controls = [struct.pack('<I', 104) + json.dumps({'conversation_id': 'conversation'}).encode()]
+    elif close_path == 'rollover':
+        controls = [struct.pack('<I', 103) + b'successor']
+
+    class OpenStream(Socket):
+        async def receive_bytes(self):
+            if len(self.frames) == 1:
+                await asyncio.wait_for(entered.wait(), 5)
+            if not self.frames:
+                await asyncio.wait_for(sealed.wait(), 5)
+                await disconnect.wait()
+            return await super().receive_bytes()
+
+    sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + controls)
+    handler = asyncio.create_task(
+        pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1, record_close_protocol=3)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(sealed.wait(), 2)
+        assert not release.is_set()
+        assert not handler.done() and not disconnect.is_set()
+        assert projected and client.rows[path]['record_audio_closed']
+        assert client.rows[path]['record_upload_sessions'] == {}
+    finally:
+        release.set()
+        disconnect.set()
+        try:
+            await asyncio.wait_for(asyncio.shield(handler), 5)
+        except asyncio.TimeoutError:
+            # Name the await the handler is parked on instead of a bare timeout.
+            parked = _parked_at(handler)
+            handler.cancel()
+            await asyncio.gather(handler, return_exceptions=True)
+            pytest.fail(f'pusher handler still running 5 s after release; parked at: {parked}')

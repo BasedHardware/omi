@@ -1,7 +1,8 @@
 # Episode composer: coalesce background evidence changes
 
 Default-on `EPISODE_COMPOSE_SETTLE_ENABLED` adds a narrow speech/name/membership
-trigger and a 10-minute background quiet window capped at 25 minutes. The
+trigger and a `COMPOSER_SETTLE_SECONDS` background quiet window (two minutes),
+capped at `COMPOSER_MAX_SETTLE_SECONDS` (five minutes). The
 [environment contract](../../listen_pusher_pipeline.mdx#closed-episode-compose-cost-control)
 describes rollback. Foreground reads promote pending work immediately.
 
@@ -48,7 +49,7 @@ unchanged-fingerprint backfill are covered by the composer tests.
 ## Verify after deploy (operator follow-up; no deploy in this change)
 
 Compare equal windows after the deployed revision is serving traffic, allowing
-one complete 25-minute settle interval before interpreting savings:
+one complete `COMPOSER_MAX_SETTLE_SECONDS` interval before interpreting savings:
 
 - `sum(increase(omi_episode_compose_total{outcome="composed"}[24h])) /
   sum(increase(omi_episode_closed_total[24h]))`: currently about 19; should fall

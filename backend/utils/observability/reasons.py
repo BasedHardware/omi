@@ -76,6 +76,7 @@ class ReasonFamily(StrEnum):
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
@@ -86,9 +87,31 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    CAPTURE_END = 'capture_end'
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
+    RECORD_SEAL_REPAIR = 'record_seal_repair'
+
+
+class RecordSealRepairRunOutcome(StrEnum):
+    """Terminal coordinator outcome, independent of individual row proof refusals."""
+
+    UNKNOWN = 'unknown'
+    COMPLETE = 'complete'
+    INCOMPLETE = 'incomplete'
+
+
+class RecordSealRepairRunStage(StrEnum):
+    """Primary unfinished repair phase; overall also identifies a completed run."""
+
+    UNKNOWN = 'unknown'
+    PREPASS = 'prepass'
+    SETUP = 'setup'
+    DISCOVERY = 'discovery'
+    ROWS = 'rows'
+    CHECKPOINT = 'checkpoint'
+    OVERALL = 'overall'
 
 
 class PusherPcmStage(StrEnum):
@@ -102,6 +125,23 @@ class PusherPcmErrorReason(StrEnum):
     ACQUIRE = 'acquire'
     RELEASE = 'release'
     LATE_STORAGE = 'late_storage'
+
+
+class AppReviewConfigReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CREDENTIALS_UNAVAILABLE = 'credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
+    RECONCILIATION_REPAIR = 'reconciliation_repair'
+    LIVE_HIDE_CLEARED = 'live_hide_cleared'
+    SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+    SUBMISSION_TOKEN_REJECTED = 'submission_token_rejected'
+
+
+class AppReviewConfigOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    PARTIAL = 'partial'
+    ERROR = 'error'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -163,11 +203,52 @@ class DeliveryOutcome(StrEnum):
     FAILED = 'failed'
 
 
+class CaptureEndOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    STORED = 'stored'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    UNBOUND = 'unbound'
+    DISABLED = 'disabled'
+    INVALID = 'invalid'
+
+
+class CaptureEndTypeReason(StrEnum):
+    UNKNOWN = 'unknown'
+    USER_INITIATED = 'user_initiated'
+    SILENCE_BACKSTOP = 'silence_backstop'
+
+
+class CaptureEndProofOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PROVEN = 'proven'
+    ABSENT = 'absent'
+    PENDING = 'pending'
+    CONTENT_BEHIND = 'content_behind'
+    NO_SPEECH_CLOCK = 'no_speech_clock'
+    RESUMED = 'resumed'
+    CLOCK_UNKNOWN = 'clock_unknown'
+
+
+class UploadTraceGateReason(StrEnum):
+    UNKNOWN = 'unknown'
+    NONE = 'none'
+    RATE_LIMITED = 'rate_limited'
+    AUTO_UPLOAD_OFF = 'auto_upload_off'
+    BACKGROUND = 'background'
+    RETRIES_EXHAUSTED = 'retries_exhausted'
+    IN_FLIGHT = 'in_flight'
+    OFFLINE = 'offline'
+    SERVER_HOLD = 'server_hold'
+    OTHER = 'other'
+
+
 class SyncProcessingHoldOutcome(StrEnum):
     UNKNOWN = 'unknown'
     QUIET_WAIT = 'quiet_wait'
     WATERMARK_WAIT = 'watermark_wait'
     READY = 'ready'
+    END_PROOF = 'end_proof'
     MAX_HOLD = 'max_hold'
     UNCHANGED = 'unchanged'
     IMMATERIAL = 'immaterial'
@@ -698,6 +779,7 @@ class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 
     UNKNOWN = 'unknown'
+    INPUT_MISSING = 'input_missing'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'
@@ -772,6 +854,8 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+    STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
 
 
 class NotesAgentForceReason(StrEnum):
@@ -866,6 +950,8 @@ class PipelineLedgerOutcome(StrEnum):
     STALE = 'stale'
     ILLEGAL = 'illegal'
     TERMINAL = 'terminal'
+    DELETED = 'deleted'
+    MISSING = 'missing'
 
 
 class PipelineLedgerFailureReason(StrEnum):

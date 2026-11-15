@@ -249,7 +249,9 @@ class LiveAudioArchive:
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
-        raw, metadata = await run_blocking(storage_executor, pack.encoded, preserve_pcm=self.durable)
+        raw, metadata = await run_blocking(
+            storage_executor, pack.encoded, preserve_pcm=self.durable, compact_custody_pcm=self.durable
+        )
         if (
             self.durable
             and framed_pack(request.uid)
@@ -365,3 +367,25 @@ class LiveAudioArchive:
             for channel in list(self.packs):
                 await self.flush(channel)
         await self.ensure_durable()
+
+    async def finish_recording(self, conversation_id: str) -> None:
+        """Commit one retired binding without flushing a continuing successor.
+
+        The receiver's frame fence must already forbid further appends for this
+        binding. Timeout/cancellation retains every pack and its tracked commit;
+        neither is evidence that custody finished.
+        """
+        async with self.lock:
+            for channel, pack in list(self.packs.items()):
+                if pack.conversation_id == conversation_id:
+                    await self.flush(channel)
+            for key, (pack, channel) in list(self.uncommitted.items()):
+                if pack.conversation_id == conversation_id and key not in self.running:
+                    self._start(pack, channel)
+            commits = tuple(self.inflight)
+        if commits:
+            done, _ = await asyncio.wait(commits, timeout=15)
+            for task in done:
+                task.result()
+        if any(pack.conversation_id == conversation_id for pack, _ in self.uncommitted.values()):
+            raise TimeoutError('retired recording custody remains pending')

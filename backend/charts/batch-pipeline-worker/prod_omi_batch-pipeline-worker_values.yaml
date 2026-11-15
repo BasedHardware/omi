@@ -56,6 +56,8 @@ borrowedNodePools:
   enabled: false
   pools: [parakeet-pool, parakeet-pool-b, parakeet-pool-v2]
 worker:
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Staged OFF until every merge writer runs the sibling guard.
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff
@@ -118,10 +120,13 @@ recordSealRepair:
   suspend: false
   mode: apply
   rowSeconds: 270
-  # 48 workers (2026-11-05 #24729) pushed every row past the 270 s cap (budget_exhausted); per-row I/O, not
-  # pod resources, saturates. Back to 16 until the per-row bottleneck is profiled.
-  # 24 workers (#24962) missed the 3-run gate 2026-11-09: sealed/run 126-170 vs >=190, per-row time ~118 s -> ~178 s; reverted.
-  workers: 16
+  # Match live: eight row processes per pod. More processes in one 4-CPU pod regressed.
+  workers: 8
+  shards: 5
+  # CPU-only pool can autoscale from zero; one pod per hostname, no GPU contention.
+  nodePool: api-pool
+  tolerations: []
+  cpuRequest: "3"
   serverFlags:
     K_SERVICE: backend
     BATCH_PIPELINE_ENABLED: 'true'

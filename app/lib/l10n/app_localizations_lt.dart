@@ -7034,6 +7034,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepavyko prisijungti su Apple, bandykite dar kartą.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepavyko gauti Firebase žetono, bandykite dar kartą.';
 
   @override
@@ -15477,4 +15481,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Šiandien sumokėta $price. Atnaujinama kas mėnesį.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
 }

@@ -114,6 +114,7 @@ class EpisodeProvider extends ChangeNotifier {
 
   void invalidateHome() {
     _openedEpisodes.clear();
+    _openProblems.clear();
     _byConversation.clear();
     _cachedAt.clear();
     _opening.clear();
@@ -364,6 +365,7 @@ class EpisodeProvider extends ChangeNotifier {
     _homeGeneration++;
     _byConversation.clear();
     _openedEpisodes.clear();
+    _openProblems.clear();
     _opening.clear();
     _openTokens.clear();
     _cachedAt.clear();
@@ -592,6 +594,8 @@ class EpisodeProvider extends ChangeNotifier {
   static const openComposePollInterval = Duration(seconds: 5);
   static const openComposeReadTimeout = Duration(seconds: 4);
   final Map<String, Future<Episode?>> _opening = {};
+  final Map<String, ApiProblem> _openProblems = {};
+  ApiProblem? openProblem(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openProblems[id] : null;
   final Map<String, Object> _openTokens = {};
 
   /// One read per open, with at most eight more reads only while the server says
@@ -602,6 +606,7 @@ class EpisodeProvider extends ChangeNotifier {
     final existing = _opening[episodeId];
     if (existing != null) return existing;
     final token = Object();
+    _openProblems.remove(episodeId);
     _openTokens[episodeId] = token;
     final future = _readOpened(episodeId, token).whenComplete(() {
       if (identical(_openTokens[episodeId], token)) {
@@ -636,10 +641,29 @@ class EpisodeProvider extends ChangeNotifier {
           episodeId,
         ).timeout(remaining < openComposeReadTimeout ? remaining : openComposeReadTimeout);
       } on TimeoutException {
+        if (active()) {
+          _openProblems[episodeId] = const ApiProblem(ApiProblemKind.transport);
+          notifyListeners();
+        }
         break;
       }
       if (!active()) return null;
-      if (result is! ApiSuccess<Episode>) break;
+      if (result is! ApiSuccess<Episode>) {
+        if (result is ApiFailure<Episode>) {
+          _openProblems[episodeId] = result.problem;
+          if ({
+            ApiProblemKind.authTerminal,
+            ApiProblemKind.forbidden,
+            ApiProblemKind.paymentRequired,
+            ApiProblemKind.notFound
+          }.contains(result.problem.kind)) {
+            _openedEpisodes.remove(episodeId);
+          }
+          notifyListeners();
+        }
+        break;
+      }
+      _openProblems.remove(episodeId);
       episode = result.data;
       _mergeOpened(episode);
       if (episode.live || !episode.composeDeferred) break;

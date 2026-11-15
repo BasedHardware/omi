@@ -7028,6 +7028,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepodarilo sa prihlásiť cez Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prihlásenie cez Apple sa nepodarilo. Skúste to znova alebo pokračujte cez Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodarilo sa získať token';
 
   @override
@@ -15449,4 +15453,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Dnes zaplatené $price. Obnovuje sa mesačne.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
 }

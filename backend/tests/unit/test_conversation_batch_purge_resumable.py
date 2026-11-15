@@ -29,8 +29,10 @@ from database.batch_pipeline_privacy import privacy_owner_key
 from utils.batch_pipeline import retention
 from utils.conversations import deletion_batch_purge
 from tests.unit.test_conversation_delete_gate_wait import (  # noqa: F401 - fixtures
+    GATE_PATH,
     HOLD_PATH,
     UID,
+    _gate_doc,
     _advance,
     _obligation,
     _plane,
@@ -73,7 +75,7 @@ class BatchPlane:
         monkeypatch.setattr(purge, '_erase_result', self.erase_result)
         monkeypatch.setattr(purge, '_delete_job', self.delete_job)
         monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)
-        monkeypatch.setattr(purge, '_shadow_mode', lambda: False)
+        monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *args: 0)
         from tests.unit.test_conversation_delete_gate_wait import _Transaction
 
         monkeypatch.setattr(purge, '_in_transaction', lambda _client, body: body(_Transaction(client)))
@@ -455,3 +457,79 @@ def test_unknown_consumer_readiness_records_a_degraded_fallback(
     if expected:
         assert recorder.call_args.kwargs['outcome'] == 'degraded'
         assert result['dispatched'] == 1
+
+
+def test_cold_copy_phase_runs_for_both_namespaces_with_shadow_disabled(
+    owner, tombstone_db, armed, dispatch, fast_clock, monkeypatch
+):
+    owner.plane()
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+    monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
+    monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)
+    seen = []
+    monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda namespace, uid: seen.append(namespace))
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'purged'
+    assert seen == list(purge.NAMESPACES)
+
+
+def test_cold_copy_failure_cannot_checkpoint_the_shadow_phase_complete(
+    owner, tombstone_db, armed, dispatch, fast_clock, monkeypatch
+):
+    owner.plane()
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+
+    def unavailable(*args):
+        raise RuntimeError('synthetic cold copy unavailable')
+
+    monkeypatch.setattr(purge, 'purge_jobstore_owner', unavailable)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    with pytest.raises(RuntimeError, match='cold copy unavailable'):
+        _run(armed, 1)
+    assert _obligation(tombstone_db, 'c1')['last_outcome'] == 'failed'
+
+
+# --- 5. a unit that loses its gate wait to a same-account peer hands off; any other blocker still fails ---
+
+
+def test_unit_losing_its_gate_wait_to_a_same_account_peer_hands_off_busy_and_resumes(
+    owner, tombstone_db, gate_client, armed, dispatch, fast_clock
+):
+    """Prod 2026-11-12..15: one account's purges, erasures and deletes queue on its gate; a unit that waited
+    out its 30 s raised DestructiveOperationInProgress and the task answered 500 (1,293 times)."""
+    plane = owner.plane()
+    _matching_artifacts(plane, 2)
+    gate_client.docs[GATE_PATH] = _gate_doc()  # a same-kind peer that outlasts the unit's wait
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    assert _run(armed, 1) == 'busy'
+    assert sum(fast_clock.sleeps) == pytest.approx(purge_jobs.UNIT_GATE_WAIT_SECONDS)
+    # Nothing was erased without the gate, the peer keeps it, and the run's scan position is saved.
+    assert plane.erased == [] and plane.objects == []
+    assert gate_client.docs[GATE_PATH]['token'] == 'peer'
+    row = _obligation(tombstone_db, 'c1')
+    assert row['last_outcome'] == 'busy' and row['lease_until'] is None and row['run_token'] is None
+    assert row['progress'] and row['attempts'] == 0
+    assert row['due_at'] <= purge_jobs._now() + purge_jobs.timedelta(seconds=purge_jobs.BUSY_RETRY_SECONDS + 1)
+
+    gate_client.docs.pop(GATE_PATH)  # the peer finished
+    _redrive(tombstone_db, armed, purge_jobs.BUSY_RETRY_SECONDS + 1)
+    assert dispatch[-1] == (armed, 2)
+    assert _run(armed, 2) == 'purged'
+    assert plane.doc('artifacts', 'a000') is None and plane.doc('artifacts', 'a001') is None
+    assert _obligation(tombstone_db, 'c1') is None
+
+
+@pytest.mark.parametrize('kind', ['account_deletion', 'retention_cleanup', 'audio_conversation_deletion'])
+def test_unit_blocked_by_another_destructive_kind_still_fails_the_run(
+    owner, tombstone_db, gate_client, armed, dispatch, fast_clock, kind
+):
+    """An account wipe (or any other kind) is never a peer: the purge yields to it and the task retries."""
+    plane = owner.plane()
+    _matching_artifacts(plane, 1)
+    gate_client.docs[GATE_PATH] = _gate_doc(kind=kind)
+    deletion_batch_purge.reconcile_conversation_batch_purges()
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        _run(armed, 1)
+    assert fast_clock.sleeps == [] and plane.erased == [] and plane.objects == []
+    row = _obligation(tombstone_db, 'c1')
+    assert row['last_outcome'] == 'failed' and row['lease_until'] is None
