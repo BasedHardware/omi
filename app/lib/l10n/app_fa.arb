@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "پرداخت رد شد. طرح شما تغییری نکرد.",
     "monthlySwitchUnavailable": "تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.",
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
-    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود."
+    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
+    "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید."
 }

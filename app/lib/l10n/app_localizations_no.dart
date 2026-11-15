@@ -15461,4 +15461,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Fornyes månedlig.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
 }

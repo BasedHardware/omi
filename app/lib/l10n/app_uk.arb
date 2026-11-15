@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Платіж відхилено. Ваш план не змінився.",
     "monthlySwitchUnavailable": "Перехід зараз недоступний. Натомість оновіть картку.",
     "monthlySwitchDoneTitle": "Тепер ви платите щомісяця",
-    "monthlySwitchDoneBody": "Сьогодні сплачено {price}. Подовжується щомісяця."
+    "monthlySwitchDoneBody": "Сьогодні сплачено {price}. Подовжується щомісяця.",
+    "processingDeleteScopeChanged": "Список обробки змінився. Перевірте його та спробуйте знову."
 }

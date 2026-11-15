@@ -15440,4 +15440,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'आज $price का भुगतान हुआ। हर महीने रिन्यू होता है।';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।';
 }

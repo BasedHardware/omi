@@ -15535,4 +15535,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price pagati oggi. Si rinnova ogni mese.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'L\'elenco in elaborazione è cambiato. Controllalo e riprova.';
 }

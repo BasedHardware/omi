@@ -15458,4 +15458,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Đã thanh toán $price hôm nay. Gia hạn hằng tháng.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
 }

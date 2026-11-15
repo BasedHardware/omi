@@ -15508,4 +15508,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Днес са платени $price. Подновява се всеки месец.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
 }

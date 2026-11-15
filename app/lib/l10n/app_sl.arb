@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.",
     "monthlySwitchUnavailable": "Preklop trenutno ni na voljo. Namesto tega posodobite kartico.",
     "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
-    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno."
+    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
+    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova."
 }

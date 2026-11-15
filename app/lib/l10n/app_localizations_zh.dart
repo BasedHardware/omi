@@ -15206,4 +15206,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '今日已支付 $price。按月续订。';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
 }

@@ -15522,4 +15522,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price plătiți azi. Se reînnoiește lunar.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
 }

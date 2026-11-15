@@ -15472,4 +15472,7 @@ class AppLocalizationsId extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price dibayar hari ini. Diperpanjang tiap bulan.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
 }

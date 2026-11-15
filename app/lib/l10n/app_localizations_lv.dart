@@ -15492,4 +15492,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Šodien samaksāts $price. Atjaunojas katru mēnesi.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
 }

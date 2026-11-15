@@ -15383,4 +15383,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'ชำระ $price แล้ววันนี้ ต่ออายุทุกเดือน';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
 }

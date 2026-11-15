@@ -15559,4 +15559,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Πληρώθηκαν $price σήμερα. Ανανεώνεται κάθε μήνα.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
 }

@@ -15496,4 +15496,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price vandaag betaald. Verlengt maandelijks.';
   }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.';
 }

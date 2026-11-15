@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "התשלום נדחה. התוכנית שלך לא השתנתה.",
     "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
-    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש."
+    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
+    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב."
 }

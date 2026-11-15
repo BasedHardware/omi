@@ -4689,5 +4689,6 @@
     "monthlySwitchDeclined": "Pembayaran ditolak. Paket Anda tidak berubah.",
     "monthlySwitchUnavailable": "Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.",
     "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
-    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan."
+    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan.",
+    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi."
 }

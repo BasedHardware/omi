@@ -15453,4 +15453,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Dnes zaplatené $price. Obnovuje sa mesačne.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
 }
