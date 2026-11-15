@@ -101,3 +101,23 @@ def test_pg_sim_forwards_the_independent_record_ready_page():
     store.pg.ready_pending.return_value = [{'segment_id': 'independent'}]
     assert store.ready_pending('synthetic-owner', 160) == [{'segment_id': 'independent'}]
     store.pg.ready_pending.assert_called_once_with('synthetic-owner', 160, after=None)
+
+
+def test_every_serving_read_is_in_the_executable_parity_census():
+    from database.jobstore.serving_parity import STORE_QUERIES, TRANSACTION_QUERIES
+
+    mutations = {
+        'run',
+        'acquire_pull_claim',
+        'quarantine_fenced',
+        'cancel_fenced_recovery',
+        'defer_privacy_blocked_record',
+    }
+    assert STORE_QUERIES == _public(firestore_store.FirestoreStore) - mutations - {'client'}
+    assert TRANSACTION_QUERIES == _public(firestore_store.FirestoreTransaction) - {
+        'put',
+        'patch',
+        'defer_set',
+        'check_privacy',
+        'flush',
+    }
