@@ -151,7 +151,9 @@ def test_recovered_projection_uses_source_identity_and_exposes_unknown_date():
     later = projection.build_incoming(replace(item, capture_at=item.capture_at + 100), binding, payload)
     assert first['id'] == later['id'] == 'receipt-source'
     assert first['capture_time_trust'] == 'untrusted' and first['clock'] == 'imported'
-    assert write_span({**first, 'sync_content_revision': 1})['clock'] == 'imported'
+    span_patch = write_span({**first, 'sync_content_revision': 1, 'sync_bridge_pending': {'expires_at': 123}})
+    assert span_patch['clock'] == 'imported'
+    assert set(span_patch) == {'recorded_start', 'recorded_end', 'arrival_at', 'clock'}
     assert first['sync_clock_run'] == later['sync_clock_run'] == first['id']
     assert Conversation.model_validate(first).model_dump()['capture_time_trust'] == 'untrusted'
     neighbour = {**first, 'id': 'neighbour', 'sync_clock_run': 'receipt-other'}
