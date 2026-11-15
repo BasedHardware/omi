@@ -161,12 +161,6 @@ def _generate(uid: str) -> tuple[dict, bool]:
     )
     if synthesis is None:
         raise RefreshError('ai_profile_synthesis_failed')
-    # The user may have edited or deleted the profile while the model ran; their
-    # change wins and is folded in by the next refresh.
-    current = users_db.get_ai_user_profile_fresh(uid) or {}
-    if str(current.get('profile_text') or '').strip() != previous_text:
-        logger.info('event=ai_profile_refresh outcome=superseded uid=%s', uid)
-        return current, False
     stamp = now.isoformat()
     profile = {
         'profile_text': synthesis.profile_text,
@@ -175,7 +169,11 @@ def _generate(uid: str) -> tuple[dict, bool]:
         'data_sources_used': synthesis.item_count,
         'source': SOURCE_BACKEND,
     }
-    users_db.write_ai_user_profile(uid, profile)
+    # The user may have edited or deleted the profile while the model ran; their
+    # change wins (atomically) and is folded in by the next refresh.
+    if not users_db.write_ai_user_profile_if_unchanged(uid, previous_text, profile):
+        logger.info('event=ai_profile_refresh outcome=superseded uid=%s', uid)
+        return users_db.get_ai_user_profile_fresh(uid) or {}, False
     logger.info(
         'event=ai_profile_refresh outcome=written uid=%s items=%d chars=%d sources=%s',
         uid,

@@ -2537,11 +2537,28 @@ def update_ai_user_profile(
     return existing
 
 
-def write_ai_user_profile(uid: str, profile: dict) -> dict:
-    """Replace the whole backend-generated profile projection."""
-    db.collection('users').document(uid).update({'ai_user_profile': profile})
+@transactional
+def _write_ai_user_profile_if_unchanged_txn(transaction, user_ref, expected_text: str, profile: dict) -> bool:
+    snapshot = user_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    current = (snapshot.to_dict() or {}).get('ai_user_profile') or {}
+    if str(current.get('profile_text') or '').strip() != expected_text:
+        return False
+    transaction.update(user_ref, {'ai_user_profile': profile})
+    return True
+
+
+def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: dict) -> bool:
+    """Replace the generated profile only if the stored text is still the synthesis input.
+
+    A user edit or delete that lands while the model runs wins; returns False then.
+    """
+    client = get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    written = _write_ai_user_profile_if_unchanged_txn(client.transaction(), user_ref, expected_text, profile)
     invalidate(_USER_AI_PROFILE_CACHE, uid)
-    return profile
+    return written
 
 
 def delete_ai_user_profile(uid: str) -> None:

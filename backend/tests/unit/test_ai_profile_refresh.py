@@ -21,10 +21,12 @@ class FakeStore:
     def get(self, uid):
         return self.profile
 
-    def write(self, uid, profile):
+    def write_if_unchanged(self, uid, expected_text, profile):
+        if str((self.profile or {}).get('profile_text') or '').strip() != expected_text:
+            return False
         self.writes.append(profile)
         self.profile = profile
-        return profile
+        return True
 
 
 class FakeLock:
@@ -57,7 +59,7 @@ def wired(monkeypatch):
 
     monkeypatch.setattr(refresh.users_db, 'get_ai_user_profile', store.get)
     monkeypatch.setattr(refresh.users_db, 'get_ai_user_profile_fresh', store.get)
-    monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile', store.write)
+    monkeypatch.setattr(refresh.users_db, 'write_ai_user_profile_if_unchanged', store.write_if_unchanged)
     monkeypatch.setattr(refresh.redis_db, 'try_acquire_ai_profile_refresh_lock', lock.acquire)
     monkeypatch.setattr(refresh.redis_db, 'release_ai_profile_refresh_lock', lock.release)
     monkeypatch.setattr(refresh, 'generated_compute_allowed', lambda uid, feature: True)
@@ -208,3 +210,28 @@ def test_collect_sources_formats_lines_and_survives_a_failed_source(monkeypatch)
     assert sources.goals == ['Run 100km (25% complete)', 'Read (0% complete)']
     assert sources.conversations == ['Standup: Planned the week']
     assert sources.messages == []
+
+
+@pytest.mark.parametrize(
+    'stored, expected, written',
+    [
+        ({'profile_text': '- old'}, '- old', True),
+        ({'profile_text': '- user fixed this', 'source': 'user_edit'}, '- old', False),
+        (None, '', False),
+    ],
+)
+def test_compare_and_write_is_transactional(monkeypatch, stored, expected, written):
+    import database.users as users_db
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    rows = {} if stored is None else {('users', UID): {'name': 'x', 'ai_user_profile': stored}}
+    client = StrictFirestore(rows)
+    monkeypatch.setattr(users_db, 'get_firestore_client', lambda: client)
+    profile = {'profile_text': '- new', 'source': 'backend'}
+
+    assert users_db.write_ai_user_profile_if_unchanged(UID, expected, profile) is written
+    after = client.rows.get(('users', UID))
+    if written:
+        assert after['ai_user_profile'] == profile and after['name'] == 'x'
+    else:
+        assert after == (None if stored is None else {'name': 'x', 'ai_user_profile': stored})
