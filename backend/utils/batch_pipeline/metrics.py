@@ -363,6 +363,30 @@ class QueueMetrics:
             buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
             registry=registry,
         )
+        self.scheduler_leases = Counter(
+            'omi_batch_pipeline_scheduler_leases_total',
+            'Lease opportunities by service; recent/deep are explicit residual service, not compute authorization',
+            ['service'],
+            registry=registry,
+        )
+        self.protected_cohort_leases = Counter(
+            'omi_batch_pipeline_protected_cohort_leases_total',
+            'Eligible immutable capture-end cohort at lease, through any service',
+            registry=registry,
+        )
+        self.protected_cohort_age = Histogram(
+            'omi_batch_pipeline_protected_cohort_age_seconds',
+            'Immutable capture-end to lease age; not transcript delivery latency',
+            buckets=(0, 60, 300, 600, 1800, 3600, 5400, 7200),
+            registry=registry,
+        )
+        self.protected_discovery_reads = Histogram(
+            'omi_batch_pipeline_protected_discovery_reads',
+            'Discovery document read upper bound per cycle including transaction retries; excludes control/claim/privacy',
+            ['phase'],
+            buckets=(0, 1, 8, 16, 32, 64, 100, 128, 256, 384, 768, 1920),
+            registry=registry,
+        )
         self.events = Counter(
             'omi_batch_pipeline_events_total',
             'Worker transition receipts; jobs/s is rate of completed events',
@@ -407,6 +431,19 @@ class QueueMetrics:
             ['priority', 'reason', 'worker_release', 'namespace'],
             registry=registry,
         )
+
+    def record_service(self, service: str, *, age: float | None = None) -> None:
+        if service not in ('fresh', 'protected', 'recent', 'deep'):
+            raise ValueError('static scheduler service required')
+        self.scheduler_leases.labels(service).inc()
+        if age is not None:
+            self.protected_cohort_leases.inc()
+            self.protected_cohort_age.observe(age)
+
+    def record_discovery(self, phase: str, reads: int) -> None:
+        if phase not in ('ready', 'retry'):
+            raise ValueError('static discovery phase required')
+        self.protected_discovery_reads.labels(phase).observe(reads)
 
     def record_head(self, event: str, priority: Priority, *, age: float | None = None) -> None:
         if event == 'ready_age' and age is not None:

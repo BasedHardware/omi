@@ -372,33 +372,71 @@
    "content_kind": "speech",
    "duration_seconds": 209.11,
    "final_job": null,
-   "final_result": null,
+   "final_result": {
+    "conversation_id": "conv-6",
+    "erased": true,
+    "fresh_capture": false,
+    "late_capture": true,
+    "log_sequence": 12,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-15",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
    "job_transitions": [
     "<1s ready",
-    "<30s leased",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [],
    "result_artifact": null,
-   "result_transitions": []
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
   },
   "seg-17": {
    "content_kind": "speech",
    "duration_seconds": 65.86,
    "final_job": null,
-   "final_result": null,
+   "final_result": {
+    "conversation_id": "conv-6",
+    "erased": true,
+    "fresh_capture": false,
+    "late_capture": true,
+    "log_sequence": 13,
+    "owner_id": "owner-1",
+    "previous_segment_id": "seg-16",
+    "privacy_generation": 0,
+    "projection_state": "erased",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
    "job_transitions": [
     "<1s ready",
-    "<30s leased",
+    "<5s leased",
+    "<30s result_ready",
+    "<30s committed",
     "<30s purged"
    ],
    "owner": "owner-1",
    "paid_calls": 0,
    "recover_task_responses": [],
    "result_artifact": null,
-   "result_transitions": []
+   "result_transitions": [
+    "<30s pending outcome:success",
+    "<30s erased outcome:success"
+   ]
   },
   "seg-18": {
    "content_kind": "speech",

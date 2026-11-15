@@ -28,6 +28,7 @@ from database.jobstore.cohort import production_policy_applies
 STORE_QUERIES = frozenset(
     {
         'due',
+        'protected_retries',
         'oldest',
         'oldest_retry',
         'oldest_admissible_ready',
@@ -56,6 +57,7 @@ TRANSACTION_QUERIES = frozenset(
         'fresh_first_pending',
         'fresh_first_ready_pending',
         'ready_predecessor',
+        'protected_ready',
         'service_frontier',
     }
 )

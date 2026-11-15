@@ -180,7 +180,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed"
    ],
@@ -238,7 +238,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed"
    ],
@@ -301,7 +301,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -395,7 +395,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -467,7 +467,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

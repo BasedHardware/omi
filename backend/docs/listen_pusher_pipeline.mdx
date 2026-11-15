@@ -10029,3 +10029,23 @@ Prepared EOF/deadline recovery still blocks default-on admission. See the
 `EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED` defaults off: only explicit true adds atomic removal of the stub's episode/reverse references to existing guarded empty-live deletion. Dangling-ID read tolerance, membership acknowledgement and registered-audio protection stay active independently of this switch. The quality lead owns a 1% then 100% traffic ramp within 48 hours of this image serving on listen and pusher, gated on clean attach abort/409 lock-timeout logs; see the rollout contract above. This does not finish/discard a recording beyond the cleanup's preexisting status decision, change episode bounds, or repair production history.
 
 `HOME_SETTLED_EMPTY_WIRE_ENABLED` defaults on. Conversation-list and episode-member reads give an empty-title affirmative settled-empty noise row the terminal caption `No summary`, preserving `home_step=noise`, empty notes/transcript, status and action IDs. This prevents released clients' empty-title STT inference across both merged wire shapes. Off restores the prior empty-title wire. No title is persisted and actual pending transcripts remain pending.
+
+### Protected capture share
+
+`BATCH_PIPELINE_PROTECTED_SHARE_ENABLED` defaults on; off/false/0/no restores
+legacy dedicated-batch FRESH/RECENT/DEEP order and retry discovery.
+`BATCH_PIPELINE_PROTECTED_SHARE_PERCENT` defaults to 25 (integer 1–50; invalid
+uses 25). After existing FRESH service, that fraction of non-FRESH lease
+opportunities can select a capture whose immutable `capture_at + duration_seconds`
+is at most 7,200 s old, inclusive, and is not in the future or marked untrusted.
+Residual slots alternate RECENT/DEEP preference at allocation and serve in
+bounded batches, sharing existing owner duration
+DRR credit. Eligibility is rechecked at lease; holds never grant protected
+compute permission. Retry discovery uses a bounded indexed capture-clock page
+and retains an oldest-due page. Stored priority, merge freshness, admission and
+capture clocks do not change. Shared-live pulls retain legacy ordering.
+
+The [protected-share change note](listen_pusher_pipeline/changes/2026-11-16-protected-share.md)
+records query/claim budgets, metrics, mixed-version behavior and Release-owned
+GPU rollout prerequisites. Lease urgency alone does not establish a two-hour
+transcript/projection/composition outcome.
