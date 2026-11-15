@@ -194,6 +194,7 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSER_CONTEXT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},
@@ -708,6 +709,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'HOSTED_LID_API_URL',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
@@ -4030,3 +4033,41 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
             assert host['env'][key] == expected
             assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
     assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in config['gke']['pusher']['env']
+
+
+def _assert_record_close_listener_bindings(config):
+    # main.py defaults to ALL: every declared backend service can mount /v4/listen.
+    hosts = [config['gke']['backend-listen'], config['gke']['pusher']]
+    hosts.extend(config['cloud_run']['services'].values())
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    for host in hosts:
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_record_close_notify_bound_on_all_listener_hosts(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    _assert_record_close_listener_bindings(config)
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' in classification['kinds']['config']
+    for host in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        missing = copy.deepcopy(config)
+        del missing['cloud_run']['services'][host]['env']['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED']
+        with pytest.raises(AssertionError):
+            _assert_record_close_listener_bindings(missing)
+
+
+@pytest.mark.parametrize('key', ['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'])
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
+    validator = load_validator()
+    payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+    value = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
+    payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
+    path = tmp_path / 'missing-close-switch.json'
+    path.write_text(payload)
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+        *(('cloud_run/' + name, 'missing env ' + key) for name in ('backend', 'backend-sync', 'backend-integration')),
+    }

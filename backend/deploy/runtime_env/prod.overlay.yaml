@@ -45,6 +45,8 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
@@ -54,6 +56,7 @@ overlay:
         RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
@@ -287,11 +290,15 @@ overlay:
           category: rollout
     pusher:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Mirrors backend-listen (co-host env parity); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
@@ -571,7 +578,10 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
@@ -950,7 +960,10 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
@@ -1366,7 +1379,10 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
@@ -1731,7 +1747,10 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
