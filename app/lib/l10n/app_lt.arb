@@ -252,6 +252,7 @@
     "authAccessMessage": "Jums reikės autorizuoti Omi prieigą prie jūsų {appName} duomenų. Bus atidaryta naršyklė autentifikacijai.",
     "authFailedToLinkApple": "Nepavyko susieti su Apple, bandykite dar kartą.",
     "authFailedToLinkGoogle": "Nepavyko susieti su Google, bandykite dar kartą.",
+    "authAppleSignInFailedUseGoogle": "Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.",
     "authFailedToRetrieveToken": "Nepavyko gauti Firebase žetono, bandykite dar kartą.",
     "authFailedToSignInWithApple": "Nepavyko prisijungti su Apple, bandykite dar kartą.",
     "authFailedToSignInWithGoogle": "Nepavyko prisijungti su Google, bandykite dar kartą.",

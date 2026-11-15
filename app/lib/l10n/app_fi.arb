@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Kirjautuminen Googlella epäonnistui, yritä uudelleen.",
     "authenticationFailed": "Todennus epäonnistui. Yritä uudelleen.",
     "authFailedToSignInWithApple": "Kirjautuminen Applella epäonnistui, yritä uudelleen.",
+    "authAppleSignInFailedUseGoogle": "Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.",
     "authFailedToRetrieveToken": "Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.",
     "authUnexpectedErrorFirebase": "Odottamaton virhe kirjautuessa, Firebase-virhe, yritä uudelleen.",
     "authUnexpectedError": "Odottamaton virhe kirjautuessa, yritä uudelleen",

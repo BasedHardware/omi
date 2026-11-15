@@ -6976,6 +6976,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'כישלון בכניסה עם Apple, אנא נסה שוב.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'ההתחברות עם Apple לא הצליחה. נסו שוב או המשיכו עם Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'כישלון בשליפת אסימון firebase, אנא נסה שוב.';
 
   @override

@@ -836,6 +836,10 @@ class AnalyticsManager {
       provider: value,
       errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
     ));
+    final detailProvider = signInFailureDetailProvider(provider);
+    if (error == null || detailProvider == null) return;
+    const TypedEvents()
+        .emit(SignInFailureDetail(provider: detailProvider, errorCode: classifySignInFailureCode(error)));
   }
 
   void onboardingPermissionResult({

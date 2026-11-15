@@ -7032,6 +7032,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kirjautuminen Applella epäonnistui, yritä uudelleen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.';
 
   @override

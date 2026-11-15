@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Kunne ikke logge inn med Google, vennligst prøv igjen.",
     "authenticationFailed": "Autentisering mislyktes. Vennligst prøv igjen.",
     "authFailedToSignInWithApple": "Kunne ikke logge inn med Apple, vennligst prøv igjen.",
+    "authAppleSignInFailedUseGoogle": "Pålogging med Apple fungerte ikke. Prøv igjen, eller fortsett med Google.",
     "authFailedToRetrieveToken": "Kunne ikke hente Firebase-token, vennligst prøv igjen.",
     "authUnexpectedErrorFirebase": "Uventet feil under pålogging, Firebase-feil, vennligst prøv igjen.",
     "authUnexpectedError": "Uventet feil under pålogging, vennligst prøv igjen",

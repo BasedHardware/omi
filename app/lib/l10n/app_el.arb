@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.",
     "authenticationFailed": "Η ταυτοποίηση απέτυχε. Παρακαλώ δοκιμάστε ξανά.",
     "authFailedToSignInWithApple": "Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.",
+    "authAppleSignInFailedUseGoogle": "Η σύνδεση με Apple δεν ολοκληρώθηκε. Δοκιμάστε ξανά ή συνεχίστε με Google.",
     "authFailedToRetrieveToken": "Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.",
     "authUnexpectedErrorFirebase": "Απρόσμενο σφάλμα κατά τη σύνδεση, σφάλμα Firebase, παρακαλώ δοκιμάστε ξανά.",
     "authUnexpectedError": "Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά",

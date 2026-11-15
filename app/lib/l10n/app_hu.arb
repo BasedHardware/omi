@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Nem sikerült bejelentkezni a Google-lel, kérjük próbálja újra.",
     "authenticationFailed": "A hitelesítés sikertelen. Kérjük, próbálja újra.",
     "authFailedToSignInWithApple": "Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.",
+    "authAppleSignInFailedUseGoogle": "Az Apple-bejelentkezés nem sikerült. Próbáld újra, vagy folytasd a Google-lel.",
     "authFailedToRetrieveToken": "Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.",
     "authUnexpectedErrorFirebase": "Váratlan hiba a bejelentkezés során, Firebase hiba, kérjük próbálja újra.",
     "authUnexpectedError": "Váratlan hiba a bejelentkezés során, kérjük próbálja újra",
