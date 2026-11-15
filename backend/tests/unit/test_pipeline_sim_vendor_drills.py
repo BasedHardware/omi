@@ -11,6 +11,7 @@ from dataclasses import replace
 
 import pytest
 
+from config.batch_pipeline_vendor_failover import HELD_REDRIVE_SECONDS_DEFAULT
 from testing.pipeline_sim.clock import SIM_EPOCH
 from testing.pipeline_sim.sim import Simulation
 from testing.pipeline_sim.trace import GOLDEN_CONFIGS
@@ -148,12 +149,15 @@ def test_a_health_blind_total_outage_is_bounded_to_one_paid_call_per_vendor():
 
 @pytest.mark.parametrize('end', [OUTAGE_END, 3600.0])
 def test_holds_never_outlive_the_outage_by_more_than_one_redrive(end):
-    from config.batch_pipeline_vendor_failover import HELD_REDRIVE_SECONDS_DEFAULT
-
-    sim, result, jobs = drill(vendor_outages=(('modulate', 0.0, end),))
+    # Japanese units use the provider route (asserted by drill), so GPU pumps
+    # cannot serve this backlog. Avoid thousands of idle GPU polls during the
+    # virtual outage; keep the workload, supervision cadence and deadline intact.
+    sim, result, jobs = drill(vendor_outages=(('modulate', 0.0, end),), gpu_pumps=0)
+    assert_paid_once_per_vendor(sim)
     assert_all_committed(jobs)
     assert not any(row['state'] == VENDOR_HELD for row in jobs.values())
     # Each unit's one successful attempt started within a redrive interval of the recovery.
     for row in jobs.values():
+        assert row['vendor_hold']['redrives'] >= 1
         started = row['provider_attempts'][-1]['started_at'] - SIM_EPOCH
         assert end <= started <= end + HELD_REDRIVE_SECONDS_DEFAULT + 60.0
