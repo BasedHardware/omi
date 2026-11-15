@@ -460,6 +460,7 @@ class SimStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
@@ -476,6 +477,7 @@ class SimStore:
             if table == 'results'
             and row.get('projection_state') in wanted
             and 'committed_at' in row
+            and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
             and (cutoff is None or row.get(clock_field) is not None and row[clock_field] <= float(cutoff))
         )
         if after is not None:

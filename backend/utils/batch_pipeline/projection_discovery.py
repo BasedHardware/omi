@@ -42,7 +42,12 @@ class ProjectionDiscovery:
         self.clock_mode = None
 
     def next(
-        self, limit: int = 100, due_before: float | None = None, *, followup_due_before: float | None = None
+        self,
+        limit: int = 100,
+        due_before: float | None = None,
+        *,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None
     ) -> list[str]:
         if due_before is not None and followup_due_before is not None:
             raise ValueError('finish and follow-up discovery clocks cannot be combined')
@@ -55,6 +60,8 @@ class ProjectionDiscovery:
         scope: dict[str, object] = {} if self.states is None else {'states': self.states}
         if due_mode:
             scope['followup_due_before' if clock_mode == 'followup' else 'due_before'] = cutoff
+        if exclude_async:
+            scope['exclude_async'] = True
         if not projection_pagination_enabled():
             self.after = None
             self.seeded = True
@@ -70,6 +77,8 @@ class ProjectionDiscovery:
                 oldest = float(head[0])
                 # A timestamp-only cursor includes every tie at the lower bound.
                 ceiling = float(cutoff) if cutoff is not None else time.time()
+                if clock_mode == 'finish':
+                    ceiling = min(ceiling, time.time())
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
         recent_on = self.recent and not due_mode and projection_recent_discovery_seconds() > 0

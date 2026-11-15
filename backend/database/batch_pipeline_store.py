@@ -498,6 +498,7 @@ class FirestoreStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         return projection_page(
@@ -507,6 +508,7 @@ class FirestoreStore:
             after=after,
             states=states,
             due_before=due_before,
+            exclude_async=exclude_async,
             followup_due_before=followup_due_before,
         )
 
@@ -526,6 +528,7 @@ def projection_page(
     after: tuple | None = None,
     states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
     due_before: float | None = None,
+    exclude_async: bool = False,
     followup_due_before: float | None = None,
 ) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
@@ -544,7 +547,9 @@ def projection_page(
     ``projection_finish_due_at`` has passed. That field leads the ordering
     because Firestore serves a range filter on the first ordered field only, so
     the cursor becomes ``(due_at, committed_at, key)`` and a seed
-    ``(due_at,)`` starts at that clock.
+    ``(due_at,)`` starts at that clock. ``exclude_async`` adds a lower bound
+    on that same field, excluding negative async ownership hints. Without a
+    clock ordering the option is inert and the legacy page stays unchanged.
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
@@ -563,6 +568,8 @@ def projection_page(
             .order_by('committed_at')
             .order_by('__name__')
         )
+    if exclude_async and due_before is not None:
+        query = query.where(PROJECTION_FINISH_DUE_FIELD, '>=', 0.0)
     seeded = after is not None and len(after) == 2 and after[1] == ''
     if cutoff is not None:
         if after is not None and len(after) == 3:

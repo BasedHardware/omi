@@ -1110,3 +1110,20 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def projection_finish_async_skip_enabled() -> bool:
+    """Ship-on: async receipts belong only to the independent follow-up drain."""
+    return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')
+
+
+PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 8
+
+
+def projection_finish_classify_page_limit() -> int:
+    """Bound legacy clock updates per page/process; zero pauses classification."""
+    try:
+        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '8'))
+    except ValueError:
+        return PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT
+    return value if 0 <= value <= 16 else PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT

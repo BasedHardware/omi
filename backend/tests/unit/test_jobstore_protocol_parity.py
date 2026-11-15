@@ -22,6 +22,8 @@ from database.batch_pipeline_projection_followup_backfill import (
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from testing.pipeline_sim.postgres_store import PgSimStore
 from testing.pipeline_sim.store import SimStore, SimTransaction
+from testing.pipeline_sim.projection_drain import ChainLog
+from tests.unit.test_batch_pipeline_owner_chain_projection import ResultLog
 
 
 def _public(cls) -> set[str]:
@@ -71,8 +73,11 @@ def test_pg_sim_forwards_the_due_page_cursor(clock):
     store.pg.projection_page.return_value = (['a'], (10.0, 3.0, 'a'))
     cutoffs = dict(due_before=None, followup_due_before=None)
     cutoffs[clock] = 10.0
-    assert store.projection_page(1, after=(5.0,), states=('ready',), **cutoffs) == (['a'], (10.0, 3.0, 'a'))
-    store.pg.projection_page.assert_called_once_with(1, after=(5.0,), states=('ready',), **cutoffs)
+    assert store.projection_page(1, after=(5.0,), states=('ready',), exclude_async=False, **cutoffs) == (
+        ['a'],
+        (10.0, 3.0, 'a'),
+    )
+    store.pg.projection_page.assert_called_once_with(1, after=(5.0,), states=('ready',), exclude_async=False, **cutoffs)
 
 
 @pytest.mark.parametrize('backend', [PostgresStore, SimStore])
@@ -183,6 +188,50 @@ def test_sim_followup_clock_filters_and_resumes_equal_clock_rows_independently()
     assert store.projection_page(2, after=after, states=('ready',), followup_due_before=10.0) == (['b'], None)
     assert store.projection_page(10, states=('ready',), due_before=10.0) == (['legacy', 'future'], None)
     assert store.projection_page(10, states=('ready',))[0] == ['legacy', 'future', 'a', 'b']
+
+
+@pytest.mark.parametrize('backend', [SimStore, ChainLog, ResultLog])
+def test_async_finish_exclusion_does_not_hide_independent_followup_work(backend):
+    store = object.__new__(backend)
+    rows = {
+        ('results', 'async'): dict(
+            projection_state='ready',
+            committed_at=3.0,
+            projection_followup_due_at=10.0,
+            projection_finish_due_at=-1.0,
+        ),
+        ('results', 'sync'): dict(
+            projection_state='ready',
+            committed_at=4.0,
+            projection_followup_due_at=20.0,
+            projection_finish_due_at=10.0,
+        ),
+    }
+    if backend is SimStore:
+        store.rows = rows
+    else:
+        store.results = {key: value for (_, key), value in rows.items()}
+        if backend is ChainLog:
+            store.lanes = Mock()
+    assert store.projection_page(10, due_before=float('inf'), exclude_async=True) == (['sync'], None)
+    assert store.projection_page(10, followup_due_before=10.0, exclude_async=True) == (['async'], None)
+    assert store.projection_page(10, due_before=10.0) == (['async', 'sync'], None)
+    assert store.projection_page(1, after=(10.0,), followup_due_before=10.0) == (['async'], (10.0, 3.0, 'async'))
+    with pytest.raises(ValueError, match='cannot be combined'):
+        store.projection_page(due_before=10.0, followup_due_before=20.0)
+
+
+@pytest.mark.parametrize('clock', ['due_before', 'followup_due_before'])
+def test_postgres_async_lower_bound_only_applies_to_finish_ordering(clock):
+    store = object.__new__(PostgresStore)
+    store.namespace = 'batch_pipeline_test_clock'
+    connection = MagicMock()
+    connection.execute.return_value.fetchall.return_value = []
+    store._read_conn = MagicMock()
+    store._read_conn.return_value.__enter__.return_value = connection
+    assert store.projection_page(10, exclude_async=True, **{clock: 10.0}) == ([], None)
+    statement, _ = connection.execute.call_args.args
+    assert ('>= 0' in statement) is (clock == 'due_before')
 
 
 @pytest.mark.parametrize(

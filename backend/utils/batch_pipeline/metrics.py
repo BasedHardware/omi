@@ -41,6 +41,14 @@ PROJECTION_FINISH_COMPLETED = Counter(
     'omi_batch_projection_finish_completed_total',
     'Finish-page rows completed by the projection sweep',
 )
+PROJECTION_FINISH_CLASSIFIED = Counter(
+    'omi_batch_projection_finish_classified_total',
+    'Legacy async finish clocks successfully classified by the sweep',
+)
+PROJECTION_FINISH_CLASSIFICATION_FAILURES = Counter(
+    'omi_batch_projection_finish_classification_failures_total',
+    'Legacy async finish clock classification attempts that raised; rows remain eligible',
+)
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )

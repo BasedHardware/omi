@@ -409,6 +409,10 @@
     "BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED": {
       "seeded": "2026-10-25"
     },
+    "BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT": {
+      "owner": "firestore-lead / SCA-2280",
+      "review_by": "2026-12-14"
+    },
     "BATCH_PULL_BUSY_BORROW_ENABLED": {
       "owner": "cl2-gpueff / batch rollout lead",
       "review_by": "2026-12-04"
