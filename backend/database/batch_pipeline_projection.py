@@ -13,6 +13,8 @@ from typing import Any
 from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
+from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
 from database.batch_pipeline_shadow_hook import mirror_refresh
@@ -41,6 +43,8 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.processing_hold import MAX_HOLD_SECONDS
+from utils.sync import processing_hold
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
@@ -396,6 +400,43 @@ class ProjectionStore:
             session.guard(transaction, output_ids)
             if receipt.get('state') == 'ready':
                 return None
+            complete_notes = (
+                session.job.get('record_notes_after_complete') is True
+                or session.ledger.get('record_notes_after_complete') is True
+            )
+            if complete_notes or record_notes_eager_enabled() and recent_native_record_notes(session.job, now):
+                # One recording-wide dispatch is owned by complete(), after
+                # every sibling receipt is ready in that same transaction.
+                # A missing/held sibling must not strand this owner forever.
+                # Reuse the normal settle deadline for one durable fallback
+                # per canonical output; completion can advance it to now.
+                # Do not renew the fallback as each later sibling projects.
+                prepared = set(session.ledger.get('record_notes_fallback_outputs') or [])
+                remaining = [cid for cid in output_ids if cid not in prepared]
+                result = None
+                if remaining:
+                    output_id = remaining[0]
+                    result = outbox.enqueue(
+                        reprocess.key(binding.owner_id, output_id),
+                        binding.owner_id,
+                        {'conversation_id': output_id, 'language': language},
+                        now + min(settle_seconds(), MAX_HOLD_SECONDS),
+                        tx=_ClientTransaction(self.client, transaction),
+                        now=now,
+                        coalesce='min',
+                        snapshot_summary=True,
+                        eager_if_unheld=True,
+                    )
+                    transaction.update(
+                        session.ledger_ref,
+                        {
+                            'record_notes_after_complete': True,
+                            'record_notes_fallback_outputs': sorted(prepared | {output_id}),
+                        },
+                    )
+                finished = len(remaining) <= 1
+                receipt.update(state='ready' if finished else 'persisted', record_notes_deferred=True)
+                return result, finished, session.write_receipt(transaction, receipt)
             backfill = session.job.get('priority') != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
@@ -426,7 +467,7 @@ class ProjectionStore:
             result, finished, sibling_held = committed
             if sibling_held:
                 log_projection_hold('sibling')
-            if result.wake_token:
+            if result is not None and result.wake_token:
                 outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
             if finished:
                 break
@@ -644,10 +685,12 @@ class ProjectionStore:
         """Complete only after every bound sibling persisted and marked enrichment."""
         policy = policy or self.policy(segment_id)
         coalescing_receipts: list[tuple[str, str]] = []
+        notes_wakes = []
 
         @firestore.transactional
         def commit(transaction):
             coalescing_receipts.clear()
+            notes_wakes.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             members = coalescing_completion.prepare(
@@ -688,7 +731,8 @@ class ProjectionStore:
             # This is a job-wide decision after collecting every sibling/part.
             # A no-text receipt must suppress IDs from parts assigned earlier.
             source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
-            new, updated = self._visible(transaction, binding, receipts)
+            conversation_rows = {}
+            new, updated = self._visible(transaction, binding, receipts, rows_out=conversation_rows)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
             deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
@@ -763,6 +807,90 @@ class ProjectionStore:
             )
             if seconds != accounting['seconds']:
                 raise ProjectionBlocked('speech accounting changed during completion')
+            if (
+                not source_deleted
+                and any(receipt.get('record_notes_deferred') for receipt in receipts)
+                and (new or updated)
+            ):
+                from config.sync_reprocess import settle_seconds
+                from database.outbox_firestore import FirestoreEnrichmentOutbox
+                from utils.enrichment import outbox as reprocess
+
+                outbox = FirestoreEnrichmentOutbox(self.client)
+                notes_writes = []
+                prepared = set(session.ledger.get('record_notes_prepared_outputs') or [])
+                outputs = sorted(set(new + updated) - prepared)
+                # Up to 128 siblings also need two completion writes each.
+                # Bound output writes so a size rollover cannot exceed the
+                # Firestore commit ceiling. Ready receipts remain discoverable.
+                for canonical in outputs[:128]:
+                    row = conversation_rows.get(canonical) or {}
+                    hold = row.get('sync_processing_hold') or {}
+                    producer_ready = (
+                        bool(row.get('record_audio_closed'))
+                        and not row.get('record_audio_partial')
+                        and not row.get('record_upload_failed')
+                        and (
+                            session.job.get('record_input_upload_revision') is None
+                            or session.job['record_input_upload_revision'] == row.get('record_upload_revision')
+                        )
+                    )
+                    if producer_ready:
+                        try:
+                            require_record_audio_barrier(row)
+                        except ValueError:
+                            producer_ready = False
+                    eager = (
+                        record_notes_eager_enabled()
+                        and recent_native_record_notes(session.job, now)
+                        and not hold.get('held')
+                        and producer_ready
+                    )
+                    due_at = now if eager else now + settle_seconds()
+                    hold_owns_delay = producer_ready and processing_hold.FIELD in row
+                    if hold_owns_delay:
+                        # The transcript arrival already started this clock.
+                        # Do not add another settle after its absolute deadline.
+                        # Only clocks are needed here: raw Firestore transcript
+                        # fields may be encrypted. The consumer owns fingerprints.
+                        _, held_until = (
+                            processing_hold.admission(
+                                {
+                                    'finished_at': row.get('finished_at'),
+                                    'smart_merge': row.get('smart_merge') or {},
+                                    processing_hold.FIELD: {
+                                        key: hold.get(key)
+                                        for key in ('pending_since', 'last_content_at', 'upload_watermark_at')
+                                    },
+                                },
+                                {'first_pending_at': now},
+                                now=now,
+                            )
+                            if processing_hold.enabled_for(row)
+                            else ('ready', None)
+                        )
+                        due_at = now if held_until is None else held_until
+                    wake = outbox.enqueue(
+                        reprocess.key(binding.owner_id, canonical),
+                        binding.owner_id,
+                        {'conversation_id': canonical, 'language': binding.language or row.get('language') or 'en'},
+                        due_at,
+                        tx=_ClientTransaction(self.client, transaction),
+                        now=now,
+                        coalesce='min' if eager or hold_owns_delay else 'max',
+                        snapshot_summary=True,
+                        eager_if_unheld=eager,
+                        pending_writes=notes_writes,
+                    )
+                    if wake.wake_token:
+                        notes_wakes.append((outbox, wake.row_id, wake.wake_token))
+                for ref, row in notes_writes:
+                    transaction.set(ref, row)
+                if len(outputs) > 128:
+                    transaction.update(
+                        session.ledger_ref, {'record_notes_prepared_outputs': sorted(prepared | set(outputs[:128]))}
+                    )
+                    return None, False, 0
             if not source_deleted:
                 self._commit_usage(transaction, session.ledger_ref, session.ledger, binding, accounting, seconds, now)
             from database.sync_ledger import complete_batch_projection_in_transaction
@@ -791,6 +919,8 @@ class ProjectionStore:
 
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
+        for outbox, row_id, token in notes_wakes:
+            outbox.wake(row_id, token)
         self._mirror(binding, coalescing_receipts)
         if result is not None and result.get('reason_code') != 'source_deleted':
             self._settle_allowance(binding, now, accounting, binding.segment_ids)
@@ -803,7 +933,7 @@ class ProjectionStore:
         return result
 
     def _visible(
-        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False
+        self, transaction, binding: ProjectionBinding, receipts, *, source_deleted=False, rows_out=None
     ) -> tuple[list[str], list[str]]:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
@@ -834,6 +964,8 @@ class ProjectionStore:
                 if not row or (row.get('deleted') and not row.get('sync_merged_into')):
                     raise ProjectionBlocked('projected conversation deleted')
                 if not row.get('sync_merged_into'):
+                    if rows_out is not None:
+                        rows_out[cid] = row
                     break
                 cid = row['sync_merged_into']
             if cid:

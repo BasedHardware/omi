@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -599,6 +599,38 @@ def test_drain_step_holds_the_owner_claim_and_skips_only_the_pre_checks(claims):
     assert log.prechecks == 0
     # One claim for the whole step, not one per row.
     assert claims.entered == [owner_key(BURST)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['recent', 'old', 'multipart', 'partial', 'upload', 'off', 'wake_error'])
+async def test_recent_single_record_followup_wakes_at_persist_without_discovery(monkeypatch, case):
+    monkeypatch.setenv('RECORD_FOLLOWUP_WAKE_ENABLED', 'false' if case == 'off' else 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 2 if case == 'multipart' else 1)
+    for sid in ids:
+        log.jobs[sid].update(
+            fresh_capture=True,
+            record_finished_at=1000 - (1801 if case == 'old' else 700),
+            projection_binding={'native_record': case != 'upload', 'partial_record': case == 'partial'},
+        )
+    projector = projector_for(log)
+    projector.clock = lambda: 1000
+    projector.start_followups = AsyncMock()
+    if case == 'wake_error':
+        projector.start_followups.side_effect = RuntimeError('synthetic wake failure')
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        assert log.persist_order == ids
+        if case in {'recent', 'wake_error'}:
+            projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+        else:
+            projector.start_followups.assert_not_awaited()
+        # Queued wakes need no duplicate hint; rollback retains the old hints.
+        # The result receipt remains durable in either case.
+        assert projector.chain_followups == ([] if case == 'recent' else ids)
+    finally:
+        drains.close()
 
 
 def test_drain_off_walk_keeps_every_pre_check(monkeypatch):

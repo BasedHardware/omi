@@ -167,6 +167,10 @@ spec:
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.
             - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
+            - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | quote }}}
+            - {name: RECORD_NOTES_EAGER_ENABLED, value: {{ .Values.worker.RECORD_NOTES_EAGER_ENABLED | quote }}}
+            - {name: RECORD_FOLLOWUP_WAKE_ENABLED, value: {{ .Values.worker.RECORD_FOLLOWUP_WAKE_ENABLED | quote }}}
+            - {name: RECORD_SEAL_WAKE_PRESERVED_ENABLED, value: {{ .Values.worker.RECORD_SEAL_WAKE_PRESERVED_ENABLED | quote }}}
             - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
