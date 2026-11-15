@@ -55,6 +55,7 @@ import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.staging_fence import jobstore_mirror_factory_admits
 from database.jobstore.cohort import production_policy_applies, project_document
+from database.jobstore.copy_connections import copy_pools
 
 logger = logging.getLogger(__name__)
 
@@ -292,11 +293,13 @@ class DualStore:
         budget_s: float = BUDGET_S,
         queue_limit: int = QUEUE_LIMIT,
         inline: bool = False,
+        erasure_pool: Any = None,
     ):
         if getattr(primary, 'namespace', None) != getattr(shadow, 'namespace', None):
             raise ValueError('primary and shadow must share one namespace')
         self.primary = primary
         self.shadow = shadow
+        self.erasure_pool = erasure_pool
         self.budget_s = budget_s
         self.inline = inline  # single-threaded harnesses mirror in the caller, deterministically
         self._queue: queue.Queue = queue.Queue(maxsize=queue_limit)
@@ -545,14 +548,15 @@ class DualStore:
         return sorted(rows)
 
     def _reconcile_owner(self, owner_id: str) -> list[tuple[str, str]]:
-        with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+        pool = self.shadow.pool if self.erasure_pool is None else self.erasure_pool
+        with pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
             with conn.transaction():
                 conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
                 # Exclusive barrier: in-flight copies that read the pre-purge primary commit first.
                 conn.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))', (self._purge_barrier(),))
                 rows = self.owner_rows(conn, owner_id)
         for start in range(0, len(rows), PURGE_CHUNK):
-            with self.shadow.pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
+            with pool.connection(timeout=PURGE_TIMEOUT_S) as conn:
                 with conn.transaction():
                     conn.execute(f'SET LOCAL statement_timeout = {int(PURGE_TIMEOUT_S * 1000)}')
                     self.copy_current(conn, rows[start : start + PURGE_CHUNK])
@@ -845,12 +849,10 @@ class _ErasurePrimary:
 def shadow_from_env(primary: Any) -> Any:
     """``primary`` unchanged unless shadow/index mode and an explicit mirror target are configured.
 
-    Fails closed to Firestore-only: any other mode, an unadmitted namespace/context, a missing
-    setting, or an image
-    without the Postgres driver returns
-    ``primary`` and logs why. One ``DualStore`` (one mirror thread, one pool) serves each namespace per
-    process, so call sites that build a store per call share it. No Postgres connection is opened here
-    (the pool dials lazily).
+    Falls back to ``primary`` if mode, namespace/context, target or driver is unavailable.
+    One ``DualStore`` (one mirror thread) serves each namespace per process.
+    All namespaces and cold erasure calls share the process's fixed target pools: two normal connections
+    and one reserved for erasure. No Postgres connection is opened here (the pools dial lazily).
     """
     mode = os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower()
     if mode not in {'shadow', 'index'}:
@@ -886,11 +888,11 @@ def _configured_copy(primary: Any) -> DualStore | None:
         raise RuntimeError('incomplete jobstore purge target configuration')
     if importlib.util.find_spec('psycopg') is None:
         raise RuntimeError('jobstore purge target configured without Postgres driver')
-    from database.jobstore.connection import Pool, iam_connector
     from database.jobstore.postgres_store import PostgresStore
 
-    pool = Pool('', size=2, connect=iam_connector(*target))
-    return DualStore(primary, PostgresStore(primary.namespace, pool=pool, customer_client=None))
+    pools = copy_pools(*target)
+    shadow = PostgresStore(primary.namespace, pool=pools.normal, customer_client=None)
+    return DualStore(primary, shadow, erasure_pool=pools.erasure)
 
 
 def purge_owner(namespace: str, owner_id: str) -> int:
@@ -914,10 +916,9 @@ def purge_owner(namespace: str, owner_id: str) -> int:
     store = _configured_copy(primary)
     if store is None:
         return 0
-    try:
-        return store.purge_owner_now(owner_id)
-    finally:
-        store.shadow.pool.close()
+    # These pools are process-owned, including cold/mode-off erasure. Closing one
+    # here would invalidate other namespaces and concurrent retryable purges.
+    return store.purge_owner_now(owner_id)
 
 
 def mirror_refresh(namespace: str, keys) -> None:
