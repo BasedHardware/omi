@@ -1,0 +1,16 @@
+id: mute/unmute-write-failure-stays-muted
+summary: An unmute whose NVS write fails leaves the pendant muted (already fail-closed in 3.0.23).
+committee: [7]
+tags: [guard]
+faults:
+  - {op: settings_save, key: omi/muted, rc: -5, boots: [1]}
+timeline:
+  - {t: 3000, app_mute: 1}
+  - {t: 6000, power: cycle}
+  - {t: 9000, app_mute: 0}
+end: 12000
+expect:
+  boots:
+    - {muted: 1}
+    - {muted: 1, should_capture: false, sd_paused: true}
+  invariants: [mute-blocks-capture]

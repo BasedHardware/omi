@@ -201,6 +201,16 @@ class DirectoryStore:
             > 0
         )
 
+    def is_active_owner(self, space_id: str, uid: str) -> bool:
+        with self.pool.connection() as conn:
+            return (
+                conn.execute(
+                    "SELECT 1 FROM memberships WHERE space_id=%s AND uid=%s AND state='active' AND role='owner'",
+                    (space_id, uid),
+                ).fetchone()
+                is not None
+            )
+
     def memberships_for_space(self, space_id: str, *, active_only: bool = True) -> list[Membership]:
         with self.pool.connection() as conn:
             rows = conn.execute(

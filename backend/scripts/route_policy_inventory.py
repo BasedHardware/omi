@@ -52,6 +52,7 @@ AUTH_MECHANISMS = {
     'firebase_id_token',
     'admin_key',
     'beta_promotion_token',
+    'codemagic_submission_token',
     'desktop_preview_publish_key',
     'admin_key_uid_prefix',
     'developer_api_key',
@@ -199,7 +200,7 @@ def _timeout_class_for_path(path: str, paths_timeout: dict[str, Any]) -> str:
         return 'sync_job'
     if path == '/v2/audio-merge-jobs/run':
         return 'audio_merge'
-    if path == '/v1/users/account-deletion-wipes/run':
+    if path in {'/v1/users/account-deletion-wipes/run', '/v1/conversations/deletion-batch-purges/run'}:
         return 'account_deletion_wipe'
     if path == '/v1/conversation-finalization-jobs/run':
         return 'listen_finalization'

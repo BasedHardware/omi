@@ -84,14 +84,22 @@ class WorkItem:
     # CPU admission provenance, never inferred from record-origin speaker scopes.
     timing_store: str | None = None
     language_receipt_enabled: bool | None = None
+    # Frozen admission provenance; a receipt-clock span cannot bind by time.
+    capture_time_trust: str | None = None
+    # Privacy-only source authority; never an assignment target or ordering hint.
+    capture_source_conversation_id: str | None = None
 
-    def to_dict(self):
-        """Serialize optional receipt state without widening legacy job documents."""
+    def to_dict(self, *, include_nulls: bool = False):
+        """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict
 
         value = asdict(self)
-        if self.language_receipt_enabled is None:
+        if not include_nulls and self.language_receipt_enabled is None:
             value.pop('language_receipt_enabled')
+        if self.capture_time_trust is None:
+            value.pop('capture_time_trust')
+        if self.capture_source_conversation_id is None:
+            value.pop('capture_source_conversation_id')
         return value
 
     def __post_init__(self):
@@ -111,6 +119,12 @@ class WorkItem:
             not self.conversation_id or len(self.conversation_id) > 128 or '/' in self.conversation_id
         ):
             raise ValueError('conversation_id must be a bounded opaque ID')
+        if self.capture_source_conversation_id is not None and (
+            not self.capture_source_conversation_id
+            or len(self.capture_source_conversation_id) > 128
+            or '/' in self.capture_source_conversation_id
+        ):
+            raise ValueError('capture source must be a bounded same-owner conversation ID')
         if self.privacy_generation is not None and (
             type(self.privacy_generation) is not int or self.privacy_generation < 0
         ):
@@ -121,6 +135,8 @@ class WorkItem:
             raise ValueError('shadow must be boolean')
         if self.language_receipt_enabled is not None and self.language_receipt_enabled is not True:
             raise ValueError('language_receipt_enabled must be true or absent')
+        if self.capture_time_trust not in (None, 'untrusted'):
+            raise ValueError('capture_time_trust must be untrusted or absent')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')

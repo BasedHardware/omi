@@ -19,6 +19,9 @@ from database import episodes, episode_batch_pending
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.fragment_visibility import is_relevance_discarded
 
+# The admission attach's distinct refusal: the audio close already owns the member.
+ADMISSION_CLOSED = 'closed'
+
 
 def _automatic(row):
     return (
@@ -158,7 +161,10 @@ def attach(
     transaction=None,
     fence_row=None,
     pending_at=None,
-):
+    deadline_floor=None,
+    detach_from=None,
+    admission=False,
+) -> dict[str, Any] | str | None:
     """One fenced transaction, or None when an established boundary owns intake."""
     client = firestore_client
     root = client.collection('users').document(uid)
@@ -166,11 +172,27 @@ def attach(
     fence = root.collection('episode_links').document('recorded_timeline')
 
     def commit(transaction):
+        if admission:
+            # Read the member inside the same transaction as the attach. The
+            # scheduled admission task may run after the audio close committed;
+            # in that case the close-time window is final, and the admission's
+            # stale provisional bounds must never re-enter placement.
+            member = root.collection('conversations').document(cid).get(transaction=transaction).to_dict() or {}
+            if episode_batch_pending.audio_finalized(member):
+                return ADMISSION_CLOSED
         revision = fence_row if fence_row is not None else (fence.get(transaction=transaction).to_dict() or {})
         linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
-        pending_patch = episode_batch_pending.read_patch(transaction, client, uid, cid, pending_at)
-        if linked.get('episode_id'):
-            owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
+        pending_patch = episode_batch_pending.read_patch(
+            transaction, client, uid, cid, pending_at, deadline_floor=deadline_floor
+        )
+        linked_owner = linked.get('episode_id')
+        if detach_from and linked_owner == detach_from:
+            # The close is moving this member out of its provisional owner. Place
+            # it in the episode the real window selects, then remove the stale
+            # membership in the same transaction.
+            linked_owner = None
+        if linked_owner:
+            owner = collection.document(linked_owner).get(transaction=transaction).to_dict() or {}
             if not _automatic(owner):
                 return None
             # Proof is written only by a complete canonical repartition. A note,
@@ -196,14 +218,25 @@ def attach(
                 span = conversation_span(member) if member and pending_at is None else None
                 # Before transcription, committed archive bounds are the only
                 # audio clock. Legacy started_at/finished_at can be arrival time.
+                # An admission attach has no committed bounds yet: its stored
+                # provisional fact already matched above, so a replay of the same
+                # window is the same span and must not bump the episode. Once the
+                # audio close has finalized the member, that closed membership is
+                # already placed and must never re-enter placement with the stale
+                # provisional window.
                 same_span = (
-                    episode_batch_pending.matches_closed_audio(member, start, end)
-                    if pending_at is not None
-                    else span is not None and span.recorded_start == start and span.recorded_end == end
+                    True
+                    if admission
+                    else (
+                        episode_batch_pending.matches_closed_audio(member, start, end)
+                        or member.get('server_batch_audio_closed') is not True
+                        if pending_at is not None
+                        else span is not None and span.recorded_start == start and span.recorded_end == end
+                    )
                 )
                 if (
                     same_span
-                    and member.get('episode_id') == linked['episode_id']
+                    and member.get('episode_id') == linked_owner
                     and member.get('source') == source
                     and not is_relevance_discarded(member)
                     and not any(member.get(k) for k in ('deleted', 'sync_merged_into'))

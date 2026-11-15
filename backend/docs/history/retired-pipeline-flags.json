@@ -1,4 +1,8 @@
 {
+  "SYNC_BACKFILL_INFLIGHT_LIMIT": {
+    "on": "2026-11-08",
+    "replaced_by": "PROJECTION_DRAIN_LIVE_TARGET_BACKOFF"
+  },
   "SYNC_LEGACY_FRESH_BURST_TOKENS": {
     "on": "2026-11-06",
     "replaced_by": null

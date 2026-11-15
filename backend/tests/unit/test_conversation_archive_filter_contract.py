@@ -158,8 +158,9 @@ def conversations_db():
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
     from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
-    from database import sync_live_overlap
-    from utils.sync import live_overlap
+    from database import sync_live_overlap, transcript_pointer
+    from utils.sync import live_overlap, stage
+    from utils.home_feed import projection as home_feed_projection
 
     firestore = _Firestore([])
 
@@ -224,7 +225,13 @@ def conversations_db():
         # Archive reads do not execute sync admission. Keep the real pure
         # overlap policy and discovery seam loaded before closing utils paths.
         "database.sync_live_overlap": sync_live_overlap,
+        # Load the real codec before closing utils.other; archive query tests do
+        # not execute transcript IO, but its module dependencies must stay real.
+        "database.transcript_pointer": transcript_pointer,
         "utils.sync.live_overlap": live_overlap,
+        # The write-only restore-obligation lookup imports the real stage
+        # helper; load its env-loader dependency before closing utils paths.
+        "utils.sync.stage": stage,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
         # Archive queries never invoke the separate speaker publication/revocation IO seam.
         "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
@@ -236,6 +243,7 @@ def conversations_db():
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
         "utils.conversations.transcribing_hold": transcribing_hold,
@@ -337,7 +345,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
     }
 
 
-def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
+def test_archive_filter_precedes_pagination_and_matches_count(conversations_db, monkeypatch):
     module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
@@ -382,6 +390,26 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         "offset",
         "stream",
     ]
+
+    # The actual slim query must keep the evidence needed by both old-client wires.
+    # Reuse this query fixture so the contract adds no heavy import/setup per test.
+    model = ModuleType('models.conversation')
+    model.Conversation = SimpleNamespace(model_fields={})
+    monkeypatch.setitem(sys.modules, 'models.conversation', model)
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    module.get_conversations_without_photos('user-1', list_fields_only=True)
+    assert {
+        'record_transcription_empty',
+        'record_projection_revision',
+        'home_transcription_pending_at',
+        'episode_transcription_pending_at',
+        'server_batch_audio_closed',
+        'server_batch_audio_start',
+        'server_batch_audio_end',
+        'record_audio_closed',
+        'record_upload_sessions',
+        'record_audio_partial',
+    } <= set(firestore.queries[-1].selected_fields)
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):

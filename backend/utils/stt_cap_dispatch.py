@@ -18,7 +18,7 @@ from config.stt_cap_dispatch import (
     offline_admission_enabled,
     LANES,
 )
-from config.ladder_v1 import budget_enforcement_enabled
+
 from utils.observability.stt_cap_dispatch import (
     allowance_decision_reason,
     record_audio,
@@ -28,6 +28,7 @@ from utils.observability.stt_cap_dispatch import (
 )
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
+from utils import backfill_hours_cap
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def customer_funded(provider):
 _UNRESOLVED = object()
 
 
-def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
+def _funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None):
     # Streaming imports this module even with enforcement off. Load billing
     # policy only at the admission boundary, not during provider-module import.
     from utils.subscription import resolve_transcription_allowance, TranscriptionAllowance
@@ -84,18 +85,43 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
+def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESOLVED, lane=None, backfill=False):
+    """The funded-STT allowance, then the default-off unlimited_v2 backfill day cap.
+
+    ``backfill`` marks an admission as historical/import work (the sync and batch
+    ``backfill`` lanes). Only those admissions are capped; live listen and fresh
+    capture never pass it, so live capture is untouched. The cap is evaluated on
+    every managed backfill answer, independent of the legacy dispatch scope, so
+    the same refusal reaches sync and batch admission.
+    """
+    allowance = _funded_allowance(uid, source=source, usage_cache=usage_cache, subscription=subscription, lane=lane)
+    if not backfill:
+        return allowance
+    return backfill_hours_cap.refuse(uid, allowance, plane=lane or 'sync')
+
+
 class CapAllowanceDenied(Exception):
     """A spend refusal, handled as durable audio custody rather than STT failure."""
 
 
 def sync_admission(
-    uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync', path: DispatchPath | None = None
+    uid: str,
+    seconds: float = 0,
+    provider: Any = 'unknown',
+    *,
+    lane: str = 'sync',
+    path: DispatchPath | None = None,
+    backfill: bool = False,
 ) -> tuple[bool, str]:
     """``sync_allowed`` with the bounded DispatchReason surfaced for durable per-unit decisions."""
     if lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
     path = path or (DispatchPath.BATCH_GPU if lane == 'batch' else DispatchPath.SYNC_SEGMENT)
-    if not offline_admission_enabled(uid, lane):
+    # The backfill day cap is independent of the legacy/offline dispatch scope:
+    # when it is on, a backfill admission still resolves the allowance so the
+    # cap can answer even on a host that has the older scope switched off.
+    cap_active = backfill and backfill_hours_cap.cap_enabled()
+    if not offline_admission_enabled(uid, lane) and not cap_active:
         allowed, reason = True, DispatchReason.SCOPE_DISABLED
     elif customer_funded(provider):
         allowed, reason = True, DispatchReason.BYOK
@@ -105,7 +131,7 @@ def sync_admission(
         if not funded_processing.consent_allows(uid):
             allowed, reason = False, DispatchReason.CONSENT_DENIED
         else:
-            allowance = funded_allowance(uid, lane=lane)
+            allowance = funded_allowance(uid, lane=lane, backfill=backfill)
             if not allowance.managed:
                 record_audio(lane, 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
             allowed, reason = allowance.managed, allowance_decision_reason(allowance)
@@ -114,9 +140,15 @@ def sync_admission(
 
 
 def sync_allowed(
-    uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync', path: DispatchPath | None = None
+    uid: str,
+    seconds: float = 0,
+    provider: Any = 'unknown',
+    *,
+    lane: str = 'sync',
+    path: DispatchPath | None = None,
+    backfill: bool = False,
 ) -> bool:
-    return sync_admission(uid, seconds, provider, lane=lane, path=path)[0]
+    return sync_admission(uid, seconds, provider, lane=lane, path=path, backfill=backfill)[0]
 
 
 HELD_SPAN_MERGE_GAP_SECONDS = 0.5
@@ -156,10 +188,6 @@ class LiveAdmission:
         # excludes their overlap with its billable window: held audio is metered
         # once, by recovery, when it is actually transcribed.
         self.held_spans: list[list[float]] = []
-        if budget_enforcement_enabled():
-            from database.usage_units_session import UsageUnitsSession
-
-            self.usage_cache = UsageUnitsSession()
 
     def refresh_due(self):
         if self.refreshed_at is None:
@@ -417,6 +445,21 @@ def live_provider(provider, rate_index):
         @wraps(fn)
         async def connect(*args, **kwargs):
             admission = current_live_admission.get()
+            from utils.byok import get_byok_uid
+            from utils.stt.allowance_watch import observe_async
+
+            from utils.stt.allowance_session import current
+
+            scope = current.get()
+            if scope is not None:
+                await scope.reserve_async(provider, customer_funded=customer_funded(provider))
+            else:
+                await observe_async(
+                    admission.uid if admission is not None else get_byok_uid(),
+                    'live_open',
+                    provider,
+                    customer_funded=customer_funded(provider),
+                )
             if admission is not None and not execution_admission_enabled(admission.uid, 'live'):
                 admission = None
             if admission is None:
@@ -457,9 +500,13 @@ def session_admission(fn):
     async def connect(self, *args, **kwargs):
         admission = getattr(self.receiver, 'cap_admission', None)
         token = current_live_admission.set(admission)
+        from utils.stt.allowance_session import current
+
+        scope_token = current.set(getattr(getattr(self.receiver, 'host', None), 'allowance_operation', None))
         try:
             return await fn(self, *args, **kwargs)
         finally:
+            current.reset(scope_token)
             current_live_admission.reset(token)
 
     return connect

@@ -12,7 +12,7 @@ from typing import Any, Mapping
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from config.plan_catalog import resolve_subscription_entitlements
-from config.ladder_v1 import enabled, budget_enforcement_enabled
+from config.ladder_v1 import enabled
 from config.rate_card import (
     budget_units,
     get_rate_card,
@@ -553,9 +553,9 @@ def get_usage_units(
 
     period selects the month. Uses one existing year/month query and at most
     two day-rollups per elapsed day in one batched RPC, without immutable attempt
-    scans. Missing records and known producer gaps make this a lower-bound shadow total. Flagged ladder
-    enforcement adds conservative residual-second and attempt estimates in memory;
-    legacy and flag-off reads retain the shadow-only total.
+    scans. Missing records and known producer gaps make this a lower-bound shadow total.
+    Standalone reads retain recorded shadow units; independent funded admission
+    owns its conservative estimates and session cache.
     """
     if period.tzinfo is None:
         raise ValueError('timezone-aware period required')
@@ -575,16 +575,12 @@ def get_usage_units(
         if promotional:
             subscription = effective_subscription_payload(subscription, data.get(GRANT_FIELD))
         entitlements = resolve_subscription_entitlements(subscription)
-    enforcing = budget_enforcement_enabled() and entitlements['entitlement_version'] == 'ladder_v1'
-    if session_cache is not None and enforcing and rate_card_version is None:
-        summary = session_cache.read(uid, period, client, entitlements)
-    else:
-        hourly, days = read_usage_month(uid, period, client, entitlements)
-        summary = summarize_usage(
-            [data for _, data in hourly],
-            [(data, api) for _, data, api in days],
-            entitlements,
-            enforcing,
-            read_versions,
-        )
-    return _render_usage(summary, entitlements, enforcing, rate_card_version=version)
+    hourly, days = read_usage_month(uid, period, client, entitlements)
+    summary = summarize_usage(
+        [data for _, data in hourly],
+        [(data, api) for _, data, api in days],
+        entitlements,
+        False,
+        read_versions,
+    )
+    return _render_usage(summary, entitlements, False, rate_card_version=version)

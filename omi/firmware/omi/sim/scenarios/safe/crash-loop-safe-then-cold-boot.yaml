@@ -1,0 +1,29 @@
+id: safe/crash-loop-safe-then-cold-boot
+summary: >
+  A transient crash loop latches SAFE; a cold power cycle afterwards gets a
+  fresh normal trial instead of SAFE forever (committee: "a transient crash
+  loop also persists SAFE, and restores it forever").
+committee: [1]
+tags: [baseline-bug]
+build: wdt-starve
+timeline:
+  - {t: 240000, power: cycle}
+end: 260000
+expect:
+  boot_count: 5
+  boots:
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: stop, safe: true, latch_reason: 1}
+    - {exit: stop, reset: power-on, safe: false, boot_count: 1, log: ["Device initialized successfully"]}
+  invariants: [no-stuck-safe]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {safe: true, latch_reason: 1}
+      - {reset: power-on, safe: true, latch_reason: 1}

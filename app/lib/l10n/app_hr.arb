@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava putem Applea nije uspjela. Pokušajte ponovno ili nastavite s Googleom.",
     "authFailedToRetrieveToken": "Dohvaćanje firebase tokena nije uspjelo, molim vas pokušajte ponovno.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "Sinkronizacija je nakratko pauzirana — nastavit će se automatski",
     "syncCardBackendBusy": "Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet",
     "unableToDetermineFirmwareVersion": "Nije moguće utvrditi trenutnu verziju firmvera",
+    "applyCodeToCurrentPlan": "Primijeni na trenutačni plan",
+    "subscriptionCodeResult": "{result, select, applied{Kod je primijenjen na vaš trenutačni plan.} refused{Ovaj kod nije moguće primijeniti. Provjerite kod i potreban plan.} conflict{Kod je već iskorišten ili vaš plan već ima popust.} rateLimited{Previše pokušaja. Pričekajte i pokušajte kasnije.} other{Kod nije moguće primijeniti. Pokušajte ponovno.}}",
     "promoCode": "Promo kod",
     "enterPromoCode": "Unesite promo kod",
     "invalidPromotionCode": "Nevažeći promo kod.",
@@ -11603,6 +11606,7 @@
     "activityAttentionStorageSubtitle": "Snimke su pauzirane",
     "activityAttentionUploadStalledTitle": "Prijenos je zastao",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čeka 1 snimka} other{Čeka {count} snimki}}",
+    "attentionRerunNotes": "Ponovno izradi bilješke",
     "attentionSummaryFailed": "Ovaj razgovor nije bilo moguće sažeti",
     "activityAttentionSemantics": "Aktivnost, zahtijeva pažnju",
     "connectAgentHeadline": "Koristite svoju Omi memoriju u ChatGPT-u i svojim AI agentima",
@@ -12193,11 +12197,19 @@
     "referralRewardSecondDetail": "Kad još 3 prijatelja kupe",
     "referralClaimShort": "Preuzmi",
     "paymentDeclinedTitle": "Vaša kartica je odbijena",
+    "paymentDeclinedMonthlyMessage": "Ažurirajte karticu ili vratite {plan} za {price} mjesečno",
     "paymentDeclinedMessage": "Ažurirajte karticu kako biste vratili {plan}",
     "hasLinkedTasksLabel": "Ima povezane zadatke",
     "hasTasksFilter": "Sa zadacima",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Prijeđi na mjesečno",
+    "monthlySwitchPlanValue": "{plan}, {price} mjesečno",
+    "monthlySwitchNote": "Zamjenjuje neplaćenu godišnju naplatu od {yearly}. Obnavlja se mjesečno. Otkažite bilo kada.",
+    "monthlySwitchDeclined": "Plaćanje je odbijeno. Vaš plan nije promijenjen.",
+    "monthlySwitchUnavailable": "Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.",
+    "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
+    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno."
 }

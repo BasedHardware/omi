@@ -285,7 +285,8 @@ class _PendingItem {
         label = l.processing,
         step = 3,
         moving = false,
-        isRecording = true;
+        isRecording = true,
+        recordingCount = 1;
 
   /// A recording block's start, or null when no device clock value in the block
   /// is plausible: a never-set clock shows no time rather than a bogus one.
@@ -300,14 +301,16 @@ class _PendingItem {
       : start = _blockStart(block),
         seconds = block.seconds,
         moving = block.state == WalSyncDisplayState.syncing,
-        isRecording = true;
+        isRecording = true,
+        recordingCount = 1;
 
   /// A stage with no recording to name yet: only the label shows.
   const _PendingItem.status({required this.label, required this.step})
       : start = null,
         seconds = 0,
         moving = false,
-        isRecording = false;
+        isRecording = false,
+        recordingCount = 0;
 
   /// Server-reported work's start, or null when unreported or before the
   /// plausibility floor (a device clock that was never set).
@@ -325,7 +328,8 @@ class _PendingItem {
         label = work.state == 'transcribing' ? l.transcribing : l.processing,
         step = work.state == 'summarizing' ? 3 : 2,
         moving = false,
-        isRecording = true;
+        isRecording = true,
+        recordingCount = work.recordingCount;
 
   final DateTime? start;
   final int seconds;
@@ -336,6 +340,7 @@ class _PendingItem {
 
   /// False only for a bare stage line with no recording behind it.
   final bool isRecording;
+  final int recordingCount;
 
   /// 1: still syncing, 2: transcribing, 3: writing the conversation, 0: failed or refused.
   final int step;
@@ -369,7 +374,7 @@ String _dayKey(DateTime day) =>
 /// "9 recordings · 1h 12m"; just the count when no length is known yet (server work).
 String _totals(List<_PendingItem> items, AppLocalizations l) {
   final seconds = items.fold(0, (s, i) => s + i.seconds);
-  final count = l.onTheWayRecordingCount(items.length);
+  final count = l.onTheWayRecordingCount(items.fold(0, (count, item) => count + item.recordingCount));
   return seconds > 0 ? '$count · ${OmiDuration.compact(seconds, l)}' : count;
 }
 

@@ -19,6 +19,8 @@ Provides shared executors with strict separation (bulkhead pattern):
 - cleanup_executor: long-running account-deletion wipes (vectors, recordings,
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
+- erasure_executor: conversation batch purges and accepted-delete erasures
+  (conversation-erasure queue), apart from account-deletion wipes.
 - storage_executor: audio file precaching, GCS operations.
 - pinecone_shutdown: lazy single-worker mutation settlement, isolated from
   provider calls and the event loop's default executor during termination.
@@ -282,6 +284,18 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# Optional read-cache checks cannot queue behind, or consume, serving DB workers.
+# Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
+free_allowance_executor = MonitoredThreadPoolExecutor(
+    name="free_allowance", max_workers=2, max_queue_size=4, thread_name_prefix="free-allowance"
+)
+read_cache_shadow_executor = MonitoredThreadPoolExecutor(
+    name="read_cache_shadow",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,  # submit still raises immediately; suppress expected rejection warnings.
+    thread_name_prefix="read-cache-shadow",
+)
 record_barrier_executor = MonitoredThreadPoolExecutor(
     name="record_barrier",
     max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
@@ -310,7 +324,27 @@ postprocess_executor = MonitoredThreadPoolExecutor(
     thread_name_prefix="postproc",
 )
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
+# Sized to the conversation-erasure queue's maxConcurrentDispatches: a delivered task
+# never waits here against its dispatch deadline, and a cleanup burst never waits in
+# front of account wipes on cleanup's four workers.
+erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -339,6 +373,8 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    free_allowance_executor,
+    read_cache_shadow_executor,
     record_barrier_executor,
     llm_executor,
     stripe_executor,
@@ -347,7 +383,10 @@ _ALL_EXECUTORS = [
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
+    erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,

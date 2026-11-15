@@ -7047,6 +7047,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Pierakstīšanās ar Apple neizdevās. Mēģiniet vēlreiz vai turpiniet ar Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.';
 
   @override
@@ -9196,6 +9200,24 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nevar noteikt pašreizējo programmaparatūras versiju';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Piemērot pašreizējam plānam';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kods piemērots jūsu pašreizējam plānam.',
+        'refused': 'Šo kodu nevar piemērot. Pārbaudiet kodu un nepieciešamo plānu.',
+        'conflict': 'Kods jau izmantots vai jūsu plānam jau ir atlaide.',
+        'rateLimited': 'Pārāk daudz mēģinājumu. Uzgaidiet un mēģiniet vēlāk.',
+        'other': 'Kodu neizdevās piemērot. Mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Reklāmas kods';
@@ -13685,6 +13707,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Izveidot piezīmes vēlreiz';
+
+  @override
   String get attentionSummaryFailed => 'Šo sarunu neizdevās apkopot';
 
   @override
@@ -15411,6 +15436,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atjauniniet karti vai atgūstiet $plan par $price mēnesī';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atjauniniet karti, lai atgūtu $plan';
   }
@@ -15435,4 +15465,31 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pāriet uz mēneša maksu';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mēnesī';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Aizstāj neapmaksāto gada maksu $yearly. Atjaunojas katru mēnesi. Atceliet jebkurā laikā.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksājums noraidīts. Jūsu plāns nav mainīts.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Tagad jūs maksājat katru mēnesi';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šodien samaksāts $price. Atjaunojas katru mēnesi.';
+  }
 }

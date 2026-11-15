@@ -16,6 +16,7 @@ from mercury_costs import (
     load_map,
     money,
     saas_rows,
+    spend_saas_rows,
 )
 
 META = [('run_id', 'STRING'), ('computed_at', 'TIMESTAMP')]
@@ -95,7 +96,7 @@ def ready_snapshot(raw: pathlib.Path, config: dict) -> dict | None:
     return snapshot
 
 
-def load(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace, bq) -> dict:
+def load(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace, bq, derived=None) -> dict:
     config = load_map()
     snapshot = ready_snapshot(raw, config)
     if snapshot is None:
@@ -128,6 +129,15 @@ def load(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_re
     window = days(start, end)
     cost_rows = saas_rows(history + snapshot['rows'], window, config)
     infra_cost_rows = infra_rows(history + snapshot['rows'], window, config)
+    if derived is not None:
+        derived.mkdir(parents=True, exist_ok=True)
+        (derived / 'mercury_run_rates.json').write_text(
+            json.dumps(
+                {'saas': spend_saas_rows(history + snapshot['rows'], window, config), 'infra': infra_cost_rows},
+                indent=1,
+            )
+            + '\n'
+        )
     metadata = {'run_id': run_id, 'computed_at': computed_at}
     vendors = [dict(row, **metadata) for row in snapshot['rows']]
     costs = [dict(row, **metadata) for row in cost_rows]

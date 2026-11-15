@@ -1,0 +1,13 @@
+id: battery/critical-not-charging-shuts-down
+summary: A sustained critical reading off the charger powers off after three samples.
+committee: [6]
+tags: [guard]
+timeline:
+  - {t: 5000, battery_mv: 3400}
+end: 60000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, log: ["Battery critical level reached", "Entering system off"]}
+  invariants: [critical-battery-respects-charger]

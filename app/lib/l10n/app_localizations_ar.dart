@@ -6978,6 +6978,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.';
 
   @override
@@ -9113,6 +9117,24 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'تعذر تحديد إصدار البرنامج الثابت الحالي';
+
+  @override
+  String get applyCodeToCurrentPlan => 'تطبيق على الخطة الحالية';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'تم تطبيق الرمز على خطتك الحالية.',
+        'refused': 'لا يمكن تطبيق هذا الرمز. تحقق من الرمز والخطة المطلوبة.',
+        'conflict': 'تم استخدام الرمز أو توجد خصومات على خطتك بالفعل.',
+        'rateLimited': 'محاولات كثيرة. انتظر وحاول لاحقًا.',
+        'other': 'تعذر تطبيق الرمز. حاول مرة أخرى.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'رمز ترويجي';
@@ -13577,6 +13599,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'إعادة إنشاء الملاحظات';
+
+  @override
   String get attentionSummaryFailed => 'تعذّر تلخيص هذه المحادثة';
 
   @override
@@ -15288,6 +15313,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paymentDeclinedTitle => 'تم رفض بطاقتك';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'حدّثها، أو استعد $plan مقابل $price شهريًا';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'حدّث بطاقتك لاستعادة $plan';
   }
@@ -15312,4 +15342,31 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'التبديل إلى الاشتراك الشهري';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، $price شهريًا';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'يحل محل الرسوم السنوية غير المدفوعة البالغة $yearly. يتجدد شهريًا. يمكنك الإلغاء في أي وقت.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'تم رفض الدفع. لم تتغير خطتك.';
+
+  @override
+  String get monthlySwitchUnavailable => 'التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'أصبحت على الدفع الشهري';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'تم دفع $price اليوم. يتجدد شهريًا.';
+  }
 }

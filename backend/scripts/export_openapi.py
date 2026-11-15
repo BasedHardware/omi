@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
+    '/v1/home',
     '/v1/import',
     '/v1/integrations',
     # Released JIT paths remain static 410 tombstones for client compatibility.
@@ -123,6 +124,7 @@ APP_CLIENT_PREFIXES = (
     '/v2/firmware',
     '/v2/initial-message',
     '/v2/messages',
+    '/v2/sync-capture-end',
     '/v2/sync-capture-manifest',
     '/v2/sync-local-files',
     '/v2/tts',
@@ -139,6 +141,10 @@ AUDITED_PUBLIC_PREFIXES = (
     '/v1/conversations',
 )
 UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
+    (
+        'POST',
+        '/v1/conversations/deletion-batch-purges/run',
+    ): 'Cloud Tasks worker on backend-sync, service OIDC only; not a browser, app or Developer API surface.',
     (
         'POST',
         '/v1/conversations/shared/chat',

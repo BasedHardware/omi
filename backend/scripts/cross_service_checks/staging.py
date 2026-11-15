@@ -43,6 +43,11 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'MCP_OAUTH_CLAUDE_CLIENT_*',
     'LADDER_V1_*_PRICE_ID',
     'SYNC_LEDGER_FENCE_MODE',
+    # Independent staging rollout inputs; prod supplies these at deploy time.
+    'RECORD_TOKEN_LEASE_MODE',
+    'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
+    'RECORD_TOKEN_LEASE_SECONDS',
+    'RECORD_TOKEN_LEASE_DEPLOYED_AT',
     # Messaging channels are prod-only (bot tokens, webhooks); staging turns them off.
     'OMI_TELEGRAM_ENABLED',
     'OMI_IMESSAGE_ENABLED',

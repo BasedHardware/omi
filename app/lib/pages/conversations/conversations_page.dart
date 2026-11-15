@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:omi/utils/local_day_rollover.dart';
 // The conversations list page: paged list with filter-keyed load-more state,
 // plus the capture-status surfaces stacked above it (processing card, held
 // audio, on-device queue banners).
@@ -23,6 +25,9 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
 import 'home_rows.dart';
+import 'home_card_rows.dart';
+import 'package:omi/providers/home_feed_provider.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'home_rows_health.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -315,6 +320,28 @@ class _ConversationsPageState extends State<ConversationsPage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  HomeFeedProvider? _feed;
+  bool _usesCards(ConversationProvider p) =>
+      _feed != null &&
+      !_feed!.unsupported &&
+      !p.hasActiveSearch &&
+      !_hasActiveFilter(p) &&
+      !p.showShortConversations &&
+      !p.showDiscardedConversations;
+  void _prefetchCards() {
+    if (!_scrollController.hasClients) return;
+    final source = context.read<ConversationProvider>();
+    _feed?.continuePreparation();
+    if (!_usesCards(source)) {
+      if (_scrollController.position.extentAfter < _scrollController.position.viewportDimension * 2) {
+        _requestMoreIfNeeded(source);
+      }
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.extentAfter < position.viewportDimension * 2 && _feed!.problem == null) unawaited(_feed!.loadMore());
+  }
+
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
@@ -338,6 +365,14 @@ class _ConversationsPageState extends State<ConversationsPage>
     final active = home.selectedIndex == HomeProvider.homeTab;
     if (active == _homeTabActive) return;
     _homeTabActive = active;
+    final source = context.read<ConversationProvider>();
+    _feed?.setActive(active &&
+        !_wasBackgrounded &&
+        !source.hasActiveSearch &&
+        !_hasActiveFilter(source) &&
+        !source.showShortConversations &&
+        !source.showDiscardedConversations);
+    if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
     // Re-entering Home releases an outage-era grouping. With nothing held,
     // a tab switch must not rebuild this page (tab_switch perf budget).
     if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
@@ -358,9 +393,19 @@ class _ConversationsPageState extends State<ConversationsPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _wasBackgrounded = true;
+      _feed?.setActive(false);
+    }
     if (state == AppLifecycleState.resumed && _wasBackgrounded) {
       _wasBackgrounded = false;
+      final source = context.read<ConversationProvider>();
+      _feed?.setActive(_homeTabActive &&
+          !source.hasActiveSearch &&
+          !_hasActiveFilter(source) &&
+          !source.showShortConversations &&
+          !source.showDiscardedConversations);
+      _scheduleDayRollover();
       if (mounted) setState(_releaseHomeLayout);
     }
   }
@@ -369,15 +414,12 @@ class _ConversationsPageState extends State<ConversationsPage>
   bool get wantKeepAlive => true;
 
   /// Rebuilds Home at local midnight so the pending row moves under the new Today.
-  Timer? _dayTimer;
+  LocalDayRollover? _dayTimer;
 
   void _scheduleDayRollover() {
-    final now = DateTime.now();
-    final next = DateTime(now.year, now.month, now.day + 1);
-    _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setState(() {});
-      _scheduleDayRollover();
+    _dayTimer?.cancel();
+    _dayTimer = LocalDayRollover(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -390,6 +432,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_prefetchCards);
     WidgetsBinding.instance.addObserver(this);
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     _wasBackgrounded = lifecycle == AppLifecycleState.paused || lifecycle == AppLifecycleState.hidden;
@@ -404,7 +447,18 @@ class _ConversationsPageState extends State<ConversationsPage>
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
       episodes?.observeHomeConversations(conversationProvider);
-      final today = DateUtils.dateOnly(DateTime.now());
+      _feed = context.read<HomeFeedProvider?>();
+      _feed?.setActive(!_wasBackgrounded && _homeTabActive);
+      if (widget.requestInitialLoad && _feed != null && _usesCards(conversationProvider)) {
+        await _feed!.start();
+        if (!mounted) return;
+        if (!_feed!.unsupported) {
+          setState(() => _isBootstrapping = false);
+          _scheduleDeferred(context.read<LocalRecordingsProvider>().refresh);
+          return;
+        }
+      }
+      final today = DateUtils.dateOnly(clock.now());
       final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
         today.subtract(const Duration(days: 7)),
         (oldest, day) => day.isBefore(oldest) ? day : oldest,
@@ -680,6 +734,30 @@ class _ConversationsPageState extends State<ConversationsPage>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
+        final feed = context.watch<HomeFeedProvider?>();
+        final cardsOn = feed != null &&
+            !feed.unsupported &&
+            !convoProvider.hasActiveSearch &&
+            !_hasActiveFilter(convoProvider) &&
+            !convoProvider.showShortConversations &&
+            !convoProvider.showDiscardedConversations;
+        if (feed != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            feed.setActive(!_wasBackgrounded &&
+                _homeTabActive &&
+                !convoProvider.hasActiveSearch &&
+                !_hasActiveFilter(convoProvider) &&
+                !convoProvider.showShortConversations &&
+                !convoProvider.showDiscardedConversations);
+            if (feed.preparationReady &&
+                feed.unsupported &&
+                (!_scrollController.hasClients || _scrollController.offset <= 20)) {
+              unawaited(feed.refresh());
+            }
+            if (cardsOn && widget.requestInitialLoad && !feed.initialized) unawaited(feed.start());
+          });
+        }
         final defaultHome = !convoProvider.hasActiveSearch &&
             !_hasActiveFilter(convoProvider) &&
             !convoProvider.showShortConversations &&
@@ -724,11 +802,48 @@ class _ConversationsPageState extends State<ConversationsPage>
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
+        if (!defaultHome && _pendingWork.homeProcessingToday) {
+          final today = localHomeDay(clock.now());
+          conversationsByDate = {
+            for (final entry in conversationsByDate.entries)
+              entry.key: [
+                for (final c in entry.value)
+                  if (!isFailedHomeConversation(c) &&
+                      (!showRecordings ||
+                          convoProvider.isSelectionModeActive ||
+                          localHomeDay(c.startedAt ?? c.createdAt) == today ||
+                          !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c))))
+                    c,
+              ],
+          };
+        }
+        final cardById = <String, HomeFeedCard>{};
+        final unknownCardDay = DateTime(1);
+        if (cardsOn) {
+          conversationsByDate = {};
+          final hidden = {...convoProvider.memoriesToDelete.keys, ...hiddenByLive};
+          for (final card in feed.items) {
+            if (card.kind == 'conversation' &&
+                (convoProvider.memoriesToDelete.containsKey(card.detailId) ||
+                    (hidden.contains(card.detailId) && card.homeStep != 'ready'))) {
+              continue;
+            }
+            if (card.kind == 'episode' && episodeLive && card.detailId == episodes?.live?.id) continue;
+            final seed = card.displaySeed();
+            cardById[seed.id] = card;
+            (conversationsByDate[card.startedAt == null ? unknownCardDay : localHomeDay(card.startedAt!)] ??= [])
+                .add(seed);
+          }
+          convoProvider.setHomeCardSelectionSeeds([
+            for (final card in feed.items)
+              if (card.kind == 'conversation') card.displaySeed(),
+          ]);
+        }
         final projectedEpisodes = <String, HomeRow>{};
-        final projectedMemberIds = <String>{};
+        final projectedMemberIds = <String>{...hiddenByLive};
         final projectedProcessingIds = <String>{};
-        if (defaultHome) {
-          final today = DateTime.now();
+        if (defaultHome && !cardsOn) {
+          final today = clock.now();
           final days = conversationsByDate.keys;
           final from = days.isEmpty
               ? DateTime(today.year, today.month, today.day - 7)
@@ -745,6 +860,15 @@ class _ConversationsPageState extends State<ConversationsPage>
           final paintEpisodes = holdingLayout
               ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
               : latestEpisodes;
+          // Home and live snapshots can disagree about the latest membership.
+          // The same live episode owns its closed members in both insertion paths.
+          for (final episode in paintEpisodes) {
+            if (episode.live &&
+                (episodeLive && episode.id == episodes?.live?.id ||
+                    episode.conversationIds.any(hiddenByLive.contains))) {
+              projectedMemberIds.addAll(episode.conversationIds);
+            }
+          }
           final listed = [for (final list in conversationsByDate.values) ...list];
           final listedIds = {for (final c in listed) c.id};
           final projected = buildHomeRows(
@@ -757,9 +881,14 @@ class _ConversationsPageState extends State<ConversationsPage>
             paintEpisodes,
             enabled: episodesOn,
             groupAwaitingTranscript: true,
+            now: clock.now(),
+            processingTodayOnly: _pendingWork.homeProcessingToday,
+            singleProcessingRow: _pendingWork.homeProcessingToday,
+            activityOnlyFailures: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
             liveConversationIds: hiddenByLive,
+            liveEpisodeId: episodeLive ? episodes?.live?.id : null,
             deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
             knownConversations: snapshot.conversations,
             processingConversations: snapshot.processingConversations,
@@ -785,6 +914,19 @@ class _ConversationsPageState extends State<ConversationsPage>
                 .map((row) => row.id));
           }
         }
+        if (defaultHome && cardsOn && _pendingWork.homeProcessingToday) {
+          final projected = buildHomeCardRows(cardById.values.toList(), snapshot.processingConversations,
+              now: clock.now(), processingTitle: context.l10n.wrappedProcessingDefault, liveIds: hiddenByLive);
+          conversationsByDate = {};
+          for (final row in projected) {
+            final card = cardById[row.conversation.id];
+            final day = card?.startedAt == null && card != null ? unknownCardDay : row.day;
+            (conversationsByDate[day] ??= []).add(row.conversation);
+            projectedMemberIds.addAll(row.episodeConversationIds);
+            if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
+            if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
+          }
+        }
         // Only the default view: a search or folder shows what it matched.
         final usage = context.watch<UsageProvider?>()?.subscription;
         final heldRecordings = showRecordings && !convoProvider.isSelectionModeActive
@@ -800,24 +942,40 @@ class _ConversationsPageState extends State<ConversationsPage>
             .toList()
           ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
-        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
-        final builtRows = _buildConversationListRows(
-          dates: mergedDates,
-          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
-          recordingsByDate: recordingsByDate,
-          heldByDate: heldByDate,
-        );
+        final hidingBackground = !cardsOn && episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final builtRows = _processingFirst(
+            _buildConversationListRows(
+              dates: mergedDates,
+              conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
+              recordingsByDate: recordingsByDate,
+              heldByDate: heldByDate,
+            ),
+            projectedProcessingIds,
+            enabled: _pendingWork.homeProcessingToday);
+        final localToday = localHomeDay(clock.now());
         final withLive =
-            episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+            episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
         // Only the default view: a search or folder shows what it matched.
-        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
+        // Default Home already projected every local entry together with server
+        // rows. A second insertion can resurrect stale ready/noise entries and
+        // bypass the one-row fold. Filtered views and rollback keep their adapter.
+        final conversationRows = showRecordings &&
+                !convoProvider.isSelectionModeActive &&
+                !(defaultHome && _pendingWork.homeProcessingToday)
             ? _withProcessingRows(
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedMemberIds.contains(c.id)) c,
+                    if ((!cardsOn ||
+                            (!cardById.containsKey(c.id) &&
+                                !cardById.values
+                                    .any((card) => card.kind == 'episode' && card.detailId == c.episodeId))) &&
+                        !projectedMemberIds.contains(c.id) &&
+                        (!_pendingWork.homeProcessingToday ||
+                            (!isFailedHomeConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
+                      c,
                 ],
-                DateTime.now())
+                clock.now())
             : withLive;
 
         if (showRecordings &&
@@ -837,6 +995,19 @@ class _ConversationsPageState extends State<ConversationsPage>
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
+            if (!cardsOn && feed?.unsupported == true) {
+              await feed!.refresh();
+              if (!feed.unsupported) return;
+              if (!context.mounted) return;
+            }
+            if (cardsOn) {
+              await Future.wait([
+                feed.refresh(),
+                context.read<LocalRecordingsProvider>().refresh(),
+                if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh()
+              ]);
+              return;
+            }
             _lastLoadMoreRequestKey = null;
             unawaited(_pendingWork.refresh());
             // Pull-to-refresh is an explicit layout boundary. Keep the held
@@ -844,7 +1015,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             // during this refresh cannot expose half of the new grouping.
             episodes?.invalidateHome();
             if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
-            final today = DateUtils.dateOnly(DateTime.now());
+            final today = DateUtils.dateOnly(clock.now());
             final from = convoProvider.groupedConversations.keys.fold<DateTime>(
               today.subtract(const Duration(days: 7)),
               (oldest, day) => day.isBefore(oldest) ? day : oldest,
@@ -905,7 +1076,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        DateListItem(date: DateUtils.dateOnly(DateTime.now()), isFirst: true),
+                        DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
                         const LiveEpisodeRow(),
                       ],
                     ),
@@ -915,9 +1086,17 @@ class _ConversationsPageState extends State<ConversationsPage>
               // never the new-account empty state. Unset (data) keeps production.
               // The skeleton is Home's only loading state: it stays up until the first
               // episode read settles, so no second loader replaces it.
-              if (_isBootstrapping || _initialOverlayPending)
+              if (cardsOn && feed.partial)
+                SliverToBoxAdapter(
+                    child: feed.items.isEmpty && feed.problem != null
+                        ? OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: feed.refresh)
+                        : OmiPartialNotice(message: context.l10n.somethingWentWrong, onRetry: feed.retry)),
+              if ((_isBootstrapping && (!cardsOn || feed.items.isEmpty)) || _initialOverlayPending)
                 _buildLoadingShimmer()
-              else if (showTypedStatus &&
+              else if (cardsOn && feed.items.isEmpty && feed.partial)
+                const SliverToBoxAdapter(child: SizedBox.shrink())
+              else if (!cardsOn &&
+                  showTypedStatus &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&
@@ -932,7 +1111,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                   !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
-                  !_hasActiveFilter(convoProvider))
+                  !_hasActiveFilter(convoProvider) &&
+                  (!cardsOn || (feed.initialized && !feed.partial)))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(
@@ -978,6 +1158,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                   delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
                     if (index == conversationRows.length) {
                       Logger.debug('loading more conversations');
+                      if (cardsOn) return feed.loading ? _buildLoadMoreShimmer() : const SizedBox(height: 20);
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
                       }
@@ -1008,6 +1189,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
+                          label: cardsOn && row.date == unknownCardDay ? context.l10n.unknown : null,
                           isFirst: row.isFirst,
                         );
                       case _ConversationListRowKind.liveEpisode:
@@ -1025,7 +1207,9 @@ class _ConversationsPageState extends State<ConversationsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
-                            ProcessingConversationRow(conversation: row.conversation!),
+                            ProcessingConversationRow(
+                                conversation: row.conversation!,
+                                step: homeStepOf(row.conversation!) ?? HomeStep.transcribing),
                           ],
                         );
                       case _ConversationListRowKind.conversation:
@@ -1035,13 +1219,14 @@ class _ConversationsPageState extends State<ConversationsPage>
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
                             episode: projectedRow?.episode,
+                            processingEpisodes: projectedRow?.processingEpisodes ?? const [],
                             step: projectedRow?.step ?? HomeStep.writingNotes,
                             count: projectedRow?.count ?? 1,
                           );
                         }
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
-                        final lockedRun = _lockedRunAt(conversationRows, index);
+                        final lockedRun = cardsOn ? null : _lockedRunAt(conversationRows, index);
                         if (lockedRun != null) {
                           if (lockedRun.isEmpty) return const SizedBox.shrink();
                           return LockedConversationRun(
@@ -1051,16 +1236,19 @@ class _ConversationsPageState extends State<ConversationsPage>
                           );
                         }
                         return ConversationListItem(
-                          key: ValueKey(row.conversation!.id),
+                          key: ValueKey(cardById[row.conversation!.id]?.id ?? row.conversation!.id),
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
+                          homeCard: cardById[row.conversation!.id],
                           date: row.date,
                           fillingSeconds: homeRowFilling(
                             filling,
                             row.conversation!.id,
                             projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
                           ),
-                          homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
+                          homeEpisode: projectedEpisodes[row.conversation!.id]?.isTemporaryMember == true
+                              ? null
+                              : projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);

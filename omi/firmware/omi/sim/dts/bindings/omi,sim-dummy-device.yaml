@@ -1,0 +1,2 @@
+description: Simulator stand-in for a bus device the application only power-manages.
+compatible: "omi,sim-dummy-device"

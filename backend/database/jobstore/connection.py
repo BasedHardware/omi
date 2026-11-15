@@ -25,6 +25,11 @@ def _psycopg():
     return psycopg
 
 
+def sql() -> Any:
+    """Return psycopg's SQL composition helpers without making the driver a package import requirement."""
+    return _psycopg().sql  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def configure(conn: Any) -> Any:
     """Per-connection setup: restore Firestore-native values (datetime, bytes) when reading jsonb."""
     from psycopg.types.json import set_json_loads  # pyright: ignore[reportMissingImports]
@@ -75,7 +80,7 @@ class Pool:
         self._closed = False
 
     @contextmanager
-    def connection(self, timeout: float = 30.0) -> Iterator[Any]:
+    def connection(self, timeout: float = 30.0, *, existing_only: bool = False) -> Iterator[Any]:
         if not self._slots.acquire(timeout=timeout):
             raise TimeoutError('job store pool exhausted')
         conn = None
@@ -83,6 +88,9 @@ class Pool:
             try:
                 conn = self._idle.get_nowait()
             except queue.Empty:
+                if existing_only:
+                    # Observers must not enter unbounded credential refresh/connection setup.
+                    raise TimeoutError('job store observation requires a warm connection')
                 conn = self._connect()
             yield conn
         except BaseException:

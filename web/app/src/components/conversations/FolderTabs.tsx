@@ -1,7 +1,17 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'lucide-react';
+import {
+  Plus,
+  Bell,
+  Star,
+  Pencil,
+  Trash2,
+  Inbox,
+  Briefcase,
+  Heart,
+  Users,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
 import { OpenSurface } from '@/components/ui/OpenSurface';
@@ -9,8 +19,10 @@ import { OpenSurface } from '@/components/ui/OpenSurface';
 // Special folder IDs for built-in tabs
 export const FOLDER_ALL = 'all';
 export const FOLDER_STARRED = 'starred';
+export const FOLDER_ACTIVITY = 'activity';
 
 interface FolderTabsProps {
+  showActivity?: boolean;
   folders: Folder[];
   selectedFolderId: string;
   onSelectFolder: (folderId: string) => void;
@@ -22,6 +34,7 @@ interface FolderTabsProps {
 
 export function FolderTabs({
   folders,
+  showActivity = false,
   selectedFolderId,
   onSelectFolder,
   onCreateFolder,
@@ -68,6 +81,15 @@ export function FolderTabs({
           isSelected={selectedFolderId === FOLDER_STARRED}
           onClick={() => onSelectFolder(FOLDER_STARRED)}
         />
+
+        {showActivity && (
+          <TabButton
+            label="Activity"
+            icon={<Bell className="h-3.5 w-3.5" />}
+            isSelected={selectedFolderId === FOLDER_ACTIVITY}
+            onClick={() => onSelectFolder(FOLDER_ACTIVITY)}
+          />
+        )}
 
         {/* User folders */}
         {folders.map((folder) => (

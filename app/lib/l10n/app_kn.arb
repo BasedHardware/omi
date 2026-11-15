@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ Google ಮೂಲಕ ಮುಂದುವರಿಯಿರಿ.",
     "authFailedToRetrieveToken": "Firebase ಟೋಕನ್ ಪುನರುದ್ಧರಣ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "ಸಿಂಕ್ ಸ್ವಲ್ಪ ಸಮಯ ನಿಲ್ಲಿಸಲಾಗಿದೆ — ಅದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಪುನರಾರಂಭಗೊಳ್ಳುತ್ತದೆ",
     "syncCardBackendBusy": "Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ",
     "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "applyCodeToCurrentPlan": "ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಅನ್ವಯಿಸಿ",
+    "subscriptionCodeResult": "{result, select, applied{ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಿದೆ.} refused{ಈ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗುವುದಿಲ್ಲ. ಕೋಡ್ ಮತ್ತು ಅಗತ್ಯ ಯೋಜನೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.} conflict{ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ ಅಥವಾ ನಿಮ್ಮ ಯೋಜನೆಯಲ್ಲಿ ಈಗಾಗಲೇ ರಿಯಾಯಿತಿ ಇದೆ.} rateLimited{ಹಲವಾರು ಪ್ರಯತ್ನಗಳು. ಸ್ವಲ್ಪ ಕಾದು ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.} other{ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.}}",
     "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
     "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ",
     "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.",
@@ -11603,6 +11606,7 @@
     "activityAttentionStorageSubtitle": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ",
     "activityAttentionUploadStalledTitle": "ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್ ಕಾಯುತ್ತಿದೆ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಕಾಯುತ್ತಿವೆ}}",
+    "attentionRerunNotes": "ಟಿಪ್ಪಣಿಗಳನ್ನು ಮತ್ತೆ ರಚಿಸಿ",
     "attentionSummaryFailed": "ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "activityAttentionSemantics": "ಚಟುವಟಿಕೆ, ಗಮನ ಬೇಕು",
     "connectAgentHeadline": "ChatGPT ಮತ್ತು ನಿಮ್ಮ AI ಏಜೆಂಟ್‌ಗಳಲ್ಲಿ ನಿಮ್ಮ Omi ಸ್ಮೃತಿಯನ್ನು ಬಳಸಿ",
@@ -12193,11 +12197,19 @@
     "referralRewardSecondDetail": "ಇನ್ನೂ 3 ಸ್ನೇಹಿತರು ಖರೀದಿಸಿದಾಗ",
     "referralClaimShort": "ಪಡೆಯಿರಿ",
     "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMonthlyMessage": "ಕಾರ್ಡ್ ನವೀಕರಿಸಿ, ಅಥವಾ {plan} ಅನ್ನು ತಿಂಗಳಿಗೆ {price} ಗೆ ಮರಳಿ ಪಡೆಯಿರಿ",
     "paymentDeclinedMessage": "{plan} ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ",
     "hasLinkedTasksLabel": "ಲಿಂಕ್ ಮಾಡಿದ ಕಾರ್ಯಗಳಿವೆ",
     "hasTasksFilter": "ಕಾರ್ಯಗಳಿವೆ",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "ಮಾಸಿಕಕ್ಕೆ ಬದಲಿಸಿ",
+    "monthlySwitchPlanValue": "{plan}, ತಿಂಗಳಿಗೆ {price}",
+    "monthlySwitchNote": "ಪಾವತಿಸದ {yearly} ವಾರ್ಷಿಕ ಶುಲ್ಕದ ಬದಲಿಗೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.",
+    "monthlySwitchDeclined": "ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಯೋಜನೆ ಬದಲಾಗಿಲ್ಲ.",
+    "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
+    "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
+    "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ."
 }

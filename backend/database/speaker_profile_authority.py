@@ -2,6 +2,7 @@
 
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
+from database import transcript_pointer
 from utils.owner_voice_evidence import authorized_owner_segments
 from utils.speaker_learning_policy import authorized_teaching_segments
 
@@ -41,7 +42,11 @@ def current_source(
         segments = decode_transcript_segments_verified(
             uid, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
         )
-    except Exception:
+    except (
+        transcript_pointer.TranscriptSegmentsDecodeError,
+        transcript_pointer.TranscriptBlobAbsent,
+        transcript_pointer.TranscriptShredded,
+    ):
         return None
     return segments, receipt
 

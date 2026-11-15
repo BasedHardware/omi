@@ -1,5 +1,7 @@
 """Decision coverage for lifecycle boundaries outside normal model assessment."""
 
+import ast
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -187,15 +189,23 @@ def test_new_rules_do_not_change_server_recovery_policy():
     assert PROCESSING_MODES[ProcessingTrigger.SERVER_RECOVERY].relevance is RelevancePolicy.KEEP
 
 
-@pytest.mark.parametrize(
-    'mode,expected', [('no_overlap', False), ('provider_error', None), ('missing_token', None), ('truncated', None)]
-)
-def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeypatch, mode, expected):
-    from datetime import datetime, timedelta, timezone
-    from unittest.mock import AsyncMock
+@pytest.fixture
+def calendar_probe():
     from database import calendar_meetings, users
     from utils.conversations import calendar_linking
     from utils.conversations.terminal_calendar import calendar_retains
+
+    return calendar_meetings, users, calendar_linking, calendar_retains
+
+
+@pytest.mark.parametrize(
+    'mode,expected', [('no_overlap', False), ('provider_error', None), ('missing_token', None), ('truncated', None)]
+)
+def test_real_terminal_calendar_probe_distinguishes_unavailable_evidence(monkeypatch, mode, expected, calendar_probe):
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import AsyncMock
+
+    calendar_meetings, users, calendar_linking, calendar_retains = calendar_probe
 
     monkeypatch.setattr(calendar_meetings, 'get_meetings_in_time_range', lambda *_: [])
     integration = {'connected': True, 'access_token': 'test-token'}
@@ -316,51 +326,58 @@ def test_stamp_never_enables_assessment(monkeypatch):
     assert calls == [False] * len(TERMINAL_PATHS)
 
 
-def test_production_terminal_assessment_call_sites_are_pinned():
-    import ast
-    from pathlib import Path
-
+@pytest.fixture(scope='module')
+def terminal_source_trees():
     root = Path(__file__).resolve().parents[2]
+    trees = []
+    for folder in ('database', 'utils'):
+        for file in (root / folder).rglob('*.py'):
+            if file.name == 'terminal_relevance.py':
+                continue
+            source = file.read_text()
+            if 'stamp_terminal_decision' in source or 'terminal_decision' in source:
+                trees.append((str(file.relative_to(root)), ast.parse(source)))
+    return trees
+
+
+def test_production_terminal_assessment_call_sites_are_pinned(terminal_source_trees):
     expected = {
         'database/conversation_finalization_jobs.py': 1,
         'database/conversations.py': 2,
         'database/conversation_merge_jobs.py': 1,
         'database/conversation_terminal_title.py': 1,
         'utils/task_intelligence/chat_first_fixture_capture.py': 1,
-        'utils/conversations/lifecycle.py': 3,
+        # complete_orphan_batch_capture adds the reviewed policy-only stamp.
+        'utils/conversations/lifecycle.py': 4,
         'utils/sync/assignment.py': 1,
     }
     observed = {}
-    for folder in ('database', 'utils'):
-        for file in (root / folder).rglob('*.py'):
-            if file.name == 'terminal_relevance.py':
+    for relative, tree in terminal_source_trees:
+        for call in ast.walk(tree):
+            if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
                 continue
-            for call in ast.walk(ast.parse(file.read_text())):
-                if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
-                    continue
-                if call.func.id == 'stamp_terminal_decision':
-                    relative = str(file.relative_to(root))
-                    observed[relative] = observed.get(relative, 0) + 1
-                    assert 'assess' not in {kw.arg for kw in call.keywords}
-                elif call.func.id == 'terminal_decision':
-                    if str(file.relative_to(root)) == 'database/conversations.py':
-                        core = next(
-                            node
-                            for node in ast.walk(ast.parse(file.read_text()))
-                            if isinstance(node, ast.FunctionDef) and node.name == 'claim_conversation_status_in_txn'
-                        )
-                        assert any(ast.dump(call) == ast.dump(node) for node in ast.walk(core))
-                        assert any(
-                            kw.arg == 'path'
-                            and isinstance(kw.value, ast.Constant)
-                            and kw.value.value == 'lifecycle_terminal'
-                            for kw in call.keywords
-                        )
-                        assert 'assess' not in {kw.arg for kw in call.keywords}
-                        continue
-                    assert str(file.relative_to(root)) == 'database/conversation_terminal_title.py'
+            if call.func.id == 'stamp_terminal_decision':
+                observed[relative] = observed.get(relative, 0) + 1
+                assert 'assess' not in {kw.arg for kw in call.keywords}
+            elif call.func.id == 'terminal_decision':
+                if relative == 'database/conversations.py':
+                    core = next(
+                        node
+                        for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef) and node.name == 'claim_conversation_status_in_txn'
+                    )
+                    assert any(ast.dump(call) == ast.dump(node) for node in ast.walk(core))
                     assert any(
-                        kw.arg == 'assess' and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                        kw.arg == 'path'
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value == 'lifecycle_terminal'
                         for kw in call.keywords
                     )
+                    assert 'assess' not in {kw.arg for kw in call.keywords}
+                    continue
+                assert relative == 'database/conversation_terminal_title.py'
+                assert any(
+                    kw.arg == 'assess' and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                    for kw in call.keywords
+                )
     assert observed == expected

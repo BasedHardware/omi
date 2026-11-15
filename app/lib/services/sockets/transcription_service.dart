@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
@@ -642,6 +643,8 @@ class TranscriptSocketServiceFactory {
 
     // Special handling for On-Device Whisper
     if (config.provider == SttProvider.onDeviceWhisper) {
+      final usage = OnDeviceUsageTracker(
+          route: config.identity == 'freemium:on-device' ? OnDeviceUsageRoute.allowance : OnDeviceUsageRoute.custom);
       // Use Native iOS Speech Recognition on iOS
       if (Platform.isIOS) {
         return PurePollingSocket(
@@ -652,6 +655,7 @@ class TranscriptSocketServiceFactory {
             transcoder: transcoder,
           ),
           sttProvider: OnDeviceAppleProvider(language: config.language ?? 'en'),
+          onDeviceUsage: usage,
         );
       }
 
@@ -666,6 +670,7 @@ class TranscriptSocketServiceFactory {
           transcoder: transcoder,
         ),
         sttProvider: OnDeviceWhisperProvider(modelPath: config.url ?? '', language: config.language ?? 'en'),
+        onDeviceUsage: usage,
       );
     }
 

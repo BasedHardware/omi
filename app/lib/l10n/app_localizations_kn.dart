@@ -7057,6 +7057,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ಸಹಿತ ಸೈನ್ ಇನ್ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ Google ಮೂಲಕ ಮುಂದುವರಿಯಿರಿ.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase ಟೋಕನ್ ಪುನರುದ್ಧರಣ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
@@ -9203,6 +9207,24 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
+
+  @override
+  String get applyCodeToCurrentPlan => 'ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಅನ್ವಯಿಸಿ';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆಗೆ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಿದೆ.',
+        'refused': 'ಈ ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗುವುದಿಲ್ಲ. ಕೋಡ್ ಮತ್ತು ಅಗತ್ಯ ಯೋಜನೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.',
+        'conflict': 'ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ ಅಥವಾ ನಿಮ್ಮ ಯೋಜನೆಯಲ್ಲಿ ಈಗಾಗಲೇ ರಿಯಾಯಿತಿ ಇದೆ.',
+        'rateLimited': 'ಹಲವಾರು ಪ್ರಯತ್ನಗಳು. ಸ್ವಲ್ಪ ಕಾದು ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಕೋಡ್ ಅನ್ವಯಿಸಲಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'ಪ್ರೋಮೋ ಕೋಡ್';
@@ -13693,6 +13715,9 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'ಟಿಪ್ಪಣಿಗಳನ್ನು ಮತ್ತೆ ರಚಿಸಿ';
+
+  @override
   String get attentionSummaryFailed => 'ಈ ಸಂಭಾಷಣೆಯ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ';
 
   @override
@@ -15427,6 +15452,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paymentDeclinedTitle => 'ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'ಕಾರ್ಡ್ ನವೀಕರಿಸಿ, ಅಥವಾ $plan ಅನ್ನು ತಿಂಗಳಿಗೆ $price ಗೆ ಮರಳಿ ಪಡೆಯಿರಿ';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ';
   }
@@ -15451,4 +15481,31 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'ಮಾಸಿಕಕ್ಕೆ ಬದಲಿಸಿ';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, ತಿಂಗಳಿಗೆ $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'ಪಾವತಿಸದ $yearly ವಾರ್ಷಿಕ ಶುಲ್ಕದ ಬದಲಿಗೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಯೋಜನೆ ಬದಲಾಗಿಲ್ಲ.';
+
+  @override
+  String get monthlySwitchUnavailable => 'ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ಇಂದು $price ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.';
+  }
 }

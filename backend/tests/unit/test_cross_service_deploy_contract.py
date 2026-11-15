@@ -105,12 +105,12 @@ def _unparseable_boolean(manifest: dict) -> None:
 
 
 def _unparseable_named_set_boolean(manifest: dict) -> None:
-    # LIVE_CAPTURE_WINDOW_RETENTION is compared against a named module-level frozenset (_TRUTHY), not a
+    # LIVE_CAPTURE_WINDOW_MERGE_UNION is compared against a named module-level frozenset (_TRUTHY), not a
     # literal tuple; a scanner that skips named sets never sees its tokens.
     for services in (_prod(manifest)['cloud_run']['services'],):
         for svc in services.values():
-            if 'LIVE_CAPTURE_WINDOW_RETENTION' in svc.get('env', {}):
-                svc['env']['LIVE_CAPTURE_WINDOW_RETENTION']['value'] = 'enabled'
+            if 'LIVE_CAPTURE_WINDOW_MERGE_UNION' in svc.get('env', {}):
+                svc['env']['LIVE_CAPTURE_WINDOW_MERGE_UNION']['value'] = 'enabled'
 
 
 def _sync_handler_wrong_route(manifest: dict) -> None:
@@ -345,10 +345,10 @@ def test_unparseable_boolean_value_fails(results: Results) -> None:
 
 
 def test_unparseable_named_set_boolean_fails(results: Results) -> None:
-    # LIVE_CAPTURE_WINDOW_RETENTION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
+    # LIVE_CAPTURE_WINDOW_MERGE_UNION is read via ``in _TRUTHY`` (a named frozenset); the scanner must
     # resolve named collections or this deployed flag is invisible to boolean-token.
     assert any(
-        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_CAPTURE_WINDOW_RETENTION')
+        v.invariant == 'boolean-token' and v.scope.endswith('/LIVE_CAPTURE_WINDOW_MERGE_UNION')
         for v in results.mutations['unparseable_named_set_boolean']
     ), results.mutations['unparseable_named_set_boolean']
 
@@ -417,8 +417,39 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
-@pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])
-def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
+@pytest.mark.parametrize(
+    'key',
+    [
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ],
+)
+def test_post_seal_kill_switches_have_readers_on_every_bound_host(results: Results, key: str) -> None:
+    for model in results.baseline.models.values():
+        for deployment in model.deployments.values():
+            if key not in deployment.env:
+                continue
+            assert deployment.entrypoint is not None, (model.env, deployment.id, key)
+            readers = results.baseline.readers.by_entrypoint[deployment.entrypoint]
+            assert key in readers, (model.env, deployment.id, key)
+            assert 'backend/config/record_latency.py' in readers[key].modules, (model.env, deployment.id, key)
+
+
+@pytest.mark.parametrize(
+    'helper',
+    [
+        '_default_on',
+        'default_on',
+        'modes_default_on',
+        'rollout_default_on',
+        '_default_off',
+        'default_off',
+        'modes_default_off',
+        'rollout_default_off',
+    ],
+)
+def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     source = OverlaySource(
         tmp_path,

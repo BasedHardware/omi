@@ -481,6 +481,40 @@ void main() {
   });
 
   group('upload batching', () {
+    test('live age is bounded on both sides and unknown clocks stay recoverable', () {
+      const now = 1794700800;
+      Wal at(int timestamp) =>
+          Wal(timerStart: timestamp, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss);
+      expect(isLiveCaptureWal(at(now), now), isTrue);
+      expect(isLiveCaptureWal(at(now - liveCaptureMaxAgeSeconds), now), isTrue);
+      expect(isLiveCaptureWal(at(now - liveCaptureMaxAgeSeconds - 1), now), isFalse);
+      for (final timestamp in [-1, 0, now + 1, 2145916800]) {
+        final wal = at(timestamp);
+        expect(isLiveCaptureWal(wal, now), isFalse);
+        expect(walCaptureTimeClass(wal, now), WalCaptureTimeClass.unknown);
+        expect(nextSyncUploadBatch([wal], now), [wal]);
+        expect(wal.timerStart, timestamp, reason: 'classification must never re-date audio');
+      }
+    });
+
+    test('invalid clocks cannot mix with or lead valid live and historical audio', () {
+      const now = 1794700800;
+      Wal at(int timestamp) =>
+          Wal(timerStart: timestamp, codec: BleAudioCodec.opus, seconds: 60, status: WalStatus.miss);
+      final unknown = at(0);
+      final future = at(2145916800);
+      final older = at(now - 3 * 86400);
+      final recentHistory = at(now - 86400);
+      final live = at(now - 60);
+      final pending = [future, recentHistory, unknown, live, older];
+      expect(nextSyncUploadBatch(pending, now), [live]);
+      pending.remove(live);
+      expect(nextSyncUploadBatch(pending, now), [older, recentHistory]);
+      pending.removeWhere((wal) => wal == older || wal == recentHistory);
+      expect(nextSyncUploadBatch(pending, now), [unknown, future]);
+      expect(pending.every((wal) => wal.status == WalStatus.miss), isTrue);
+    });
+
     test('the unscoped-5xx pause grows exponentially and caps at 30s', () {
       expect(syncServerUnavailablePauseSeconds(0), 0);
       expect(syncServerUnavailablePauseSeconds(1), 2);

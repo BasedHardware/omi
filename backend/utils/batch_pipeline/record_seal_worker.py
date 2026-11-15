@@ -30,7 +30,15 @@ class Metrics:
             return Gauge('omi_record_seal_' + suffix, help_text, labels, registry=self.registry).labels(*values)
 
         self.backlog = gauge('backlog', 'Unsealed completed record_pending rows, including claims and backoff')
-        self.oldest = gauge('oldest_age_seconds', 'Oldest unsealed finish age in the completed sample')
+        self.oldest = Gauge(
+            'omi_record_seal_oldest_age_seconds',
+            'Oldest unsealed finish age in the completed sample',
+            labels,
+            registry=self.registry,
+        ).labels(*values)
+        self.invalid_clocks = gauge(
+            'invalid_clock_rows', 'Unsealed rows with invalid finish clocks in the completed sample'
+        )
         self.fresh = gauge('refreshed_at_seconds', 'Start time of the last fully completed sample')
         self.sealed = Counter(
             'omi_record_seal_sealed', 'Rows sealed by this slot', labels, registry=self.registry
@@ -52,17 +60,20 @@ class Metrics:
         # An uninitialized gauge is not a successful empty sample.
         self.backlog.set(float('nan'))
         self.oldest.set(float('nan'))
+        self.invalid_clocks.set(float('nan'))
 
-    def sample(self, count, oldest, started):
+    def sample(self, count, oldest, started, invalid_clock_rows):
         self.backlog.set(count)
         self.oldest.set(oldest)
+        self.invalid_clocks.set(invalid_clock_rows)
         self.fresh.set(started)
 
     def outcome(self, disposition, age):
         self.outcomes.labels(*self.labels, disposition).inc()
         if disposition in {'sealed', 'sealed_registered', 'upload_failed_cleared'}:
             self.sealed.inc()
-            self.age.observe(age)
+            if age is not None:
+                self.age.observe(age)
 
 
 class Scanner:
@@ -81,7 +92,7 @@ class Scanner:
         self.after = None
         self.started = time.time()
         self.horizon = datetime.fromtimestamp(self.started, timezone.utc)
-        self.count, self.oldest = 0, 0
+        self.count, self.oldest, self.invalid_clock_rows = 0, 0, 0
 
     def page(self, *, candidates=True):
         jobs, after = claims.pending_page(self.client, self.namespace, horizon=self.horizon, after=self.after)
@@ -103,21 +114,26 @@ class Scanner:
         now = time.time()
         selected = []
         # Do not mutate partial-pass counters/frontier until every read succeeds.
-        count, oldest = 0, 0
+        count, oldest, invalid_clock_rows = 0, 0, 0
         for job_id, job, ref in valid:
             row = rows.get(ref.path, {})
             if claims.is_debt(row):
                 count += 1
-                oldest = max(oldest, max(0, now - row['finished_at'].timestamp()))
+                stamp = row['finished_at'].timestamp()
+                if repair.valid_metric_clock(stamp):
+                    oldest = max(oldest, max(0, now - stamp))
+                else:
+                    invalid_clock_rows += 1
                 if candidates and claims.ready(job.get('seal_claim') or {}, now):
                     selected.append(job_id)
         self.count += count
+        self.invalid_clock_rows += invalid_clock_rows
         self.oldest = max(self.oldest, oldest)
         self.after = after
         complete = after is None
         if complete:
             # Timestamp the START: a long/incomplete pass cannot look fresh.
-            self.metrics.sample(self.count, self.oldest, self.started)
+            self.metrics.sample(self.count, self.oldest, self.started, self.invalid_clock_rows)
             self.reset()
         return selected, complete
 
@@ -171,7 +187,9 @@ class Worker:
             elif self.clock() >= deadline:
                 disposition = 'budget_exhausted'
             if disposition:
-                self.metrics.outcome(disposition, max(0, time.time() - claim['finished_at'].timestamp()))
+                stamp = claim['finished_at'].timestamp()
+                age = max(0, time.time() - stamp) if repair.valid_metric_clock(stamp) else None
+                self.metrics.outcome(disposition, age)
                 self.close(clear_pending=False, backoff=True)
         # Sampling continues during the child walk. Bounded main-thread IO
         # adds at most 10s cleanup latency, still well inside the 360s claim.

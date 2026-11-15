@@ -7031,6 +7031,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Falha ao fazer login com a Apple, tente novamente.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Não foi possível entrar com a Apple. Tente novamente ou continue com o Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Falha ao recuperar o token do Firebase, tente novamente.';
 
   @override
@@ -9181,6 +9185,24 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Não foi possível determinar a versão atual do firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Aplicar ao plano atual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Código aplicado ao seu plano atual.',
+        'refused': 'Não é possível aplicar este código. Verifique o código e o plano necessário.',
+        'conflict': 'Código já utilizado ou seu plano já tem desconto.',
+        'rateLimited': 'Muitas tentativas. Aguarde e tente novamente mais tarde.',
+        'other': 'Não foi possível aplicar o código. Tente novamente.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Código promocional';
@@ -13677,6 +13699,9 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Gerar notas novamente';
+
+  @override
   String get attentionSummaryFailed => 'Não foi possível resumir esta conversa';
 
   @override
@@ -15404,6 +15429,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get paymentDeclinedTitle => 'Seu cartão foi recusado';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atualize o cartão ou recupere $plan por $price por mês';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atualize o cartão para recuperar $plan';
   }
@@ -15428,4 +15458,31 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Mudar para mensal';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price por mês';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Substitui a cobrança anual pendente de $yearly. Renova todo mês. Cancele quando quiser.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pagamento recusado. Seu plano não mudou.';
+
+  @override
+  String get monthlySwitchUnavailable => 'A mudança não está disponível agora. Atualize seu cartão.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Agora você está no plano mensal';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagos hoje. Renova todo mês.';
+  }
 }

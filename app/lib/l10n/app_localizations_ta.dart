@@ -7089,6 +7089,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ஆக உள்நுழைக தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple மூலம் உள்நுழைய முடியவில்லை. மீண்டும் முயலவும் அல்லது Google மூலம் தொடரவும்.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase டோகனை பெற தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override
@@ -9243,6 +9247,24 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை';
+
+  @override
+  String get applyCodeToCurrentPlan => 'தற்போதைய திட்டத்தில் பயன்படுத்தவும்';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'உங்கள் தற்போதைய திட்டத்தில் குறியீடு பயன்படுத்தப்பட்டது.',
+        'refused': 'இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது. குறியீட்டையும் தேவையான திட்டத்தையும் சரிபார்க்கவும்.',
+        'conflict': 'குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது அல்லது உங்கள் திட்டத்தில் ஏற்கனவே தள்ளுபடி உள்ளது.',
+        'rateLimited': 'அதிக முயற்சிகள். காத்திருந்து பின்னர் மீண்டும் முயற்சிக்கவும்.',
+        'other': 'குறியீட்டைப் பயன்படுத்த முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'விளம்பர குறியீடு';
@@ -13747,6 +13769,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'குறிப்புகளை மீண்டும் உருவாக்கு';
+
+  @override
   String get attentionSummaryFailed => 'இந்த உரையாடலைச் சுருக்க முடியவில்லை';
 
   @override
@@ -15479,6 +15504,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paymentDeclinedTitle => 'உங்கள் கார்டு நிராகரிக்கப்பட்டது';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'கார்டைப் புதுப்பிக்கவும், அல்லது $plan ஐ மாதம் $priceக்கு மீண்டும் பெறவும்';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்';
   }
@@ -15503,4 +15533,31 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'மாதாந்திரத்துக்கு மாறவும்';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, மாதத்துக்கு $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'செலுத்தப்படாத $yearly ஆண்டுக் கட்டணத்துக்குப் பதிலாக. மாதந்தோறும் புதுப்பிக்கப்படும். எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'கட்டணம் நிராகரிக்கப்பட்டது. உங்கள் திட்டம் மாறவில்லை.';
+
+  @override
+  String get monthlySwitchUnavailable => 'இப்போது மாற்ற இயலாது. அதற்குப் பதிலாக கார்டைப் புதுப்பிக்கவும்.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'இன்று $price செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.';
+  }
 }

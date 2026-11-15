@@ -7078,6 +7078,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Η σύνδεση με Apple δεν ολοκληρώθηκε. Δοκιμάστε ξανά ή συνεχίστε με Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.';
 
   @override
@@ -9236,6 +9240,24 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Εφαρμογή στο τρέχον πρόγραμμα';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Ο κωδικός εφαρμόστηκε στο τρέχον πρόγραμμά σας.',
+        'refused': 'Δεν μπορεί να εφαρμοστεί ο κωδικός. Ελέγξτε τον κωδικό και το απαιτούμενο πρόγραμμα.',
+        'conflict': 'Ο κωδικός έχει χρησιμοποιηθεί ή το πρόγραμμά σας έχει ήδη έκπτωση.',
+        'rateLimited': 'Πολλές προσπάθειες. Περιμένετε και δοκιμάστε αργότερα.',
+        'other': 'Δεν εφαρμόστηκε ο κωδικός. Δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Κωδικός προσφοράς';
@@ -13739,6 +13761,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Δημιουργία σημειώσεων ξανά';
+
+  @override
   String get attentionSummaryFailed => 'Δεν ήταν δυνατή η σύνοψη αυτής της συνομιλίας';
 
   @override
@@ -15478,6 +15503,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Η κάρτα σας απορρίφθηκε';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ενημερώστε την κάρτα ή αποκτήστε ξανά το $plan με $price τον μήνα';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
   }
@@ -15502,4 +15532,31 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Μετάβαση σε μηνιαίο';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price τον μήνα';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Αντικαθιστά την απλήρωτη ετήσια χρέωση των $yearly. Ανανεώνεται κάθε μήνα. Ακύρωση οποιαδήποτε στιγμή.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Η πληρωμή απορρίφθηκε. Το πρόγραμμά σας δεν άλλαξε.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Η αλλαγή δεν είναι διαθέσιμη τώρα. Ενημερώστε την κάρτα σας.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Είστε πλέον σε μηνιαία χρέωση';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Πληρώθηκαν $price σήμερα. Ανανεώνεται κάθε μήνα.';
+  }
 }

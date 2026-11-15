@@ -357,7 +357,14 @@ async def test_zero_sample_packets_do_not_expand_or_shrink_batch_span(remote, mo
             originals.append(b'\xff')
     await archive.close()
     receipt = AudioReceipt(**h.events[0].receipt)
-    assert remote.blob(receipt.path).data == b''.join(originals)
+    blob = remote.blob(receipt.path)
+    if blob.metadata['codec'] == 'flac':
+        # Lossless storage can change the container; custody still recovers
+        # every original PCM byte through the generation/hash-verified reader.
+        assert read_pcm('owner', receipt) == b''.join(originals)
+    else:
+        # Undecodable/unaligned zero-sample packets retain their raw bytes.
+        assert blob.data == b''.join(originals)
     manifest = json.loads(remote.blob(receipt.manifest_path).data)
     assert len(manifest['frames']) == len(originals)
     assert sum(frame['samples'] for frame in manifest['frames']) == 16000

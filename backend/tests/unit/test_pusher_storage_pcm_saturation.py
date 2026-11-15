@@ -134,6 +134,7 @@ async def settled_admissions(tasks):
     # The test-first unbounded implementation holds all 50 in GCS.
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_50_sockets_plateau_refuse_without_ack_then_retry_once(monkeypatch):
     budget = configure(monkeypatch, LIMIT)
@@ -764,6 +765,9 @@ async def test_retained_deleted_owner_is_not_retried_into_new_conversation(inlin
             asyncio.get_running_loop().call_soon(projected.set)
         return result
 
+    from utils import pusher_playback_coordinator
+
+    monkeypatch.setattr(pusher_playback_coordinator, 'run_blocking', run)
     monkeypatch.setattr(pusher, 'run_blocking', run)
     monkeypatch.setattr(pusher.PusherAudioProjection, 'refresh', delete_on_projection)
     monkeypatch.setattr(pusher, '_commit_durable_audio_window', refuse_second)

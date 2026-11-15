@@ -29,6 +29,13 @@ from copy import deepcopy
 import hashlib
 from typing import Any, Callable, TypeVar
 
+from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
+
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
     BatchPrivacyBlocked,
@@ -40,6 +47,8 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
+    PROJECTION_DISCOVERY_STATES,
+    PROJECTION_OBLIGATION_STATES,
     is_admissible_ready,
     is_policy_hold,
     is_queue_dispositioned,
@@ -143,6 +152,28 @@ class SimTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        # Filter borrowed rows before copying: a held owner can retain hundreds of
+        # backlog jobs, and neither fresh query needs to materialize their payloads.
+        rows = (
+            self.writes.get(('jobs', segment), self.store.rows.get(('jobs', segment), {}))
+            for segment in self.store._pending_by_owner.get(owner_key, ())
+        )
+        rows = [
+            row
+            for row in rows
+            if row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self.store.ready_predecessor(owner_key, priority, segment_id)
 
@@ -198,6 +229,25 @@ class SimStore:
         self.observers: list[Callable[[tuple[str, str], dict, dict], None]] = []
 
     # -- Store protocol -------------------------------------------------
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        rows = sorted(
+            (row['check_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'allowance_holds' and row.get('active') and row['check_at'] <= now
+        )
+        return [key for _, key in rows[: max(1, min(limit, 100))]]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        rows = sorted(
+            (row['capture_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'allowance_held'
+            and (owner_key is None or row['owner_key'] == owner_key)
+            and (after is None or (row['capture_at'], key) > tuple(after))
+        )
+        return [key for _, key in rows[: max(1, min(limit, 100))]]
+
     def run(self, body: Callable[[SimTransaction], T]) -> T:
         self.transactions += 1
         tx = SimTransaction(self)
@@ -307,7 +357,7 @@ class SimStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
         job = self.rows.get(('jobs', segment_id), {})
-        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+        if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
             return False
         if not self.customer.blocked(
             job['owner_id'],
@@ -320,6 +370,24 @@ class SimStore:
             revoked['merge_pending'] = False
         self.apply(('jobs', segment_id), revoked)
         return True
+
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Model of cancel_fenced_recovery: revocation-only write allowed after privacy rejects ordinary writes."""
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        job = self.rows.get(('jobs', segment_id), {})
+        if not job or not job.get('recovery'):
+            return False
+        binding = normalized_binding(job['projection_binding'])
+        ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+        ids.extend(job.get('conversation_ids') or [])
+        if self.customer.blocked(binding.owner_id, ids, binding.privacy_generation):
+            self.apply(
+                ('jobs', segment_id),
+                {**job, 'recovery_state': 'cancelled'},
+            )
+            return True
+        return False
 
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.defer_privacy_blocked_record (available_at only)."""
@@ -336,10 +404,13 @@ class SimStore:
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
+    def first_pending(self, owner_key: str, *, ready_only: bool = False, skip_terminal: bool = True) -> dict | None:
+        skip = not ready_only and skip_terminal and held_poll_skip_enabled()
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
+            if skip and row.get('state') in (None, *MERGE_POLL_TERMINAL_STATES):
+                continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
             candidate = (row['capture_at'], segment_id)
@@ -363,6 +434,13 @@ class SimStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
+
+    def projection_followup_backfill_complete(self) -> bool:
+        # Only this backend's native control marker can certify its population.
+        return followup_backfill_marker_complete(self.run(lambda tx: tx.get('control', FOLLOWUP_BACKFILL_KEY)))
+
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""
         matches = sorted(
@@ -376,26 +454,41 @@ class SimStore:
         return matches[0] if len(matches) == 1 else None
 
     def projection_page(
-        self, limit: int = 100, *, after=None, states: tuple[str, ...] | None = None
+        self,
+        limit: int = 100,
+        *,
+        after: tuple | None = None,
+        states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
+        due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
-        from database.batch_pipeline_store import PROJECTION_DISCOVERY_STATES, PROJECTION_OBLIGATION_STATES
-
-        states = PROJECTION_DISCOVERY_STATES if states is None else states
+        """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
         wanted = set(states)
         ordered = sorted(
-            (row['committed_at'], key)
+            ((row['committed_at'], key) if cutoff is None else (row[clock_field], row['committed_at'], key))
             for (table, key), row in self.rows.items()
-            if table == 'results' and row.get('projection_state') in wanted and 'committed_at' in row
+            if table == 'results'
+            and row.get('projection_state') in wanted
+            and 'committed_at' in row
+            and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
+            and (cutoff is None or row.get(clock_field) is not None and row[clock_field] <= float(cutoff))
         )
         if after is not None:
-            ordered = [entry for entry in ordered if entry > (after[0], after[1])]
-        size = max(1, min(limit, 100))
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
+                ordered = [entry for entry in ordered if entry[0] >= after[0]]
+            else:
+                ordered = [entry for entry in ordered if entry > after]
+        size = max(1, min(limit, 200))
         page = ordered[:size]
-        cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
-        return [key for _, key in page], cursor
+        cursor = page[-1] if len(page) == size else None
+        return [entry[-1] for entry in page], cursor
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # Firestore excludes rows without the ordered field, and orders ties by document name.
@@ -407,12 +500,40 @@ class SimStore:
         return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        skip = held_poll_skip_enabled()
         rows = sorted(
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
+            and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
+
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('state') == 'result_ready'
+            and (after is None or (row['capture_at'], row['segment_id']) > tuple(after))
+        ]
+        return deepcopy(sorted(rows, key=lambda row: (row['capture_at'], row['segment_id']))[: max(1, min(limit, 160))])
+
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        owners = {
+            row['owner_key']: row.get('owner_id')
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'result_ready'
+            and row.get('merge_pending')
+            and (after_owner_key is None or row['owner_key'] > after_owner_key)
+            and (ceiling_owner_key is None or row['owner_key'] <= ceiling_owner_key)
+        }
+        return sorted(owners.items(), reverse=descending)[: max(1, min(limit, 100))]
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         keys = sorted(
@@ -422,7 +543,7 @@ class SimStore:
         )
         owners = []
         for key in keys[:limit]:
-            job = self.first_pending(key)
+            job = self.first_pending(key, skip_terminal=False)
             owners.append((key, job['owner_id'] if job else None))
         return owners
 

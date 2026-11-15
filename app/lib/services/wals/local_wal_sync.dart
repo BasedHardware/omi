@@ -58,6 +58,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 import 'capture_committed_journal.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'capture_committed_custody.dart';
 part 'on_device_prepared_upload.dart';
@@ -83,9 +84,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   late final WatchLiveCoverage watchCoverage = WatchLiveCoverage(getApplicationDocumentsDirectory, now: _now);
   late final NativeRecordingIntake nativeIntake = NativeRecordingIntake(this, coverage: watchCoverage);
   Future<void> intakeNativeRecordings() async {
+    final generation = _sessionGeneration;
+    final uid = SharedPreferencesUtil().uid;
     await walReady;
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await intakeOnDeviceOverflow(this);
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await nativeIntake.scan();
+    if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
+    await _rehydrateForCurrentUser();
   }
 
   /// A minute recovery receipt can arrive before the normal flush timer. Seal
@@ -146,6 +153,24 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   IWalSyncListener listener;
 
+  /// Called after the server accepts an upload, with that upload's recording.
+  /// The end-of-recording reporter uses it to say when nothing is left to send.
+  void Function(String? recordingSessionId)? onRecordingUploadAccepted;
+
+  /// Sealed files of [recordingSessionId] the server has not accepted yet,
+  /// limited to audio that starts at or before [through] when given. An
+  /// unknown clock cannot prove it starts after the end, so stays pending.
+  int pendingWalsForRecording(String recordingSessionId, {DateTime? through}) => _wals
+      .where((wal) =>
+          wal.recordingSessionId == recordingSessionId &&
+          !captureEndAccepted(wal) &&
+          (through == null ||
+              wal.timerStart <= 0 ||
+              wal.timerStart <= through.millisecondsSinceEpoch ~/ 1000 ||
+              wal.timerStart > _now().millisecondsSinceEpoch ~/ 1000 ||
+              wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime))
+      .length;
+
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
   BleAudioCodec get currentCodec => _codec;
@@ -204,6 +229,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// ('legacy'), or was created by the current account.
   bool _walAdmittedAtLoad(Wal wal) {
     final owner = wal.ownerUid;
+    // Native migration must resolve receipt ownership before any reader/drain sees it.
+    final batch = wal.filePath?.split('/').last.startsWith('audio_omibatch') ?? false;
+    if (batch && (owner == null || owner.isEmpty || owner == 'legacy')) return false;
     return owner == null || owner == 'legacy' || owner == _currentWalOwnerUid();
   }
 
@@ -405,8 +433,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   Future<void> get testWalIoQuiescent => _bufferQueue;
 
+  @visibleForTesting
+  Future<void> testQueueWalIo(Future<void> barrier) => _enqueueBuffer(() => barrier);
+
+  int _syncCancellationEpoch = 0;
+
   @override
   void cancelSync() {
+    _syncCancellationEpoch++;
     _isCancelled = true;
   }
 
@@ -1421,6 +1455,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<int> purgeAccountWals(String uid) => _purgeAccountWals(uid);
+  @override
+  Future<void> rehydrateForCurrentUser() => _rehydrateForCurrentUser();
 
   Future<int> _removeExpiredSyncedCopies() async {
     final prefs = SharedPreferencesUtil();
@@ -2002,9 +2038,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
     final generation = _sessionGeneration;
-    await _enqueueBuffer(() => _flush(generation));
-    if (!_isCurrent(generation)) return null;
+    final cancellationEpoch = _syncCancellationEpoch;
+    bool passCancelled() => cancellationEpoch != _syncCancellationEpoch;
+    // Start the pass before yielding to queued IO. A cancel during the flush
+    // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
+    await _enqueueBuffer(() => _flush(generation));
+    if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 
     final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -2063,7 +2103,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _drainGroupBatchCounts.removeWhere((group, _) => (_drainGroupCountedAt[group] ?? 0) < shareWindowStart);
     _drainGroupCountedAt.removeWhere((_, countedAt) => countedAt < shareWindowStart);
     while (true) {
-      if (!_isCurrent(generation)) break;
+      if (!_isCurrent(generation) || passCancelled()) break;
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -2080,14 +2120,20 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
+      final clockRecoveryTurn = pending.any((wal) =>
+          walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown &&
+          wal.clockRecoveryValidBatches >= maxValidBatchesBeforeClockRecovery);
+      final turnPending = clockRecoveryTurn
+          ? pending.where((wal) => walCaptureTimeClass(wal, batchNowSeconds) == WalCaptureTimeClass.unknown).toList()
+          : pending;
       // A deferred group waits only while another group can still be served in
       // this pass. Once nothing else is pending it rejoins the candidates, so
       // a capped recording finishes in the same drain instead of stranding its
       // tail until a later pass — a custom-STT user confirms one sync, and a
       // recording near the 30-day backfill deadline must not wait for a second
       // confirmation the deadline may not survive (#14688).
-      final waiting = pending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
-      final candidates = waiting.isNotEmpty ? waiting : pending;
+      final waiting = turnPending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
+      final candidates = waiting.isNotEmpty ? waiting : turnPending;
       var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
       if (batch.isEmpty) break;
       if (batch
@@ -2095,7 +2141,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         batch = [batch.first];
       }
       final drainGroup = groupKeys[batch.first]!;
-      if ((_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
+      if (!clockRecoveryTurn &&
+          (_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
           pending.any((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal]))) {
         // This recording spent its share while others still wait: defer its
         // remainder instead of letting it own every interrupted drain. The
@@ -2211,13 +2258,25 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       reportUploadProgress();
 
       _notifyUpdated(generation);
+      var clockRecoveryAttempted = false;
       try {
         // Upload only — return as soon as the server acknowledges. We do NOT
         // wait for server-side processing here; the reconciler resolves the
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
         if (!await reserveRefusalRetries(batchWals, generation, batchNowSeconds)) return resp;
+        if (!await reserveClockRecoveryBudget(batchWals, generation, batchNowSeconds)) return resp;
+        if (!_isCurrent(generation) || passCancelled()) {
+          for (final wal in batchWals) {
+            wal.isSyncing = false;
+          }
+          break;
+        }
         final audioBounds = syncUploadAudioBounds(batchWals);
+        clockRecoveryAttempted = walCaptureTimeClass(batchWals.first, batchNowSeconds) == WalCaptureTimeClass.unknown;
+        final oldest = batchWals.reduce((a, b) => a.timerStart <= b.timerStart ? a : b);
+        UploadTrace.instance.prepare(
+            firstFilePath: files.first.path, oldestId: oldest.id, sealedAtSeconds: oldest.timerStart + oldest.seconds);
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
@@ -2231,6 +2290,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
 
         _observeNativeUpload(batchWals);
+        UploadTrace.instance.accepted(oldest.id);
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
           final r = result.completed!;
@@ -2268,10 +2328,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
 
         _clearRecoveryMarkers(batchWals, generation);
+        onRecordingUploadAccepted?.call(batchWals.first.recordingSessionId);
         batchesCompleted++;
         serverUnavailableStreak = 0;
         reportUploadProgress();
       } on SyncRateLimitedException {
+        UploadTrace.instance.noteGate('rate_limited');
+        UploadTrace.instance.noteGate('rate_limited');
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
         for (final wal in batchWals) {
@@ -2403,6 +2466,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
         }
+      } finally {
+        // Spend the turn only after entering the gate, including refusals.
+        // A crash before that call leaves the durable earned turn intact.
+        if (clockRecoveryAttempted) await completeClockRecoveryTurn(generation);
       }
 
       await _saveWalsToFile(generation);
@@ -2525,6 +2592,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _now().millisecondsSinceEpoch ~/ 1000,
       );
       final audioBounds = syncUploadAudioBounds([walToSync]);
+      UploadTrace.instance.prepare(
+          firstFilePath: walFile.path,
+          oldestId: walToSync.id,
+          sealedAtSeconds: walToSync.timerStart + walToSync.seconds);
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
@@ -2536,6 +2607,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         geolocation: walToSync.geolocation,
         telemetrySource: _uploadTelemetrySource([walToSync]),
       );
+      // The server took it: a later retry of this file starts a fresh trace.
+      UploadTrace.instance.accepted(walToSync.id);
 
       _observeNativeUpload([walToSync]);
       if (result.completed != null) {
@@ -2568,7 +2641,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
         _notifyUpdated(generation);
       }
+      onRecordingUploadAccepted?.call(walToSync.recordingSessionId);
     } on SyncRateLimitedException {
+      UploadTrace.instance.noteGate('rate_limited');
       // Account-level rate limit — leave the WAL pending without consuming its
       // retry budget. The global upload gate owns the cooldown.
       DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});

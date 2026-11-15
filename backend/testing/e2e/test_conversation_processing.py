@@ -115,7 +115,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
         transcript_segments=[
             TranscriptSegment(
                 id="seg-life-1",
-                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow.",
+                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
@@ -138,7 +138,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert (
         body["transcript_segments"][0]["text"]
-        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow."
+        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery."
     )
 
     # INV-TASK-2: an omi conversation has no Suggested surface to review a
@@ -166,8 +166,6 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
     monkeypatch.setattr(process_module, 'trigger_conversation_apps', app_boundary)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'on')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     paid = Mock(side_effect=AssertionError('minimum attempted paid intelligence'))
     monkeypatch.setattr(process_module, 'get_conversation_notes', paid)
     monkeypatch.setattr(process_module, 'extract_canonical_l1_memory_candidates', paid)

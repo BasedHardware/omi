@@ -7,10 +7,16 @@ import argparse
 import json
 from pathlib import Path
 from collections.abc import Mapping
+import sys
 
 import yaml
 
 BACKEND = Path(__file__).resolve().parents[1]
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+from config.object_lake import validate_write_settings  # noqa: E402
+
 EXPECTED_SERVICES = (
     ('gke', 'backend-listen'),
     ('gke', 'pusher'),
@@ -72,6 +78,7 @@ def validate_runtime_binding(document: Mapping, contract: Mapping) -> list[str]:
     if not isinstance(environments, Mapping) or not {'dev', 'prod'} <= environments.keys():
         return ['runtime manifest must declare dev and prod environments']
     for env_name, env in environments.items():
+        errors.extend(validate_write_admission(env_name, env))
         for plane, service in EXPECTED_SERVICES:
             try:
                 services = env[plane]['services'] if plane == 'cloud_run' else env[plane]
@@ -82,16 +89,38 @@ def validate_runtime_binding(document: Mapping, contract: Mapping) -> list[str]:
             for name in (contract.get('bucket_env_var'), 'OBJECT_LAKE_KMS_KEY'):
                 if name not in bindings or not isinstance(bindings[name], Mapping):
                     errors.append(f'{env_name}/{service} must declare {name}')
-            # Empty, unprovisioned bindings are intentional while write admission is off.
-            write = bindings.get('OBJECT_LAKE_WRITE_ENABLED', {})
-            percent = bindings.get('OBJECT_LAKE_WRITE_PERCENT', {})
-            if (
-                str(write.get('value', '')).strip().lower() in ('true', '1', 'on', 'yes')
-                and percent.get('value') != '0'
-            ):
-                for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
-                    if not str(bindings.get(name, {}).get('value') or '').strip():
-                        errors.append(f'{env_name}/{service} enabled writes require a real {name}')
+    return errors
+
+
+def _zero_percent(percent) -> bool:
+    """A numerically zero cohort ('0', '0.0', ' 0 ') admits no writes; unparseable values do."""
+    try:
+        return float(str(percent).strip()) == 0
+    except ValueError:
+        return False
+
+
+def validate_write_admission(stage: str, environment: Mapping) -> list[str]:
+    """Check every host, including hosts outside the initial lake rollout."""
+    hosts = list(environment.get('gke', {}).items())
+    cloud_run = environment.get('cloud_run', {})
+    hosts.extend(cloud_run.get('services', {}).items())
+    hosts.extend(cloud_run.get('jobs', {}).items())
+    hosts.extend((name, environment.get(name, {})) for name in ('desktop_backend', 'llm_gateway'))
+    errors = []
+    for name, host in hosts:
+        if not isinstance(host, Mapping):
+            continue
+        bindings = host.get('env', {})
+        enabled = bindings.get('OBJECT_LAKE_WRITE_ENABLED', {}).get('value', 'false')
+        percent = bindings.get('OBJECT_LAKE_WRITE_PERCENT', {}).get('value', '0')
+        errors.extend(f'{stage}/{name} {error}' for error in validate_write_settings(stage, enabled, percent))
+        # Shared with runtime manifest validation: empty bindings are permitted
+        # only while writes are off, including hosts outside the initial rollout.
+        if str(enabled).strip().lower() in ('true', '1', 'on', 'yes') and not _zero_percent(percent):
+            for binding in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+                if not str(bindings.get(binding, {}).get('value') or '').strip():
+                    errors.append(f'{stage}/{name} enabled writes require a real {binding}')
     return errors
 
 

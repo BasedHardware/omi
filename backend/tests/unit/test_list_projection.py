@@ -567,10 +567,12 @@ def test_per_request_proxy_trace_does_not_break_unchanged_poll(store):
 
 
 @pytest.mark.parametrize('gate', ['on', 'off'])
-def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch, gate):
-    # With the presentation kill switch off, writer-version ETags retain their
-    # original contract. The default-on deadline path must bypass them.
+@pytest.mark.parametrize('home_gate', ['on', 'off'])
+def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch, gate, home_gate):
+    # Both presentation switches must be off to restore writer-version ETags.
+    # Either reader-enforced age bound must bypass them without a writer bump.
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
+    monkeypatch.setenv('HOME_STEP_PROJECTION', home_gate)
     store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
     rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
 
@@ -578,7 +580,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
         # The default-on Home row contract stamps the wire copy (both gate
         # modes). This bare completed capture has no title, transcript, batch
         # receipt, or 2h bound, so it reads as still transcribing.
-        return [{**row, 'home_step': 'transcribing'} for row in source_rows]
+        return [{**row, 'home_step': 'transcribing'} for row in source_rows] if home_gate == 'on' else source_rows
 
     calls = []
 
@@ -622,7 +624,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     rows[0]['is_locked'] = False
     fresh = Response()
     assert conversation_routes.get_conversations(response=fresh, **params) == wire(rows)
-    if gate == 'on':
+    if gate == 'on' or home_gate == 'on':
         assert 'etag' not in fresh.headers
         params['request'] = Request(
             {

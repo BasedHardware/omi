@@ -101,7 +101,8 @@ def test_destroy_evicts_all_versions_and_is_idempotent(keys):
         space_keys.unwrap_space_dek('s', version, firestore_client=store)
     assert space_keys.destroy_space_keys('s', firestore_client=store) == 2
     assert not space_keys._cache
-    assert space_keys.get_space_keys('s', firestore_client=store) is None
+    with pytest.raises(space_keys.SpaceKeyDestroyed):
+        space_keys.get_space_keys('s', firestore_client=store)
     with pytest.raises(space_keys.SpaceKeyDestroyed):
         space_keys.unwrap_space_dek('s', 1, firestore_client=store)
     assert space_keys.destroy_space_keys('s', firestore_client=store) == 0
@@ -187,7 +188,7 @@ def test_destroy_requires_verified_absence(keys):
     saved = deepcopy(store.rows)
 
     def resurrect(ref, transaction=None):
-        if transaction is None and not store.rows:
+        if transaction is None and (store.rows.get(ref.path) or {}).get('state') == 'destroyed':
             store.rows.update(saved)
         return original(ref, transaction=transaction)
 

@@ -6,6 +6,14 @@
  * Row contract (from the Firestore and margin lead, 2026-11-07): one row per
  * (date, line, source, status). `basis_class` is variable, fixed or excluded.
  * A missing row means unavailable, never $0, so callers must check coverage.
+ *
+ * Two bases, never mixed. `in_all_in` marks the all-in total's rows;
+ * `in_margin_basis` marks the rows the margin basis counts. The producer writes
+ * mutually exclusive alternatives that are BOTH `basis_class = 'variable'` on
+ * the same day — Modulate cash vs modelled, and Stripe actual fees vs the
+ * subscription-fee estimate — and only the two flags say which one counts. The
+ * variable and listen sums below therefore gate on `in_margin_basis`; summing
+ * `basis_class = 'variable'` alone double counts both pairs.
  */
 
 export const SPEND_TABLE = "based-hardware.omi_finops.spend_daily";
@@ -27,10 +35,12 @@ export const LISTEN_LINE_PREFIX = "stt_";
 export const SONIOX_LINE = "stt_soniox";
 
 /**
- * One day's totals from the settled table. `variableUsd` covers every
- * `basis_class = 'variable'` row; `listenUsd` covers the STT lines within it;
- * `allInUsd` covers rows flagged `in_all_in`; `sonioxUsd` is the measured
- * Soniox line alone. `rows` is the row count, so a day with no rows is
+ * One day's totals from the settled table. `variableUsd` covers the
+ * `basis_class = 'variable'` rows the margin basis counts (`in_margin_basis`),
+ * so the cash/modelled and actual/estimated alternatives are never summed
+ * together; `listenUsd` covers the STT lines within it; `allInUsd` covers rows
+ * flagged `in_all_in`; `sonioxUsd` is the measured Soniox line alone. `rows` is
+ * the row count, so a day with no rows is
  * distinguishable from a day that sums to $0.
  */
 export interface SpendDay {
@@ -68,7 +78,8 @@ export function isCalendarDate(value: string): boolean {
  * Daily totals over `days` days ending on `end`. Dedupe first: the producer may
  * write the same (date, line, source, status) across runs, so keep the latest
  * `computed_at` for each key. Only then drop rows whose latest run is unsettled,
- * so an older settled row can never stand in for a newer unsettled one.
+ * so an older settled row can never stand in for a newer unsettled one, and
+ * drop provisional rows (the producer's parity gate rejects them).
  */
 export function spendDailyQuery(end: string, days: number): string {
   // Interpolated into SQL: accept only a real ISO calendar date and a bounded window.
@@ -87,13 +98,13 @@ WITH latest AS (
 )
 SELECT
   FORMAT_DATE('%F', date) AS day,
-  SUM(IF(basis_class = 'variable', usd, NULL)) AS variable_usd,
-  SUM(IF(basis_class = 'variable' AND STARTS_WITH(line, '${LISTEN_LINE_PREFIX}'), usd, NULL)) AS listen_usd,
+  SUM(IF(basis_class = 'variable' AND in_margin_basis, usd, NULL)) AS variable_usd,
+  SUM(IF(basis_class = 'variable' AND in_margin_basis AND STARTS_WITH(line, '${LISTEN_LINE_PREFIX}'), usd, NULL)) AS listen_usd,
   SUM(IF(in_all_in, usd, NULL)) AS all_in_usd,
   SUM(IF(basis_class = 'variable' AND line = '${SONIOX_LINE}', usd, NULL)) AS soniox_usd,
   COUNT(*) AS rows
 FROM latest
-WHERE inputs_settled
+WHERE inputs_settled AND status != 'provisional'
 GROUP BY day
 ORDER BY day`;
 }
@@ -121,9 +132,11 @@ export function sonioxSpendByDay(days: SpendDay[]): Record<string, number> {
   return out;
 }
 
-/** Parity: the all-in total for the anchor day must match the producer's
- * contract value to the cent. Returns the difference, or null when the anchor
- * day is absent (a gap, not a pass). */
+/** Parity: the all-in total for the anchor day against the producer's contract
+ * value ($3,549.21). Returns the difference, or null when the anchor day is
+ * absent (a gap, not a pass). The producer's own gate allows ±$2 all-in (±$1
+ * per component), so the consumer decides the tolerance rather than assuming
+ * exact-to-the-cent. */
 export function parityDelta(days: SpendDay[]): number | null {
   const anchor = days.find((d) => d.day === PARITY_DAY);
   if (!anchor || anchor.allInUsd == null) return null;
@@ -140,9 +153,11 @@ export function listenUsdPerAudioHour(
   return listenUsd / audioHours;
 }
 
-/** Variable cost per paying user per month: the window's average daily
- * variable cost × 30.44, ÷ paying users. Null when any input is missing,
- * the window is empty, or there are no paying users. */
+/** Variable cost per paying user per month: the mean daily variable cost over
+ * the covered days × 30.44, ÷ paying users. A day with no variable rows is a
+ * gap, not a $0 day, so it is left out of the mean; the figure is only as
+ * complete as the covered days (`rows` shows per-day coverage). Null when any
+ * input is missing, the window is empty, or there are no paying users. */
 export function variableCostPerPayingUserMonth(
   days: SpendDay[],
   payingUsers: number | null

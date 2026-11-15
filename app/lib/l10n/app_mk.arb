@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Најавувањето со Apple не успеа. Обидете се повторно или продолжете со Google.",
     "authFailedToRetrieveToken": "Неуспешно преземање на firebase жетон, ве молиме обидете се повторно.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "Синхронизацијата е накратко паузирана — ќе продолжи автоматски",
     "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет",
     "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот",
+    "applyCodeToCurrentPlan": "Примени на тековната претплата",
+    "subscriptionCodeResult": "{result, select, applied{Кодот е применет на вашата тековна претплата.} refused{Кодот не може да се примени. Проверете го кодот и потребната претплата.} conflict{Кодот е веќе искористен или претплатата веќе има попуст.} rateLimited{Премногу обиди. Почекајте и обидете се подоцна.} other{Кодот не е применет. Обидете се повторно.}}",
     "promoCode": "Промо код",
     "enterPromoCode": "Внесете промо код",
     "invalidPromotionCode": "Невалиден промо код.",
@@ -11603,6 +11606,7 @@
     "activityAttentionStorageSubtitle": "Снимките се паузирани",
     "activityAttentionUploadStalledTitle": "Преносот е запрен",
     "activityAttentionUploadRecordings": "{count, plural, =1{Чека 1 снимка} other{Чекаат {count} снимки}}",
+    "attentionRerunNotes": "Повторно создај белешки",
     "attentionSummaryFailed": "Овој разговор не можеше да се сумира",
     "activityAttentionSemantics": "Активност, бара внимание",
     "connectAgentHeadline": "Користете ја вашата Omi меморија во ChatGPT и вашите AI агенти",
@@ -12193,11 +12197,19 @@
     "referralRewardSecondDetail": "Кога уште 3 пријатели ќе купат",
     "referralClaimShort": "Преземи",
     "paymentDeclinedTitle": "Вашата картичка е одбиена",
+    "paymentDeclinedMonthlyMessage": "Ажурирајте ја картичката или вратете го {plan} за {price} месечно",
     "paymentDeclinedMessage": "Ажурирајте ја картичката за да го вратите {plan}",
     "hasLinkedTasksLabel": "Има поврзани задачи",
     "hasTasksFilter": "Со задачи",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Префрли на месечно",
+    "monthlySwitchPlanValue": "{plan}, {price} месечно",
+    "monthlySwitchNote": "Го заменува неплатеното годишно плаќање од {yearly}. Се обновува месечно. Откажете во секое време.",
+    "monthlySwitchDeclined": "Плаќањето е одбиено. Вашиот план не е променет.",
+    "monthlySwitchUnavailable": "Префрлањето моментално не е достапно. Наместо тоа, ажурирајте ја картичката.",
+    "monthlySwitchDoneTitle": "Сега плаќате месечно",
+    "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно."
 }

@@ -7008,6 +7008,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple से साइन इन विफल, कृपया पुनः प्रयास करें।';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple से साइन इन नहीं हो पाया। फिर से कोशिश करें या Google के साथ जारी रखें।';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override
@@ -9153,6 +9157,24 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'वर्तमान फ़र्मवेयर संस्करण निर्धारित नहीं किया जा सका';
+
+  @override
+  String get applyCodeToCurrentPlan => 'मौजूदा प्लान पर लागू करें';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'कोड आपके मौजूदा प्लान पर लागू हो गया।',
+        'refused': 'यह कोड लागू नहीं हो सकता। कोड और आवश्यक प्लान जाँचें।',
+        'conflict': 'कोड पहले इस्तेमाल हो चुका है या आपके प्लान पर पहले से छूट है।',
+        'rateLimited': 'बहुत अधिक प्रयास। प्रतीक्षा करें और बाद में फिर कोशिश करें।',
+        'other': 'कोड लागू नहीं हुआ। फिर कोशिश करें।',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'प्रोमो कोड';
@@ -13635,6 +13657,9 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'नोट्स फिर से बनाएँ';
+
+  @override
   String get attentionSummaryFailed => 'इस बातचीत का सारांश नहीं बन सका';
 
   @override
@@ -15359,6 +15384,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'कार्ड अपडेट करें, या $plan वापस पाएं $price प्रति माह में';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan वापस पाने के लिए कार्ड अपडेट करें';
   }
@@ -15383,4 +15413,31 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'मासिक पर स्विच करें';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price प्रति माह';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly के बकाया सालाना शुल्क की जगह लेता है। हर महीने रिन्यू होता है। कभी भी रद्द करें।';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'भुगतान अस्वीकार हुआ। आपका प्लान नहीं बदला।';
+
+  @override
+  String get monthlySwitchUnavailable => 'अभी स्विच उपलब्ध नहीं है। इसके बजाय कार्ड अपडेट करें।';
+
+  @override
+  String get monthlySwitchDoneTitle => 'अब आप मासिक प्लान पर हैं';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'आज $price का भुगतान हुआ। हर महीने रिन्यू होता है।';
+  }
 }

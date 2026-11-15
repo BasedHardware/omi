@@ -1,7 +1,7 @@
 """Per-space envelope keys. No clients, credentials or IO are initialized on import.
 
 Wrapped keys live at space_keys/{space_id}, outside the user subtree. Account
-wipe must delete this document LAST (C4). A fresh document read precedes cache
+wipe must destroy the wrapped keys LAST, retaining the deletion tombstone (C4). A fresh document read precedes cache
 use so another worker's destroy cannot leave a cached key usable for a day.
 """
 
@@ -101,12 +101,12 @@ def _kms():
         return _kms_client
 
 
-def _client(firestore_client):
+def space_key_firestore_client(firestore_client=None):
     if firestore_client is not None:
         return firestore_client
-    from database._client import get_firestore_client
+    from database._client import get_data_plane_firestore_client
 
-    return get_firestore_client()
+    return get_data_plane_firestore_client()
 
 
 def _space_id(space_id: str) -> str:
@@ -130,14 +130,40 @@ def _key_errors():
         raise SpaceKeyUnavailable('Space key operation unavailable') from None
 
 
+def _destroyed_tombstone(data: dict, space_id: str) -> bool:
+    if data.get('state') != 'destroyed':
+        return False
+    if (
+        set(data) != {'space_id', 'state', 'destroyed_at'}
+        or data.get('space_id') != space_id
+        or not isinstance(data.get('destroyed_at'), str)
+        or not data.get('destroyed_at')
+    ):
+        raise ValueError('Malformed destroyed space-key authority')
+    return True
+
+
 def _decode(data: dict, space_id: str) -> SpaceKey:
+    if _destroyed_tombstone(data, space_id):
+        raise SpaceKeyDestroyed('Space key is durably destroyed')
     if data['space_id'] != space_id or data['algo'] != 'AES-256-GCM':
         raise ValueError('Invalid space key document')
     versions = tuple(SpaceKeyVersion(v['version'], v['wrapped'], v['wrapped_at'], v['state']) for v in data['versions'])
     if (
-        not versions
+        type(data['active_version']) is not int
+        or not isinstance(data['kms_key'], str)
+        or not versions
         or len({v.version for v in versions}) != len(versions)
-        or any(type(v.version) is not int or v.version < 1 or v.state not in ('active', 'retired') for v in versions)
+        or any(
+            type(v.version) is not int
+            or not 1 <= v.version <= 0xFFFFFFFF
+            or v.state not in ('active', 'retired')
+            or type(v.wrapped_at) is not str
+            or not v.wrapped_at
+            or type(v.wrapped_b64) is not str
+            or not base64.b64decode(v.wrapped_b64, validate=True)
+            for v in versions
+        )
         or [v.version for v in versions if v.state == 'active'] != [data['active_version']]
     ):
         raise ValueError('Invalid space key versions')
@@ -147,7 +173,7 @@ def _decode(data: dict, space_id: str) -> SpaceKey:
 def get_space_keys(space_id: str, *, firestore_client=None) -> SpaceKey | None:
     _space_id(space_id)
     with _key_errors():
-        snapshot = _client(firestore_client).collection('space_keys').document(space_id).get()
+        snapshot = space_key_firestore_client(firestore_client).collection('space_keys').document(space_id).get()
         return _decode(snapshot.to_dict(), space_id) if snapshot.exists else None
 
 
@@ -168,7 +194,7 @@ def _wrapped_version(version: int) -> dict:
 def get_or_create_space_key(space_id: str, *, firestore_client=None) -> SpaceKey:
     _space_id(space_id)
     with _key_errors():
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         existing = get_space_keys(space_id, firestore_client=client)
         if existing is not None:
             return existing
@@ -198,7 +224,7 @@ def rotate_space_key(space_id: str, *, firestore_client=None) -> SpaceKey:
     with _key_errors():
         from google.cloud.firestore_v1 import transactional
 
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         ref = client.collection('space_keys').document(space_id)
         # KMS is outside the transaction (including retries).
         candidate = _wrapped_version(1)
@@ -236,11 +262,17 @@ def _key_cache() -> TTLCache:
 def unwrap_space_dek(space_id: str, version: int, *, firestore_client=None) -> bytes:
     _space_id(space_id)
     with _key_errors():
-        client = _client(firestore_client)
+        client = space_key_firestore_client(firestore_client)
         # Cache only KMS work, never the authority that the document still exists.
         keys = get_space_keys(space_id, firestore_client=client)
         if keys is None:
             raise SpaceKeyDestroyed('Space key no longer exists')
+        return _unwrap_keys(client, keys, version)
+
+
+def _unwrap_keys(client, keys: SpaceKey, version: int) -> bytes:
+    with _key_errors():
+        space_id = keys.space_id
         stored = next((v for v in keys.versions if v.version == version), None)
         if stored is None:
             raise SpaceKeyDestroyed('Space key version no longer exists')
@@ -262,6 +294,13 @@ def unwrap_space_dek(space_id: str, version: int, *, firestore_client=None) -> b
         return raw
 
 
+def active_space_dek(space_id: str) -> tuple[SpaceKey, bytes]:
+    """One fresh key authority read for a put; the caller rechecks after upload."""
+    client = space_key_firestore_client()
+    keys = get_or_create_space_key(space_id, firestore_client=client)
+    return keys, _unwrap_keys(client, keys, keys.active_version)
+
+
 def _evict_space(space_id: str) -> None:
     with _cache_lock:
         if _cache is not None:
@@ -276,20 +315,31 @@ def destroy_space_keys(space_id: str, *, firestore_client=None) -> int:
         with _key_errors():
             from google.cloud.firestore_v1 import transactional
 
-            client = _client(firestore_client)
+            client = space_key_firestore_client(firestore_client)
             ref = client.collection('space_keys').document(space_id)
 
             @transactional
             def destroy(transaction):
                 snapshot = ref.get(transaction=transaction)
-                if not snapshot.exists:
+                data = snapshot.to_dict() or {}
+                if _destroyed_tombstone(data, space_id):
                     return 0
-                keys = _decode(snapshot.to_dict(), space_id)
-                transaction.delete(ref)
-                return len(keys.versions)
+                # Content-free tombstone survives even a never-created key.
+                # Malformed live rows are retryable, never treated as shredded.
+                count = len(_decode(data, space_id).versions) if snapshot.exists else 0
+                transaction.set(
+                    ref,
+                    {
+                        'space_id': space_id,
+                        'state': 'destroyed',
+                        'destroyed_at': datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                return count
 
             count = destroy(client.transaction())
-            if ref.get().exists:
+            verified = ref.get().to_dict() or {}
+            if not _destroyed_tombstone(verified, space_id):
                 raise SpaceKeyUnavailable('Space key deletion not verified')
             return count
     finally:

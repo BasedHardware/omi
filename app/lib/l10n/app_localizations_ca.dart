@@ -7067,6 +7067,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'No s\'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'No s\'ha pogut iniciar la sessió amb Apple. Torna-ho a provar o continua amb Google.';
+
+  @override
   String get authFailedToRetrieveToken =>
       'No s\'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.';
 
@@ -9221,6 +9225,24 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'No s\'ha pogut determinar la versió actual del firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Aplica al pla actual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Codi aplicat al teu pla actual.',
+        'refused': 'No es pot aplicar aquest codi. Comprova el codi i el pla necessari.',
+        'conflict': 'El codi ja s\'ha utilitzat o el pla ja té un descompte.',
+        'rateLimited': 'Massa intents. Espera i torna-ho a provar més tard.',
+        'other': 'No s\'ha pogut aplicar el codi. Torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Codi promocional';
@@ -13722,6 +13744,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Torna a generar les notes';
+
+  @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
 
   @override
@@ -15453,6 +15478,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualitza-la o recupera $plan per $price al mes';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualitza-la per recuperar $plan';
   }
@@ -15477,4 +15507,31 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Canvia a mensual';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price al mes';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Substitueix el càrrec anual pendent de $yearly. Es renova cada mes. Cancel·la quan vulguis.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pagament rebutjat. El teu pla no ha canviat.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Ara no es pot canviar. Actualitza la targeta.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Ara pagues mensualment';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagats avui. Es renova cada mes.';
+  }
 }

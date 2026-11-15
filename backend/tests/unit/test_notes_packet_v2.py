@@ -31,7 +31,7 @@ START = datetime(2026, 1, 12, 1, 30, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def isolated_flags(monkeypatch):
-    for flag in ('NOTES_PACKET_V2_MODE', 'STT_LANGUAGE_HINTS_MODE'):
+    for flag in ('NOTES_PACKET_V2_MODE',):
         monkeypatch.delenv(flag, raising=False)
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
@@ -522,6 +522,48 @@ def test_served_one_shot_output_without_an_emoji_uses_the_category_fallback(monk
     source = prefix(shaped_context='FULL TRANSCRIPT\nA synthetic workshop discussion.')
     output = notes._get_shaped_conversation_notes(source, uid='synthetic-account', **inputs())
     assert output.emoji == '📚'
+
+
+@pytest.mark.parametrize('words', [100, 4990, 6000])
+def test_scaled_density_changes_only_the_long_notes_packet(monkeypatch, processing, words):
+    from utils.llm import conversation_processing as notes
+    from config.notes_detail import NOTES_SCALED_DETAIL_ENV
+
+    monkeypatch.setenv(packet.FLAG, 'off')
+    requests = []
+
+    class Model:
+        async def ainvoke(self, messages):
+            requests.append(messages)
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Workshop volunteer schedule',
+                        'category': 'education',
+                        'sections': [{'heading': 'Topic', 'body_markdown': 'A grounded synthetic statement.'}],
+                    }
+                )
+            )
+
+    @asynccontextmanager
+    async def isolated(model):
+        yield model
+
+    monkeypatch.setattr(notes, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(notes, 'agentic_notes_payload', lambda **_kwargs: None)
+    monkeypatch.setattr(notes, 'isolated_notes_model', isolated)
+    source = prefix(shaped_context='FULL TRANSCRIPT\n' + 'workshop ' * words)
+    bodies = []
+    for value in ('false', 'true'):
+        monkeypatch.setenv(NOTES_SCALED_DETAIL_ENV, value)
+        requests.clear()
+        notes._get_shaped_conversation_notes(source, uid='synthetic-account', **inputs())
+        bodies.append(json.dumps(requests[0], ensure_ascii=False, sort_keys=True))
+    if words < 5000:
+        assert bodies[0] == bodies[1]  # Whole request bytes, including the variable packet.
+        assert 'LENGTH' not in bodies[1]
+    else:
+        assert bodies[0] != bodies[1] and 'LENGTH' in bodies[1]
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])

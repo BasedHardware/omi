@@ -964,3 +964,119 @@ def test_claim_peek_uses_only_get(monkeypatch):
         call.get('batch_projection:synthetic:owner'),
         call.get('batch_projection:synthetic:owner'),
     ]
+
+
+def _ledger_completion_store(client=None):
+    store = ProjectionStore(SimpleNamespace(client=client or Mock(), namespace='synthetic'))
+    store.policy = lambda _: ProjectionPolicy()
+    store._mirror = lambda *args, **kwargs: None
+    return store
+
+
+def _recording_binding():
+    return ProjectionBinding(
+        'synthetic-owner', 'job', 'content', ('segment',), target_conversation_id='capture', record_origin=True
+    )
+
+
+def test_first_completion_writes_transcribed_on_the_completion_clock(monkeypatch):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append((args, kwargs)) or True)
+    client = Mock()
+    store = _ledger_completion_store(client)
+    store.run = lambda operation, policy=None: ({'outcome': 'success'}, True, 4.5)
+    accounting = {'seconds': 4.5, 'source_deleted': False}
+
+    assert store.complete('segment', _recording_binding(), 1234.5, accounting)['outcome'] == 'success'
+
+    ((args, kwargs),) = writes
+    assert args == ('synthetic-owner', 'capture', pipeline_ledger.TRANSCRIBED)
+    assert kwargs['now'] == 1234.5  # the completion clock, not the ledger-write time
+    assert kwargs['speech_seconds'] == 4.5 and kwargs['has_speech'] is True
+    assert kwargs['speech_basis'] == 'transcript'
+    assert kwargs['firestore_client'] is client
+
+
+def test_replayed_completion_does_not_write_a_second_transcription(monkeypatch):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    store = _ledger_completion_store()
+    store.run = lambda operation, policy=None: ({'outcome': 'success'}, False, 4.5)
+
+    assert store.complete('segment', _recording_binding(), 2.0, {'seconds': 4.5})['outcome'] == 'success'
+    assert not writes
+
+
+@pytest.mark.parametrize(
+    'accounting,result',
+    [({'seconds': 4.5, 'source_deleted': True}, {}), ({'seconds': 0.0}, {'reason_code': 'source_deleted'})],
+)
+def test_source_deletion_keeps_its_erasure_fence(monkeypatch, accounting, result):
+    from database import pipeline_ledger
+
+    writes = []
+    monkeypatch.setattr(pipeline_ledger, 'advance', lambda *args, **kwargs: writes.append(args) or True)
+    store = _ledger_completion_store()
+    store.run = lambda operation, policy=None: (result or {'outcome': 'success'}, True, 0.0)
+
+    store.complete('segment', _recording_binding(), 2.0, accounting)
+    assert not writes
+
+
+def test_transcription_writer_is_fail_open_and_needs_a_capture_identity(monkeypatch):
+    from database import pipeline_ledger
+
+    store = _ledger_completion_store()
+    binding = replace(_recording_binding(), target_conversation_id=None)
+    store._observe_transcription(binding, 2.0, {'seconds': 4.5}, {'outcome': 'success'})
+    monkeypatch.setattr(pipeline_ledger, 'advance', Mock(side_effect=RuntimeError('synthetic outage')))
+    store._observe_transcription(_recording_binding(), 2.0, {'seconds': 4.5}, {'outcome': 'success'})
+
+
+def test_committed_transcript_signals_episode_before_playback_or_enrichment(binding, monkeypatch):
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+    from utils.episodes import transcript_receipts
+    from utils.capture import batch_coverage
+
+    events = []
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    payload = {
+        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'diarization': {'turns': []},
+    }
+    projector = projection.Projector(Mock(), Mock(return_value=payload))
+    projector.store = Mock()
+    session = projector.store.session.return_value
+    receipt = {'state': 'persisted', 'conversation_id': 'record'}
+    session.persist.return_value = receipt
+    row = {'id': 'record', 'transcript_segments': [{'text': 'Recovered decision.', 'speaker_id_scope': 'sync:fixture'}]}
+    monkeypatch.setattr(
+        projection,
+        'build_incoming',
+        lambda *a, **kw: {**row, 'started_at': Mock(timestamp=lambda: 0), 'finished_at': Mock(timestamp=lambda: 1)},
+    )
+    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
+
+    def assign(uid, incoming, **kwargs):
+        kwargs['after_assign'](Mock(), (row, False, []))
+        events.append('commit')
+        return row, False, []
+
+    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', assign)
+    monkeypatch.setattr(batch_coverage, 'record_projection', Mock())
+
+    def signal(uid, committed, **kwargs):
+        assert committed is row
+        assert kwargs['firestore_client'] is projector.store.client
+        events.append('signal')
+
+    monkeypatch.setattr(transcript_receipts, 'enqueue', signal)
+    projector.finish_part = lambda *a, **kw: events.append('finish')
+    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
+    assert events == ['commit', 'signal', 'finish']

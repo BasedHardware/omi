@@ -54,6 +54,24 @@ class MemoryTransaction:
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
 
+    def fresh_first_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key, *, ready):
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
+
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
             v
@@ -84,6 +102,25 @@ class MemoryStore:
         return [
             key for (table, key), v in self.rows.items() if table == 'jobs' and v['state'] == state and v[field] <= now
         ][:limit]
+
+    def allowance_owners(self, now, limit):
+        rows = sorted(
+            (v['check_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'allowance_holds' and v.get('active') and v['check_at'] <= now
+        )
+        return [key for _, key in rows[:limit]]
+
+    def allowance_page(self, owner_key, after, limit):
+        rows = sorted(
+            (v['capture_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'jobs'
+            and v['state'] == 'allowance_held'
+            and (owner_key is None or v['owner_key'] == owner_key)
+            and (after is None or (v['capture_at'], key) > tuple(after))
+        )
+        return [key for _, key in rows[:limit]]
 
     def oldest(self, priority, *, ready_only):
         from database.batch_pipeline_store import is_allowance_policy_hold
@@ -140,6 +177,9 @@ class MemoryStore:
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
+    def cancel_fenced_recovery(self, segment_id):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
     # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
     def defer_privacy_blocked_record(self, segment_id, until, now):
         with self.lock:
@@ -173,6 +213,32 @@ class MemoryStore:
             if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v.get('fresh_capture') is True
         ]
         return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
+    def ready_pending(self, owner_key, limit, *, after=None):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and (after is None or (v['capture_at'], v['segment_id']) > tuple(after))
+        ]
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        owners = {
+            row['owner_key']: row.get('owner_id')
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'result_ready'
+            and row.get('merge_pending')
+            and (after_owner_key is None or row['owner_key'] > after_owner_key)
+            and (ceiling_owner_key is None or row['owner_key'] <= ceiling_owner_key)
+        }
+        return sorted(owners.items(), reverse=descending)[: max(1, min(limit, 100))]
 
     def held_merge_owners(self, limit, *, after=None):
         owners = []
@@ -306,7 +372,8 @@ def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
     assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
 
 
-def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     from prometheus_client import CollectorRegistry
     from utils.batch_pipeline.metrics import QueueMetrics
 
@@ -358,6 +425,10 @@ def test_attempt_charged_re_lease_records_relet_true():
 def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
     # Shadow idle admission must follow this actual scheduler behavior, rather
     # than treating an attempt count as an authoritative terminal state.
+    # This is the CAPTURE_RETRY_CAP_ENFORCED rollback; the enforcing default is
+    # the next test. Either way a due retry is still promoted: the cap applies
+    # only at lease expiry, so the shadow busy estimator stays correct.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'false')
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
     store = MemoryStore()
     queue = Scheduler(store)
@@ -376,7 +447,26 @@ def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
     assert next_lease.token != lease.token
 
 
-def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
+    # CAPTURE_RETRY_CAP_ENFORCED=true (default off): the at-cap expiry is a
+    # retained hold. The unset default keeps retrying, as the test above shows.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'true')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    queue.pull(0)
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    held = store.rows['jobs', 'at-cap']
+    assert held['state'] == 'quarantined' and held['recovery_state'] == 'held'
+    assert held['audio_uri']
+
+
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('held-shadow-probe'), 0)
@@ -577,7 +667,10 @@ def test_admission_classifies_fresh_capture_by_capture_end():
     assert store.rows['jobs', 'catch_up']['fresh_capture'] is False
 
 
-def test_expired_leases_never_terminal_state_ordered_head():
+def test_expired_leases_never_terminal_state_ordered_head(monkeypatch):
+    # CAPTURE_RETRY_CAP_ENFORCED rollback. The enforcing default quarantines at
+    # the cap: test_enforced_cap_quarantines_at_cap_lease_expiry.
+    monkeypatch.setenv('CAPTURE_RETRY_CAP_ENFORCED', 'false')
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), 0)

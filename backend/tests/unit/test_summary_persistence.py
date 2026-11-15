@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from google.api_core.exceptions import InvalidArgument
 from database import conversations as db
+from utils.conversations import lifecycle
 from utils.conversations import summary_delivery as delivery
 from tests.unit.test_conversation_persistence_transaction_expiry import _FakeFirestoreClient, EXPIRED_MESSAGE
 from tests.unit.test_process_conversation_free_tier_branch import (
@@ -17,8 +18,6 @@ from tests.unit.test_process_conversation_free_tier_branch import (
 
 @pytest.fixture
 def writer(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     old = {
         'id': 'c',
         'status': 'completed',
@@ -58,7 +57,10 @@ def test_terminal_receipt_after_fenced_commit_and_expired_transaction_retry(writ
 
     monkeypatch.setattr(delivery, 'emit', emit)
     assert db.persist_processing_result_with_lifecycle('u', payload())
-    assert len(client.transactions) == 2 and len(receipts) == 1
+    # One expired real transaction, one retry, and the ledger's own noted and
+    # done stages in one ledger write.
+    assert len(client.commits) == 1 and len(client.ledger_commits) == 1 and len(receipts) == 1
+    assert client.ledger_commits[0]['stage'] == 'done' and client.ledger_commits[0]['home_ready_at']
     assert receipts[0]['reason'] == 'summary' and receipts[0]['present']
 
 
@@ -68,6 +70,23 @@ def test_summary_commit_preserves_record_lane_owner(writer, record_owner):
     assert db.persist_processing_result_with_lifecycle('u', {**payload(), 'record_lane_owner': 'legacy_final_pass_v1'})
     assert writer.commits[0]['record_lane_owner'] == record_owner
     assert writer.commits[0]['summary_completed_at']
+
+
+@pytest.mark.parametrize('sections_only', [False, True])
+def test_long_notes_use_the_lifecycle_summary_ledger_writer(writer, sections_only):
+    notes = payload()
+    # Scaled notes change the body, not the persistence authority or receipt contract.
+    notes['transcript_segments'] = [{'start': 0, 'end': 3600, 'text': 'Launch planning. ' * 1500}]
+    body = 'The team agreed to validate the launch before sending invitations. ' * 100
+    notes['structured'] = {
+        'title': 'Launch planning',
+        'overview': '' if sections_only else body,
+        'sections': [{'title': 'Launch decisions', 'body_markdown': body}] if sections_only else [],
+    }
+    assert lifecycle.persist_processed_conversation('u', notes)
+    assert len(writer.commits) == 1 and len(writer.ledger_commits) == 1
+    assert writer.ledger_commits[0]['stage'] == 'done'
+    assert writer.ledger_commits[0]['home_ready_at'] >= writer.commits[0]['summary_completed_at']
 
 
 def test_record_owner_does_not_bypass_summary_processing_fence(writer):

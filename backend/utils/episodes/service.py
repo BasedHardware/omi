@@ -119,6 +119,10 @@ SYNC_UPDATE = 'sync_update'
 FINALIZE_MIN_WORDS = 8
 
 
+class AdmissionClosed(Exception):
+    """The audio close already owns the capture: a late admission attached nothing."""
+
+
 @dataclass
 class Collaborators:
     """Seams for tests; production uses the module defaults."""
@@ -450,7 +454,7 @@ def _close(
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
         f_join.record_closed_size(closed)
-        composer.schedule(uid, str(episode['id']), collaborators=c)  # Members still processing reschedule it.
+        composer.schedule_after_close(uid, str(episode['id']), episode=closed, collaborators=c, trigger='close')
     return closed
 
 
@@ -1201,7 +1205,7 @@ def _record_moment_once(
             updates=updates,
             segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
-            **({'recovery_conversation_id': moment.conversation_id} if walk is not None else {}),
+            recovery_conversation_id=moment.conversation_id if walk is not None else None,
         )
     else:
         stored = episodes_db.commit_moment(
@@ -1244,6 +1248,8 @@ def on_conversation_finalized(
     collaborators: Optional[Collaborators] = None,
 ) -> str:
     """After the conversation's normal processing. Returns an outcome label; never raises."""
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or trigger not in RECONCILE_TRIGGERS:
         return 'skipped'
@@ -1502,6 +1508,10 @@ def _synced_f_verdict(
     if sum(len(str(s.get('text') or '').split()) for s in segments) < MOMENT_MIN_WORDS:
         # Too little speech to ask about: the join stays as today's, as a short moment keeps it.
         return None
+    if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
+        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
+        # Checked after the cheap gates, so only an admitted join with enough speech pays this read.
+        return None
     rows = episode_timeline.recorded_candidates(
         uid,
         started,
@@ -1527,8 +1537,7 @@ def _synced_f_verdict(
     if marker is None:
         return None
     if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
-        # Already placed (a retry or a changed re-attach): F answers only a first placement, and nothing moves.
-        # Checked after the cheap gates, so only an admitted, ambiguous join pays this read.
+        # A control attach may have committed after the selected owner snapshot, before uncertain.
         return None
     pending = {
         'gap_seconds': marker.gap_seconds or 0.0,
@@ -1536,13 +1545,15 @@ def _synced_f_verdict(
         'variant': F_JOIN_VARIANT,
         'previous': f_join.latest_member(owner, conversation_id),
     }
-    # Sync/late F adds <=24 document reads and <=1 Jev call per decision, including close:
+    # Sync/late F adds <=26 document reads and <=1 Jev call per decision, including close:
     # 1 admitted owner candidate + 1 fresh candidate + 1 owner + 1 boundary authority
-    # + 2 ownership docs + 1 predecessor
+    # + 1 early unplaced link + 2 post-uncertain/pre-Jev unplaced link reads + 1 predecessor + 1 user consent
     # + 2 names per transcript (4 total) + 1 final candidate re-read before Jev + 1 post-Jev recheck + 1 pre-close refresh
-    # + 4 close control docs + <=3 close members + 4 close candidates
+    # + 4 close control docs + <=3 close members + <=2 close candidates + 1 optimization-off owner re-read
     # (includes optimization-off re-reads). The 2-document initial query fails closed
     # when full, so only a window with <=1 result can reach the remaining reads.
+    # Close queries share one transaction snapshot: a complete first window has <=1 result,
+    # and the optimization-off requery uses the same or a narrower window.
     # Full windows/large or recovered owners keep control placement. The close is single-attempt; sync retries reuse its placement without repeating F or close reads.
     named = _named_segments(uid, f_join.candidate_head(segments), c, person_limit=2)
     return owner, f_join.settle(
@@ -1554,7 +1565,7 @@ def _synced_f_verdict(
         c,
         started_at=started,
         member=False,
-        # No candidate_row: settle re-reads the candidate's stored privacy as its last read before Jev.
+        # No candidate_row: settle re-reads stored privacy and consent, then ownership before Jev.
         people_read_limit=2,
     )
 
@@ -1662,7 +1673,18 @@ def _no_owner(rows, started, finished):
 
 
 def attach_recorded(
-    uid, conversation_id, row, started, finished, c, *, pending_transcription=False, new_occasion=False
+    uid,
+    conversation_id,
+    row,
+    started,
+    finished,
+    c,
+    *,
+    pending_transcription=False,
+    new_occasion=False,
+    deadline_floor=None,
+    detach_from=None,
+    admission=False,
 ) -> dict[str, Any]:
     template = new_episode(
         conversation_id=conversation_id,
@@ -1683,8 +1705,13 @@ def attach_recorded(
         new_episode=template,
         firestore_client=c.firestore_client,
         pending_at=template['created_at'] if pending_transcription else None,
+        deadline_floor=deadline_floor,
+        detach_from=detach_from,
         attach_row=row,
+        admission=admission,
     )
+    if isinstance(placed, str):
+        raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
 
@@ -1755,6 +1782,8 @@ def attach_synced_intake(
     episode (live or closed) never moves.
     Fail-open; returns a bounded outcome label; never raises.
     """
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
@@ -1808,6 +1837,8 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
@@ -2163,6 +2194,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'title': clean_text(episode.get('title'), 240),
         'bullets': [clean_text(line, composer.COMPOSER_MAX_PARAGRAPH_CHARS) for line in episode.get('bullets') or []],
         'lede': clean_text(episode.get('lede'), composer.COMPOSER_MAX_PARAGRAPH_CHARS),
+        'compose_deferred': composer.episode_late_compose_enabled() and composer.is_deferred(episode),
         'follow_ups': [clean_text(line, 400) for line in episode.get('follow_ups') or [] if clean_text(line, 400)],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [

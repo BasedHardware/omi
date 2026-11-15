@@ -1,0 +1,14 @@
+id: sd/muted-pendant-writes-nothing
+summary: >
+  Issue 5054 end to end through the real SD worker: after the app mutes, the
+  pusher stores nothing, across a cold boot as well.
+tags: [guard]
+timeline:
+  - {t: 5000, app_mute: 1}
+  - {t: 20000, power: cycle}
+end: 40000
+expect:
+  boots:
+    - {muted: 1, sd_paused: true, should_capture: false}
+    - {muted: 1, sd_paused: true, sd_written: 0}
+  invariants: [mute-blocks-capture]

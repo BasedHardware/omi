@@ -13251,6 +13251,12 @@ abstract class AppLocalizations {
   /// **'Failed to sign in with Apple, please try again.'**
   String get authFailedToSignInWithApple;
 
+  /// Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple didn\'t work. Try again or continue with Google.'**
+  String get authAppleSignInFailedUseGoogle;
+
   /// Error message when retrieving Firebase token fails
   ///
   /// In en, this message translates to:
@@ -17060,6 +17066,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to determine current firmware version'**
   String get unableToDetermineFirmwareVersion;
+
+  /// Apply a code only to the existing subscription, regardless of highlighted checkout plan; never changes plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to Current Plan'**
+  String get applyCodeToCurrentPlan;
+
+  /// Existing-subscription code application result; never promises payment or entitlement. result: applied, refused, conflict, rateLimited, other.
+  ///
+  /// In en, this message translates to:
+  /// **'{result, select, applied{Code applied to your current plan.} refused{This code cannot be applied. Check the code and its required plan.} conflict{Code already used, or your plan already has a discount.} rateLimited{Too many tries. Please wait and try again later.} other{Could not apply this code. Please try again.}}'**
+  String subscriptionCodeResult(String result);
 
   /// No description provided for @promoCode.
   ///
@@ -24285,6 +24303,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
   String activityAttentionUploadRecordings(int count);
 
+  /// Activity Needs attention button: retry notes only, preserving saved tasks and events
+  ///
+  /// In en, this message translates to:
+  /// **'Re-run notes'**
+  String get attentionRerunNotes;
+
   /// Needs attention row: the server gave up summarizing a conversation
   ///
   /// In en, this message translates to:
@@ -27003,6 +27027,12 @@ abstract class AppLocalizations {
   /// **'Your card was declined'**
   String get paymentDeclinedTitle;
 
+  /// Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'Update it, or get {plan} back for {price} a month'**
+  String paymentDeclinedMonthlyMessage(String plan, String price);
+
   /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
   ///
   /// In en, this message translates to:
@@ -27044,6 +27074,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirming installation… This may take up to 3 minutes.'**
   String get firmwareVerifyingInstallation;
+
+  /// Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Monthly'**
+  String get monthlySwitchTitle;
+
+  /// Value of the Plan row in the switch-to-monthly sheet, e.g. "Omi Pro, US$29.99 a month"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a month'**
+  String monthlySwitchPlanValue(String plan, String price);
+
+  /// Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91
+  ///
+  /// In en, this message translates to:
+  /// **'Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.'**
+  String monthlySwitchNote(String yearly);
+
+  /// Switch-to-monthly sheet: the monthly charge was declined; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. Your plan didn\'t change.'**
+  String get monthlySwitchDeclined;
+
+  /// Switch-to-monthly sheet: the server refused the switch for this subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Switching isn\'t available right now. Update your card instead.'**
+  String get monthlySwitchUnavailable;
+
+  /// Switch-to-monthly sheet title after a successful switch
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on monthly'**
+  String get monthlySwitchDoneTitle;
+
+  /// Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'{price} paid today. Renews monthly.'**
+  String monthlySwitchDoneBody(String price);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

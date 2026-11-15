@@ -36,6 +36,8 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from utils.sync.recovery_source import recovery_source_conversation
+from utils.sync.deleted_conversation import deleted_conversation_result, is_conversation_deleted
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
@@ -54,9 +56,18 @@ from models.sync_job_status import (
     SyncJobStatusResponse,
     SyncCaptureManifestRequest,
     SyncCaptureManifestResponse,
+    SyncCaptureEndRequest,
+    SyncCaptureEndResponse,
+    SyncUploadHoldReleaseResponse,
 )
 from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
+from database import record_audio as record_audio_db
+from config import record_seal_rules as record_lease
+from utils.sync import record_token_lease as custody_lease
+from utils.sync import capture_end
+from database import capture_end as capture_end_db
+from database import pipeline_ledger
 from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
@@ -174,13 +185,19 @@ from utils.sync.repeat_work_metrics import (
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
+from config.firestore_read_levers import lever_enabled
 from utils.subscription import (
     TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS,
     has_transcription_credits,
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
-from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
+from utils.sync.input_limits import (
+    BackfillInputLimitExceeded,
+    BackfillStoragePressure,
+    validate_backfill_uploads,
+    validate_backfill_paths,
+)
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
@@ -204,6 +221,7 @@ from utils.sync.pipeline import (
     _reprocess_merged_conversations,
     _RESPONSE_FENCED_CONVERSATION_IDS,
     _retrieve_file_paths_v2,
+    _record_capture_time_admission,
     run_full_pipeline_background_async,
     _stage_files_to_gcs,
     build_person_embeddings_cache,
@@ -218,7 +236,18 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
+    capture_time_rejection,
+    future_capture_clamp_enabled,
     is_early_capture_time,
+    is_implausible_future_capture_time,
+)
+from utils.sync.clock_run import capture_clock_run_from_path
+from utils.sync.receipt_clock import (
+    POLICY as RECEIPT_CLOCK_POLICY,
+    ESTIMATED_POLICY,
+    FutureCaptureRefused,
+    require_future_upload,
+    retained_source_offsets,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -235,7 +264,6 @@ from utils.sync.backfill import (
     release_backfill_slot,
     reserve_backfill_speech,
     retry_after_next_utc_day,
-    try_acquire_backfill_slot,
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, memoized_record_wait, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
@@ -252,7 +280,7 @@ from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
-from utils.sync import cap_hold_redrive
+from utils.sync import batch_census, cap_hold_redrive
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +331,22 @@ router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(
 router.include_router(coverage_router)
 
 
+async def _renew_custody_lease(uid, conversation_id):
+    if not record_lease.token_lease_serving(uid):
+        return
+    try:
+        await run_blocking(
+            db_executor,
+            record_audio_db.renew_record_token_lease,
+            uid,
+            conversation_id,
+            source='custody_append',
+        )
+    except Exception as error:
+        logger.warning('event=record_token_lease_renewal outcome=unavailable exception_type=%s', type(error).__name__)
+        raise HTTPException(status_code=503, detail='Retain local audio and retry custody admission') from error
+
+
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
 async def create_sync_capture_manifest(
     payload: SyncCaptureManifestRequest,
@@ -327,6 +371,7 @@ async def create_sync_capture_manifest(
     )
     if not trusted:
         raise HTTPException(status_code=403, detail='Fresh capture provenance could not be verified')
+    await _renew_custody_lease(uid, payload.conversation_id)
     claims = [item.model_dump() for item in payload.files]
     try:
         claimed = await run_blocking(
@@ -354,6 +399,58 @@ async def create_sync_capture_manifest(
         uid=uid,
     )
     return SyncCaptureManifestResponse(manifest=manifest)
+
+
+def _store_capture_end(uid: str, recording_session_id: str, marker: dict) -> str:
+    outcome, conversation_id = capture_end_db.store(uid, recording_session_id, marker)
+    if outcome == 'stored' and conversation_id:
+        # Fail-open measurement: the marker is already durable on the session.
+        pipeline_ledger.record_end(
+            uid,
+            conversation_id,
+            end_type=marker['end_type'],
+            end_at=marker['end_at'],
+            end_observed_at=marker['end_observed_at'],
+            last_speech_at=marker['last_speech_at'],
+        )
+    return outcome
+
+
+@router.post('/v2/sync-capture-end', response_model=SyncCaptureEndResponse)
+async def record_sync_capture_end(
+    payload: SyncCaptureEndRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """The phone states that a recording ended and how much of it is uploaded.
+
+    Stored on the recording's own session document. It lets notes start once
+    the recording's speech has landed, without the arrival-quiet wait. It never
+    changes custody and never deletes or finalizes anything itself.
+    """
+    if not capture_end.enabled():
+        capture_end.record_received(payload.end_type, 'disabled')
+        return SyncCaptureEndResponse(accepted=False)
+    try:
+        marker = capture_end.normalize(
+            end_type=payload.end_type,
+            last_speech_at=payload.last_speech_at,
+            end_decided_at=payload.end_decided_at,
+            sent_at=payload.sent_at,
+            pending_wals=payload.pending_wals,
+            received_at=time.time(),
+        )
+    except ValueError as e:
+        capture_end.record_received(payload.end_type, 'invalid')
+        raise HTTPException(status_code=422, detail='Invalid capture end') from e
+    try:
+        outcome = await run_blocking(db_executor, _store_capture_end, uid, payload.recording_session_id, marker)
+    except Exception as e:
+        logger.error('sync capture end unavailable uid=%s error=%s', uid, type(e).__name__)
+        raise HTTPException(status_code=503, detail='Capture end is temporarily unavailable') from e
+    capture_end.record_received(marker['end_type'], outcome)
+    # No session yet: no upload for this recording has been bound. The phone's
+    # resend after its last accepted file covers that case.
+    return SyncCaptureEndResponse(accepted=outcome != 'unbound', retry=outcome == 'unbound')
 
 
 class AudioDownloadPendingResponse(BaseModel):
@@ -601,6 +698,7 @@ def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     responses=SYNC_LOCAL_FILES_V2_RESPONSES,
 )
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
+@custody_lease.custody_upload
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -628,6 +726,7 @@ async def sync_local_files_v2(
     x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
     x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
+    x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
 ):
     """
     Async version of sync-local-files. Saves raw files and returns 202
@@ -637,8 +736,13 @@ async def sync_local_files_v2(
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
     upload_filenames = [f.filename or '' for f in files]
+    supplied_conversation_id = conversation_id  # Authenticate original custody proof before ignoring a stale target.
     repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
+    # Measurement only: how long the oldest file waited on the phone, and why.
+    capture_end.observe_trace(
+        x_omi_upload_trace if isinstance(x_omi_upload_trace, str) else None, received_at=capture_received_at
+    )
     try:
         files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
     except EmptySyncUpload:
@@ -651,6 +755,30 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    try:
+        recovery_hint = future_capture_clamp_enabled() and any(
+            is_implausible_future_capture_time(get_timestamp_from_path(file.filename or ''), now=capture_received_at)
+            or (
+                capture_clock_run_from_path(file.filename or '')
+                and not is_early_capture_time(get_timestamp_from_path(file.filename or ''))
+            )
+            for file in files
+        )
+    except (IndexError, ValueError):
+        recovery_hint = False  # Ordinary staging still returns the typed malformed-name refusal.
+    recovery_source_id = None
+    if recovery_hint:
+        try:
+            recovery_source_id = await run_blocking(
+                db_executor, recovery_source_conversation, uid, supplied_conversation_id
+            )
+        except BatchPrivacyBlocked as error:
+            return (
+                JSONResponse(status_code=200, content=deleted_conversation_result(0))
+                if is_conversation_deleted(error)
+                else privacy_blocked_response()
+            )
+        conversation_id = None  # No stale record wait, live-owner lookup or explicit binding for unknown time.
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
         # it before saving, archiving or decoding these bytes (audio retained).
@@ -690,19 +818,23 @@ async def sync_local_files_v2(
         x_omi_sync_capture_manifest,
         uid,
         client_device_context.client_device_id,
-        conversation_id,
+        supplied_conversation_id,
         upload_filenames,
     )
     manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
-    has_server_capture_proof = manifest_claims is not None and await run_blocking(
-        db_executor,
-        _capture_matches_server_conversation,
-        uid,
-        conversation_id,
-        filenames,
-        client_device_context.client_device_id,
-        snapshot_out=record_snapshot,
+    has_server_capture_proof = (
+        not recovery_hint
+        and manifest_claims is not None
+        and await run_blocking(
+            db_executor,
+            _capture_matches_server_conversation,
+            uid,
+            conversation_id,
+            filenames,
+            client_device_context.client_device_id,
+            snapshot_out=record_snapshot,
+        )
     )
     # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
@@ -793,10 +925,18 @@ async def sync_local_files_v2(
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+    # Reuse the first answer. At 0, preserve the old wrapper + conditional second lookup,
+    # including its different lock decision if allowance state changes between calls.
+    if lever_enabled('sync_allowance_single_resolve', uid):
+        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        has_credits = allowance.managed
+    else:
+        has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
+        allowance = None
     should_lock = False
     if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        if allowance is None:
+            allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
         should_lock = (
             allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
             and allowance.reason != 'usage_budget_exhausted'
@@ -822,11 +962,12 @@ async def sync_local_files_v2(
     sequencer_registration_started = False
 
     try:
+        await custody_lease.begin_upload(uid, conversation_id, job_id, recording_session_id=recording_session_id)
         # --- Fast path: save raw files only (< 2s typical) ---
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
         try:
-            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id, probe_future=True)
         except SyncCaptureTimeRejected:
             logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
@@ -837,9 +978,86 @@ async def sync_local_files_v2(
                 content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
             )
 
+        retained_capture_offsets = await run_blocking(
+            db_executor,
+            retained_source_offsets,
+            paths,
+            uid=uid,
+            device_id=client_device_context.client_device_id,
+            received_at=capture_received_at,
+        )
+        # Staging a future clock is only a probe. New 600s-to-24h stamps and
+        # disabled recovery still get today's typed 400; retained source proof
+        # alone can carry an admitted file through that band on a later retry.
+        for path in paths:
+            stamp = get_timestamp_from_path(path)
+            rejection = capture_time_rejection(
+                datetime.fromtimestamp(stamp, timezone.utc),
+                now=datetime.fromtimestamp(capture_received_at, timezone.utc),
+            )
+            if path not in retained_capture_offsets and rejection is not None:
+                _record_capture_time_admission(rejection, ahead_seconds=max(0, stamp - capture_received_at))
+                raise FutureCaptureRefused()
+        retained_capture = bool(retained_capture_offsets)
+        if retained_capture:
+            await run_blocking(sync_executor, validate_backfill_paths, paths)
+            if os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
+                raise HTTPException(503, detail='Historical recovery is paused; retain local audio')
+            lane_decision = replace(
+                lane_decision,
+                lane=SyncLane.BACKFILL,
+                trust=CaptureTimeTrust.UNTRUSTED,
+                reason='retained_capture_recovery',
+                maximum_age_seconds=None,
+            )
         early_capture_received_at = (
             capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
         )
+        future_capture = any(
+            is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at) for path in paths
+        )
+        estimated_capture = future_capture_clamp_enabled() and any(
+            capture_clock_run_from_path(path) and not is_early_capture_time(get_timestamp_from_path(path))
+            for path in paths
+        )
+        if future_capture or estimated_capture or retained_capture:
+            try:
+                recovery_source_id = await run_blocking(
+                    db_executor, recovery_source_conversation, uid, supplied_conversation_id
+                )
+            except BatchPrivacyBlocked as error:
+                return (
+                    JSONResponse(status_code=200, content=deleted_conversation_result(0))
+                    if is_conversation_deleted(error)
+                    else privacy_blocked_response()
+                )
+            # Old WALs may carry a live conversation stamp. Keep custody proof
+            # authenticated against the submitted ID, but never use it as a
+            # temporal target for this isolated recovery source.
+            conversation_id = None
+            record_snapshot = {}
+        capture_clock_policy = (
+            RECEIPT_CLOCK_POLICY if retained_capture else ESTIMATED_POLICY if estimated_capture else None
+        )
+        if future_capture:
+            future_paths = [
+                path
+                for path in paths
+                if is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at)
+            ]
+            require_future_upload(future_paths, received_at=capture_received_at)
+            if (
+                any(capture_clock_run_from_path(path) for path in future_paths)
+                and not client_device_context.client_device_id
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    headers={'Retry-After': '30'},
+                    content={'code': 'capture_clock_identity_required', 'detail': 'Retain local audio and retry'},
+                )
+            # Future clocks are a batch-only extension. Legacy and early-clock
+            # admission/placement keep main's existing context and behavior.
+            capture_clock_policy = RECEIPT_CLOCK_POLICY
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
@@ -859,10 +1077,10 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                if any(is_early_capture_time(value) for value in admitted_file_starts):
+                if early_capture_received_at is not None or future_capture or estimated_capture or retained_capture:
                     # Reset clocks prove no server-clock interval. Do not use
                     # a possibly years-wide client claim for session lookup;
-                    # explicit targets and source-frame evidence stay intact.
+                    # source-frame custody evidence keeps its original meaning.
                     audio_start_seconds = audio_end_seconds = None
                 else:
                     admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
@@ -901,8 +1119,7 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        archive_paths = await run_blocking(
-            sync_executor,
+        archive_paths = await custody_lease.archive(
             archive_mobile_batch_raw_files,
             uid,
             paths,
@@ -915,6 +1132,7 @@ async def sync_local_files_v2(
             },
         )
 
+        custody_lease.stored(paths, archive_paths)
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
@@ -943,7 +1161,9 @@ async def sync_local_files_v2(
                 source=source.value,
                 client_device_id=client_device_context.client_device_id,
                 byok_enabled=byok_enabled,
-                recording_session_id=recording_session_id,
+                recording_session_id=(
+                    None if future_capture or estimated_capture or retained_capture else recording_session_id
+                ),
                 policy=batch_policy,
                 loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
                 # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
@@ -981,9 +1201,29 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
+                    **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
-                        {'capture_received_at': early_capture_received_at}
+                        {
+                            'retained_capture_offsets_by_name': {
+                                os.path.basename(path): offset for path, offset in retained_capture_offsets.items()
+                            }
+                        }
+                        if capture_clock_policy is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            'capture_received_at': (
+                                capture_received_at
+                                if future_capture or estimated_capture or retained_capture
+                                else early_capture_received_at
+                            )
+                        }
                         if early_capture_received_at is not None
+                        or future_capture
+                        or estimated_capture
+                        or retained_capture
                         else {}
                     ),
                     'recording_session_id': recording_session_id,
@@ -1008,6 +1248,23 @@ async def sync_local_files_v2(
                     record_upload_outcome('batch')
                 return batch_response
             sequencer_registration_started = False
+
+        if future_capture:
+            # A cohort/language/capacity decline retains the phone's files;
+            # this policy can never fall through to a legacy reader.
+            raise FutureCaptureRefused()
+
+        if estimated_capture or retained_capture:
+            # A repaired clock must retain its per-source isolation even when
+            # the batch cohort/language/capacity path declines this upload.
+            return JSONResponse(
+                status_code=503,
+                headers={'Retry-After': '30'},
+                content={
+                    'code': 'sync_batch_unavailable',
+                    'detail': 'Sync is temporarily unavailable; retain local audio',
+                },
+            )
 
         if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
             # A legacy job is created only on a young mode read: a request that read 'on'
@@ -1059,6 +1316,10 @@ async def sync_local_files_v2(
             total_files=len(files),
             total_segments=0,
             job_id=job_id,
+            # Live WAL uploads already supply their target and recording session.
+            # Session-only uploads keep an unknown target; do not infer membership.
+            recording_ids=[recording_session_id] if recording_session_id else [],
+            target_conversation_id=conversation_id if isinstance(conversation_id, str) else None,
             lane=lane_decision.lane.value,
             capture_time_trust=lane_decision.trust.value,
             recording_age_seconds=lane_decision.maximum_age_seconds,
@@ -1546,6 +1807,10 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
+    except FutureCaptureRefused:
+        return JSONResponse(
+            status_code=400, content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL}
+        )
     except HTTPException as error:
         if error.status_code == 400:
             reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
@@ -1575,6 +1840,29 @@ async def sync_local_files_v2(
         )
     finally:
         _cleanup_files(paths)
+
+
+@router.post('/v2/sync-local-files/{job_id}/release-hold', response_model=SyncUploadHoldReleaseResponse)
+def release_sync_upload_hold(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Precise owner-authenticated user-open hint; no priority promotion.
+
+    Generic polling, Home refresh and app foreground never call this operation.
+    The normal per-owner limiter bounds repeated hints; wrong-owner and unknown
+    handles have the same response. The producer kill switch does not gate it.
+    """
+    if not admit_sync_job_poll(uid):
+        raise HTTPException(status_code=429, detail='Sync job polling too frequent; retry later')
+    if not job_id.startswith('bp_') or len(job_id) > 128 or '/' in job_id:
+        raise HTTPException(status_code=404, detail='Sync job not found')
+    from database.batch_pipeline_coalescing import release_for_open
+    from database.batch_pipeline_store import FirestoreStore
+    from utils.sync.stage import current_stage
+
+    try:
+        release_for_open(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id, time.time())
+    except BatchPrivacyBlocked:
+        return privacy_blocked_response()
+    return {'accepted': True}
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
@@ -1827,10 +2115,12 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
                 summary = await run_blocking(db_executor, summary_debt_repair.tick)
             except Exception as error:
                 logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
+                summary = {'scanned': 0, 'admitted': 0, 'near_expiry_admitted': 0, 'errors': 1, 'expired_seen': 0}
             outcomes['summary_debt_scanned'] = summary['scanned']
             outcomes['summary_debt_admitted'] = summary['admitted']
+            outcomes['summary_debt_near_expiry_admitted'] = summary.get('near_expiry_admitted', 0)
             outcomes['summary_debt_errors'] = summary['errors']
+            outcomes['summary_debt_expired_seen'] = summary['expired_seen']
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 
@@ -3814,3 +4104,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 @read_origin('job:cap_hold_recovery')
 async def sweep_cap_hold_recovery(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     return await cap_hold_redrive.sweep()
+
+
+@router.post('/v2/batch-census/run', include_in_schema=False)
+@read_origin('job:batch_census')
+async def run_batch_census(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Exact per-stock counts and oldest ages for the batch census registry."""
+    return JSONResponse(status_code=200, content=await batch_census.snapshot())

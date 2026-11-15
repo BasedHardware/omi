@@ -3489,7 +3489,7 @@
       "__panelId__": "31",
       "summary": "New BYOK blocked state exceeds three days",
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
-      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment.",
+      "scope": "Only blocked_byok entries stamped blocked_byok_at in the last seven days. Existing unstamped/13-day legacy stock remains informational; threshold 3d precedes automatic 14d abandonment. Day-1 import disposition: active agent-tier warning, muted by omi-tier-silent; UID and 259200s/1h threshold remain unchanged. BYOK blocked-state triage owns the real debt; this rule does not page on import.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
       "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
@@ -3500,13 +3500,13 @@
       "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
     },
     "labels": {
-      "severity": "critical",
+      "severity": "warning",
       "instatus_component": "speech-processing",
       "alert_identity": "omi-finalization-byok-dwell-page",
       "component": "speech-processing",
       "impact": "user-experience",
-      "tier": "page",
-      "audience": "human",
+      "tier": "agent",
+      "audience": "agent",
       "owner": "two-lane-lead"
     },
     "isPaused": false,
@@ -3515,10 +3515,12 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "30s",
-      "group_interval": "5m",
-      "repeat_interval": "4h",
-      "mute_time_intervals": []
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -4140,6 +4142,140 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-held-content-snapshot-stale",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Held-content fleet snapshot stale",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "time() - max(omi_held_content_fleet_snapshot_timestamp_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 3600",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "E",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "D",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "E",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-08T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The held-content fleet snapshot is older than one hour or has never been published.",
+      "user_impact": "Held-content ages and counts can appear healthy or frozen while cap-held recovery is delayed.",
+      "scope": "Fleet snapshot publication freshness, selecting the newest timestamp across replicas. Default cadence is 120s, so one hour is about 30 missed publishes. Agent-tier telemetry warning.",
+      "verification": "Compare time() - max(omi_held_content_fleet_snapshot_timestamp_seconds) with 3600s. Check cap-hold redrive completion and snapshot publication logs and supervised ticks. Select replicas by snapshot timestamp; never max the held-content age gauge.",
+      "safe_next_action": "Check the cap-hold redrive publisher and supervised tick logs using the runbook. Confirm snapshot publication resumes. This alert authorizes no runtime changes.",
+      "runbook": "backend/docs/runbooks/cap-hold-durability.md",
+      "threshold": "$A > 3600 for 10m; absent snapshot is Alerting",
+      "evaluated_bad": "Newest fleet snapshot older than 3600s, or no snapshot series.",
+      "evaluated_good": "Newest fleet snapshot at most 3600s old."
+    },
+    "labels": {
+      "alert_identity": "omi-held-content-snapshot-stale",
+      "component": "batch-pipeline",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "omi-pipeline"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
   },
   {
     "uid": "omi-stt-chain-exhausted-warn",
@@ -5036,13 +5172,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "record_pending entered via enqueued_at within the last 24h; legacy 8-72h stock is excluded from this page. Up to 1000 cohort rows, capped stock COUNT 5001. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_batch_record_pending_new_oldest_age_seconds and ignoring(state, lane) (time() - omi_batch_record_pending_observed_at_seconds < 900)) > 7200 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">7200 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 7200 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 record-admission drain work reaches production, require fresh, untruncated record_pending cohort observations below 7200s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -5054,7 +5191,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -5988,13 +6125,14 @@
       "user_impact": "A recording may wait without a transcript or summary; this observation does not change custody.",
       "scope": "Active obligations entered via first_pending_at within the last 24h; fresh includes non-backfill and pending first summaries. Dormant receipts and legacy stock are excluded. Cohort page cap 1000. Entry must also be at/after the fixed 2026-11-04T09:27Z cutoff; rolling24h alone includes known 8-24h incident stock.",
       "verification": "Check the source observation timestamp and scan-truncated metric first. Bounded stock counts are lower bounds at their cap; compare consecutive samples.",
-      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically.",
+      "safe_next_action": "Assign the affected lifecycle source to its owner. Restore the observer if stale or blind; use the approved bounded repair runbook after confirming the cohort. Do not replay historical stock automatically. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/lifecycle-alarms.md",
       "threshold": "max(omi_enrichment_obligation_new_oldest_age_seconds{lane=\"fresh\"} and ignoring(state, lane) (time() - omi_enrichment_obligation_observed_at_seconds < 1200)) > 3600 for 10m",
       "evidence_date": "2026-11-04",
       "intended_final_threshold": ">3600 for 10m; review after the freshtitles backlog drain. Age thresholds remain the lifecycle budget.",
       "evaluated_bad": "Synthetic: a fresh observation exceeds 3600 continuously for 10m.",
-      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget."
+      "evaluated_good": "Synthetic: only pre-cohort legacy rows are late, or the observed value is within its budget.",
+      "unpause_criteria": "After #24893 enrichment drain work reaches production, require fresh, untruncated fresh-cohort observations below 3600s continuously for 24h. The lifecycle owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "severity": "critical",
@@ -6006,7 +6144,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -7787,7 +7925,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(min(min_over_time(scrape_samples_scraped{job=\"kube-state-metrics\"}[15m])) or vector(0)) < bool 1",
+          "expr": "(min(min_over_time(scrape_samples_scraped{job=\"kube-state-metrics\"}[15m])) < bool 1) and on() (max(max_over_time(up{job=\"kube-state-metrics\"}[15m])) == 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -7840,7 +7978,7 @@
       }
     ],
     "updated": "2026-07-15T00:00:00Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "30m",
     "keep_firing_for": "0s",
@@ -7848,7 +7986,7 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "6",
       "summary": "kube-state-metrics returned 0 samples on at least one scrape in every 15m window for 30m (restart loop or outage), so kube_* series are gapped or absent",
-      "threshold": "min scrape_samples_scraped{job=\"kube-state-metrics\"} over 15m < 1, sustained 30m",
+      "threshold": "min scrape_samples_scraped{job=\"kube-state-metrics\"} over 15m < 1 while the target was up in the window, sustained 30m (down/absent is omi-scrape-kube-state-metrics)",
       "user_impact": "No direct user impact; the backend-listen HPA custom metric, capacity and replica alerts, and the margin meter read kube_* series and go blind.",
       "scope": "kube-state-metrics in prod-omi-monitoring (kube-prometheus-stack subchart).",
       "verification": "kubectl -n prod-omi-monitoring get pod -l app.kubernetes.io/name=kube-state-metrics (RESTARTS) and its events (liveness timeouts); up stays 1 during this failure.",

@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "ההתחברות עם Apple לא הצליחה. נסו שוב או המשיכו עם Google.",
     "authFailedToRetrieveToken": "כישלון בשליפת אסימון firebase, אנא נסה שוב.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית",
     "syncCardBackendBusy": "השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה",
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
+    "applyCodeToCurrentPlan": "החל על התוכנית הנוכחית",
+    "subscriptionCodeResult": "{result, select, applied{הקוד הוחל על התוכנית הנוכחית שלך.} refused{לא ניתן להחיל קוד זה. בדוק את הקוד ואת התוכנית הנדרשת.} conflict{הקוד כבר נוצל או שכבר יש הנחה בתוכנית שלך.} rateLimited{יותר מדי ניסיונות. המתן ונסה שוב מאוחר יותר.} other{לא ניתן היה להחיל את הקוד. נסה שוב.}}",
     "promoCode": "קוד קידום",
     "enterPromoCode": "הזינו קוד קידום",
     "invalidPromotionCode": "קוד קידום לא תקין.",
@@ -11603,6 +11606,7 @@
     "activityAttentionStorageSubtitle": "ההקלטות מושהות",
     "activityAttentionUploadStalledTitle": "ההעלאה נתקעה",
     "activityAttentionUploadRecordings": "{count, plural, =1{הקלטה אחת ממתינה} other{{count} הקלטות ממתינות}}",
+    "attentionRerunNotes": "יצירת הערות מחדש",
     "attentionSummaryFailed": "לא ניתן היה לסכם את השיחה הזו",
     "activityAttentionSemantics": "פעילות, דורש תשומת לב",
     "connectAgentHeadline": "השתמשו בזיכרון של Omi ב-ChatGPT ובסוכני ה-AI שלכם",
@@ -12193,11 +12197,19 @@
     "referralRewardSecondDetail": "כשעוד 3 חברים קונים",
     "referralClaimShort": "קבלה",
     "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMonthlyMessage": "עדכנו את הכרטיס או קבלו שוב את {plan} ב-{price} לחודש",
     "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}",
     "hasLinkedTasksLabel": "כולל משימות מקושרות",
     "hasTasksFilter": "עם משימות",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "מעבר לתשלום חודשי",
+    "monthlySwitchPlanValue": "{plan}, {price} לחודש",
+    "monthlySwitchNote": "מחליף את החיוב השנתי שלא שולם בסך {yearly}. מתחדש מדי חודש. אפשר לבטל בכל עת.",
+    "monthlySwitchDeclined": "התשלום נדחה. התוכנית שלך לא השתנתה.",
+    "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
+    "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
+    "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש."
 }

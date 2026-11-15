@@ -534,8 +534,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return items;
   }
 
-  /// A one-file recording keeps the swipe-to-delete row; a longer one is a single row that opens
-  /// its files, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
+  /// Both single-file and grouped recording rows support swipe-to-delete; a grouped row opens
+  /// its files on tap, so a continuous recording no longer reads as a column of 75 s and 3 min rows.
   Widget _buildBlockListItem(
     SyncProvider syncProvider,
     RecordingBlock block,
@@ -544,7 +544,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     required bool isLast,
   }) {
     final wal = block.wals.first;
-    final state = wal.syncDisplayState;
     return Container(
       decoration: BoxDecoration(
         color: OmiColors.surface1,
@@ -557,36 +556,35 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (block.wals.length > 1)
-            _blockRow(block)
-          else
-            Dismissible(
-              // Storage suffix because `wal.id` (device_timerStart) is shared by the
-              // SD-card and on-phone copies of one recording. Not the row index: rows
-              // shift after a dismiss, and a reused key asserts.
-              key: ValueKey('${wal.id}#${wal.storage.name}'),
-              direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
-              confirmDismiss: (direction) {
-                final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
-                return showOmiConfirm(
-                  context,
-                  title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
-                  message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
-                  confirmLabel: context.l10n.delete,
-                  destructive: true,
-                );
-              },
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20.0),
-                color: Colors.red,
-                child: const Icon(Icons.delete, color: Colors.white),
-              ),
-              onDismissed: (direction) {
-                syncProvider.deleteWal(wal);
-              },
-              child: _walRow(wal, showDay: false),
+          Dismissible(
+            // Storage suffix because `wal.id` (device_timerStart) is shared by the
+            // SD-card and on-phone copies of one recording. Not the row index: rows
+            // shift after a dismiss, and a reused key asserts.
+            key: ValueKey('${wal.id}#${wal.storage.name}'),
+            direction: block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.syncing)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
+            confirmDismiss: (direction) async {
+              final uploading = block.wals.any((w) => w.syncDisplayState == WalSyncDisplayState.uploaded);
+              final confirmed = await showOmiConfirm(
+                context,
+                title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
+                confirmLabel: context.l10n.delete,
+                destructive: true,
+              );
+              if (!confirmed || !mounted) return false;
+              return _deleteWalsVerified(syncProvider, List<Wal>.of(block.wals));
+            },
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20.0),
+              color: Colors.red,
+              child: const Icon(Icons.delete, color: Colors.white),
             ),
+            onDismissed: (direction) {},
+            child: block.wals.length > 1 ? _blockRow(block) : _walRow(wal, showDay: false),
+          ),
           if (!isLast) _rowDivider,
         ],
       ),
@@ -873,22 +871,56 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       confirmLabel: context.l10n.delete,
       destructive: true,
     );
-    if (!confirmed) return;
-    for (final wal in wals) {
-      await syncProvider.deleteWal(wal);
-    }
+    if (!confirmed || !mounted) return;
+    await _deleteWalsVerified(syncProvider, wals);
   }
 
-  Future<void> _confirmDeleteWal(Wal wal) async {
-    final syncProvider = context.read<SyncProvider>();
-    final confirmed = await showOmiConfirm(
-      context,
-      title: context.l10n.deleteRecording,
-      message: context.l10n.thisCannotBeUndone,
-      confirmLabel: context.l10n.delete,
-      destructive: true,
-    );
-    if (confirmed) await syncProvider.deleteWal(wal);
+  Future<void> _confirmDeleteWal(Wal wal) => _confirmDeleteWals([wal]);
+
+  Future<bool> _deleteWalsVerified(SyncProvider provider, List<Wal> wals) async {
+    final firmware = context.read<DeviceProvider>().currentFirmwareVersion;
+    var failed = false;
+    for (final wal in wals) {
+      try {
+        await provider.deleteWal(wal);
+      } catch (e) {
+        failed = true;
+        Logger.debug('Offline Sync delete failed: $e');
+      }
+    }
+    // A device-backed file must stay absent from a fresh listing too.
+    if (wals.any((w) => w.storage != WalStorage.disk && w.storage != WalStorage.mem)) {
+      await provider.discoverDeviceWals(firmwareVersion: firmware);
+    }
+    final remaining = wals.any((item) => provider.allWals.any((w) => w.id == item.id && w.storage == item.storage));
+    if ((failed || remaining) && mounted) OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+    return !failed && !remaining;
+  }
+
+  Future<void> _clearVerified(
+    SyncProvider provider,
+    List<Wal> targets,
+    Future<void> Function() clear,
+    String success,
+  ) async {
+    final firmware = context.read<DeviceProvider>().currentFirmwareVersion;
+    var failed = false;
+    try {
+      await clear();
+    } catch (e) {
+      failed = true;
+      Logger.debug('Offline Sync clear failed: $e');
+    }
+    if (targets.any((w) => w.storage != WalStorage.disk && w.storage != WalStorage.mem)) {
+      await provider.discoverDeviceWals(firmwareVersion: firmware);
+    }
+    final remaining = targets.any((item) => provider.allWals.any((w) => w.id == item.id && w.storage == item.storage));
+    if (!mounted) return;
+    if (failed || remaining) {
+      OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
+    } else if (targets.isNotEmpty) {
+      OmiFeedback.confirm(context, success);
+    }
   }
 
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
@@ -1015,10 +1047,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await clearActions.synced();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.syncedFilesDeleted);
-            }
+            await _clearVerified(
+                provider, List<Wal>.of(provider.syncedWals), clearActions.synced, context.l10n.syncedFilesDeleted);
           }
         },
         onClearPending: () async {
@@ -1031,10 +1061,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await clearActions.pending();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.pendingFilesDeleted);
-            }
+            await _clearVerified(provider, List<Wal>.of(provider.pendingDeletableWals), clearActions.pending,
+                context.l10n.pendingFilesDeleted);
           }
         },
         onClearAll: () async {
@@ -1047,10 +1075,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             destructive: true,
           );
           if (confirmed && context.mounted) {
-            await clearActions.all();
-            if (context.mounted) {
-              OmiFeedback.confirm(context, context.l10n.allFilesDeleted);
-            }
+            await _clearVerified(
+                provider, List<Wal>.of(provider.allWals), clearActions.all, context.l10n.allFilesDeleted);
           }
         },
         onToggleAutoRemove: (value) async {

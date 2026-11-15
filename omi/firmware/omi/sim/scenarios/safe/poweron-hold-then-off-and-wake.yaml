@@ -1,0 +1,25 @@
+id: safe/poweron-hold-then-off-and-wake
+summary: >
+  Power-on hold, release, then the user's normal 3 s "power off" hold and a
+  later wake press. The wake must be a normal boot.
+committee: [1]
+tags: [baseline-bug]
+initial: {charging: false}
+timeline:
+  - {t: 0, hold: 3500}
+  - {t: 6000, hold: 3500}
+  - {t: 20000, tap: [150]}
+end: 30000
+expect:
+  boot_count: 2
+  boots:
+    - {exit: poweroff, safe: false}
+    - {reset: off-wake, safe: false, log: ["Device initialized successfully"]}
+  final: running
+  invariants: [no-stuck-safe, poweroff-waits-release]
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boots:
+      - {exit: poweroff, safe: true, latch_reason: 2, log: ["Safe mode entering system off"]}
+      - {reset: off-wake, safe: true, log: ["BOOTSTATE: active=1"]}

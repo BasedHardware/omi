@@ -36,6 +36,7 @@ from routers import (
     dream_report,
     dream_sweep,
     error_class_sweep,
+    app_review_config_sweep,
     review,
     proactivity,
     chat,
@@ -58,11 +59,13 @@ from routers import (
     sync_worker,
     batch_pipeline,
     batch_provider_stt,
+    pipeline_ledger,
     enrichment,
     apps,
     payment,
     retention_offer,
     yearly_switch,
+    monthly_switch,
     redeem_code,
     storefront,
     integration,
@@ -70,6 +73,7 @@ from routers import (
     conversation_tasks,
     recording_speakers,
     conversation_mutations,
+    spaces,
     memories,
     api_key_management,
     mcp,
@@ -187,6 +191,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(dream_sweep, roles=API_WORKERS),  # Scheduler: /v2/dream-agent/sweep, canary
     Mount(candidate_integration_sweep, roles=API_WORKERS),  # Scheduler: /v2/candidate-integrations/sweep
     Mount(error_class_sweep, roles=API_WORKERS),  # Scheduler: /v2/error-class-alerts/sweep
+    Mount(app_review_config_sweep, roles=API_WORKERS),  # Scheduler: /v2/app-review-config/sweep
     Mount(transcribe, roles=API_REALTIME),  # /v4/listen websocket
     Mount(static_map),
     Mount(omni_relay, roles=API_REALTIME),  # websockets
@@ -195,6 +200,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(conversation_tasks),
     Mount(recording_speakers),
     Mount(conversation_mutations),
+    Mount(spaces),
     Mount(public_shared_conversation_chat),
     Mount(action_items),
     Mount(account_cutover),
@@ -216,7 +222,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(notifications),
     Mount(integration),
     Mount(agents),
-    Mount(users, roles=API_WORKERS),  # Cloud Tasks: /v1/users/account-deletion-wipes/run
+    Mount(users, roles=API_WORKERS),  # Cloud Tasks: account-deletion wipes + conversation batch purges
     Mount(support),
     Mount(referrals),
     Mount(csat),
@@ -236,6 +242,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(sync, roles=API_WORKERS),  # uploads (api) and Cloud Tasks /v2/sync-jobs/run (workers)
     Mount(sync_worker, roles=API_WORKERS),  # OIDC backfill pull-worker control plane
     Mount(batch_pipeline, roles=API_WORKERS),  # GPU worker RPC pull and recovery tasks
+    Mount(pipeline_ledger, roles=API),  # operator census and explain reads
     Mount(enrichment, roles=API_WORKERS),  # Cloud Tasks /v2/enrichment/run (lane 9; contract (a) phase 1)
     Mount(batch_provider_stt, roles=API_WORKERS),  # Cloud Tasks /v2/batch-pipeline/provider-stt/run (lane 8)
     Mount(apps),
@@ -247,6 +254,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(payment),
     Mount(retention_offer),
     Mount(yearly_switch),
+    Mount(monthly_switch),
     Mount(redeem_code),
     Mount(storefront),
     Mount(api_key_management, attr='mcp_router'),

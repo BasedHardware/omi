@@ -132,6 +132,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--integration-canary-state', type=Path)
+    parser.add_argument('--integration-canary-source')
     parser.add_argument(
         '--cloud-run-state',
         type=Path,
@@ -167,6 +169,8 @@ def main() -> int:
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
+        integration_canary_state=args.integration_canary_state,
+        integration_canary_source=args.integration_canary_source,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)

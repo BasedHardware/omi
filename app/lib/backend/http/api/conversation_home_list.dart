@@ -37,7 +37,7 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
           folderId: folderId,
           starred: starred),
       method: 'GET',
-      headers: {if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
     ),
     send: api._send,
     onResponseHeaders: (value) => headers = value,

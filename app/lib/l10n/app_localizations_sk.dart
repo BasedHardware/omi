@@ -7028,6 +7028,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepodarilo sa prihlásiť cez Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prihlásenie cez Apple sa nepodarilo. Skúste to znova alebo pokračujte cez Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodarilo sa získať token';
 
   @override
@@ -9163,6 +9167,24 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nedá sa určiť aktuálna verzia firmvéru';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Použiť na aktuálny program';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kód bol použitý na váš aktuálny program.',
+        'refused': 'Tento kód sa nedá použiť. Skontrolujte kód a požadovaný program.',
+        'conflict': 'Kód už bol použitý alebo váš program už má zľavu.',
+        'rateLimited': 'Priveľa pokusov. Počkajte a skúste to neskôr.',
+        'other': 'Kód sa nepodarilo použiť. Skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promo kód';
@@ -13649,6 +13671,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Znova vytvoriť poznámky';
+
+  @override
   String get attentionSummaryFailed => 'Tento rozhovor sa nepodarilo zhrnúť';
 
   @override
@@ -15372,6 +15397,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaša karta bola zamietnutá';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Aktualizujte kartu alebo obnovte $plan za $price mesačne';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Aktualizujte kartu a obnovte $plan';
   }
@@ -15396,4 +15426,31 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Prejsť na mesačné';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mesačne';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nahrádza nezaplatenú ročnú platbu $yearly. Obnovuje sa mesačne. Zrušiť môžete kedykoľvek.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Platba bola zamietnutá. Váš plán sa nezmenil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Teraz platíte mesačne';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Dnes zaplatené $price. Obnovuje sa mesačne.';
+  }
 }

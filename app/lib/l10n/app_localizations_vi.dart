@@ -7039,6 +7039,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Không thể đăng nhập bằng Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Không thể đăng nhập bằng Apple. Hãy thử lại hoặc tiếp tục với Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Không thể lấy mã thông báo';
 
   @override
@@ -9173,6 +9176,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Không thể xác định phiên bản firmware hiện tại';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Áp dụng cho gói hiện tại';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Đã áp dụng mã cho gói hiện tại của bạn.',
+        'refused': 'Không thể áp dụng mã này. Kiểm tra mã và gói được yêu cầu.',
+        'conflict': 'Mã đã được dùng hoặc gói của bạn đã có ưu đãi giảm giá.',
+        'rateLimited': 'Thử quá nhiều lần. Vui lòng chờ rồi thử lại sau.',
+        'other': 'Không thể áp dụng mã. Vui lòng thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Mã khuyến mãi';
@@ -13652,6 +13673,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Tạo lại ghi chú';
+
+  @override
   String get attentionSummaryFailed => 'Không thể tóm tắt cuộc trò chuyện này';
 
   @override
@@ -15378,6 +15402,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paymentDeclinedTitle => 'Thẻ của bạn đã bị từ chối';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Cập nhật thẻ, hoặc dùng lại $plan với $price mỗi tháng';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Cập nhật thẻ để dùng lại $plan';
   }
@@ -15402,4 +15431,31 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Chuyển sang gói tháng';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mỗi tháng';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Thay cho khoản phí năm $yearly chưa thanh toán. Gia hạn hằng tháng. Hủy bất cứ lúc nào.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Thanh toán bị từ chối. Gói của bạn không thay đổi.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Bạn đã chuyển sang trả theo tháng';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Đã thanh toán $price hôm nay. Gia hạn hằng tháng.';
+  }
 }

@@ -7046,6 +7046,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Aanmelden met Apple mislukt, probeer het opnieuw.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Inloggen met Apple is niet gelukt. Probeer het opnieuw of ga verder met Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kon Firebase-token niet ophalen, probeer het opnieuw.';
 
   @override
@@ -9193,6 +9197,24 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Kan de huidige firmwareversie niet bepalen';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Toepassen op huidig abonnement';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code toegepast op je huidige abonnement.',
+        'refused': 'Deze code kan niet worden toegepast. Controleer de code en het vereiste abonnement.',
+        'conflict': 'Code al gebruikt, of je abonnement heeft al korting.',
+        'rateLimited': 'Te veel pogingen. Wacht en probeer het later opnieuw.',
+        'other': 'Code kon niet worden toegepast. Probeer het opnieuw.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promotiecode';
@@ -13689,6 +13711,9 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Notities opnieuw genereren';
+
+  @override
   String get attentionSummaryFailed => 'Dit gesprek kon niet worden samengevat';
 
   @override
@@ -15415,6 +15440,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Uw kaart is geweigerd';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Werk je kaart bij of krijg $plan terug voor $price per maand';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Werk je kaart bij om $plan terug te krijgen';
   }
@@ -15439,4 +15469,31 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Overstappen naar maandelijks';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per maand';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Vervangt de onbetaalde jaarlijkse betaling van $yearly. Verlengt maandelijks. Altijd opzegbaar.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betaling geweigerd. Je abonnement is niet gewijzigd.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Overstappen kan nu niet. Werk in plaats daarvan je kaart bij.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Je betaalt nu maandelijks';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price vandaag betaald. Verlengt maandelijks.';
+  }
 }

@@ -7047,6 +7047,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Gagal log masuk dengan Apple, sila cuba lagi.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Log masuk dengan Apple tidak berjaya. Cuba lagi atau teruskan dengan Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Gagal mendapatkan token Firebase, sila cuba lagi.';
 
   @override
@@ -9189,6 +9193,24 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Tidak dapat menentukan versi perisian tegar semasa';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Gunakan pada Pelan Semasa';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod digunakan pada pelan semasa anda.',
+        'refused': 'Kod ini tidak boleh digunakan. Semak kod dan pelan yang diperlukan.',
+        'conflict': 'Kod sudah digunakan atau pelan anda sudah mempunyai diskaun.',
+        'rateLimited': 'Terlalu banyak percubaan. Tunggu dan cuba lagi kemudian.',
+        'other': 'Kod tidak dapat digunakan. Sila cuba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Kod promo';
@@ -13684,6 +13706,9 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Jana semula nota';
+
+  @override
   String get attentionSummaryFailed => 'Perbualan ini tidak dapat diringkaskan';
 
   @override
@@ -15413,6 +15438,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get paymentDeclinedTitle => 'Kad anda ditolak';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Kemas kini kad, atau dapatkan semula $plan pada $price sebulan';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Kemas kini kad untuk mendapatkan semula $plan';
   }
@@ -15437,4 +15467,31 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Tukar ke Bulanan';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price sebulan';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Menggantikan caj tahunan $yearly yang belum dibayar. Diperbaharui setiap bulan. Batalkan bila-bila masa.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pembayaran ditolak. Pelan anda tidak berubah.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Pertukaran tidak tersedia sekarang. Kemas kini kad anda sebaliknya.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Anda kini membayar bulanan';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price dibayar hari ini. Diperbaharui setiap bulan.';
+  }
 }

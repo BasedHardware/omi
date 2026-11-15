@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -40,6 +42,7 @@ import 'package:omi/widgets/extensions/string.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
+  if (conversation.homeStep == 'failed') return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
@@ -104,6 +107,7 @@ class ConversationListItem extends StatefulWidget {
 
   /// Closed episode projection, drawn by the same conversation row widget.
   final Episode? homeEpisode;
+  final HomeFeedCard? homeCard;
   final bool openEpisodeFromSearch;
 
   /// A filtered server page already proves canonical membership.
@@ -121,6 +125,7 @@ class ConversationListItem extends StatefulWidget {
     this.embedded = false,
     this.fillingSeconds,
     this.homeEpisode,
+    this.homeCard,
     this.openEpisodeFromSearch = true,
     this.hasLinkedTasks,
   });
@@ -140,6 +145,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.structured.emoji,
         conversation.structured.category,
         conversation.status,
+        conversation.homeStep,
         conversation.discarded,
         conversation.starred,
         conversation.folderId,
@@ -155,6 +161,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.processingDeferred,
         widget.fillingSeconds,
         widget.homeEpisode?.members.length,
+        widget.homeCard?.revision,
+        widget.homeCard?.preview,
         _hasLinkedTasks,
       ]);
 
@@ -244,6 +252,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
       openHeldAudioPlans(context);
       return;
     }
+    if (widget.homeCard case final card? when card.kind == 'episode') {
+      await routeToPage(context, EpisodePage(episode: card.episodeSeed(), displaySeedOnly: true));
+      if (context.mounted) unawaited(context.read<HomeFeedProvider?>()?.refresh());
+      return;
+    }
     if (widget.homeEpisode case final episode?) {
       await routeToPage(context, EpisodePage(episode: episode));
       return;
@@ -312,6 +325,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
     var result = await resultFuture;
     if (context.mounted) {
+      if (widget.homeCard != null) unawaited(context.read<HomeFeedProvider?>()?.refresh());
       // Don't upsert if the conversation was deleted while on the detail page
       if (result is Map && result['deleted'] == true) return;
       bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
@@ -339,7 +353,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
     HapticFeedback.mediumImpact();
-    final conversation = widget.conversation;
+    var conversation = widget.conversation;
+    if (widget.homeCard != null) {
+      final result = await getConversationByIdResult(conversation.id, userInitiated: true);
+      if (!context.mounted) return;
+      if (!result.ok || result.item == null) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
+      conversation = result.item!;
+    }
     final action = await showConversationActionsSheet(
       context,
       conversation,
@@ -372,7 +395,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   @override
   Widget build(BuildContext context) {
-    bool? linked = widget.hasLinkedTasks;
+    bool? linked = widget.homeCard?.hasTasks ?? widget.hasLinkedTasks;
     if (!widget.conversation.isLocked && linked == null) {
       context.read<ConversationTaskPresenceProvider?>()?.request(widget.conversation.id);
       linked = context.select<ConversationTaskPresenceProvider?, bool?>(
@@ -411,8 +434,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
           // when the selector correctly decides not to rebuild the content.
           isMerging: provider.mergingConversationIds.contains(widget.conversation.id) ||
               widget.conversation.status == ConversationStatus.merging,
-          isEligible:
-              !widget.conversation.isLocked && !provider.mergingConversationIds.contains(widget.conversation.id),
+          isEligible: !widget.conversation.isLocked &&
+              widget.homeCard?.kind != 'episode' &&
+              !provider.mergingConversationIds.contains(widget.conversation.id),
         ),
         builder: (context, rowState, child) {
           final provider = context.read<ConversationProvider>();
@@ -439,9 +463,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           return GestureDetector(
             onTap: onTap,
-            onLongPress: isSelectionMode || isMerging || widget.homeEpisode != null
-                ? null
-                : () => _showActions(context, provider),
+            onLongPress:
+                isSelectionMode || isMerging || (widget.homeEpisode != null || widget.homeCard?.kind == 'episode')
+                    ? null
+                    : () => _showActions(context, provider),
             child: Stack(
               children: [
                 Padding(
@@ -452,7 +477,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
                       child: _SwipeDeleteRow(
-                        enabled: !isSelectionMode && !isMerging && widget.homeEpisode == null,
+                        enabled: !isSelectionMode &&
+                            !isMerging &&
+                            widget.homeEpisode == null &&
+                            widget.homeCard?.kind != 'episode',
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
                         // pops from the row's delete button.
                         confirm: (anchor) async {
@@ -539,12 +567,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                style: _metaStyle,
-                maxLines: 1,
-              ),
+              if (widget.homeCard == null || widget.homeCard!.startedAt != null)
+                Text(
+                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                  style: _metaStyle,
+                  maxLines: 1,
+                ),
               if (duration.isNotEmpty) Text('• $duration', style: _metaStyle, maxLines: 1),
+              if (widget.homeCard?.memberCount case final count? when count > 1)
+                Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
+              if (widget.homeCard?.homeStep == 'transcribing') ...[
+                const OmiActivityRing.inline(),
+                Text(context.l10n.homeStepTranscribing, style: _metaStyle),
+              ],
+              if (widget.homeCard?.homeStep == 'writing_notes') ...[
+                const OmiActivityRing.inline(),
+                Text(context.l10n.episodeWritingNotes, style: _metaStyle),
+              ],
               if (_hasLinkedTasks)
                 Semantics(
                   key: const ValueKey('conversation_has_tasks'),
@@ -582,8 +621,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   Widget _buildMobileLayout(BuildContext context) {
     final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
-    final discardedSnippet =
-        discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
+    final discardedSnippet = widget.homeCard?.preview ??
+        (discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '');
     return Stack(
       children: [
         Column(
@@ -610,7 +649,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        conversationRowTitle(context, widget.conversation),
+                        widget.homeCard != null &&
+                                widget.homeCard!.startedAt == null &&
+                                widget.conversation.structured.title.trim().isEmpty
+                            ? context.l10n.recording
+                            : conversationRowTitle(context, widget.conversation),
                         style: Theme.of(context).textTheme.titleMedium,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -626,9 +669,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
-                      if (widget.conversation.processingDeferred) const ProcessingDeferredMarker(),
+                      if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
+                        const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if (widget.conversation.showsSummaryRetry) ...[
+                      if (widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
                       ],
@@ -668,7 +712,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  List<String> get _captureSources => CaptureGroupPresentation.distinctSources(widget.conversation);
+  List<String> get _captureSources =>
+      widget.homeCard?.sources ?? CaptureGroupPresentation.distinctSources(widget.conversation);
 
   String? _searchSnippetText() {
     if (widget.conversation.matchSnippets.isEmpty) return null;
@@ -689,6 +734,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   String _getConversationDuration(BuildContext context) {
+    if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
     return OmiDuration.compact(durationSeconds, context.l10n);

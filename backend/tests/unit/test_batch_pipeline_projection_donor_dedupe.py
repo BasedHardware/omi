@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict
+from dataclasses import replace
 from datetime import timedelta
 import logging
 import threading
@@ -149,6 +150,30 @@ def batch_projection(monkeypatch):
 
     monkeypatch.setattr(db, 'assign_sync_conversation', observed_assignment)
     return SimpleNamespace(**locals())
+
+
+@pytest.mark.parametrize('provider', [False, True], ids=['gpu', 'provider-no-manifest'])
+def test_untrusted_receipt_clock_projects_without_temporal_binding(batch_projection, monkeypatch, provider):
+    lane = batch_projection
+    binding = replace(lane.binding, target_conversation_id=None)
+    lane.context['conversation_id'] = None
+    work = replace(lane.work, capture_time_trust='untrusted', requires_compute_admission=not provider)
+    job = lane.client.rows[(f'{lane.namespace}_jobs', work.segment_id)]
+    job.update(work.to_dict(), projection_binding=asdict(binding))
+    before_live = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'live')])
+    before_donor = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'donor')])
+    closest = Mock(side_effect=AssertionError('receipt-clock time is not a binding proof'))
+    monkeypatch.setattr(db, 'get_closest_conversation_to_timestamps', closest)
+    if provider:
+        monkeypatch.setattr(lane.projector, 'fetch_audio', Mock(side_effect=AssertionError('no provider manifest')))
+    lane.projector.project('segment')
+    closest.assert_not_called()
+    lane.planned.assert_not_called()
+    assert lane.client.rows[('users', 'u', 'conversations', 'live')] == before_live
+    assert lane.client.rows[('users', 'u', 'conversations', 'donor')] == before_donor
+    entry = lane.client.rows[(f'{lane.namespace}_results', 'segment')]
+    stored = lane.client.rows[('users', 'u', 'conversations', entry['projection']['conversation_id'])]
+    assert stored['capture_time_trust'] == 'untrusted'
 
 
 @pytest.mark.parametrize('gate', ['on', 'no_s1', 'dedupe_off', 'lineage_off', 'not_allowlisted'])

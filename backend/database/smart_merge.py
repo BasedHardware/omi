@@ -16,6 +16,8 @@ transaction.
 
 from __future__ import annotations
 
+from database import transcript_pointer
+
 import logging
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
@@ -28,7 +30,8 @@ from google.api_core.exceptions import FailedPrecondition
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database.transcript_pointer import run_preloaded_transactional as run_transactional
 from database.firestore_index_registry import (
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
     CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
@@ -423,8 +426,14 @@ def absorb_conversation(
             }
         else:
             ancestor_rows = {}
-        survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
-        donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        try:
+            survivor, survivor_segments = _decode_row(uid, dict(survivor_raw, id=survivor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
+        try:
+            donor, donor_segments = _decode_row(uid, dict(donor_raw, id=donor_id))
+        except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         last_fragment_row = None
         if last_fragment_id is not None:
             if last_fragment_id == survivor_id:
@@ -436,7 +445,10 @@ def absorb_conversation(
                     else collection.document(last_fragment_id).get(transaction=transaction).to_dict()
                 )
                 if fragment_raw is not None:
-                    fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    try:
+                        fragment_row, fragment_segments = _decode_row(uid, dict(fragment_raw, id=last_fragment_id))
+                    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+                        return AbsorbResult('rejected', 'conversation_not_eligible')
                     last_fragment_row = dict(fragment_row, transcript_segments=fragment_segments)
         if has_intervening_discarded(uid, survivor, donor, transaction=transaction, firestore_client=client):
             return AbsorbResult('rejected', 'intervening_discarded')
@@ -479,7 +491,9 @@ def absorb_conversation(
         survivor_update.update(write_span({**survivor, **survivor_update}))
         if 'transcript_segments' in survivor_update:
             rearm_on_revision_change(survivor_raw, survivor_update)
-        payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
+        payload = conversations_db.encode_conversation_for_write(
+            uid, survivor_update, level, conversation_state=survivor_raw
+        )
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw

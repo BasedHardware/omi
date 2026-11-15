@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / ".github" / "scripts" / "listen_helm_env_overrides.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "gcp_backend_listen_helm.yml"
 PROD_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
+_WORKFLOW_STEPS: list[dict] | None = None
 
 
 def load_helper():
@@ -258,7 +259,12 @@ def _render_env(values_file: Path, *extra: str) -> list[dict]:
 
 
 def _expected_env(values: dict) -> list[dict]:
-    expected = []
+    expected = [
+        {
+            "name": "ROLLOUT_POD_TEMPLATE_HASH",
+            "valueFrom": {"fieldRef": {"fieldPath": "metadata.labels['pod-template-hash']"}},
+        }
+    ]
     for entry in values["env"]:
         if entry["name"] == "GOOGLE_CLOUD_PROJECT":
             expected.append({"name": entry["name"], "value": values["runtimeGcpProjectId"]})
@@ -307,7 +313,7 @@ def test_chart_private_env_replaces_by_name_and_renders_each_name_once(tmp_path:
     }
     others = [entry for entry in env if entry["name"] not in private_names]
     assert others == [entry for entry in _expected_env(values) if entry["name"] not in private_names]
-    assert set(names) == {entry["name"] for entry in values["env"]} | {"LISTEN_PRIVATE_ONLY_FLAG"}
+    assert set(names) == {entry["name"] for entry in _expected_env(values)} | {"LISTEN_PRIVATE_ONLY_FLAG"}
 
 
 def test_chart_private_env_non_string_fails_without_echoing_value(tmp_path: Path):
@@ -507,8 +513,16 @@ def test_cli_redact_release_values_reads_stdin():
 
 
 def _workflow_steps() -> list[dict]:
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    return document["jobs"]["helm-upgrade"]["steps"]
+    # The workflow is ~40 KB and ``_step`` is called several times per test; parse it
+    # once per process with the C loader instead of re-tokenizing it in Python.
+    global _WORKFLOW_STEPS
+    if _WORKFLOW_STEPS is None:
+        document = yaml.load(
+            WORKFLOW.read_text(encoding="utf-8"),
+            Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader),
+        )
+        _WORKFLOW_STEPS = document["jobs"]["helm-upgrade"]["steps"]
+    return _WORKFLOW_STEPS
 
 
 def _step(name: str) -> dict:

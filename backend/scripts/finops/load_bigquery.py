@@ -23,12 +23,14 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+from decimal import Decimal, InvalidOperation
 import json
 import os
 import pathlib
 import subprocess
 import sys
 import tempfile
+import uuid
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -157,10 +159,15 @@ SCHEMAS["vendor_balance_spend_daily"] = [
 CLUSTER["vendor_balance_spend_daily"] = ["vendor", "flag"]
 
 # Modelled Modulate STT cost: measured Prometheus audio seconds x the committed
-# rate-card price. Dark while either input is missing; never a guessed number.
+# live/REST prices. Dark while an input is missing; never a guessed number.
 SCHEMAS["stt_modulate_modelled_daily"] = [
     ("date", "DATE"),
     ("audio_seconds", "FLOAT64"),
+    ("live_seconds", "FLOAT64"),
+    ("rest_stt_seconds", "FLOAT64"),
+    ("lid_seconds", "FLOAT64"),
+    ("rest_price_usd_per_hour", "NUMERIC"),
+    ("lid_price_usd_per_hour", "NUMERIC"),
     ("usd", "NUMERIC"),
     ("price_usd_per_hour", "NUMERIC"),
     ("price_as_of", "DATE"),
@@ -169,7 +176,122 @@ SCHEMAS["stt_modulate_modelled_daily"] = [
     ("computed_at", "TIMESTAMP"),
 ]
 CLUSTER["stt_modulate_modelled_daily"] = ["run_id"]
-MODULATE_ROW_KEYS = {"date", "audio_seconds", "usd"}
+MODULATE_ROW_KEYS = {"date", "audio_seconds", "live_seconds", "rest_stt_seconds", "lid_seconds", "usd"}
+
+
+SCHEMAS["spend_daily"] = [
+    ("date", "DATE"),
+    ("line", "STRING"),
+    ("source", "STRING"),
+    ("status", "STRING"),
+    ("usd", "FLOAT64"),
+    ("in_all_in", "BOOL"),
+    ("in_margin_basis", "BOOL"),
+    ("basis_class", "STRING"),
+    ("basis_version", "STRING"),
+    ("note", "STRING"),
+    ("inputs_settled", "BOOL"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["spend_daily"] = ["line", "source"]
+SCHEMAS["spend_daily_gcp_sku"] = [
+    ("date", "DATE"),
+    ("project_class", "STRING"),
+    ("service", "STRING"),
+    ("sku", "STRING"),
+    ("usd_net", "FLOAT64"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["spend_daily_gcp_sku"] = ["service", "project_class"]
+SPEND_SOURCES = {
+    "billing_export",
+    "openai_admin_api",
+    "anthropic_admin_api",
+    "soniox_usage_api",
+    "deepgram_billing_api",
+    "stripe_api",
+    "mercury",
+    "prometheus",
+    "rate_card",
+}
+
+
+def load_spend_daily(
+    raw: pathlib.Path, derived: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace
+) -> dict:
+    from assemble_spend_daily import assemble, read
+
+    path = derived / "spend_daily.json"
+    if not path.exists():
+        return {}
+    artifact = json.loads(path.read_text())
+    # Mercury's existing loader retained older annual history when deriving these
+    # rates. Reassemble offline with those exact rates, without a second BQ read.
+    rates = read(derived, "mercury_run_rates.json")
+    if rates is not None:
+        window = artifact["modelled_window"]
+        if window:
+            artifact = assemble(raw, derived, min(window), max(window), artifact["frontier"], mercury_rates=rates)
+    frontier = dt.date.fromisoformat(artifact["frontier"]).isoformat()
+    scopes = artifact["scopes"]
+    if not set(scopes) <= SPEND_SOURCES:
+        raise ValueError("producer may only replace its own spend sources")
+    keys = set()
+    for row in artifact["rows"]:
+        key = tuple(row[k] for k in ("date", "line", "source", "status"))
+        if (
+            key in keys
+            or row["source"] not in scopes
+            or row["date"] not in scopes[row["source"]]
+            or row["date"] > frontier
+            or row["status"] not in {"billed", "measured", "estimate", "carry"}
+            or row["inputs_settled"] is not True
+        ):
+            raise ValueError("invalid settled spend row")
+        keys.add(key)
+    ensure_table("spend_daily")
+    detail = json.loads((derived / "spend_daily_gcp_sku.json").read_text())
+    companion = None
+    if "billing_export" in scopes:
+        ensure_table("spend_daily_gcp_sku")
+        companion = (
+            "spend_daily_gcp_sku",
+            [dict(r, run_id=run_id, computed_at=computed_at) for r in detail],
+            scopes["billing_export"],
+        )
+    loaded = 0
+    for source, dates in sorted(scopes.items()):
+        for day in dates:
+            if dt.date.fromisoformat(day).isoformat() != day or day > frontier:
+                raise ValueError("invalid spend replacement date")
+        # Re-evaluate cash/model preference in the same transaction, including
+        # Mercury's wider refresh window and previously loaded modelled days.
+        in_list = ", ".join("DATE('%s')" % d for d in dates)
+        housekeeping = """
+DELETE FROM `{p}.{ds}.spend_daily` WHERE status = 'provisional' AND date < DATE('{frontier}');
+UPDATE `{p}.{ds}.spend_daily` AS cash
+SET in_all_in = NOT EXISTS (
+  SELECT 1 FROM `{p}.{ds}.spend_daily` AS model
+  WHERE model.date = cash.date AND model.line = 'stt_modulate_modelled'
+    AND model.source = 'prometheus' AND model.status = 'estimate'
+)
+WHERE cash.source = 'mercury' AND cash.line = 'stt_modulate_cash' AND cash.date IN ({dates});
+""".format(p=PROJECT, ds=DATASET, frontier=frontier, dates=in_list)
+        rows = [dict(r, run_id=run_id, computed_at=computed_at) for r in artifact["rows"] if r["source"] == source]
+        loaded += load_replace(
+            "spend_daily",
+            rows,
+            dates,
+            extra_delete=" AND source = '%s'" % source,
+            after_insert=housekeeping,
+            related=companion if source == "billing_export" else None,
+        )
+    result = {"spend_daily": loaded}
+    if companion is not None:
+        result["spend_daily_gcp_sku"] = len(detail)
+    return result
 
 
 def load_stripe_fees(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace) -> dict:
@@ -216,8 +338,15 @@ def load_vendor_balance(raw: pathlib.Path, run_id: str, computed_at: str, ensure
         raise SystemExit("unknown vendor balance vendor")
     if not str(snapshot["ts"]).endswith("Z"):
         raise SystemExit("vendor balance ts must be UTC ISO with Z")
-    pull_vendor_balance.usd(snapshot["used_usd"])
-    pull_vendor_balance.usd(snapshot["available_usd"])
+    # Re-render through the NUMERIC contract so an artifact written by an older
+    # image can never reach BigQuery with more than nine fractional digits.
+    try:
+        snapshot["used_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["used_usd"]))
+        snapshot["available_usd"] = pull_vendor_balance.numeric_usd(pull_vendor_balance.usd(snapshot["available_usd"]))
+    except pull_vendor_balance.BalanceError as error:
+        # Same rule as the puller: an unusable value is a bounded skip, never a failed daily job.
+        print("vendor balance artifact skipped: %s" % error.reason, file=sys.stderr)
+        return {}
     if type(snapshot["invoice_billing_enabled"]) is not bool:
         raise SystemExit("invalid vendor balance invoice flag")
     vendor = snapshot["vendor"]
@@ -263,23 +392,39 @@ def load_modulate_modelled(raw: pathlib.Path, run_id: str, computed_at: str, ens
     artifact = json.loads(path.read_text())
     if artifact.get("status") == "skipped":
         return {}
-    required = {"status", "method", "price_usd_per_hour", "price_source", "price_as_of", "rows"}
+    required = {"status", "method", "rows"} | {
+        prefix + key
+        for prefix in ("", "rest_", "lid_")
+        for key in ("price_usd_per_hour", "price_source", "price_as_of")
+    }
     if set(artifact) != required or artifact["status"] != "ready" or artifact["method"] != "modelled":
         raise SystemExit("invalid Modulate modelled artifact")
-    dt.date.fromisoformat(artifact["price_as_of"])
-    if float(artifact["price_usd_per_hour"]) <= 0:
-        raise SystemExit("invalid Modulate modelled price")
+    for prefix in ("", "rest_", "lid_"):
+        dt.date.fromisoformat(artifact[prefix + "price_as_of"])
+        try:
+            price = Decimal(str(artifact[prefix + "price_usd_per_hour"]))
+            if not price.is_finite() or price <= 0:
+                raise ValueError("invalid price")
+        except (ValueError, InvalidOperation):
+            raise SystemExit("invalid Modulate modelled price") from None
     for row in artifact["rows"]:
         if set(row) != MODULATE_ROW_KEYS:
             raise SystemExit("invalid Modulate modelled row")
-        if float(row["audio_seconds"]) < 0 or float(row["usd"]) < 0:
-            raise SystemExit("invalid Modulate modelled amounts")
+        for key in MODULATE_ROW_KEYS - {"date"}:
+            try:
+                amount = Decimal(str(row[key]))
+                if not amount.is_finite() or amount < 0:
+                    raise ValueError("invalid amount")
+            except (ValueError, InvalidOperation):
+                raise SystemExit("invalid Modulate modelled amounts") from None
     dates = sorted({row["date"] for row in artifact["rows"]})
     ensure_table("stt_modulate_modelled_daily")
     rows = [
         dict(
             row,
             price_usd_per_hour=artifact["price_usd_per_hour"],
+            rest_price_usd_per_hour=artifact["rest_price_usd_per_hour"],
+            lid_price_usd_per_hour=artifact["lid_price_usd_per_hour"],
             price_as_of=artifact["price_as_of"],
             method="modelled",
             run_id=run_id,
@@ -340,6 +485,18 @@ def ensure_table(name: str) -> None:
     if p.returncode == 0:
         sys.stderr.write("table %s exists\n" % name)
         ensure_columns(name)
+        return
+    if name == "spend_daily":
+        keys = {"date", "line", "source", "status"}
+        columns = ", ".join(c + " " + t + (" NOT NULL" if c in keys else "") for c, t in SCHEMAS[name])
+        bq(
+            ["query", "--use_legacy_sql=false", "--format=none"],
+            stdin=(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.spend_daily` (%s, "
+                "PRIMARY KEY (date, line, source, status) NOT ENFORCED) "
+                "PARTITION BY date CLUSTER BY line, source" % (PROJECT, DATASET, columns)
+            ),
+        )
         return
     schema = ",".join("%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[name])
     bq(
@@ -413,38 +570,63 @@ def ensure_columns(name: str, show=None, run=None) -> list[str]:
     return missing
 
 
-def load_replace(name: str, rows: list[dict], dates: list[str], extra_delete: str = "") -> int:
-    """Delete the run's dates then insert, in one transaction. Idempotent per date.
+def load_replace(
+    name: str,
+    rows: list[dict],
+    dates: list[str],
+    extra_delete: str = "",
+    after_insert: str = "",
+    related: tuple[str, list[dict], list[str]] | None = None,
+) -> int:
+    """Replace scoped dates transactionally, optionally with a diagnostic table.
 
-    ``extra_delete`` narrows the DELETE (e.g. `` AND vendor = 'soniox'``) when a
-    table holds more than one writer's rows for the same date.
+    ``extra_delete`` narrows only the primary DELETE (e.g. one source family).
+    Both stages load before the transaction. Diagnostic replacement and spend
+    housekeeping commit with the primary rows, so readers never see half a pair.
     """
-    if not rows:
+    if not rows and name not in ("spend_daily", "spend_daily_gcp_sku") and related is None:
         sys.stderr.write("  %s: nothing to load\n" % name)
         return 0
-    cols = [c for c, _ in SCHEMAS[name]]
-    stage = "_stage_%s_%d" % (name, int(dt.datetime.now().timestamp()))
-    stage_ref = "%s:%s.%s" % (PROJECT, DATASET, stage)
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-        for r in rows:
-            fh.write(json.dumps({c: r.get(c) for c in cols}) + "\n")
-        path = fh.name
-    schema = ",".join("%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[name])
+    batches = [(name, rows, dates, extra_delete)]
+    if related is not None:
+        table, detail_rows, detail_dates = related
+        batches.append((table, detail_rows, detail_dates, ""))
+    stages, statements = [], []
     try:
-        bq(["load", "--source_format=NEWLINE_DELIMITED_JSON", "--replace", stage_ref, path, schema])
-        in_list = ", ".join("DATE('%s')" % d for d in dates)
-        sql = (
-            "BEGIN TRANSACTION;\n"
-            "DELETE FROM `{p}.{ds}.{t}` WHERE date IN ({dates}){extra};\n"
-            "INSERT INTO `{p}.{ds}.{t}` ({cols}) SELECT {cols} FROM `{p}.{ds}.{stage}`;\n"
-            "COMMIT TRANSACTION;"
-        ).format(p=PROJECT, ds=DATASET, t=name, dates=in_list, extra=extra_delete, cols=", ".join(cols), stage=stage)
+        for table, batch, window, extra in batches:
+            in_list = ", ".join("DATE('%s')" % dt.date.fromisoformat(d).isoformat() for d in window)
+            statements.append(
+                "DELETE FROM `%s.%s.%s` WHERE date IN (%s)%s;" % (PROJECT, DATASET, table, in_list, extra)
+            )
+            if not batch:
+                continue  # a known empty window deletes stale rows without fake zeros
+            cols = [c for c, _ in SCHEMAS[table]]
+            stage = "_stage_%s_%s" % (table, uuid.uuid4().hex[:12])
+            stage_ref = "%s:%s.%s" % (PROJECT, DATASET, stage)
+            stages.append(stage_ref)
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+                for row in batch:
+                    fh.write(json.dumps({c: row.get(c) for c in cols}) + "\n")
+                path = pathlib.Path(fh.name)
+            schema = ",".join(
+                "%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[table]
+            )
+            try:
+                bq(["load", "--source_format=NEWLINE_DELIMITED_JSON", "--replace", stage_ref, str(path), schema])
+            finally:
+                path.unlink(missing_ok=True)
+            columns = ", ".join(cols)
+            statements.append(
+                "INSERT INTO `%s.%s.%s` (%s) SELECT %s FROM `%s.%s.%s`;"
+                % (PROJECT, DATASET, table, columns, columns, PROJECT, DATASET, stage)
+            )
+        sql = "BEGIN TRANSACTION;\n" + "\n".join(statements) + "\n" + after_insert + "\nCOMMIT TRANSACTION;"
         bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=sql)
     finally:
-        subprocess.run(
-            _bq_cmd() + ["--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True
-        )
-        pathlib.Path(path).unlink(missing_ok=True)
+        for stage_ref in stages:
+            subprocess.run(
+                _bq_cmd() + ["--project_id=" + PROJECT, "rm", "-f", "-t", stage_ref], capture_output=True, text=True
+            )
     sys.stderr.write("  %s: replaced %d dates, inserted %d rows\n" % (name, len(dates), len(rows)))
     return len(rows)
 
@@ -569,13 +751,24 @@ def main() -> None:
         return
     ensure_dataset()
     loaded = {}
-    for name in ("unit_cost_daily", "unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day"):
-        ensure_table(name)
-        loaded[name] = load_replace(name, tables[name], dates)
-    loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
+    loaded.update(
+        load_mercury.load(
+            pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq, derived=pathlib.Path(a.derived)
+        )
+    )
     loaded.update(load_stripe_fees(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))
     loaded.update(load_vendor_balance(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
     loaded.update(load_modulate_modelled(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))
+    loaded.update(
+        load_spend_daily(
+            pathlib.Path(a.raw), pathlib.Path(a.derived), a.run_id, computed_at, ensure_table, load_replace
+        )
+    )
+    # Publish the discoverable unit-cost total last. Gap-fill checks its run_id
+    # against spend's billing rows, so a failed spend load cannot hide a hole.
+    for name in ("unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day", "unit_cost_daily"):
+        ensure_table(name)
+        loaded[name] = load_replace(name, tables[name], dates)
     print(
         json.dumps(
             {"run_id": a.run_id, "dates": dates, "rows_loaded": loaded, "dataset": "%s.%s" % (PROJECT, DATASET)},

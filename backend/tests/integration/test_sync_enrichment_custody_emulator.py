@@ -16,8 +16,6 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def custody(store, monkeypatch):
     client, uid, tasks = store
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     monkeypatch.setattr(reprocess, '_wake_exists', lambda _: False)
     user = client.collection('users').document(uid)
@@ -45,7 +43,6 @@ def test_merged_donor_atomically_coalesces_earliest_deadline_and_replay(custody,
     client, uid, tasks, _ = custody
     donor, token = admit(custody, 'donor')
     reprocess.mark(uid, 'canonical', 'en', now=30)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     assert reprocess.run(donor, token, redirect, now=120) == 'redirected'
     assert not client.collection(reprocess.COLLECTION).document(donor).get().exists
     target = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'canonical'))

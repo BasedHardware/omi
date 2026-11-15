@@ -7034,6 +7034,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава са Apple, молим покушајте поново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Пријава преко Apple-а није успела. Покушајте поново или наставите са Google-ом.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преузимање firebase токена, молим покушајте поново.';
 
   @override
@@ -9177,6 +9181,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Примени на тренутни план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код је примењен на ваш тренутни план.',
+        'refused': 'Овај код није могуће применити. Проверите код и потребан план.',
+        'conflict': 'Код је већ искоришћен или ваш план већ има попуст.',
+        'rateLimited': 'Превише покушаја. Сачекајте и покушајте касније.',
+        'other': 'Код није примењен. Покушајте поново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -13662,6 +13684,9 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Поново генериши белешке';
+
+  @override
   String get attentionSummaryFailed => 'Овај разговор није могуће сажети';
 
   @override
@@ -15384,6 +15409,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша картица је одбијена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте картицу или вратите $plan за $price месечно';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте картицу да бисте вратили $plan';
   }
@@ -15408,4 +15438,31 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Пређите на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замењује неплаћену годишњу наплату од $yearly. Обнавља се месечно. Откажите било када.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаћање је одбијено. Ваш план се није променио.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сада плаћате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Данас плаћено $price. Обнавља се месечно.';
+  }
 }

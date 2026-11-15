@@ -1,6 +1,16 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+# Part A only. All repair children inherit a stable release epoch; 0 is
+# dormant while off. The release owner pins the epoch with the shadow flip,
+# then retains it across restarts and later ramp steps.
+recordTokenLease:
+  mode: "off"
+  servePercent: 0
+  seconds: 3600
+  deployedAt: 0
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
@@ -49,7 +59,11 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Staged ordering guard; enable on every merge writer before CPU fresh admission.
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Post-seal rollback controls, shared with the CPU serving hosts.
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
   servingMetricsMinRefreshSeconds: 30
   # Control-loop defaults; rollback independently with 64 / false / 2 / {}.
@@ -74,7 +88,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
-  ladderBudgetEnforcement: false
+  # Default-off unlimited_v2 backfill/import daily transcribed-hours cap (see
+  # utils/backfill_hours_cap.py). false restores current behavior exactly.
+  unlimitedV2BackfillHoursCapEnabled: false
+  unlimitedV2BackfillHoursCapHours: "24"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
@@ -138,7 +155,6 @@ worker:
   diarizeSpeechOnlyEnabled: true
   # Default off until a paired run on the prod pyannote revision qualifies it
   # (see backend/diarizer/batch_pipeline_runtime.md).
-  shortSpeechSingleEnabled: false
   correctnessMetricsEnabled: false
 resources:
   # Dev L4 batch-8 one-hour compute receipt: 9.795Gi cgroup lifetime peak.
@@ -215,16 +231,43 @@ t4Fallback:
 podMonitoring:
   enabled: true
 recordSealRepair:
+  shards: 1
+  # Independently pin the repair artifact; never change the GPU image for a repair-only patch.
+  imageRepository: ""
+  imageDigest: ""
   # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
   enabled: true
   # Retained for evening overlap and rollback; lead overrides false for the first peak.
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Serving hosts also need the matching runtime-env/listen overlay switch.
+  freshEnabled: true
+  # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.
+  schedule: "* * * * *"
   projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
   rowSeconds: 270
+  # CPU-only repair pod placement. The old affinity excluded the batch-pipeline
+  # pool, so repair landed on the monitoring pool at 101% CPU and received ~2 of
+  # its 4-core limit; the batch-pipeline pool sits at 8-19% CPU. Empty nodePool
+  # restores the old exclusion (and empty tolerations the old no-toleration pod).
+  # Current GPU nodes have only 1.3 CPU / 2.5 GiB free by requests; do not co-locate repair.
+  # Prod uses separate CPU-only api-pool nodes; this default preserves the one-pod footprint.
+  nodePool: batch-pipeline-pool
+  tolerations:
+    - key: omi.ai/batch-pipeline
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  # 2 -> 4 (== the unchanged limit) so 16 row workers are not starved to ~2 cores.
+  cpuRequest: "4"
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}

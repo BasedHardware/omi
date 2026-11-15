@@ -7055,6 +7055,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешно влизане с Apple, моля опитайте отново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Влизането с Apple не успя. Опитайте отново или продължете с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно извличане на Firebase токен, моля опитайте отново.';
 
   @override
@@ -9206,6 +9209,24 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Не може да се определи текущата версия на фърмуера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Приложи към текущия план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Кодът е приложен към текущия ви план.',
+        'refused': 'Кодът не може да бъде приложен. Проверете кода и необходимия план.',
+        'conflict': 'Кодът вече е използван или планът вече има отстъпка.',
+        'rateLimited': 'Твърде много опити. Изчакайте и опитайте по-късно.',
+        'other': 'Кодът не беше приложен. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -13701,6 +13722,9 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get attentionRerunNotes => 'Повторно генериране на бележки';
+
+  @override
   String get attentionSummaryFailed => 'Този разговор не можа да бъде обобщен';
 
   @override
@@ -15428,6 +15452,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get paymentDeclinedTitle => 'Картата ви беше отхвърлена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Обновете картата или върнете $plan за $price на месец';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Обновете картата, за да възстановите $plan';
   }
@@ -15452,4 +15481,31 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Преминете към месечен';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price на месец';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Заменя неплатеното годишно плащане от $yearly. Подновява се всеки месец. Отказ по всяко време.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плащането е отказано. Планът ви не е променен.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Преминаването в момента не е достъпно. Вместо това обновете картата.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Вече плащате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Днес са платени $price. Подновява се всеки месец.';
+  }
 }
