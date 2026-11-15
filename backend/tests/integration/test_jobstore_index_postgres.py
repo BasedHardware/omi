@@ -14,7 +14,7 @@ import pytest
 
 from database.jobstore.connection import Pool
 from database.jobstore.dual_store import DualStore
-from database.jobstore.index_store import INDEX_QUERIES, IndexStore, _IndexPostgresStore
+from database.jobstore.index_store import INDEX_QUERIES, IndexStore, BoundedPostgresReader
 from database.jobstore.postgres_store import PostgresStore
 from testing.store_fixtures import BackendUnavailable, build_backend, postgres_connect, required_backends
 from utils.batch_pipeline.scheduler import Scheduler
@@ -145,7 +145,7 @@ def test_real_pg_statement_deadline_falls_back_and_discards_connection(indexed):
 
 
 def test_actual_psycopg_stalled_socket_wait_exits_and_discards(indexed):
-    reader = _IndexPostgresStore(indexed.shadow, 0.05)
+    reader = BoundedPostgresReader(indexed.shadow, 0.05)
     stopped = []
     checked_out = []
 

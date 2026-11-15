@@ -22,7 +22,7 @@ from database.batch_pipeline_store import FirestoreStore
 from database.jobstore.connection import Pool, iam_connector
 from database.jobstore.dual_store import DualStore, MIRRORED_TABLES
 from database.jobstore.postgres_store import PostgresStore
-from database.jobstore.reconcile import _decode_cursor, process_page
+from database.jobstore.reconcile import decode_cursor, process_page
 from utils.staging_fence import (
     PROD_JOBSTORE_NAMESPACE,
     is_staging,
@@ -158,7 +158,7 @@ def reconcile_main(argv: list[str]) -> int:
             state = _checkpoint_read(args.state_file, scope)
             # Validate cursor syntax and its embedded scope before any client,
             # credential refresh or connection. Public output never includes it.
-            _decode_cursor(state['cursor'], args.namespace, args.source, args.table)
+            decode_cursor(state['cursor'], args.namespace, args.source, args.table)
             primary = FirestoreStore(args.namespace)
             pool = Pool('', size=1, connect=iam_connector(*target))
             # Connection/auth is outside the warm page budget. The supervising

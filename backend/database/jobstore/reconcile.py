@@ -28,7 +28,7 @@ from google.cloud.firestore_v1.field_path import FieldPath
 
 from database.jobstore.cohort import classify_document, project_document
 from database.jobstore.dual_store import MIRRORED_TABLES, DualStore, ShadowParityOutcome, compare, mirrored
-from database.jobstore.index_store import _connection_deadline
+from database.jobstore.index_store import connection_deadline
 
 _TYPED = frozenset({'jobs', 'results', 'control'})
 _MAX_CURSOR_BYTES = 16384
@@ -65,7 +65,7 @@ def _encode_cursor(namespace: str, source: str, table: str, key: str) -> str:
     return base64.urlsafe_b64encode(raw).decode('ascii')
 
 
-def _decode_cursor(cursor: str | None, namespace: str, source: str, table: str) -> str | None:
+def decode_cursor(cursor: object, namespace: str, source: str, table: str) -> str | None:
     if cursor is None:
         return None
     try:
@@ -196,12 +196,12 @@ def process_page(
     for value in (max_rows, max_primary_reads, max_statements):
         if type(value) is not int or value <= 0:
             raise ValueError('positive integer reconciliation budgets required')
-    if max_rows > _MAX_ROWS or not isinstance(budget_s, (int, float)) or not math.isfinite(budget_s) or budget_s <= 0:
+    if max_rows > _MAX_ROWS or type(budget_s) not in (int, float) or not math.isfinite(budget_s) or budget_s <= 0:
         raise ValueError('invalid reconciliation row or deadline budget')
     namespace = dual.shadow.namespace
     if namespace != dual.primary.namespace:
         raise ValueError('primary and copy namespace mismatch')
-    after = _decode_cursor(cursor, namespace, source, table)
+    after = decode_cursor(cursor, namespace, source, table)
     counts = PageCounts()
     budget = _Budget(budget_s, max_primary_reads, max_statements, counts)
     limit = min(max_rows, max_primary_reads // (2 if source == 'primary' else 1))
@@ -209,7 +209,7 @@ def process_page(
         raise ValueError('primary-read budget cannot cover one row')
     keys = _primary_keys(dual.primary, table, after, limit, budget) if source == 'primary' else None
     with dual.shadow.pool.connection(timeout=budget.remaining(), existing_only=True) as raw:
-        with _connection_deadline(raw, budget.deadline):
+        with connection_deadline(raw, budget.deadline):
             budget.statement(2)  # reserve BEGIN and COMMIT (or rollback on failure)
             with raw.transaction():
                 conn = _BoundedConnection(raw, budget)

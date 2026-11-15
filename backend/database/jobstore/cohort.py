@@ -40,7 +40,7 @@ def production_policy_applies(namespace: str) -> bool:
     return namespace == PROD_JOBSTORE_NAMESPACE and not staging_context
 
 
-def resolve_owner_key(table: str, key: str, doc: dict) -> str | None:
+def resolve_owner_key(table: str, key: object, doc: object) -> str | None:
     """Resolve a canonical owner, requiring every present ownership claim to agree.
 
     Absence permits a table-specific key fallback; an explicitly malformed or
@@ -67,7 +67,9 @@ def resolve_owner_key(table: str, key: str, doc: dict) -> str | None:
             return None
         claims.append(key)
     elif table == 'queues':
-        match = _QUEUE_KEY.fullmatch(key) if isinstance(key, str) else None
+        if not isinstance(key, str):
+            return None
+        match = _QUEUE_KEY.fullmatch(key)
         if match is None:
             return None
         claims.append(match[1])

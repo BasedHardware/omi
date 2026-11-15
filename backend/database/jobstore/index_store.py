@@ -108,7 +108,7 @@ def _deadline_steps(generator: Generator[Any, Any, Any], deadline: float) -> Gen
 
 
 @contextmanager
-def _connection_deadline(conn: Any, deadline: float) -> Iterator[None]:
+def connection_deadline(conn: Any, deadline: float) -> Iterator[None]:
     # The pool grants exclusive use of this connection. Restore the driver
     # method before returning it; a timeout/error escapes to Pool, which closes
     # it instead. BEGIN, SET, SELECT, COMMIT and any ROLLBACK use this same wait.
@@ -125,7 +125,7 @@ def _connection_deadline(conn: Any, deadline: float) -> Iterator[None]:
         conn.wait = original_wait
 
 
-class _IndexPostgresStore(PostgresStore):
+class BoundedPostgresReader(PostgresStore):
     """Reuse the serving SQL while bounding every step on a read-only session."""
 
     def __init__(self, source: PostgresStore, budget_s: float):
@@ -139,7 +139,7 @@ class _IndexPostgresStore(PostgresStore):
         if outer is not None:
             deadline = min(deadline, outer)
         with self.pool.connection(timeout=_remaining(deadline), existing_only=True) as conn:
-            with _connection_deadline(conn, deadline):
+            with connection_deadline(conn, deadline):
                 with conn.transaction():
                     conn.execute('SET TRANSACTION READ ONLY')
                     conn.execute(f'SET LOCAL statement_timeout = {max(1, int(_remaining(deadline) * 1000))}')
@@ -193,7 +193,7 @@ class IndexStore:
         self._last_sweep: dict[str, float] = {}
         self._sweep_lock = threading.Lock()
         # No connection, credential refresh or other IO during construction.
-        self._index = _IndexPostgresStore(mirror.shadow, read_budget_s)
+        self._index = BoundedPostgresReader(mirror.shadow, read_budget_s)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.mirror, name)

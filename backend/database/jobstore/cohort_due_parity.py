@@ -21,12 +21,12 @@ _FIELDS = {'leased': 'lease_until', 'retry': 'available_at', 'result_ready': 'en
 
 
 def compare_sampled_due(primary, shadow, args: tuple, kwargs: dict, budget_s: float) -> str:
-    from database.jobstore.index_store import _IndexPostgresStore, _connection_deadline
+    from database.jobstore.index_store import BoundedPostgresReader, connection_deadline
 
     state = args[0] if args else kwargs.get('state')
     now = args[1] if len(args) > 1 else kwargs.get('now')
     limit = args[2] if len(args) > 2 else kwargs.get('limit', 100)
-    if state not in _FIELDS:
+    if not isinstance(state, str) or state not in _FIELDS or not isinstance(now, (int, float)):
         return 'unknown'
     if (
         not jobstore_mirror_factory_admits(primary.namespace)
@@ -43,11 +43,11 @@ def compare_sampled_due(primary, shadow, args: tuple, kwargs: dict, budget_s: fl
         if left <= 0:
             raise TimeoutError('sampled due observation deadline')
         primary_keys = primary.due(state, now, limit)
-        copy_keys = _IndexPostgresStore(shadow, left).due(state, now, limit)
+        copy_keys = BoundedPostgresReader(shadow, left).due(state, now, limit)
         keys = sorted(set(primary_keys) | set(copy_keys))
         current = read_current(primary, [('jobs', key) for key in keys])
         with shadow.pool.connection(timeout=max(0, deadline - time.monotonic()), existing_only=True) as conn:
-            with _connection_deadline(conn, deadline), conn.transaction():
+            with connection_deadline(conn, deadline), conn.transaction():
                 conn.execute('SET TRANSACTION READ ONLY')
                 conn.execute(f'SET LOCAL statement_timeout = {max(1, int((deadline-time.monotonic())*1000))}')
                 copies = {key: shadow.read_doc(conn, 'jobs', key) for key in copy_keys}

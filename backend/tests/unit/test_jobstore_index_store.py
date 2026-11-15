@@ -12,7 +12,7 @@ import pytest
 from database import rpc_deadline
 from database.jobstore import index_store
 from database.jobstore.connection import Pool
-from database.jobstore.index_store import IndexStore, _IndexPostgresStore, _connection_deadline
+from database.jobstore.index_store import IndexStore, BoundedPostgresReader, connection_deadline
 
 
 @pytest.fixture
@@ -247,7 +247,7 @@ def test_stalled_driver_wait_exits_deadline_closes_generator_and_restores_method
 
     started = time.monotonic()
     with pytest.raises(TimeoutError):
-        with _connection_deadline(conn, started + 0.025):
+        with connection_deadline(conn, started + 0.025):
             conn.wait(stalled())
     assert time.monotonic() - started < 0.25
     assert closed == [True]
@@ -263,7 +263,7 @@ def test_deadline_already_expired_never_starts_driver_operation():
         yield 1
 
     with pytest.raises(TimeoutError):
-        with _connection_deadline(conn, time.monotonic() - 1):
+        with connection_deadline(conn, time.monotonic() - 1):
             conn.wait(operation())
     assert began == []
 
@@ -271,7 +271,7 @@ def test_deadline_already_expired_never_starts_driver_operation():
 def test_pool_timeout_is_finite_warm_only_and_never_dials(monkeypatch):
     dial = Mock(side_effect=AssertionError('index attempted a dial'))
     pool = Pool('', size=1, connect=dial)
-    reader = _IndexPostgresStore(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 0.025)
+    reader = BoundedPostgresReader(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 0.025)
     with pytest.raises(TimeoutError, match='warm connection'):
         with reader._read_conn():
             pytest.fail('cold pool must not yield')
@@ -285,7 +285,7 @@ def test_deadline_discards_connection_and_releases_pool_slot():
     conn = PollingConnection()
     conn.stall = True
     pool._idle.put(conn)
-    reader = _IndexPostgresStore(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 0.025)
+    reader = BoundedPostgresReader(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 0.025)
     started = time.monotonic()
     with pytest.raises(TimeoutError):
         with reader._read_conn():
@@ -301,7 +301,7 @@ def test_read_only_statement_timeout_and_outer_deadline():
     pool = Pool('', size=1, connect=Mock(side_effect=AssertionError('dial')))
     conn = PollingConnection()
     pool._idle.put(conn)
-    reader = _IndexPostgresStore(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 5)
+    reader = BoundedPostgresReader(SimpleNamespace(namespace='batch_pipeline_dev', pool=pool), 5)
     with rpc_deadline.rpc_deadline(time.monotonic() + 0.1):
         with reader._read_conn():
             pass
