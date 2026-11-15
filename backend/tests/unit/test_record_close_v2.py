@@ -302,3 +302,106 @@ async def test_nondurable_relay_never_negotiates_fast_close(monkeypatch):
     session.record_close_supported = True  # Even a spurious/stale capability is insufficient.
     assert not await session.request_recording_close('conv-1')
     assert not session.pending_record_closes
+
+
+def test_terminal_wire_state_reclaims_slots_and_preserves_recent_idempotence():
+    state = PusherCloseState(True)
+    for i in range(150):
+        cid = f'c-{i}'
+        state.audio(cid, 2)
+        assert state.prepare(cid, cid, set()) == ('prepared', 2)
+        assert state.commit(cid, cid, 2) == 'accepted'
+        state.retire(cid)
+        assert not state.requests and not state.received and not state.watermarks
+        assert len(state.completed) <= 128 and len(state.committed) <= 128
+        assert state.commit(cid, cid, 2) == 'accepted'
+    assert state.prepare('uncommitted', 'r', set()) == ('prepared', 0)
+    state.retire('uncommitted')
+    assert state.blocks('uncommitted', False)
+    assert state.prepare('c-0', 'new', set()) == ('prepared', 0)
+    assert state.blocks('c-0', True)  # Evicted history must acquire/prove a new close.
+
+
+@pytest.mark.asyncio
+async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(inline_session, monkeypatch):
+    client, path, _, _ = inline_session
+    incoming, replies = asyncio.Queue(), asyncio.Queue()
+    active = {'active': True}
+    binding = {'cid': None}
+    states = []
+    original_state = pusher.PusherCloseState
+
+    def state_factory(*args):
+        state = original_state(*args)
+        states.append(state)
+        return state
+
+    monkeypatch.setattr(pusher, 'PusherCloseState', state_factory)
+
+    class Server:
+        client_state = WebSocketState.CONNECTED
+
+        async def accept(self):
+            pass
+
+        async def send_bytes(self, data):
+            replies.put_nowait(data)
+
+        async def receive_bytes(self):
+            data = await incoming.get()
+            if data is None:
+                raise WebSocketDisconnect(1000)
+            return data
+
+        async def close(self, **kwargs):
+            self.client_state = WebSocketState.DISCONNECTED
+
+    class Relay:
+        async def send(self, data):
+            incoming.put_nowait(data)
+
+        async def recv(self):
+            return await replies.get()
+
+    session = make_session(
+        ws=Relay(),
+        active_ref=active,
+        config_overrides={'uid': 'owner', 'sample_rate': 16000, 'max_pending_requests': 100},
+        deps_overrides={'get_current_conversation_id': lambda: binding['cid']},
+    )
+    handler = asyncio.create_task(
+        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
+    )
+    await session.connect()
+    receiver = asyncio.create_task(session.pusher_receive())
+    try:
+        for i in range(150):
+            cid = f'close-{i}'
+            row_path = (*path[:-1], cid)
+            client.rows[row_path] = {'record_lane_owner': 'batch_live_v1', 'status': 'completed'}
+            binding['cid'] = cid
+            # Real accepted PCM, receipt readback and producer proof for every close.
+            session.audio_bytes_send(b'\x01\x00', 100 + i)
+            await session.request_recording_close(cid)
+            async with asyncio.timeout(10):
+                while not session.record_close_supported:
+                    await asyncio.sleep(0.001)
+                while cid not in session.record_close_boundaries or not client.rows[row_path].get(
+                    'record_audio_closed'
+                ):
+                    await session.request_recording_close(cid)
+                    await asyncio.sleep(0.001)
+            assert not session.pending_record_closes
+            assert len(session.record_close_boundaries) <= 100
+            assert len(states[0].requests) <= 1 and len(states[0].received) <= 1
+            assert len(states[0].completed) <= 128 and len(states[0].committed) <= 129
+        with pytest.raises(AudioBackpressure):
+            session.audio_bytes_send(b'late', 1000, conversation_id='close-0')
+        assert not session.audio_runs
+        assert not handler.done()
+    finally:
+        active['active'] = False
+        receiver.cancel()
+        await asyncio.gather(receiver, return_exceptions=True)
+        incoming.put_nowait(None)
+        await asyncio.wait_for(handler, 10)

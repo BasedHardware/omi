@@ -4,6 +4,7 @@ import json
 import struct
 import uuid
 from dataclasses import dataclass, field
+from collections import OrderedDict
 
 VERSION = 2
 CAPABILITY_OPCODE = 204
@@ -48,6 +49,8 @@ class PusherCloseState:
         self.received: dict[str, int] = {}
         self.requests: dict[str, tuple[str, int]] = {}
         self.committed: set[str] = set()
+        self.watermarks: dict[str, int] = {}
+        self.completed: OrderedDict[str, tuple[str, int, int]] = OrderedDict()
 
     def audio(self, cid, size):
         if not self.negotiated or not cid:
@@ -58,6 +61,9 @@ class PusherCloseState:
             self.received[cid] = self.received.get(cid, 0) + size
 
     def prepare(self, cid, request_id, closing):
+        if cid in self.completed:
+            old_id, base, _ = self.completed[cid]
+            return ('prepared', base) if old_id == request_id else ('conflict', 0)
         if cid in self.requests:
             old_id, base = self.requests[cid]
             return ('prepared', base) if old_id == request_id else ('conflict', 0)
@@ -70,6 +76,11 @@ class PusherCloseState:
         return 'prepared', base
 
     def commit(self, cid, request_id, watermark, *, accept=True):
+        if cid in self.completed:
+            old_id, _, target = self.completed[cid]
+            if old_id != request_id:
+                return 'unknown'
+            return 'accepted' if watermark == target else 'invalid_watermark'
         if cid not in self.requests or self.requests[cid][0] != request_id:
             return 'unknown'
         if watermark < self.requests[cid][1]:
@@ -78,7 +89,23 @@ class PusherCloseState:
             return 'watermark_pending'
         if accept:
             self.committed.add(cid)
+            self.watermarks[cid] = watermark
         return 'accepted'
 
     def blocks(self, cid, active):
         return self.negotiated and cid not in self.committed and (active or cid in self.requests)
+
+    def retire(self, cid):
+        """Reclaim active wire slots only after the drain's terminal proof path.
+
+        Recent terminal replies remain idempotent. An evicted old request must
+        prepare anew and acquire its own producer fence, never inherit proof.
+        """
+        if cid not in self.committed or cid not in self.requests:
+            return
+        request_id, base = self.requests.pop(cid)
+        self.completed[cid] = request_id, base, self.watermarks.pop(cid)
+        self.received.pop(cid, None)
+        while len(self.completed) > MAX_CLOSES:
+            old, _ = self.completed.popitem(last=False)
+            self.committed.discard(old)

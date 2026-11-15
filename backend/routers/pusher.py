@@ -932,6 +932,7 @@ async def _run_websocket_util_trigger(
     def retire_record_close(conv_id: str) -> None:
         record_close_requests.discard(conv_id)
         record_barrier.retire_close(conv_id)
+        close_protocol.retire(conv_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.

@@ -4,7 +4,7 @@ import logging
 import random
 import struct
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
@@ -219,7 +219,7 @@ class ListenPusherSession:
         self.audio_timeline_suspended = False
         self.record_close_supported = False
         self.pending_record_closes: dict[str, PendingClose] = {}
-        self.record_close_boundaries: set[str] = set()
+        self.record_close_boundaries: OrderedDict[str, bool] = OrderedDict()
 
     @property
     def uid(self):
@@ -399,7 +399,18 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
-        bound_conversation = conversation_id or self.deps.get_current_conversation_id()
+        current_conversation = self.deps.get_current_conversation_id()
+        bound_conversation = conversation_id or current_conversation
+        if (
+            self.record_close_supported
+            and bound_conversation
+            and bound_conversation != current_conversation
+            and bound_conversation not in self.pending_record_closes
+        ):
+            # Terminal history is bounded. An old explicit offer cannot reopen a
+            # forgotten boundary: reject before acceptance; accepted/replay runs
+            # already carry their owner and bypass this entry point.
+            raise AudioBackpressure('listen_record_closed', chunk)
         closing = self.pending_record_closes.get(bound_conversation) if bound_conversation else None
         if bound_conversation in self.record_close_boundaries or closing is not None and closing.frozen:
             # This call has not accepted/buffered the input. The caller retains
@@ -425,14 +436,20 @@ class ListenPusherSession:
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
+    def _remember_record_boundary(self, cid: str, *, accepted: bool) -> None:
+        self.record_close_boundaries[cid] = accepted
+        self.record_close_boundaries.move_to_end(cid)
+        while len(self.record_close_boundaries) > self.config.max_pending_requests:
+            self.record_close_boundaries.popitem(last=False)
+
     async def request_recording_close(self, conversation_id: str) -> bool:
         """Order accepted audio before a close-only request; never run a finalizer."""
         if not close_notify_enabled() or not audio_outbox_enabled():
             return False
         if conversation_id in self.record_close_boundaries:
-            return True
+            return self.record_close_boundaries[conversation_id]
         if conversation_id not in self.pending_record_closes:
-            if len(self.pending_record_closes) + len(self.record_close_boundaries) >= self.config.max_pending_requests:
+            if len(self.pending_record_closes) >= self.config.max_pending_requests:
                 logger.warning('event=record_close_notify outcome=local_capacity')
                 return False  # Never send an unretained fast close; use slow socket closure.
             self.pending_record_closes[conversation_id] = PendingClose()
@@ -753,7 +770,7 @@ class ListenPusherSession:
                             close.base, close.prepared = base, True
                     elif ack.get('phase') == 'commit' and ack.get('status') == 'accepted' and close.frozen:
                         if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
-                            self.record_close_boundaries.add(cid)
+                            self._remember_record_boundary(cid, accepted=True)
                             self.pending_record_closes.pop(cid, None)
                     elif ack.get('status') == 'unknown':
                         close.prepared = False
