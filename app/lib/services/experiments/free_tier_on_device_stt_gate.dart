@@ -3,8 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Operational kill switch for live on-device transcription past the cloud cap (S17).
-/// False/missing/offline/error keeps it on (ops_kill, owner free-tier-on-device); true returns
-/// new sockets to today's Omi socket, where the server holds the audio at the cap.
+/// A missing flag, or a read that errors or times out, keeps it on (ops_kill, owner
+/// free-tier-on-device); true returns new sockets to today's Omi socket, where the server holds
+/// the audio at the cap. A failed refresh keeps the last answer this app saw, so a kill that
+/// reached the phone stays in force while it is offline.
 ///
 /// Flag reads come from the analytics adapter's cached map, so the gate refreshes that map at
 /// most every [refreshInterval] (bounded by one second) before reading: a flip reaches running
