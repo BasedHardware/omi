@@ -118,6 +118,9 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(legac
     assert 'record_close_protocol' not in harness.offered[0]
     assert session.pending_record_closes is None and session.record_close_boundaries is None
     session.audio_bytes_send(b'\x01\x00', 100)
+    # Model an established stream: the pusher has its conversation header
+    # before receiving the legacy finalizer. Keep the accepted tail below.
+    await session._audio_bytes_flush()
     assert await controller.schedule_finalization('conversation')
     host.request_recording_close.assert_not_awaited()
     assert not await session.request_recording_close('conversation')
