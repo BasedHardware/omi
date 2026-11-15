@@ -20,7 +20,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryAccessPolicy, MemoryItem, MemoryItemStatus
 from utils.memory.memory_read_api import query_archive_product_memory_items
-from utils.other.list_budget import ListReadBudget
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_document_get
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
@@ -216,6 +216,7 @@ def fetch_authoritative_product_memory_items_by_ids(
     memory_ids: Iterable[str],
     *,
     db_client: Any,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[MemoryItem]:
     """Load a bounded, owner- and document-id-checked canonical subset.
 
@@ -234,18 +235,23 @@ def fetch_authoritative_product_memory_items_by_ids(
         raise ValueError(f"memory_ids must contain at most {MAX_PRODUCT_MEMORY_READ_LIMIT} entries")
     if not normalized_ids:
         return []
+    if budget is not None:
+        budget.check()
+        if len(normalized_ids) > budget.remaining_documents:
+            budget.mark_exhausted('documents')
+            raise ListReadBudgetExhausted('documents')
 
     collection_path = MemoryCollections(uid=uid).memory_items
     refs = [db_client.document(f"{collection_path}/{memory_id}") for memory_id in normalized_ids]
     get_all = getattr(db_client, "get_all", None)
     snapshots: Iterable[Any]
     if callable(get_all):
-        snapshots = cast(Iterable[Any], get_all(refs))
+        snapshots = cast(Iterable[Any], get_all(refs) if budget is None else budgeted_get_all(db_client, refs, budget))
     else:
         # A point-read-capable fake/client may not expose get_all. Keep the
         # same bounded identity fence without falling back to a collection
         # scan; production Firestore uses the batch path above.
-        snapshots = (ref.get() for ref in refs)
+        snapshots = (budgeted_document_get(ref, budget) for ref in refs)
 
     expected_ids = set(normalized_ids)
     items: List[MemoryItem] = []

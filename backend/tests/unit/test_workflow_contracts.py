@@ -2321,6 +2321,9 @@ def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
             'WORKFLOW_MODE': 'deploy',
             'SERVICE_IMAGES': '',
             'REQUESTED_BY': requested_by,
+            'RELEASE_SHA': '',
+            'SKIP_ELIGIBILITY': 'false',
+            'BREAK_GLASS_LOCK': 'false',
         }
         return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
 

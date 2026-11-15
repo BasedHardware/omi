@@ -54,6 +54,11 @@ overlay:
         RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
@@ -287,6 +292,11 @@ overlay:
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
         FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Mirrors backend-listen (co-host env parity); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -562,6 +572,11 @@ overlay:
             version: latest
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
@@ -936,6 +951,11 @@ overlay:
             version: latest
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
@@ -1347,6 +1367,11 @@ overlay:
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
@@ -1707,6 +1732,11 @@ overlay:
         - HOSTED_DIARIZATION_API_URL
         env:
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
