@@ -5,7 +5,7 @@ Lifecycle: ops kill switch, default on; owner rollout-meetings; review 2026-11-2
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from functools import cache
 import hashlib
@@ -131,8 +131,31 @@ def content_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
+CLOCK_OFFSET_FIELD = 'content_clock_offset'
+CLOCK_END_FIELD = 'content_clock_end'
+
+
+def activity_patch(
+    row: Mapping[str, Any], now: float, *, clock_offset: float = 0.0, owns_end: bool = False
+) -> dict[str, Any]:
+    """The hold state after one content arrival.
+
+    Uploaded audio from a phone whose clock runs ahead is stored shifted onto
+    the server clock by a per-request offset (``capture_clock_offset``). When
+    this arrival sets the row's end (``owns_end``), that offset is kept beside
+    the end it applies to, so the end-of-recording proof can compare the row
+    with the phone's own clock. An unshifted arrival that sets the end clears
+    it; an arrival that does not set the end leaves it alone. Nothing is
+    written for a row that was never shifted.
+    """
     state = dict(row.get(FIELD) or {})
+    if owns_end:
+        if clock_offset > 0:
+            state[CLOCK_OFFSET_FIELD] = float(clock_offset)
+            state[CLOCK_END_FIELD] = timestamp(row.get('finished_at'))
+        else:
+            state.pop(CLOCK_OFFSET_FIELD, None)
+            state.pop(CLOCK_END_FIELD, None)
     # A successful full run ends an epoch. The next append starts a bounded new one.
     if not state.get('pending_since'):
         state['pending_since'] = now
@@ -149,11 +172,20 @@ def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
     return state
 
 
-def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: float) -> tuple[str, float | None]:
+def admission(
+    row: Mapping[str, Any],
+    obligation: Mapping[str, Any],
+    *,
+    now: float,
+    end_proven: Callable[[], bool] | None = None,
+) -> tuple[str, float | None]:
     """A missing watermark is unknown, never inferred from one uploaded file.
 
-    No existing WAL producer supplies a contiguous device upload watermark. If
-    one is attached to this row in future, it must be past finished_at + quiet.
+    ``end_proven`` is asked only when this call would otherwise wait. A true
+    answer means the phone has proven the recording ended and its speech has
+    landed (``utils.sync.capture_end.proof``), so the wait is skipped and the
+    outcome is ``end_proof``. The unchanged, immaterial and late-cap rules still
+    apply. No answer, or a false one, leaves the quiet rule exactly as it was.
     """
     state = row.get(FIELD) or {}
     first = timestamp(state.get('pending_since')) or float(obligation['first_pending_at'])
@@ -163,11 +195,14 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     due = min(last + quiet, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
     gap = timestamp(row.get('finished_at')) + quiet
+    waiting: tuple[str, float | None] | None = None
     if now < first + MAX_HOLD_SECONDS:
         if now < due:
-            return 'quiet_wait', due
-        if watermark is not None and timestamp(watermark) < gap:
-            return 'watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS)
+            waiting = ('quiet_wait', due)
+        elif watermark is not None and timestamp(watermark) < gap:
+            waiting = ('watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS))
+    if waiting is not None and not (end_proven is not None and end_proven()):
+        return waiting
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)
@@ -182,6 +217,8 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
             and current['words'] - int(previous.get('words') or 0) < 80
         ):
             return 'immaterial', None
+    if waiting is not None:
+        return 'end_proof', None
     return ('max_hold' if now >= first + MAX_HOLD_SECONDS else 'ready'), None
 
 
