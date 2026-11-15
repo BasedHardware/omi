@@ -224,6 +224,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  late final VoidCallback _releaseFeedbackClearance;
   Timer? _announcementTimer;
   Timer? _homeWidgetFreshnessTimer;
 
@@ -532,11 +533,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _initQuickActions();
     _startHomeWidgets();
     // Toasts float above the chat bar on Home while this shell is the visible route.
-    OmiFeedback.bottomClearance = (ctx) {
+    _releaseFeedbackClearance = OmiFeedback.claimBottomClearance((ctx) {
       final onHome = ctx.read<HomeProvider>().selectedIndex == HomeProvider.homeTab;
       final clearance = onHome ? homeChatBarClearance(ctx) : homeBottomClearance(ctx);
       return clearance - homeBottomInset(ctx);
-    };
+    });
     super.initState();
 
     // After init
@@ -1120,7 +1121,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
       PromptQueue.instance.remove(id);
     }
-    OmiFeedback.bottomClearance = null;
+    _releaseFeedbackClearance();
     _announcementTimer?.cancel();
     _announcementTimer = null;
     _homeWidgetFreshnessTimer?.cancel();

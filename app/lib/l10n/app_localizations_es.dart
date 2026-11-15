@@ -7044,6 +7044,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Error al iniciar sesión con Apple, por favor inténtalo de nuevo.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'No se pudo iniciar sesión con Apple. Inténtalo de nuevo o continúa con Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Error al recuperar el token de Firebase, por favor inténtalo de nuevo.';
 
   @override

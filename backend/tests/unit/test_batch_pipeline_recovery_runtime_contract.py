@@ -73,7 +73,9 @@ def test_recovery_queue_provisioning_is_bounded_and_inventory_errors_fail_closed
         i for i, step in enumerate(steps) if step['name'] == 'Configure production batch quarantine recovery queue'
     )
     step = steps[index]
-    assert step['if'] == "${{ inputs.runtime_env == 'prod' }}"
+    # The integration-only profile must leave the existing recovery queue alone;
+    # ordinary production deploys retain the same bounded reconciliation below.
+    assert step['if'] == "${{ inputs.integration_only != 'true' && (inputs.runtime_env == 'prod') }}"
     assert index < next(i for i, s in enumerate(steps) if s.get('id') == 'deploy-backend-integration')
     script = (
         step['run']

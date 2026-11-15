@@ -7023,6 +7023,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Přihlášení přes Apple se nezdařilo, zkuste to prosím znovu.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Přihlášení přes Apple se nezdařilo. Zkuste to znovu nebo pokračujte přes Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodařilo se získat Firebase token, zkuste to prosím znovu.';
 
   @override

@@ -7064,6 +7064,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Az Apple-bejelentkezés nem sikerült. Próbáld újra, vagy folytasd a Google-lel.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.';
 
   @override

@@ -109,6 +109,50 @@
       ]
     },
     {
+      "collectionGroup": "batch_pipeline_prod_results",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "projection_state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projection_followup_due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "committed_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_results",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "projection_state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projection_followup_due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "committed_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "batch_pipeline_prod_allowance_holds",
       "queryScope": "COLLECTION",
       "fields": [

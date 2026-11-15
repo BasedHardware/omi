@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "Anmeldung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.",
     "authenticationFailed": "Authentifizierung fehlgeschlagen. Bitte versuchen Sie es erneut.",
     "authFailedToSignInWithApple": "Anmeldung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.",
+    "authAppleSignInFailedUseGoogle": "Die Anmeldung mit Apple hat nicht geklappt. Versuche es erneut oder fahre mit Google fort.",
     "authFailedToRetrieveToken": "Firebase-Token konnte nicht abgerufen werden, bitte versuchen Sie es erneut.",
     "authUnexpectedErrorFirebase": "Unerwarteter Fehler bei der Anmeldung, Firebase-Fehler, bitte versuchen Sie es erneut.",
     "authUnexpectedError": "Unerwarteter Fehler bei der Anmeldung, bitte versuchen Sie es erneut",
