@@ -218,7 +218,7 @@ function resolveBundledPi(): string {
  *  Dev: <repo>/desktop/agent/dist/adapters/../../.. → <repo>/desktop/pi-mono-extension/index.ts
  *  Shipped: <App>.app/Contents/Resources/agent/dist/adapters/../../.. → <App>.app/Contents/Resources/pi-mono-extension/index.ts
  */
-function resolveBundledExtension(): string {
+export function resolveBundledExtension(): string {
   return decodeURIComponent(new URL(
     "../../../pi-mono-extension/index.ts",
     import.meta.url
@@ -441,6 +441,9 @@ export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
   private config: PiMonoConfig;
+  /** Provider name pi is launched with / addressed via set_model. Defaults to
+   *  "omi" (Rust-backend-routed, requires a Firebase auth token). */
+  private provider: string;
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
@@ -514,6 +517,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
+    this.provider = config.provider || "omi";
     this.sessionPrefix = `pi-worker-${PiMonoAdapter.nextAdapterInstanceId++}`;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
@@ -527,15 +531,24 @@ export class PiMonoAdapter implements HarnessAdapter {
       return;
     }
 
+    // The Swift host already guards this before start (AgentRuntimeProcess
+    // refuses to launch omi-local without a configured model id), but the
+    // adapter must not silently substitute a cloud model id ("omi-sonnet")
+    // for a misconfigured local launch, that would request a model the
+    // user's own server was never asked to serve.
+    if (this.provider === "omi-local" && !this.config.model) {
+      throw new Error('pi-mono adapter requires config.model for provider "omi-local"');
+    }
+
     const args = [
       "--mode",
       "rpc",
       "-e",
       this.extensionPath,
       "--provider",
-      "omi",
+      this.provider,
       "--model",
-      "omi-sonnet",
+      this.config.model || "omi-sonnet",
     ];
     // Pi has no set_system_prompt RPC — system prompt must be baked at spawn
     // time via the --system-prompt CLI flag. To change it, restart the process.
@@ -569,7 +582,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     // marker independent from the optional chat-first capability flags so a
     // legacy typed-chat session does not accidentally look like a background
     // or voice run to the stdio projection.
-    if (this.currentToolProjection.surfaceKind === "main_chat" || this.currentToolProjection.surfaceKind === "floating_chat") {
+    if (this.currentToolProjection.surfaceKind !== undefined) {
       env.OMI_SURFACE_KIND = this.currentToolProjection.surfaceKind;
       if (
         this.currentToolProjection.chatFirstUi
@@ -677,7 +690,16 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
-    const mapped = opts.model ? mapModel(opts.model) : undefined;
+    // The "omi" provider serves multiple models (omi-sonnet/omi-opus) and
+    // callers address them via Claude-style ids that mapModel() aliases.
+    // A local provider serves exactly one model, the one it was configured
+    // with, so any requested model is ignored in favor of that fixed id.
+    const mapped =
+      this.provider === "omi"
+        ? opts.model
+          ? mapModel(opts.model)
+          : undefined
+        : this.config.model;
     await this.setExecutionRole(opts.executionRole ?? "coordinator");
 
     const admittedWorkingDirectory = resolve(opts.cwd);
@@ -710,11 +732,11 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     await this.start();
 
-    // Set model if specified (map claude-* → omi-*)
+    // Set model if specified (map claude-* → omi-*, or fixed local model id)
     if (mapped) {
       this.sendCommand({
         type: "set_model",
-        provider: "omi",
+        provider: this.provider,
         modelId: mapped,
       });
     }
@@ -735,11 +757,12 @@ export class PiMonoAdapter implements HarnessAdapter {
     chatFirstUi: boolean;
     controlGeneration: number | null;
   }): Promise<void> {
+    const isChatFirstSurface = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat";
     const normalized: {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
-    } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
+    } = isChatFirstSurface
       ? {
           surfaceKind: projection.surfaceKind,
           chatFirstUi: projection.chatFirstUi
@@ -752,6 +775,12 @@ export class PiMonoAdapter implements HarnessAdapter {
             : null,
         }
       : {
+          // Not a chat-first surface, but "realtime_voice" must still reach
+          // env.OMI_SURFACE_KIND below so the tool-manifest's realtimeVoiceOnly
+          // gate (e.g. the screenshot tool) can recognize a realtime voice run.
+          // Without this, that surfaceKind silently comes through as
+          // undefined and realtime PTT could never invoke screenshot.
+          surfaceKind: projection.surfaceKind === "realtime_voice" ? "realtime_voice" : undefined,
           chatFirstUi: false,
           controlGeneration: null,
         };
@@ -895,14 +924,17 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
-    const mapped = mapModel(model);
+    // A local provider serves exactly one model, ignore the requested model
+    // id and keep targeting the configured local model.
+    const mapped =
+      this.provider === "omi" ? mapModel(model) : this.config.model ?? model;
     const session = this.sessions.get(sessionId);
     if (session) {
       session.model = mapped;
     }
     this.sendCommand({
       type: "set_model",
-      provider: "omi",
+      provider: this.provider,
       modelId: mapped,
     });
   }
@@ -1481,6 +1513,33 @@ export class PiMonoAdapter implements HarnessAdapter {
       this.finishPublicWebProgress(publicWebTurn, "completed");
     }
 
+    // A "length" stop with no text means the provider's output budget was
+    // already 0 or 1 token before the first token was generated (typically a
+    // local model whose declared context window undercounts what the server
+    // actually loaded). Resolving with an empty string would render as
+    // nothing at all, so surface it as an error instead.
+    if (stopReason === "length" && text.trim().length === 0) {
+      const inputTokens = message?.usage?.input;
+      const detail = typeof inputTokens === "number"
+        ? ` (${inputTokens.toLocaleString("en-US")} input tokens)`
+        : "";
+      // This check runs for every provider (a length-stop with no text is a
+      // real failure either way), but "raise the model's context length in
+      // your local server" is only actionable advice under omi-local; a
+      // cloud provider hitting this has no local server to reconfigure.
+      const remediation = this.provider === "omi-local"
+        ? "Start a new chat, or raise the model's context length in your local server."
+        : "Start a new chat.";
+      const lengthMessage =
+        `The model returned no text: its output budget ran out before the first token because the conversation${detail} is near or past the context window Omi assumes for it. ${remediation}`;
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(lengthMessage));
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      return;
+    }
+
     this.recordServedModel(message ?? undefined);
 
     // Extract usage
@@ -1567,12 +1626,19 @@ export function toolProjectionFromMetadata(metadata: Record<string, unknown> | u
   controlGeneration: number | null;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
-  const typedSurface = metadata?.surfaceKind === "main_chat"
+  // "main_chat"/"floating_chat" additionally carry chat-first UI state
+  // (chatFirstUi/controlGeneration); "realtime_voice" carries no chat-first
+  // UI concept but its surfaceKind must still reach the tool-manifest
+  // projection so omi-tool-manifest.ts's realtimeVoiceOnly gate (e.g. the
+  // screenshot tool) can recognize a realtime voice run instead of silently
+  // hiding those tools whenever surfaceKind falls through as undefined.
+  const chatFirstSurface = metadata?.surfaceKind === "main_chat"
     ? "main_chat"
     : metadata?.surfaceKind === "floating_chat"
       ? "floating_chat"
       : undefined;
-  const enabled = typedSurface !== undefined
+  const typedSurface = chatFirstSurface ?? (metadata?.surfaceKind === "realtime_voice" ? "realtime_voice" : undefined);
+  const enabled = chatFirstSurface !== undefined
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;

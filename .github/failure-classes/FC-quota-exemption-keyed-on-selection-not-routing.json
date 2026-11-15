@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-quota-exemption-keyed-on-selection-not-routing",
+  "violated_contract": "A client-side exemption from a metered/paywall gate must be conditioned on the request actually being served by the exempt path, not merely on the user having selected that provider in Settings. `isPushToTalkUsageLimitBlocked` exempted every push-to-talk turn once the Local provider was selected, but PTT's own routing (`PTTRoutePolicy.decide`) sends every online turn to Omi's cloud realtime hub regardless of which chat provider is selected — only an offline turn (on-device dictation, no AI response) ever avoids the hub. The exemption was therefore keyed to a UI selection that does not determine which backend actually answers the turn, letting a free user keep making cloud-backed PTT turns after exhausting their quota just by selecting Local.",
+  "canonical_prevention": "When a metered gate has multiple serving paths gated by provider selection, the exemption must consult the same routing/admission decision the request will actually take (e.g. `PTTRoutePolicy.decide`'s online/offline split) rather than the static per-provider selection flag alone. Prove it with a behavioral test that pins the gate's outcome across the routing dimension (online vs. offline), not just across provider selection.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift",
+    "desktop/macos/Desktop/Tests/LocalProviderPaywallTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTyping/PTTRoutePolicy.swift"
+  ],
+  "status": "open"
+}

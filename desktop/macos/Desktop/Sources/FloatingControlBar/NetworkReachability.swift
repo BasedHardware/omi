@@ -26,9 +26,16 @@ final class NetworkReachability {
 
   private init() {}
 
+  /// Test-only override. The real path is a live `NWPathMonitor` reading the
+  /// sandbox's actual network state, which is neither controllable nor
+  /// hermetic; a non-nil value here short-circuits `isOnline` without ever
+  /// starting the monitor. Production code never sets this.
+  var testingOverrideIsOnline: Bool?
+
   /// True while a network path is satisfied. Also starts the monitor, for the
   /// callers (tests, early paths) that run before launch has.
   var isOnline: Bool {
+    if let testingOverrideIsOnline { return testingOverrideIsOnline }
     start()
     return online
   }

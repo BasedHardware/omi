@@ -475,6 +475,16 @@ actor AgentRuntimeProcess {
   private var stderrPipe: Pipe?
   private var stdoutBuffer = AgentRuntimeOrderedStdoutBuffer()
   private var processGeneration: UInt64 = 0
+  /// The pi provider ("omi"/"omi-local") the currently-running piMono
+  /// process was actually spawned with, set once per launch in
+  /// `performStartProcess`. `nil` before the first launch, nothing has run
+  /// yet, so there is no "actual" state to report. A provider switch after
+  /// launch needs an explicit restart to take effect (see
+  /// `ChatProvider.switchBridgeMode`); until that restart completes, this is
+  /// what billing/credential gating must trust (see `AgentBridge.providerMode`);
+  /// re-deriving from the live Settings preference would disagree with
+  /// what the already-running subprocess was actually configured with.
+  private(set) var launchedProviderMode: String?
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
   private var synchronizedRuntimeOwnerID: String?
   private var synchronizedRuntimeCredentialOwnerID: String?
@@ -1520,6 +1530,7 @@ actor AgentRuntimeProcess {
     prompt: String,
     mode: String?,
     imageData: Data?,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
@@ -1535,7 +1546,15 @@ actor AgentRuntimeProcess {
     message["surfaceKind"] = surfaceKind
     message["prompt"] = prompt
     if let mode { message["mode"] = mode }
-    if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
+    if let imageData {
+      message["imageBase64"] = imageData.base64EncodedString()
+      // Only ever true for an actual current-screen capture (see callers);
+      // omitted (never sent as false) so its absence and "false" are the same
+      // thing on the wire. The omi-local prompt marker (jsonl-transport.ts)
+      // reads this to say what the attached image actually is instead of
+      // assuming every image under Local is the current screen.
+      if imageIsScreenCapture { message["imageIsScreenCapture"] = true }
+    }
     if !attachments.isEmpty { message["attachments"] = attachments.map(\.dictionary) }
     if let producingTurnId, !producingTurnId.isEmpty { message["producingTurnId"] = producingTurnId }
     if let reasoningEffort, !reasoningEffort.isEmpty { message["reasoningEffort"] = reasoningEffort }
@@ -2324,6 +2343,7 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     mode: String?,
     imageData: Data?,
+    imageIsScreenCapture: Bool = false,
     attachments: [AgentQueryAttachment],
     producingTurnId: String?,
     expectedContext: AgentContextFreshness?,
@@ -2371,6 +2391,7 @@ actor AgentRuntimeProcess {
         prompt: prompt,
         mode: mode,
         imageData: imageData,
+        imageIsScreenCapture: imageIsScreenCapture,
         attachments: attachments,
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
@@ -2421,6 +2442,14 @@ actor AgentRuntimeProcess {
           recordBridgeStartFailure(failure)
         }
         if let bridgeError = error as? BridgeError, case .authMissing = bridgeError {
+          throw error
+        }
+        // A missing Local base URL/model id is a user misconfiguration, not a
+        // bridge-process defect: let it pass through so the UI shows the
+        // actionable "set up your local model" message (AgentBridge's
+        // .localConfigMissing case) and telemetry classifies it separately
+        // from a real .failedToStart, instead of both being flattened here.
+        if let bridgeError = error as? BridgeError, case .localConfigMissing = bridgeError {
           throw error
         }
         if let bridgeError = error as? BridgeError, case .failedToStart(_) = bridgeError {
@@ -2539,12 +2568,49 @@ actor AgentRuntimeProcess {
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
 
+    // Provider selection within the piMono harness: "omi" (default, routed
+    // through the Rust backend) or "omi-local" (a user-configured
+    // OpenAI-compatible endpoint, chosen app-wide in Settings, see
+    // AIProvider.currentProviderMode). Meaningless for every other harness.
+    let providerMode = preferredAdapterId == .piMono ? AIProvider.currentProviderMode : "omi"
+    launchedProviderMode = providerMode
+    let isLocalProvider = preferredAdapterId == .piMono && providerMode == "omi-local"
+    if isLocalProvider {
+      // Local provider: talk directly to a user-configured OpenAI-compatible
+      // endpoint (e.g. LM Studio, Ollama). Model requests carry no Omi
+      // credentials and no BYOK key, and never reach api.omi.me: the omi-local
+      // provider is registered without the per-request credential fetch.
+      let defaults = UserDefaults.standard
+      let localBaseURL = defaults.string(forKey: AIProvider.localBaseURLKey) ?? AIProvider.defaultLocalBaseURL
+      let localModelID = defaults.string(forKey: AIProvider.localModelIDKey) ?? AIProvider.defaultLocalModelID
+      guard !localBaseURL.isEmpty, !localModelID.isEmpty else {
+        log("AgentRuntimeProcess: local provider start refused, base URL or model id not configured")
+        throw BridgeError.localConfigMissing
+      }
+      env["OMI_PROVIDER"] = "omi-local"
+      env["OMI_LOCAL_BASE_URL"] = localBaseURL
+      env["OMI_LOCAL_MODEL_ID"] = localModelID
+      // Context budget: scales retained journal turns and per-source
+      // payload caps in the kernel context snapshot on the first turn of a
+      // chat. Omitted entirely at the 100% default, so the env var is
+      // simply absent, byte-identical to today.
+      let contextBudgetPercent = AIProvider.contextBudgetPercentForRuntime
+      if let contextBudgetPercent {
+        env["OMI_CONTEXT_BUDGET_PERCENT"] = String(contextBudgetPercent)
+      }
+      log(
+        "AgentRuntimeProcess: piMono provider=omi-local baseURL=\(localBaseURL) model=\(localModelID) contextBudget=\(contextBudgetPercent ?? 100)%"
+      )
+    } else if preferredAdapterId == .piMono {
+      log("AgentRuntimeProcess: piMono provider=omi")
+    }
+
     let rustBase = await APIClient.shared.rustBackendURL
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
     env = Self.childBackendRoutingEnvironment(baseEnvironment: env, rustBase: rustBase)
-    if rustBase.isEmpty && preferredAdapterId == .piMono {
+    if rustBase.isEmpty && preferredAdapterId == .piMono && !isLocalProvider {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -2559,7 +2625,7 @@ actor AgentRuntimeProcess {
       isNonProduction: AppBuild.isNonProduction,
       hermeticFaultModelToken: hermeticFaultModelToken)
     let requiresPiMonoCredentials =
-      preferredAdapterId == .piMono && shouldFetchManagedToken
+      preferredAdapterId == .piMono && !isLocalProvider && shouldFetchManagedToken
     let authService = await MainActor.run { AuthService.shared }
     let forceRefreshToken =
       preferredAdapterId == .piMono
@@ -2881,7 +2947,7 @@ actor AgentRuntimeProcess {
       return .incompatibleHandshake
     case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
       .encodingError, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
-      .agentRuntimeFailure, .quotaExceeded, .authMissing:
+      .agentRuntimeFailure, .quotaExceeded, .authMissing, .localConfigMissing:
       return .launchFailed
     }
   }

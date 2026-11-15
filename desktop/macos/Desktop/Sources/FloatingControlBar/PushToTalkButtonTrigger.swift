@@ -92,8 +92,34 @@ extension PushToTalkManager {
   /// Read-only projection of the same rule `isBlockedByUsageLimit()` enforces,
   /// so a button can render the blocked treatment without posting the popup.
   /// Posting stays a side effect of actually attempting a turn.
+  ///
+  /// This is the monthly free-tier question-quota gate (`FloatingBarUsageLimiter`),
+  /// independent of the separate trial-expired flag `isPaywalledEffective`
+  /// guards, so the exemption here is BYOK, or Local while genuinely offline
+  /// (see below). The quota this gate enforces meters chat *questions*, not
+  /// audio capture: a PTT turn's transcription is a separate axis (gated
+  /// instead by `isTranscriptionExemptFromPaywall`/`blockIfPaywalled` at
+  /// transcription start).
+  ///
+  /// Unlike typed chat, a PTT turn does NOT run its completion against the
+  /// user's own Local server: whenever online it runs end to end (audio in,
+  /// transcript, and the reply) inside Omi's cloud realtime hub
+  /// (`RealtimeHubController`), regardless of which AI provider is selected
+  /// — see `PTTRoutePolicy.decide`, which routes online turns to the hub
+  /// unconditionally. So the Local-provider exemption below only ever fires
+  /// for the one case where a PTT turn genuinely never reaches the hub:
+  /// offline, where it falls back to on-device dictation with no AI response
+  /// at all, and the free-tier chat-question quota has nothing to meter.
+  /// An online turn under Local still stays on this same gate as every other
+  /// provider — it is answered by the same cloud hub, so exempting it here
+  /// would let a free user keep making cloud-backed PTT turns after
+  /// exhausting their quota merely by selecting Local as their provider.
   var isPushToTalkUsageLimitBlocked: Bool {
-    !APIKeyService.isByokActive && FloatingBarUsageLimiter.shared.isLimitReached
+    guard !APIKeyService.isByokActive else { return false }
+    if AIProvider.isLocalProviderActive, !NetworkReachability.shared.isOnline {
+      return false
+    }
+    return FloatingBarUsageLimiter.shared.isLimitReached
   }
 
   /// How a visible push-to-talk button must render right now.

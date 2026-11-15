@@ -27,7 +27,15 @@ struct ChatQuotaBannerView: View {
     @ObservedObject private var dismissals = ChatQuotaBannerDismissals.shared
 
     private var banner: ChatQuotaBanner? {
-      ChatQuotaBanner.current(
+      // The quota this banner warns about is Omi's account quota, which only
+      // the "omi" provider ever touches (see `ChatRunAccountingPolicy`). Under
+      // Local, `serverQuota` can still be populated from an unrelated launch/
+      // sign-in fetch (`FloatingBarUsageLimiter.fetchPlan()` runs regardless
+      // of provider), so without this check a Local session could see "Monthly
+      // limit reached, Upgrade to keep chatting" above a composer that is not
+      // actually gated by that limit at all.
+      guard !AIProvider.isLocalProviderActive else { return nil }
+      return ChatQuotaBanner.current(
         quota: usageLimiter.serverQuota,
         optimisticDelta: usageLimiter.optimisticDelta,
         dismissed: dismissals.dismissed)
