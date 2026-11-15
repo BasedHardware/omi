@@ -7,6 +7,8 @@ from typing import Any
 
 from pinecone import Pinecone
 
+from config.summary_context import context_stage
+
 
 class SummaryVectorIndex:
     """Keep owner routing outside the transport; never mutate the shared index."""
@@ -33,4 +35,5 @@ class SummaryVectorIndex:
                     transport.request = partial(transport.request, allow_redirects=False)
                     return await client.query(**kwargs)
 
-        return asyncio.run(request())
+        with context_stage('vector'):
+            return asyncio.run(request())
