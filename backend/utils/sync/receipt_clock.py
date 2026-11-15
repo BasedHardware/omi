@@ -112,7 +112,9 @@ def receipt_clock_offsets(
         raise FutureCaptureRetry() from error
 
 
-def retained_source_offsets(paths, *, uid, device_id, received_at):
+def retained_source_offsets(
+    paths: list[str], *, uid: str, device_id: str | None, received_at: float
+) -> dict[str, float]:
     """Reclassification can never erase an already admitted owner/source anchor."""
     from database.sync_capture_clock import retained_offsets
     from utils.sync.capture_clock import is_early_capture_time
