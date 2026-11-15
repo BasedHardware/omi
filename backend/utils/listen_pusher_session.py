@@ -784,7 +784,9 @@ class ListenPusherSession:
                         self.record_close_unsupported_socket = sock
                         logger.info('event=record_close_notify outcome=unsupported')
                     elif ack.get('status') == 'unknown':
-                        close.prepared = False
+                        # Retired reply history may no longer know this request.
+                        # Re-prepare a fresh byte baseline, preserving the freeze.
+                        close.socket, close.prepared = None, False
                     # Capacity and watermark refusals retain the exact request.
                 elif header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
                     if self._audio_timeline_ack_check(msg):

@@ -434,3 +434,25 @@ async def test_unsupported_close_is_terminal_until_reconnect(monkeypatch, frozen
     session.pusher_ws, session.pusher_connected, session.record_close_supported = replacement, True, True
     await session.request_recording_close('next')
     assert 'next' in session.pending_record_closes and replacement.sent
+
+
+@pytest.mark.asyncio
+async def test_evicted_lost_ack_reprepares_fresh_baseline_without_unfreezing():
+    active = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active)
+    await session.connect()
+    session.record_close_supported = True
+    await session.request_recording_close('conv-1')
+    close = session.pending_record_closes['conv-1']
+    close.prepared, close.frozen, close.base, close.sent = True, True, 10, 4
+    ws.incoming.append(result_frame('conv-1', close.request_id, 'commit', 'unknown'))
+    ws.on_recv = lambda: active.update(active=False)
+    await session.pusher_receive()
+    assert close.frozen and not close.prepared
+    await session.request_recording_close('conv-1')
+    assert close.frozen and close.base == 0 and close.sent == 0
+    control = json.loads(ws.sent[-1][4:])
+    assert control['phase'] == 'prepare' and control['watermark'] == 0
+    with pytest.raises(AudioBackpressure):
+        session.audio_bytes_send(b'late', 100)
