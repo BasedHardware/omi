@@ -684,6 +684,7 @@ def _hydrate_bounded_ledger_search_items(
     now: datetime,
     device_scope: str,
     client_device_id: Optional[str],
+    budget: Optional[ListReadBudget] = None,
 ) -> BoundedLedgerSearchHydration:
     """Hydrate provider candidates plus a bounded canonical lineage closure.
 
@@ -705,7 +706,8 @@ def _hydrate_bounded_ledger_search_items(
         )
 
     hydrated_by_id: Dict[str, MemoryItem] = {}
-    frontier = fetch_authoritative_product_memory_items_by_ids(uid, requested_ids, db_client=db_client)
+    read_options = {'budget': budget} if budget is not None else {}
+    frontier = fetch_authoritative_product_memory_items_by_ids(uid, requested_ids, db_client=db_client, **read_options)
     for item in frontier:
         hydrated_by_id[item.memory_id] = item
 
@@ -721,7 +723,7 @@ def _hydrate_bounded_ledger_search_items(
         if not next_ids:
             break
         seen_ids.update(next_ids)
-        frontier = fetch_authoritative_product_memory_items_by_ids(uid, next_ids, db_client=db_client)
+        frontier = fetch_authoritative_product_memory_items_by_ids(uid, next_ids, db_client=db_client, **read_options)
         for item in frontier:
             hydrated_by_id[item.memory_id] = item
 
@@ -1030,6 +1032,8 @@ def search_canonical_memories(
     ledger_kinds: Optional[Collection[str]] = None,
     view: str = 'released',
     as_of: Optional[datetime] = None,
+    vector_only: bool = False,
+    budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid search over default-visible Short-term and Long-term memories."""
     assessment_now = datetime.now(timezone.utc)
@@ -1071,7 +1075,11 @@ def search_canonical_memories(
         require_typesense_projection_ready,
     )
 
-    if ledger_kinds is None:
+    if budget is not None:
+        budget.check()
+    if vector_only:
+        keyword_ids = []
+    elif ledger_kinds is None:
         keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit, db_client=client)
     else:
         require_typesense_projection_ready(uid)
@@ -1088,14 +1096,16 @@ def search_canonical_memories(
         vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
+    vector_options = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
     if ledger_kinds is None:
-        vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
+        vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit, **vector_options)
     else:
         vector_result = vector_query_fn(
             uid,
             normalized_query,
             limit=fetch_limit,
             ledger_kinds=sorted(ledger_kinds),
+            **vector_options,
         )
     vector_ids = [hit.memory_id for hit in vector_result.hits if hit.memory_id]
     merged_ids = merge_memory_search_ids(keyword_ids, vector_ids)
@@ -1111,6 +1121,7 @@ def search_canonical_memories(
         now=temporal_clock,
         device_scope=device_scope,
         client_device_id=client_device_id,
+        **({'budget': budget} if budget is not None else {}),
     )
     lineage_items_by_id = hydration.lineage_items_by_id
     survivor_items_by_id = hydration.survivor_items_by_id

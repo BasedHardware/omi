@@ -15,6 +15,15 @@ from utils.episodes import composer_context as context
 from utils.episodes.composer_detail import detail_budget
 
 
+@pytest.fixture(autouse=True)
+def profile_sources(monkeypatch):
+    from utils.episodes import composer_context_io as sources
+
+    monkeypatch.setattr(sources, 'profile', lambda *_args: {'profile_text': 'A gardener.'})
+    monkeypatch.setattr(sources, 'goals', lambda *_args: [])
+    monkeypatch.setattr(sources, 'people', lambda *_args: [])
+
+
 def member(words=30000, minutes=240):
     at = datetime(2026, 11, 14, tzinfo=timezone.utc)
     return {
@@ -91,6 +100,8 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
     denied = [
         fact('third-party', subject_scope='third_party'),
         fact('unknown-person', subject_scope='unknown'),
+        fact('canonical-attributed-third-party', subject_attribution='third_party'),
+        fact('canonical-attributed-unknown', subject_attribution='unknown'),
         fact('document', kind='document'),
         fact('trigger', kind='trigger'),
         fact('inference', intent_backed=False),
@@ -107,9 +118,9 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         fact('legacy-trigger', ledger_schema_version=None, kind='trigger'),
     ]
     rows = allowed + denied
-    monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: ('Synthetic', [], [], rows))
+    monkeypatch.setattr(context, '_list_memories', lambda *_args: rows)
     if source == 'list':
-        monkeypatch.setattr(context, '_search_memories', lambda *_args: [])
+        monkeypatch.setattr(context, '_search_memories', lambda *_args, **_kw: [])
     else:
         from types import SimpleNamespace
         from utils.memory.memory_service import MemoryService
@@ -129,6 +140,7 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
     prompt = messages[1][1]
     assert all(row.id in prompt for row in allowed)
     assert all(row.id not in prompt for row in denied)
+    assert '[unknown]' not in prompt and '[legacy_unspecified]' in prompt
     # Chat's legacy compatibility contract is intentionally unchanged tonight.
     assert chat_memory.is_prompt_memory_eligible(denied[-1])
     assert not context.composer_memory_eligible(denied[-1])
@@ -178,35 +190,36 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
     _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
     assert len(seen) == 1 and 'irrigation' in seen[0][1]
-    assert seen[0][2] == {'limit': 20, 'candidate_limit': 60, 'result_filter': context.composer_memory_eligible}
+    options = seen[0][2]
+    budget = options.pop('budget')
+    assert 0 < budget.remaining_seconds <= 8 and budget.max_documents == 160
+    assert options == {
+        'limit': 20,
+        'candidate_limit': 60,
+        'result_filter': context.composer_memory_eligible,
+        'vector_only': True,
+    }
     assert 'rain sensor' in block and 'locked' not in block
 
 
-def test_search_outage_uses_cached_eligible_facts_and_emits_degradation(monkeypatch):
-    from database import goals, users
-    from utils.observability import fallback
+def test_search_outage_omits_memories_without_list_fallback(monkeypatch):
+    from utils.metrics import OMI_FALLBACK_TOTAL
 
-    events = []
-    monkeypatch.setattr(context, '_search_memories', lambda *_a: (_ for _ in ()).throw(RuntimeError('synthetic')))
-    monkeypatch.setattr(fallback, 'record_fallback', lambda **kwargs: events.append(kwargs))
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='conversation_notes',
+        from_mode='episode_memories',
+        to_mode='without_memories',
+        reason='transport_error',
+        outcome='degraded',
+    )._value
+    before = counter.get()
     monkeypatch.setattr(
-        chat_memory,
-        'get_prompt_data',
-        lambda _uid: (
-            'Synthetic',
-            [],
-            [],
-            [
-                {'content': 'Irrigation uses a rain sensor.'},
-                {'content': 'Irrigation rejected.', 'user_review': False},
-            ],
-        ),
+        context, '_search_memories', lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError('synthetic'))
     )
-    monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
-    monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
-    _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
-    assert 'rain sensor' in block and 'rejected' not in block
-    assert len(events) == 1 and events[0]['outcome'] == 'degraded'
+    monkeypatch.setattr(context, '_list_memories', lambda *_a: pytest.fail('no list fallback after search failure'))
+    profile, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
+    assert 'A gardener' in profile and block == ''
+    assert counter.get() == before + 1
 
 
 def test_background_is_token_bounded_for_multilingual_long_facts():

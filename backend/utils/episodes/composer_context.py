@@ -1,7 +1,7 @@
 """Bounded owner background for episode notes; transcript remains the event authority.
 
-Uses chat's authoritative vector-search facade and profile eligibility policy.
-An unavailable search falls back to its cached, bounded default-visible intake.
+Uses authoritative hydration and stricter composer-only legacy eligibility.
+Retrieval failure or the one overall deadline omits all memories.
 """
 
 from __future__ import annotations
@@ -14,8 +14,14 @@ from collections import Counter
 from typing import Any, Mapping, Sequence
 from types import SimpleNamespace
 
-from config.episodes import COMPOSER_MEMORY_TOKENS, COMPOSER_PROFILE_TOKENS, COMPOSER_MEMORY_QUERY_TOKENS
+from config.episodes import (
+    COMPOSER_MEMORY_TOKENS,
+    COMPOSER_PROFILE_TOKENS,
+    COMPOSER_MEMORY_QUERY_TOKENS,
+    COMPOSER_CONTEXT_MAX_READS,
+)
 from models.knowledge_ledger_policy import is_prompt_memory_eligible
+from utils.episodes.composer_context_budget import bounded_gather
 
 logger = logging.getLogger(__name__)
 _STOP = frozenset(
@@ -30,12 +36,12 @@ _STOP = frozenset(
 )
 
 
-def bounded_text(text: str, tokens: int) -> str:
+def bounded_text(text: str, tokens: int, *, encoding: str = 'o200k_base') -> str:
     """Bound actual tokenizer tokens; the offline fallback bounds UTF-8 bytes."""
     try:
         import tiktoken
 
-        encoder = tiktoken.get_encoding('o200k_base')
+        encoder = tiktoken.get_encoding(encoding)
         return encoder.decode(encoder.encode(text, disallowed_special=())[:tokens])
     except Exception:
         return text.encode('utf-8')[:tokens].decode('utf-8', errors='ignore')
@@ -92,7 +98,11 @@ def retrieval_query(members: Sequence[Mapping[str, Any]]) -> str:
         + '\nMember topics:\n'
         + '\n'.join(summaries)
     )
-    return bounded_text(query, COMPOSER_MEMORY_QUERY_TOKENS) if topics or entities or frequent else ''
+    return (
+        bounded_text(query, COMPOSER_MEMORY_QUERY_TOKENS, encoding='cl100k_base')
+        if topics or entities or frequent
+        else ''
+    )
 
 
 def _memory_data(memory: Any) -> Mapping[str, Any]:
@@ -142,17 +152,14 @@ def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[A
             for t in overlap
         ) / math.sqrt(max(1, len(terms)))
         if score > 0:
-            attribution = (
-                getattr(data.get('subject_scope'), 'value', data.get('subject_scope'))
-                if data.get('ledger_schema_version')
-                else getattr(data.get('subject_attribution'), 'value', data.get('subject_attribution'))
-            ) or 'unknown'
+            subject = data.get('subject_scope') or data.get('subject_attribution')
+            attribution = getattr(subject, 'value', subject) or 'legacy_unspecified'
             ranked.append((-score, index, f'- [{attribution}] {bounded_text(content, 700)}'))
     body = '\n'.join(text for _, _, text in sorted(ranked)[:20])
     return bounded_text(body, COMPOSER_MEMORY_TOKENS)
 
 
-def _search_memories(uid: str, members: Sequence[Mapping[str, Any]]) -> list[Any]:
+def _search_memories(uid: str, members: Sequence[Mapping[str, Any]], *, budget: Any = None) -> list[Any]:
     # Same hydrated, privacy-fenced vector facade as chat's search_memories_tool.
     # Never trust vector metadata as authoritative content or bypass tombstone checks.
     from database._client import db
@@ -167,8 +174,17 @@ def _search_memories(uid: str, members: Sequence[Mapping[str, Any]]) -> list[Any
         limit=20,
         candidate_limit=60,
         result_filter=composer_memory_eligible,
+        vector_only=True,
+        budget=budget,
     )
     return [match.memory for match in matches]
+
+
+def _list_memories(uid: str, budget: Any) -> list[Any]:
+    from database._client import db
+    from utils.memory.memory_service import MemoryService
+
+    return MemoryService(db_client=db).read(uid, limit=60, budget=budget)
 
 
 def owner_block(
@@ -200,47 +216,59 @@ def owner_block(
 def gather(
     uid: str, members: Sequence[Mapping[str, Any]], *, owner: str, language: str, timezone: str
 ) -> tuple[str, str]:
-    """Best effort per source; a background lookup failure cannot lose the notes."""
-    from database import goals as goals_db, users as users_db
-    from utils.llms.memory import get_prompt_data
+    """One eight-second budget for profile, retrieval, hydration and rendering."""
+    fallback = json.dumps({'name': owner[:200], 'output_language': language[:100], 'timezone': timezone[:100]})
 
-    profile, goals, people, memories = {}, [], [], []
-    for source in ('profile', 'goals', 'people', 'memories'):
+    def load(deadline, publish):
+        from utils.episodes import composer_context_io as sources
+        from utils.other.list_budget import ListReadBudget
+
+        budget = ListReadBudget(
+            deadline_monotonic=deadline, max_documents=COMPOSER_CONTEXT_MAX_READS, strict_documents=True
+        )
+        profile, goals, people = {}, [], []
+        ids = sorted(
+            {
+                str(s['person_id'])
+                for row in members
+                for s in row.get('transcript_segments') or []
+                if s.get('person_id') and '/' not in str(s['person_id'])
+            }
+        )[:20]
+
+        def render():
+            return owner_block(
+                owner=owner, language=language, timezone=timezone, profile=profile, goals=goals, people=people
+            )
+
+        for source in ('profile', 'goals', 'people'):
+            budget.check()
+            try:
+                if source == 'profile':
+                    profile = {'ai_user_profile': sources.profile(uid, budget)}
+                elif source == 'goals':
+                    goals = sources.goals(uid, budget)
+                elif ids:
+                    people = sources.people(uid, ids, budget)
+                budget.check()
+                publish(render())
+            except Exception as error:
+                budget.check()
+                logger.warning('event=episode_context source=%s exception_type=%s', source, type(error).__name__)
+        # Fail-empty on search/hydration errors, including budget exhaustion.
+        # Only a successful empty search may use bounded default-visible list intake.
+        budget.check()
         try:
-            if source == 'profile':
-                profile = {'ai_user_profile': users_db.get_ai_user_profile(uid) or {}}
-            elif source == 'goals':
-                goals = goals_db.get_user_goals(uid, limit=5)
-            elif source == 'people':
-                ids = sorted(
-                    {
-                        str(s['person_id'])
-                        for row in members
-                        for s in row.get('transcript_segments') or []
-                        if s.get('person_id')
-                    }
-                )[:20]
-                people = users_db.get_people_by_ids(uid, ids) if ids else []
-            else:
-                try:
-                    memories = _search_memories(uid, members)
-                except Exception as error:
-                    logger.warning('event=episode_context source=memory_search exception_type=%s', type(error).__name__)
-                    from utils.observability.fallback import record_fallback
+            memories = _search_memories(uid, members, budget=budget)
+            budget.check()
+            if not memories:
+                memories = _list_memories(uid, budget)
+            budget.check()
+            block = relevant_memories(members, memories)
+            budget.check()
+            return render(), block
+        except Exception:
+            budget.check()
+            raise
 
-                    record_fallback(
-                        component='conversation_notes',
-                        from_mode='episode_memory_search',
-                        to_mode='cached_prompt_memories',
-                        reason='other',
-                        outcome='degraded',
-                        log=logger,
-                    )
-                if not relevant_memories(members, memories):
-                    _, baseline, manual, generated = get_prompt_data(uid)
-                    memories = [*baseline, *manual, *generated]
-        except Exception as error:
-            logger.warning('event=episode_context source=%s exception_type=%s', source, type(error).__name__)
-    return owner_block(
-        owner=owner, language=language, timezone=timezone, profile=profile, goals=goals, people=people
-    ), relevant_memories(members, memories)
+    return bounded_gather(load, fallback)
