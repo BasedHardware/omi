@@ -180,4 +180,16 @@ void main() {
     expect(writes, hasLength(2));
     receipts.last.complete(true);
   });
+
+  test('a successful read during a write that then fails still retries it', () async {
+    final p = await provider();
+
+    p.updateItemIndentLevel('child', 1);
+    await debounce();
+    await p.fetchActionItems(); // succeeds while the write is in flight
+    receipts.single.complete(false);
+    await debounce();
+    expect(writes, hasLength(2), reason: 'the read proved the server reachable');
+    receipts.last.complete(true);
+  });
 }

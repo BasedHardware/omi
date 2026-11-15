@@ -56,7 +56,13 @@ class TaskLayoutWrites {
 
   /// Called after any successful task read: the server is reachable again.
   void retryPending() {
-    if (_flush == null && (_sortOrders.isNotEmpty || _indentLevels.isNotEmpty)) _schedule();
+    if (_sortOrders.isEmpty && _indentLevels.isEmpty) return;
+    // A send in flight may still fail; remember that the server answered meanwhile.
+    if (_flush != null) {
+      _flushRequestedDuringSend = true;
+    } else {
+      _schedule();
+    }
   }
 
   /// Drops pending edits, e.g. on sign-out; an in-flight write cannot restore them.
