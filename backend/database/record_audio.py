@@ -119,10 +119,12 @@ def observe_record_sealed(client, uid, conversation_id, ref, *, source_revision,
             source_ref=ref,
             owner_ref=client.collection('users').document(uid),
             firestore_client=client,
+            **({'preserve_same_stage_clock': True} if not admitted else {}),
         )
-    except Exception:
+    except Exception as error:
         # Observability never changes a committed seal's outcome.
-        pass
+        pipeline_ledger.observe_seal_failure(error)
+        return False
 
 
 def set_record_upload_pending(

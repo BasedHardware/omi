@@ -561,6 +561,8 @@ def test_slow_post_commit_ledger_is_bounded_counted_and_still_sealed(source, mon
     store, client, _ = source
     counts = {}
     failures = Mock()
+    fallback = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'record_fallback', fallback)
     monkeypatch.setattr(repair, 'LEDGER_OBSERVATION_SECONDS', 0.02)
     monkeypatch.setattr(repair.pipeline_ledger, '_observe_failure', failures)
 
@@ -579,3 +581,70 @@ def test_slow_post_commit_ledger_is_bounded_counted_and_still_sealed(source, mon
     assert client.rows[PATH]['record_admitted_at'] is not None
     assert counts == {'ledger_misses': 1}
     assert isinstance(failures.call_args.args[0], TimeoutError)
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='record_seal_ledger',
+        to_mode='sealed_without_ledger',
+        reason='timeout',
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('error,reason', [('timeout', 'timeout'), ('unavailable', 'unavailable')])
+def test_source_revision_read_failure_emits_one_fallback_and_preserves_seal(source, monkeypatch, error, reason):
+    from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    store, client, _ = source
+    original = StrictFirestoreDocument.get
+    fallback = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'record_fallback', fallback)
+
+    def read(reference, *args, **kwargs):
+        if reference.path == PATH and kwargs.get('timeout') == 3:
+            raise DeadlineExceeded('synthetic') if error == 'timeout' else ServiceUnavailable('synthetic')
+        return original(reference, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read)
+    approval = plan(source)
+    counts = {}
+    assert repair.apply_seals(store, approval, approval['plan_sha256'], observation_counts=counts) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert counts == {'ledger_misses': 1}
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='record_seal_ledger',
+        to_mode='sealed_without_ledger',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('prior_stage', ['sealed', 'failed:upload_failed'])
+def test_reseal_keeps_original_sealed_deadline_but_recovers_failed_stage(source, monkeypatch, prior_stage):
+    from copy import deepcopy
+
+    store, client, _ = source
+    client.rows[PATH]['record_admitted_at'] = 50
+    ledger_path = ('users', 'synthetic', 'pipeline_ledger', 'record')
+    client.rows[ledger_path] = {
+        'stage': prior_stage,
+        'revision': 2,
+        'entered_at': 10,
+        'deadline_at': 3610 if prior_stage == 'sealed' else None,
+        'terminal': prior_stage != 'sealed',
+    }
+    before = deepcopy(client.rows[ledger_path])
+    monkeypatch.setattr(repair.pipeline_ledger, 'source_revision', lambda _: 3)
+    admissions = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'observe_admission', admissions)
+    approval = plan(source)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    admissions.assert_not_called()
+    if prior_stage == 'sealed':
+        assert client.rows[ledger_path] == before  # Clock AND deadline/revision remain unchanged.
+    else:
+        after = client.rows[ledger_path]
+        assert after['stage'] == 'sealed' and after['revision'] == 3 and not after['terminal']
+        assert after['deadline_at'] == after['entered_at'] + 3600

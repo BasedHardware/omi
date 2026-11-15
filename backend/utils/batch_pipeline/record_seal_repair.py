@@ -390,12 +390,17 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                     # The real seal has committed. Optional ledger IO must not
                     # occupy a row slot for its entire audio-proof budget.
                     with SweepBudget(LEDGER_OBSERVATION_SECONDS).interrupt_io():
-                        observe_record_sealed(store.client, uid, cid, ref, refresh_revision=True, **sealed_observation)
+                        observed = observe_record_sealed(
+                            store.client, uid, cid, ref, refresh_revision=True, **sealed_observation
+                        )
+                    if observed is False and observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
                 except (Exception, BudgetExhausted) as error:
                     # Catch cancellation only after the seal transaction. It is
                     # a ledger miss, never a failed seal or permission bypass.
-                    pipeline_ledger._observe_write('error')
-                    pipeline_ledger._observe_failure(TimeoutError() if isinstance(error, BudgetExhausted) else error)
+                    pipeline_ledger.observe_seal_failure(
+                        TimeoutError() if isinstance(error, BudgetExhausted) else error
+                    )
                     if observation_counts is not None:
                         observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
             if (
