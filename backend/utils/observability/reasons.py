@@ -698,6 +698,7 @@ class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 
     UNKNOWN = 'unknown'
+    INPUT_MISSING = 'input_missing'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'
