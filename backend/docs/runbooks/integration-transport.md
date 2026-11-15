@@ -65,7 +65,7 @@ post-wrap window. The four existing workflow artifacts remain the handoff.
 The native HTTP/CPU windows and failure/cancellation recovery still run.
 
 Pipeline's external guard is read-only, arms after a whole post-roll shared pass,
-and posts `ROLLBACK` on SCA-2283 if the captain's population/progress rule trips.
+and posts `ROLLBACK` on SCA-2283 if the captain's permitted FreshGuard rule trips.
 Release alone executes the saved 200/10 inverse. The controller's existing
 rollback command requires its private same-run journal; it is not a durable
 post-job rollback interface. That journal must not be exported. Before relying
@@ -120,21 +120,28 @@ producer evidence or captain disposition, not a new delivery metric. Under the
 08:22 ruling those guard implementation dependencies belong to Pipeline's
 external lane and do not silently turn external mode back into internal mode.
 
-Pipeline's 08:24 source audit identifies `FreshGuard.collect` and its existing
-two consecutive >5% readings rule, with stale/missing/zero-denominator evidence
-UNKNOWN. Whole-pass provenance needs a post-receiving `pass_started_at`, or a
-complete interval between two positive post-roll wraps with stable committer
-identities; one marker may finish a pre-roll pass. The bounded stock probe still
-needs error/completeness/depth normalization. No established observable for
-30-minute **ready-but-undiscovered** history has been identified: ready/unmerged
-stock and privacy-held work are not substitutes. Pipeline requires the captain
-to identify that observable or disposition its definition before claiming that
-external condition; this controller exports no invented population proof.
+Captain ruling SCA-2283 `01a1de53-b889-73a6-9cad-177c8e123c1a`
+permits the external guard to use FreshGuard alone when the separate stock
+signal needs a new scan. Pipeline's 08:40 feasibility disposition selects that
+permitted lane: no new scan or historical census substitutes for the absent
+30-minute privacy-excluded stock baseline. This stated gap is not an unresolved
+controller admission dependency for external mode.
+
+The existing `FreshGuard.collect` rule is two consecutive >5% readings, with
+stale (120 seconds), missing, unbound or zero-denominator evidence UNKNOWN.
+After receiving revision/config verification, arming records the actual shared
+cursor position and requires a complete circle back to that position with an
+unchanged integration/worker committer vector. A timestamp-only wrap can finish
+a pre-roll pass and is insufficient. Before arming, values and UNKNOWN are
+observations only, not acceptance or rollback decisions. SCA-2015 owns the
+external producer and its identity/completeness qualification; this controller
+does not invent or assert that qualification.
 
 True upload-to-durable-transcript latency remains **UNMEASURED**. Under captain
 ruling SCA-2283 `01a1ddc7-ad39-75e0-a8de-ad7088463568`, its absence is explicitly
 not a blocker to the narrow 100/20 recovery-default restoration. No delivery
 field or delivery-producer requirement is added to this adapter. Existing
 admission-to-commit, request/CPU or audio measurements are not substituted for
-delivery. The required wrap/recount/fresh-progress evidence is not relaxed.
+delivery. The external evidence scope follows the explicit FreshGuard-only
+disposition above; default internal mode remains fail-closed.
 No live acceptance, saving, clean-hour start, or five-day outcome is claimed.
