@@ -79,10 +79,19 @@ must be supplied by that authenticated adapter; HTTP CPU/request success is
 not a replacement. Offline tests simulate an adapter to test state and rollback,
 and do not prove these production semantics.
 
-SCA-2015 reports no qualified true upload-to-durable-transcript/current
-fresh-progress producer or trusted pipeline-to-controller adapter. Existing
-admission-to-commit measurements are not delivery proof. The missing producer,
-trusted ingestion and actual post-roll receiving/wrap receipts remain concrete
-qualification dependencies; the captain's 100/20 restoration exception is not
-widened into a new gate or waived by this source. No live acceptance, saving,
-clean-hour start, or five-day outcome is claimed.
+The actual required dependencies are the trusted ingestion adapter and a bound
+producer for shared full-wrap, bounded complete recount, the 30-minute
+ready-undiscovered guard and existing fresh-progress guard. SCA-2015 owns
+identifying those existing producer inputs; SCA-2225 owns their authenticated
+transport mapping; SCA-2283 supplies actual receiving/committer identities and
+the post-roll handoff. No qualified fresh-progress input or established trusted
+adapter has been supplied. Those are the qualification blockers requiring
+producer evidence or captain disposition, not a new delivery metric.
+
+True upload-to-durable-transcript latency remains **UNMEASURED**. Under captain
+ruling SCA-2283 `01a1ddc7-ad39-75e0-a8de-ad7088463568`, its absence is explicitly
+not a blocker to the narrow 100/20 recovery-default restoration. No delivery
+field or delivery-producer requirement is added to this adapter. Existing
+admission-to-commit, request/CPU or audio measurements are not substituted for
+delivery. The required wrap/recount/fresh-progress evidence is not relaxed.
+No live acceptance, saving, clean-hour start, or five-day outcome is claimed.
