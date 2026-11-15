@@ -17,11 +17,14 @@ void main() {
   late List<ActionItemWithMetadata> serverRows;
   late List<List<Map<String, dynamic>>> writes;
   late List<Completer<bool>> receipts;
+  // When set, the next read takes its server snapshot now but resolves only when completed.
+  Completer<void>? holdRead;
 
   Future<ActionItemsProvider> provider() async {
     serverRows = [_item('parent'), _item('child')];
     writes = [];
     receipts = [];
+    holdRead = null;
     final p = ActionItemsProvider(
       getActionItems: ({
         int limit = 100,
@@ -32,8 +35,13 @@ void main() {
         DateTime? endDate,
         DateTime? dueStartDate,
         DateTime? dueEndDate,
-      }) async =>
-          ActionItemsResponse(actionItems: List.of(serverRows)),
+      }) async {
+        final snapshot = List.of(serverRows);
+        final hold = holdRead;
+        holdRead = null;
+        if (hold != null) await hold.future;
+        return ActionItemsResponse(actionItems: snapshot);
+      },
       batchUpdateActionItemsRequest: (items) {
         writes.add(items);
         final receipt = Completer<bool>();
@@ -117,6 +125,59 @@ void main() {
 
     await p.fetchActionItems(); // server still has the first value
     expect(indentOf(p, 'child'), 2);
+    receipts.last.complete(true);
+  });
+
+  test('an edit made while a failing write is in flight is still sent', () async {
+    final p = await provider();
+
+    p.updateItemIndentLevel('child', 1);
+    await debounce();
+    p.updateItemIndentLevel('child', 2);
+    await debounce(); // its timer fires while the first write is in flight
+    expect(writes, hasLength(1));
+
+    receipts.first.complete(false);
+    await debounce();
+    expect(writes, hasLength(2), reason: 'no further edit or list read is needed');
+    expect(writes.last, [
+      {'id': 'child', 'indent_level': 2}
+    ]);
+    receipts.last.complete(true);
+  });
+
+  test('a read whose snapshot predates the acknowledgement cannot revert the indent', () async {
+    final p = await provider();
+
+    p.updateItemIndentLevel('child', 1);
+    await debounce();
+    final released = Completer<void>();
+    holdRead = released;
+    final read = p.fetchActionItems(); // snapshot taken now: indent 0
+    await Future<void>.delayed(Duration.zero);
+
+    serverRows = [_item('parent'), _item('child', indent: 1)];
+    receipts.single.complete(true);
+    await Future<void>.delayed(Duration.zero);
+    released.complete();
+    await read;
+    expect(indentOf(p, 'child'), 1);
+
+    await p.fetchActionItems(); // a read after the acknowledgement uses the server value
+    expect(indentOf(p, 'child'), 1);
+  });
+
+  test('a successful Home read retries a failed indent write', () async {
+    final p = await provider();
+
+    p.updateItemIndentLevel('child', 1);
+    await debounce();
+    receipts.single.complete(false);
+    await Future<void>.delayed(Duration.zero);
+
+    await p.ensureHomeTodayTasksLoaded();
+    await debounce();
+    expect(writes, hasLength(2));
     receipts.last.complete(true);
   });
 }

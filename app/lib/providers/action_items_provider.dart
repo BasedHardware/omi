@@ -305,6 +305,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final writeRevision = _taskWriteRevision;
     final readOrdinal = ++_listReadOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
@@ -318,10 +319,11 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null && generation == _sessionGeneration && writeRevision == _taskWriteRevision) {
         _homeDayItems = response.actionItems
             .where((item) => !_pendingDeletionIds.contains(item.id))
-            .map(_layoutWrites.overlay)
+            .map(_layoutWrites.overlayFor(layoutMark))
             .toList();
         SiriIntegration.current.queueUpsertTasks(_homeDayItems);
         _homeDayLoaded = true;
+        _layoutWrites.retryPending();
       }
     } catch (e) {
       Logger.debug('Error fetching home today tasks: $e');
@@ -413,6 +415,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final readOrdinal = ++_listReadOrdinal;
     _latestTaskListRead = readOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
     final query = (includeCompleted: _includeCompleted, startDate: _startDate, endDate: _endDate);
     bool ownsQuery() =>
         !_disposed &&
@@ -447,6 +450,7 @@ class ActionItemsProvider extends ChangeNotifier {
           response,
           decodedPageIsComplete: decodedPageIsComplete,
           readOrdinal: readOrdinal,
+          layoutMark: layoutMark,
         );
         loaded = true;
       }
@@ -490,6 +494,7 @@ class ActionItemsProvider extends ChangeNotifier {
     ActionItemsResponse response, {
     required bool decodedPageIsComplete,
     required int readOrdinal,
+    required int layoutMark,
   }) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
@@ -498,8 +503,9 @@ class ActionItemsProvider extends ChangeNotifier {
     // in-place: the response list may be unmodifiable, and aliasing it
     // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
     // and retire tombstones prematurely.
-    _actionItems = TaskCategorizationList(
-        response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).map(_layoutWrites.overlay));
+    _actionItems = TaskCategorizationList(response.actionItems
+        .where((item) => !_pendingDeletionIds.contains(item.id))
+        .map(_layoutWrites.overlayFor(layoutMark)));
     _loadedTaskPageIds
       ..clear()
       ..addAll(serverIds);
@@ -556,6 +562,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final writeRevision = _taskWriteRevision;
     final readOrdinal = ++_listReadOrdinal;
     _activeListReads.add(readOrdinal);
+    final layoutMark = _layoutWrites.readMark;
 
     setFetching(true);
 
@@ -586,10 +593,11 @@ class ActionItemsProvider extends ChangeNotifier {
         final seenIds = _actionItems.map((item) => item.id).toSet();
         final filtered = response.actionItems
             .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
-            .map(_layoutWrites.overlay)
+            .map(_layoutWrites.overlayFor(layoutMark))
             .toList();
         _actionItems.addAll(filtered);
         _revealNewIncompleteTasks();
+        _layoutWrites.retryPending();
         _hasMore = response.hasMore;
         if (!_hasMore &&
             !hasActiveFilter &&
@@ -1005,7 +1013,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (newItem != null) {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
-        _receiveCanonicalTask(newItem);
+        _receiveCanonicalTask(newItem, _layoutWrites.readMark);
         unawaited(() async {
           final exported = await _automaticAppleRemindersExport.export(newItem,
               canContinue: () => !_disposed && generation == _sessionGeneration);
@@ -1035,18 +1043,20 @@ class ActionItemsProvider extends ChangeNotifier {
     final generation = _sessionGeneration;
     final typedApi = _actionItemsApi;
     if (typedApi == null || _disposed) return false;
+    final layoutMark = _layoutWrites.readMark;
     final result = await typedApi.getById(id);
     if (_disposed || generation != _sessionGeneration) return false;
     if (result case ApiSuccess(:final data)) {
       if (data.id != id) return false;
-      _receiveCanonicalTask(data);
+      _receiveCanonicalTask(data, layoutMark);
+      _layoutWrites.retryPending();
       return true;
     }
     return false;
   }
 
-  void _receiveCanonicalTask(ActionItemWithMetadata item) {
-    item = _layoutWrites.overlay(item);
+  void _receiveCanonicalTask(ActionItemWithMetadata item, int layoutMark) {
+    item = _layoutWrites.overlayFor(layoutMark)(item);
     _taskWriteRevision++;
     if (_pendingDeletionIds.contains(item.id)) return;
     // An explicit Add Task gesture should reveal its new incomplete task,

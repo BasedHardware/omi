@@ -8,7 +8,8 @@ import 'package:omi/utils/logger.dart';
 // An edit stays pending until the server acknowledges that exact value, so a
 // list read cannot revert it on screen and a failed write is retried. One
 // write is in flight at a time, so an older layout cannot land after a newer
-// one.
+// one. Acknowledged values are still overlaid on reads that started before the
+// acknowledgement, because their server snapshot may predate the write.
 
 typedef BatchUpdateActionItemsRequest = Future<bool> Function(List<Map<String, dynamic>> items);
 
@@ -18,9 +19,17 @@ class TaskLayoutWrites {
   final BatchUpdateActionItemsRequest _send;
   final Map<String, int> _sortOrders = {};
   final Map<String, int> _indentLevels = {};
+  // ponytail: kept for the session (one entry per edited task); prune by in-flight read marks if this ever grows.
+  final Map<String, ({int value, int ack})> _ackedSortOrders = {};
+  final Map<String, ({int value, int ack})> _ackedIndentLevels = {};
+  int _acks = 0;
   Timer? _debounce;
   Future<void>? _flush;
+  bool _flushRequestedDuringSend = false;
   int _generation = 0;
+
+  /// Capture before a task read starts; pass to [overlayFor] for its rows.
+  int get readMark => _acks;
 
   void setSortOrder(String id, int sortOrder) {
     _sortOrders[id] = sortOrder;
@@ -32,15 +41,20 @@ class TaskLayoutWrites {
     _schedule();
   }
 
-  /// Re-applies unacknowledged edits to a row read from the server.
-  ActionItemWithMetadata overlay(ActionItemWithMetadata item) {
-    final sortOrder = _sortOrders[item.id];
-    final indentLevel = _indentLevels[item.id];
-    if (sortOrder == null && indentLevel == null) return item;
-    return item.copyWith(sortOrder: sortOrder, indentLevel: indentLevel);
-  }
+  /// Re-applies unacknowledged edits, and edits acknowledged after [readMark],
+  /// to rows from a read that started at [readMark].
+  ActionItemWithMetadata Function(ActionItemWithMetadata) overlayFor(int readMark) => (item) {
+        final ackedSort = _ackedSortOrders[item.id];
+        final ackedIndent = _ackedIndentLevels[item.id];
+        final sortOrder =
+            _sortOrders[item.id] ?? (ackedSort != null && ackedSort.ack > readMark ? ackedSort.value : null);
+        final indentLevel =
+            _indentLevels[item.id] ?? (ackedIndent != null && ackedIndent.ack > readMark ? ackedIndent.value : null);
+        if (sortOrder == null && indentLevel == null) return item;
+        return item.copyWith(sortOrder: sortOrder, indentLevel: indentLevel);
+      };
 
-  /// Called after a successful list read: the server is reachable again.
+  /// Called after any successful task read: the server is reachable again.
   void retryPending() {
     if (_flush == null && (_sortOrders.isNotEmpty || _indentLevels.isNotEmpty)) _schedule();
   }
@@ -51,11 +65,24 @@ class TaskLayoutWrites {
     _debounce?.cancel();
     _sortOrders.clear();
     _indentLevels.clear();
+    _ackedSortOrders.clear();
+    _ackedIndentLevels.clear();
   }
 
   Future<void> flush() {
     _debounce?.cancel();
-    return _flush ??= _sendPending().whenComplete(() => _flush = null);
+    if (_flush != null) {
+      _flushRequestedDuringSend = true;
+      return _flush!;
+    }
+    return _flush = _sendPending().whenComplete(() {
+      _flush = null;
+      // An edit made while the send was in flight lost its timer to this send.
+      // If the send failed, give that edit its own attempt.
+      final retry = _flushRequestedDuringSend && (_sortOrders.isNotEmpty || _indentLevels.isNotEmpty);
+      _flushRequestedDuringSend = false;
+      if (retry) _schedule();
+    });
   }
 
   void _schedule() {
@@ -87,12 +114,16 @@ class TaskLayoutWrites {
       }
       // Failed edits stay pending; the next edit or list read retries them.
       if (!saved || generation != _generation) return;
+      _acks++;
       sortOrders.forEach((id, value) {
         if (_sortOrders[id] == value) _sortOrders.remove(id);
+        _ackedSortOrders[id] = (value: value, ack: _acks);
       });
       indentLevels.forEach((id, value) {
         if (_indentLevels[id] == value) _indentLevels.remove(id);
+        _ackedIndentLevels[id] = (value: value, ack: _acks);
       });
+      _flushRequestedDuringSend = false;
     }
   }
 }
