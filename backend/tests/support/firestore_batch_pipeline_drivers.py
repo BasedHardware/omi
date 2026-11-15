@@ -101,6 +101,8 @@ def entries():
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (1024, 'in-memory candidate cap only'),
                 'max_scan': (10000, 'aggregate scan bound only'),
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
             },
@@ -111,6 +113,8 @@ def entries():
             patchers=(_repair_age_orders,),
             domains={
                 'urgent': [False, True],
+                'fresh': [False, True],
+                'newest': [False, True],
                 'after': [
                     None,
                     {
@@ -125,6 +129,8 @@ def entries():
                 ],
             },
             neutrals={
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
@@ -132,6 +138,7 @@ def entries():
                 'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
                 'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
+                'exclude': (frozenset(), 'in-memory deduplication only; no query shape change'),
             },
         ),
         DriverEntry(

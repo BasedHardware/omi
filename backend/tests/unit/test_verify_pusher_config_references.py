@@ -196,6 +196,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SYNC_RECORD_COVERAGE_WAIT_MEMO": "true",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
+        "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",
+        "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
+        "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
@@ -505,3 +508,17 @@ def test_accepts_referenced_secret_key_from_key_only_output(monkeypatch, preflig
 
     monkeypatch.setattr(preflight.subprocess, "run", fake_run)
     assert preflight.verify("safe-ns", {("secret", "safe-name", "REQUIRED_KEY")}) == []
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
+    root = SCRIPT.parents[2]
+    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments'][environment]
+    classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
+    key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
+    assert key in classification
+    for host in [manifest['gke']['backend-listen'], *manifest['cloud_run']['services'].values()]:
+        assert host['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert key not in manifest['gke']['pusher']['env']
+    cohost = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    assert key in cohost['_BATCH_PIPELINE_LISTEN_ONLY']

@@ -24,6 +24,7 @@ import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
@@ -1102,6 +1103,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final work = lagWork.begin(LagWork.upload);
   try {
     assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
     String? captureManifest;
     if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
       captureManifest = await _createSyncCaptureManifest(files, conversationId!);
@@ -1123,6 +1126,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
       },
       onUploadProgress: onUploadProgress,
     );

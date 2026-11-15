@@ -48,6 +48,9 @@ PROMOTION_ISSUANCE_METADATA_KEYS = (
     'bundle_redemption_role',
 )
 PROMOTION_ATTRIBUTION_METADATA_KEYS = PROMOTION_ISSUANCE_METADATA_KEYS + ('bundle_promotion_code_id',)
+_REQUIRED_ISSUANCE_METADATA_KEYS = tuple(
+    key for key in PROMOTION_ISSUANCE_METADATA_KEYS if key != 'bundle_order_line_item_id'
+)
 
 _PROMOTION_ID = re.compile(r'^promo_[A-Za-z0-9_-]{1,246}$')
 _SHOPIFY_SHOP = re.compile(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$')
@@ -65,7 +68,7 @@ def _object_dict(value: Any) -> Mapping[str, Any]:
     return {}
 
 
-def _validated_issuance_metadata(metadata: Any) -> Optional[Dict[str, str]]:
+def _validated_issuance_metadata(metadata: Any, *, strict_optional_line: bool = False) -> Optional[Dict[str, str]]:
     """Return the complete issuer contract, or None for missing/invalid metadata."""
     if not isinstance(metadata, Mapping) or not any(key in metadata for key in PROMOTION_ISSUANCE_METADATA_KEYS):
         return None
@@ -81,7 +84,9 @@ def _validated_issuance_metadata(metadata: Any) -> Optional[Dict[str, str]]:
     if not _SHOPIFY_ORDER_ID.fullmatch(values['shopify_order_id'] or ''):
         return None
     line_item_id = values['bundle_order_line_item_id']
-    if line_item_id is not None and not _SHOPIFY_LINE_ITEM_ID.fullmatch(line_item_id):
+    if (line_item_id is not None or (strict_optional_line and 'bundle_order_line_item_id' in metadata)) and not (
+        _SHOPIFY_LINE_ITEM_ID.fullmatch(line_item_id or '')
+    ):
         return None
     return {key: value for key, value in values.items() if value is not None}
 
@@ -93,6 +98,12 @@ def promotion_code_attribution(promotion_code: Any) -> Dict[str, str]:
     or conflicting issuance metadata deliberately produces no attribution and never blocks billing.
     """
     promo = _object_dict(promotion_code)
+    enabled = os.getenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', 'on').strip().lower() not in (
+        'off',
+        'false',
+        '0',
+        'no',
+    )
     promo_id = promo.get('id')
     if not isinstance(promo_id, str) or not _PROMOTION_ID.fullmatch(promo_id):
         return {}
@@ -100,7 +111,9 @@ def promotion_code_attribution(promotion_code: Any) -> Dict[str, str]:
     # evidence. A shared or reusable PromotionCode is not unique order provenance.
     if isinstance(promo.get('max_redemptions'), bool) or promo.get('max_redemptions') != 1:
         return {}
-    issuance = _validated_issuance_metadata(promo.get('metadata'))
+    if enabled and not isinstance(promo.get('max_redemptions'), int):
+        return {}
+    issuance = _validated_issuance_metadata(promo.get('metadata'), strict_optional_line=enabled)
     if issuance is None:
         return {}
 
@@ -108,9 +121,17 @@ def promotion_code_attribution(promotion_code: Any) -> Dict[str, str]:
     coupon = promo.get('coupon') or (promotion.get('coupon') if isinstance(promotion, Mapping) else None)
     coupon_metadata = coupon.get('metadata') if isinstance(coupon, Mapping) else None
     if isinstance(coupon_metadata, Mapping) and any(key in coupon_metadata for key in PROMOTION_ISSUANCE_METADATA_KEYS):
-        # A shared Coupon is never a source of order provenance. If its issuer also
-        # stamps the full contract, it must agree exactly with the unique code.
-        if _validated_issuance_metadata(coupon_metadata) != issuance:
+        # A Coupon only vetoes; it never supplies provenance. Partial assertions
+        # must agree individually, while a full contract also agrees on line presence.
+        if enabled and not all(key in coupon_metadata for key in _REQUIRED_ISSUANCE_METADATA_KEYS):
+            agrees = all(
+                isinstance(coupon_metadata[key], str) and key in issuance and coupon_metadata[key] == issuance[key]
+                for key in PROMOTION_ISSUANCE_METADATA_KEYS
+                if key in coupon_metadata
+            )
+        else:
+            agrees = _validated_issuance_metadata(coupon_metadata, strict_optional_line=enabled) == issuance
+        if not agrees:
             logger.warning('Ignoring conflicting promotion attribution metadata')
             return {}
     return {**issuance, 'bundle_promotion_code_id': promo_id}

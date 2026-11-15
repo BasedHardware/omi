@@ -138,6 +138,8 @@ class ProjectionStore:
         try:
             from database import pipeline_ledger
 
+            owner_ref = self.client.collection('users').document(binding.owner_id)
+            source_ref = owner_ref.collection('conversations').document(capture_id)
             pipeline_ledger.advance(
                 binding.owner_id,
                 capture_id,
@@ -146,6 +148,8 @@ class ProjectionStore:
                 speech_seconds=speech_seconds,
                 has_speech=speech_seconds > 0,
                 speech_basis='transcript',
+                source_ref=source_ref,
+                owner_ref=owner_ref,
                 firestore_client=self.client,
             )
         except Exception as error:  # The durable completion is already authoritative.
