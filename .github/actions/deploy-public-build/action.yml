@@ -309,7 +309,7 @@ runs:
 
     - name: Record app candidate probe receipt
       if: inputs.target == 'app' && success()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: app-candidate-probe-${{ github.run_id }}
         path: |
