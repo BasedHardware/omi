@@ -72,6 +72,7 @@ def test_detach_and_existing_session_tombstone_share_one_transaction(db):
     assert set(episode['recorded_members']) == set(episode['member_activity']) == {'speech'}
     assert episode['primary_conversation_id'] == 'speech'
     assert episode['state_version'] == 4 and episode['recorded_partition'] is None
+    assert episode['home_needs_prepare'] is True
     assert episode['content'] == 'opaque encrypted content'
     assert episode['status'] == 'closed' and episode['close_reason'] == 'gap'
     assert db.rows[FENCE] == {'version': 8, 'other': 'retained'}

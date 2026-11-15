@@ -38,7 +38,9 @@ def prepare(transaction: Any, client: Any, uid: str, cid: str, conversation: Map
         updates.update(
             {key: {k: v for k, v in (row.get(key) or {}).items() if k != cid} for key in _MAPS if key in row}
         )
-        updates.update(state_version=int(row.get('state_version') or 0) + 1, recorded_partition=None)
+        updates.update(
+            state_version=int(row.get('state_version') or 0) + 1, recorded_partition=None, home_needs_prepare=True
+        )
         if row.get('primary_conversation_id') == cid:
             updates['primary_conversation_id'] = next(iter(updates.get('conversation_ids') or []), None)
         writes.append((ref, updates))
