@@ -1176,7 +1176,6 @@ def _compose(
     waiting_until: list[datetime] = []
     waiting_members: list[str] = []
     wait_observations: dict[str, Any] = {}
-    wait_observed_at = datetime.now(timezone.utc)
     state, members = _members(
         uid,
         episode,
@@ -1206,7 +1205,7 @@ def _compose(
                         'compose_pending_since': current.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
                         **compose_wait.observation_updates(
-                            wait_observations, waiting_members, wait_observed_at, current=current, due=due
+                            wait_observations, waiting_members, now, current=current, due=due
                         ),
                         'compose_transcript_wait_members': waiting_members,
                         'compose_pending_membership': sorted(_retained_ids(episode)),
