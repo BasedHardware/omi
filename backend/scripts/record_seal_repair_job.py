@@ -102,6 +102,18 @@ def failure(event, error):
     return payload
 
 
+def partition_arguments(argv):
+    """Cron arguments only; no serving runtime env or policy flag is introduced."""
+    if not argv:
+        return 0, 1
+    if len(argv) != 4 or argv[0] != '--shards' or argv[2] != '--shard-index-file':
+        raise ValueError('invalid arguments')
+    count = int(argv[1])
+    index = int(Path(argv[3]).read_text().strip())
+    repair.validate_partition(index, count)
+    return index, count
+
+
 def main():
     def terminate(*_):
         # Unwind the coordinator's finally block and reap all children.
@@ -116,7 +128,7 @@ def main():
         with terminal_probe_totals(
             'record-seal-repair', fd=os.environ.get(CHILD_FD_ENV), log_empty=False
         ), repair.silent_dependencies(), (
-            repair_probe_server() if not sys.argv[1:] and repair.config.enabled() else nullcontext()
+            repair_probe_server() if sys.argv[1:] != ['--row'] and repair.config.enabled() else nullcontext()
         ):
             try:
                 if sys.argv[1:] == ['--row']:
@@ -127,18 +139,17 @@ def main():
                         output.flush()
 
                     checkpoint(repair.row_main(payload, progress=checkpoint))
-                elif not sys.argv[1:]:
+                else:
+                    shard, shards = partition_arguments(sys.argv[1:])
                     try:
                         from utils import record_projection_rebuild
 
-                        report = record_projection_rebuild.run_job()
+                        report = record_projection_rebuild.run_job() if shard == 0 else {'outcome': 'disabled'}
                         if report['outcome'] != 'disabled':
                             emit(report)
                     except Exception as error:
                         emit(failure('record_projection_rebuild', error))
-                    emit(repair.run(progress=emit))
-                else:
-                    raise ValueError('invalid arguments')
+                    emit(repair.run(progress=emit, **({'shard': shard, 'shards': shards} if shards > 1 else {})))
             except BaseException as error:
                 emit(failure('record_seal_repair', error))
                 return 1
