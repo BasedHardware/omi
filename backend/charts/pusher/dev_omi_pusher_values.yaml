@@ -123,6 +123,8 @@ env:
     value: "true"
   - name: PUSHER_RECORD_SEAL_WAKE_ENABLED
     value: "true"
+  - name: EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED
+    value: "true"
   - name: EPISODE_COMPOSER_CONTEXT_ENABLED
     value: "true"
   - name: EPISODE_COMPOSER_DETAIL_ENABLED

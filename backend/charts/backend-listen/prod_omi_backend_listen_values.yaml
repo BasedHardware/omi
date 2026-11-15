@@ -105,6 +105,8 @@ env:
     value: "false"
   - name: PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED
     value: "true"
+  - name: EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED
+    value: "true"
   - name: EPISODE_COMPOSER_CONTEXT_ENABLED
     value: "true"
   - name: EPISODE_COMPOSER_DETAIL_ENABLED
