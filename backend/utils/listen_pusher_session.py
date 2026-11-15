@@ -224,14 +224,20 @@ class ListenPusherSession:
         self.audio_timeline_suspended = False
         self.record_close_supported = False
         self.record_close_unsupported_socket: object = None
-        self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled() else None
-        self.record_close_boundaries: OrderedDict[str, bool] | None = OrderedDict() if close_notify_enabled() else None
-        self.deferred_record_closes: OrderedDict[str, None] | None = OrderedDict() if close_notify_enabled() else None
-        self.record_boundary = ListenRecordBoundary(config.max_pending_requests) if close_notify_enabled() else None
+        self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled(self.uid) else None
+        self.record_close_boundaries: OrderedDict[str, bool] | None = (
+            OrderedDict() if close_notify_enabled(self.uid) else None
+        )
+        self.deferred_record_closes: OrderedDict[str, None] | None = (
+            OrderedDict() if close_notify_enabled(self.uid) else None
+        )
+        self.record_boundary = (
+            ListenRecordBoundary(config.max_pending_requests) if close_notify_enabled(self.uid) else None
+        )
 
     def audio_frame(self, conversation_id: str | None):
         if (
-            close_notify_enabled()
+            close_notify_enabled(self.uid)
             and audio_outbox_enabled()
             and self.deps.finish_recording_audio is not None
             and not self.config.is_multi_channel
@@ -420,7 +426,7 @@ class ListenPusherSession:
         chunk = audio_bytes
         chunk_start_wall = start_wall
         # Notify off preserves main's implicit binding resolution at flush.
-        notify = close_notify_enabled()
+        notify = close_notify_enabled(self.uid)
         current_conversation = self.deps.get_current_conversation_id() if notify else None
         bound_conversation = (
             conversation_id
@@ -489,7 +495,7 @@ class ListenPusherSession:
             # completed there; leave the unprepared owner to socket-end drainage.
             return False
         if (
-            not close_notify_enabled()
+            not close_notify_enabled(self.uid)
             or not audio_outbox_enabled()
             or self.pending_record_closes is None
             or self.record_close_boundaries is None
@@ -786,7 +792,7 @@ class ListenPusherSession:
                     current_conversation_id
                     and current_conversation_id != self.last_synced_conversation_id
                     and not (
-                        close_notify_enabled()
+                        close_notify_enabled(self.uid)
                         and self.record_boundary is not None
                         and (
                             current_conversation_id in self.record_boundary.retired
@@ -840,7 +846,7 @@ class ListenPusherSession:
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
                 await self._audio_bytes_flush()
-            if close_notify_enabled() and self.pending_record_closes is not None:
+            if close_notify_enabled(self.uid) and self.pending_record_closes is not None:
                 for cid in list(self.pending_record_closes):
                     await self.request_recording_close(cid)
 
@@ -874,7 +880,7 @@ class ListenPusherSession:
                         continue  # An old socket cannot qualify its replacement.
                     ack = json.loads(msg[4:].decode('utf-8'))
                     self.record_close_supported = (
-                        close_notify_enabled()
+                        close_notify_enabled(self.uid)
                         and audio_outbox_enabled()
                         and self.deps.finish_recording_audio is not None
                         and not self.config.is_multi_channel
@@ -888,7 +894,11 @@ class ListenPusherSession:
                         for cid in list(self.pending_record_closes):
                             await self.request_recording_close(cid)
                 elif header_type == RESULT_OPCODE:
-                    if not close_notify_enabled() or self.pending_record_closes is None or self.pusher_ws is not sock:
+                    if (
+                        not close_notify_enabled(self.uid)
+                        or self.pending_record_closes is None
+                        or self.pusher_ws is not sock
+                    ):
                         continue
                     ack = json.loads(msg[4:].decode('utf-8'))
                     if (
@@ -1281,7 +1291,7 @@ class ListenPusherSession:
             self.record_close_supported = False
             self.record_close_unsupported_socket = None
             if (
-                close_notify_enabled()
+                close_notify_enabled(self.uid)
                 and audio_outbox_enabled()
                 and not self.config.is_multi_channel
                 and self.deps.finish_recording_audio is not None

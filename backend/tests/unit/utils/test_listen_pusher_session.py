@@ -1775,6 +1775,7 @@ async def test_new_generation_at_pending_capacity_does_not_evict_another_convers
 @pytest.mark.anyio
 async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     ws = FakePusherWebSocket()
     session = make_session(ws=ws)
     await session.connect()
@@ -1794,6 +1795,7 @@ async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monke
     assert frame_json(ws.sent[-1])['watermark'] == 4
     assert 'conv-1' in session.pending_record_closes
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     assert not await session.request_recording_close('conv-1')
     assert len(ws.sent) == 4
 
@@ -1801,6 +1803,7 @@ async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monke
 @pytest.mark.anyio
 async def test_close_only_keeps_control_pending_when_tail_send_fails(monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     ws = FakePusherWebSocket(send_errors=[None, None, OSError('synthetic')])
     session = make_session(ws=ws)
     await session.connect()
@@ -1819,6 +1822,7 @@ async def test_close_only_keeps_control_pending_when_tail_send_fails(monkeypatch
 @pytest.mark.parametrize('version', [1, True, 2, 3])
 async def test_close_capability_ack_drains_pending_notification_only_for_supported_version(version, monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 
     active = {'active': True}
@@ -1841,6 +1845,7 @@ async def test_close_capability_ack_drains_pending_notification_only_for_support
 @pytest.mark.anyio
 async def test_replaced_socket_ack_cannot_qualify_legacy_replacement(monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     from utils.pusher_protocol import record_close_ack_frame
 
     active = {'active': True}

@@ -710,6 +710,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             for name in (
                 'HOSTED_LID_API_URL',
                 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
                 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
@@ -2041,75 +2043,40 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 '''
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+@pytest.fixture(scope='module')
+def missing_gateway_cloud_run_state():
+    # Normalize the complete synthetic revision once; the test still mutates
+    # independent on-disk JSON snapshots and runs the full real validator.
+    return with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        None,
+        'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
+        'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
+    ],
+)
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path, missing_gateway_cloud_run_state, missing):
     validator = load_validator()
+    state = missing_gateway_cloud_run_state
+    expected = {('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL')}
+    if missing is not None:
+        marker = f'{{"name": "{missing}", "value": "true"}},\n        '
+        assert marker in state
+        state = state.replace(marker, '')
+        expected.update(
+            (f'cloud_run/{host}', f'missing env {missing}')
+            for host in ('backend', 'backend-sync', 'backend-integration')
+        )
     state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
-        encoding='utf-8',
-    )
-
+    state_path.write_text(state, encoding='utf-8')
     errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-
-    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
-    assert errors[0].scope == 'cloud_run/backend'
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_INPUT_EXPIRING_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    # A complete synthetic revision carries the new kill switch. Removing it
-    # must still fail validation; completing the fixture must not weaken the guard.
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
+    assert len(errors) == len(expected)
+    assert {(error.scope, error.message) for error in errors} == expected
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
@@ -4042,6 +4009,14 @@ def _assert_record_close_listener_bindings(config):
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
         assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT') == {
+            'value': '100',
+            'category': 'rollout',
+        }
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S') == {
+            'value': '',
+            'category': 'rollout',
+        }
         assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
@@ -4058,11 +4033,18 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
-@pytest.mark.parametrize('key', ['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'])
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false'),
+        ('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
+    ],
+)
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
     validator = load_validator()
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
-    value = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'
     path.write_text(payload)

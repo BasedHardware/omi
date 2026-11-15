@@ -329,7 +329,7 @@ class LiveConversationController:
                 observation.flush_failed(snapshot)
 
     async def _notify_recording_close(self, conversation_id: str) -> None:
-        if close_notify_enabled():
+        if close_notify_enabled(self.host.request.uid):
             close_recording = getattr(self.host, 'request_recording_close', None)
             if close_recording is not None:
                 try:
