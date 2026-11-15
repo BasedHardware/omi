@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-presenter-removed-with-its-conditional-row",
+  "violated_contract": "A sheet or modal must be presented by a view whose lifetime covers the whole interaction it starts. When the presenter is a control the flow itself hides, the presentation is torn down with it and the flow's own result is never shown. On macOS the cancel sheet hung off the Cancel Subscription row, and a successful cancellation refreshes the subscription, which sets cancel_at_period_end and removes that row: SwiftUI dismissed the sheet and the done screen before the user could read it, so the flow recorded the cancellation but never acknowledged it.",
+  "canonical_prevention": "Attach the presentation to a stable ancestor of every row the flow can hide, drive it from state owned by that ancestor, and let only an explicit user dismissal end it. Cover it with a lifecycle test that flips the presenter row's visibility mid-flow and asserts the presented content survives until the user closes it, and that the underlying state refresh is already applied when they do.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/CancelSheetLifecycleTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/**"
+  ],
+  "status": "open"
+}

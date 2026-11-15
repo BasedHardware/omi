@@ -401,6 +401,14 @@ extension SettingsContentView {
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
     }
+    // The cancel flow is presented by the section, not by the cancel row it
+    // opens from: a successful cancellation refresh removes that row, and a
+    // sheet attached to it would dismiss its own done screen (SCA-2171).
+    .presentsCancelSubscriptionFlow(
+      isPresented: $showCancelSubscriptionFlow,
+      periodEnd: userSubscription?.subscription.currentPeriodEnd,
+      onSubscriptionChanged: { loadSubscriptionInfo() }
+    )
     .onAppear {
       // The plan grid is part of this settings section, so this is a settings
       // impression, not a blocked purchase gate. Quota and usage-limit surfaces
