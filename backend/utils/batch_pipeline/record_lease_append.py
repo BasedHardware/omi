@@ -122,6 +122,19 @@ def wake_partial(store, uid, cid, now):
     run_transactional(store.client, commit, transient=True)
 
 
+async def rearm_partial(uid, cid, row, store):
+    """The partial-continuation wake, without the retained-copy work.
+
+    ``retain_upload`` issues this even when the copy itself fails or is
+    unnecessary: forcing a new inventory comparison is what lets the record
+    discover already-durable chunks. A coverage memo hit still wants it, so the
+    wake is reachable on its own.
+    """
+    if not custody.owns_upload(uid, cid) or retention_window(row) is None:
+        return
+    await run_blocking(db_executor, wake_partial, store, uid, cid, gap.time.time())
+
+
 async def retain_upload(uid, cid, row, paths, store):
     if not custody.owns_upload(uid, cid) or retention_window(row) is None:
         return
@@ -130,4 +143,4 @@ async def retain_upload(uid, cid, row, paths, store):
     finally:
         # A later object can fail after earlier create-only writes succeeded.
         # Re-arm those durable chunks even while the phone retains its WAL.
-        await run_blocking(db_executor, wake_partial, store, uid, cid, gap.time.time())
+        await rearm_partial(uid, cid, row, store)

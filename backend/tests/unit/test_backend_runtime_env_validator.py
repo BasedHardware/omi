@@ -195,9 +195,14 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
+        {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
+        {"name": "RECORD_NOTES_EAGER_ENABLED", "value": "false"},
+        {"name": "RECORD_FOLLOWUP_WAKE_ENABLED", "value": "true"},
+        {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
+        {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
@@ -246,6 +251,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
+        {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
+        {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT", "value": "100"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -3950,6 +3957,25 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
         read_lever_manifest.collect_sources(**kwargs)
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    for host in hosts:
+        for key in flags:
+            value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
+            assert host['env'][key] == {'value': value, 'category': 'ops_kill'}
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': value}]
+
+
 @pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_home_transcription_queue_hold_is_pinned_on_every_existing_host(env):
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
@@ -3989,7 +4015,11 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
     )
     for host in hosts:
-        for key in ('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'BATCH_HELD_DEAD_LETTER_ENABLED'):
+        for key in (
+            'RECORD_SEAL_REPAIR_FRESH_ENABLED',
+            'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
+        ):
             assert key in classification['kinds']['config']
             assert host['env'][key] == expected
             assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
