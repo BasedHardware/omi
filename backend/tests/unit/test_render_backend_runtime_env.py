@@ -1330,8 +1330,18 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-1993 17:32Z: integration stays off; the other roles drop backoff at their next rolls.
-        assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
+        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
+        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
+        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
+        if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
+            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+        else:
+            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
+        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
+        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
+        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
         expected = {}
         if environment == 'prod':
             expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
@@ -1413,7 +1423,10 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
         assert lever_percent('episode_members_cache') == 0, name
-        epoch = 'c2fs_20261026_r1' if enabled else 'v1'
+        # SCA-1750: prod listen/pusher read the same monthly doc as the Cloud Run billing
+        # gate (allowance watch), so they share its epoch while their levers stay 0.
+        epoch_aligned = enabled or (environment == 'prod' and name in {'gke/backend-listen', 'gke/pusher'})
+        epoch = 'c2fs_20261026_r1' if epoch_aligned else 'v1'
         assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
         if name.startswith('cloud_run/'):
             rendered = {
@@ -1432,4 +1445,47 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
         assert lever_percent('episode_members_cache') == 0, chart
-        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['pusher', 'backend-listen'])
+def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            f'{environment}-{chart}',
+            str(chart_dir),
+            '-f',
+            str(values),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.tag=',
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert len(deployments) == 1
+    containers = deployments[0]['spec']['template']['spec']['containers']
+    expected = {
+        'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED': 'true',
+        'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
+    }
+    if chart == 'pusher':
+        expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+    else:
+        expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
+        expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
+    contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
+    for key, value in expected.items():
+        entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
+        assert entries == [{'name': key, 'value': value}]
+        assert contract[key]['value'] == value

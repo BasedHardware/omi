@@ -94,7 +94,7 @@ checks:
     command: ["node", "--test", ".github/scripts/tests/ui-author-approval.test.cjs"]
     triggers: [".github/scripts/ui-author-approval.cjs", ".github/scripts/tests/ui-author-approval.test.cjs", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "#24477: the generated Swift client exceeds the Contents API inline limit; immutable blob evidence must remain complete without exempting generated UI declarations or bypassing human approval"
+    reason: "#24477 and #25309: exempt only the five API generator outputs; other Swift files retain complete immutable source evidence, and Nik or David must approve current-head UI changes"
   - id: ui-evidence
     command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]

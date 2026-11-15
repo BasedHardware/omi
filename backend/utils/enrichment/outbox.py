@@ -492,7 +492,7 @@ def mark_update(
             if merge_hold:
                 row['merge_hold'] = True
             row['due_at'] = min(
-                max(row.get('due_at') or 0, current + processing_hold.QUIET_SECONDS),
+                max(row.get('due_at') or 0, current + processing_hold.quiet_seconds()),
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
             )
 

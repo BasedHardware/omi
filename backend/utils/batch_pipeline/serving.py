@@ -37,6 +37,7 @@ from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
 from utils.sync import reprocess
@@ -82,6 +83,7 @@ class Serving:
         self.reap_staging = reap_staging
         self.enrichment_sweep = enrichment_sweep
         self.recovery = recovery
+        self.allowance_hold_due = 0.0
         # Optional single-owner lease for periodic maintenance (see reconcile).
         self.leader = leader
         self.held_dead_letter = HeldDeadLetter(store, metrics=metrics)
@@ -206,6 +208,7 @@ class Serving:
             self._maintain(recover_quarantine=recover_quarantine)
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
+            self.metrics.delivered_share.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
             # A settled recovery commits at this owner's log tail. Walk the
@@ -300,8 +303,10 @@ class Serving:
             # Explicit reconcile bypasses the periodic lease; the guard never does.
             if self._leads(True):
                 self.metrics.fresh_guard.refresh(self.store)
+                self.metrics.delivered_share.refresh(self.store)
             else:
                 self.metrics.fresh_guard.deactivate()
+                self.metrics.delivered_share.deactivate()
         if self.cleanup:
             try:
                 if self.reap_staging:
@@ -363,6 +368,9 @@ class Serving:
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
         self.queue().recover(time.time())
+        if time.monotonic() >= self.allowance_hold_due and self._leads(True):
+            self.allowance_hold_due = time.monotonic() + 30
+            AllowanceHolds(self.store, entitlement).tick(time.time())
         page = self.ready_discovery.page()
         if page is not None:
             for _, owner_id in self.ready_discovery.owners(page):

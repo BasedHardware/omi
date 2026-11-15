@@ -263,7 +263,7 @@
     "/environments/prod/gke/backend-listen/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
         "category": "rollout",
-        "value": "v1"
+        "value": "c2fs_20261026_r1"
       },
       "FSR_USAGE_MONTH_TTL_SECONDS": {
         "category": "rollout",
@@ -276,7 +276,7 @@
     "/environments/prod/gke/pusher/env": {
       "FSR_USAGE_MONTH_TOTAL_EPOCH": {
         "category": "rollout",
-        "value": "v1"
+        "value": "c2fs_20261026_r1"
       },
       "FSR_USAGE_MONTH_TTL_SECONDS": {
         "category": "rollout",
