@@ -105,6 +105,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_HELD_DEAD_LETTER_ENABLED',
         # main.py owns the record intake drain; pusher.main never starts it.
         'RECORD_SEAL_REPAIR_FRESH_ENABLED',
+        # Only main.py admits native record units; pusher never assigns GPU queue priority.
+        'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
         'RECORD_FRESH_MERGE_ENABLED',
         'RECORD_NOTES_EAGER_ENABLED',
