@@ -39,6 +39,8 @@ _PAYLOAD_FIELDS = (
     'language',
     'effects_only',
     'sync_hold',
+    'merge_hold',
+    'sync_hold_requested',
     'immediate',
     'version',
     'first_pending_at',

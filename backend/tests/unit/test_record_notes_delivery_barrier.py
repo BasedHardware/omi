@@ -115,7 +115,10 @@ def test_clear_barrier_does_not_add_a_delay_or_buy_duplicate_notes(delivery):
     d.paid.assert_called_once()
 
 
-def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_deadline(delivery, monkeypatch):
+@pytest.mark.parametrize('merge_first', [False, True])
+def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_deadline(
+    delivery, monkeypatch, merge_first
+):
     from utils.enrichment import callback
 
     d = delivery
@@ -123,7 +126,7 @@ def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_dead
     d.adapter.enqueue(
         d.key,
         d.f.binding.owner_id,
-        {'conversation_id': 'capture', 'language': 'en', 'record_notes_processing_hold': {'merge_first': False}},
+        {'conversation_id': 'capture', 'language': 'en', 'record_notes_processing_hold': {'merge_first': merge_first}},
         NOW + 650,
         now=NOW + 50,
         coalesce='max',
@@ -137,6 +140,8 @@ def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_dead
         'last_content_at': NOW + 100,
     }
     monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '600')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false' if merge_first else 'true')
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'true')
     monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a, **k: canonical)
     paid = Mock()
     monkeypatch.setattr(callback, 'process_conversation', paid)
