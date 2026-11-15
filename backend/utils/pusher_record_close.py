@@ -109,13 +109,16 @@ class PusherCloseState:
     def abort(self, cid, request_id, watermark, *, accept=True):
         """Atomic exact-request terminal choice after the source's ordered tail proof."""
         if cid in self.completed:
-            return 'committed' if self.completed[cid][0] == request_id else 'unknown'
+            old_id, _, target = self.completed[cid]
+            if old_id != request_id:
+                return 'unknown'
+            return 'committed' if watermark == target else 'invalid_watermark'
         if cid in self.aborted_completed:
             return 'aborted' if self.aborted_completed[cid] == (request_id, watermark) else 'unknown'
         if cid not in self.requests or self.requests[cid][0] != request_id:
             return 'unknown'
         if cid in self.committed:
-            return 'committed'
+            return 'committed' if self.watermarks[cid] == watermark else 'invalid_watermark'
         validation = self.commit(cid, request_id, watermark, accept=False) if cid not in self.aborted else 'accepted'
         if validation != 'accepted' or (cid in self.aborted and self.watermarks[cid] != watermark):
             return validation if validation != 'accepted' else 'invalid_watermark'

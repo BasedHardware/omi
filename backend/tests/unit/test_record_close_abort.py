@@ -27,10 +27,12 @@ async def test_abort_and_commit_race_has_one_terminal_winner(first):
     replies = await asyncio.gather(*tasks)
     assert replies == (['aborted', 'unknown'] if first == 'abort' else ['accepted', 'committed'])
     assert not state.blocks('record', True)
+    assert state.abort('record', 'request', 5) == 'invalid_watermark'
     assert state.abort('record', 'other', 4) == 'unknown'
     assert state.abort('unknown', 'request', 4) == 'unknown'
     state.retire('record')
     assert state.abort('record', 'request', 4) == ('aborted' if first == 'abort' else 'committed')
+    assert state.abort('record', 'request', 5) == ('unknown' if first == 'abort' else 'invalid_watermark')
 
 
 @pytest.mark.parametrize('durable,capable', [(False, True), (True, True), (True, False)])
