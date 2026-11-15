@@ -182,3 +182,37 @@ whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline gu
 extracts each historical train claim and compares it with every base declaration.
 It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
 and a missing note while the sources disagree.
+
+## SCA-2185 GKE operator settings
+
+The prod listen and pusher chart values and prod runtime overlay carry the
+public operator settings observed on 2026-11-15. They preserve each host's
+existing scope. Rollback
+changes these same pins rather than removing them from the chart.
+
+Listen's nonempty `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` cohort must be supplied
+through `LISTEN_PRIVATE_VALUES_YAML` under `privateEnv`. Its payload must never
+enter this repository. Before admitting a Helm apply, the deploy owner must
+confirm that the protected input contains the existing cohort and compare the
+final private/runtime-overridden render with the serving ReplicaSets. The
+public chart alone cannot prove preservation of that private binding.
+
+The source epoch remains `c2fs_20261026_r1` on prod listen and pusher, as required
+by SCA-1750's allowance-watch contract, although the observed serving epoch is
+`v1` on both. This discrepancy requires the rollout/usage owner to reconcile;
+copying the older epoch into source would reverse that reviewed contract. The
+five explicit pusher bindings already present in source (Soniox failover and
+four token-lease keys) stay declared. Their absence from the serving spec is
+a live/source discrepancy, not permission to delete their declarations.
+
+This contribution does not authorize deployment. Keep GKE changes image-only
+until a fresh ro-prod comparison against main proves the required agreement.
+
+Seven baseline live-only keys are retired under David's 2026-11-09 ruling:
+`SPEAKER_MATCH_SCORES_ENABLED`, `FIRST_SUMMARY_DEADLINE_ENABLED`,
+`FIRST_SUMMARY_DEADLINE_PERCENT`, `AUDIO_ARCHIVE_COALESCE_ENABLED`,
+`AUDIO_ARCHIVE_UID_ALLOWLIST`, `SPEAKER_GROUPING_MODE`, and
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED`.
+They remain absent from source; the registry and graduation tests continue to
+reject their reintroduction. The rollout owner must dispose of those stale
+production entries before claiming literal environment agreement.

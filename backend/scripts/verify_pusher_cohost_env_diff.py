@@ -374,7 +374,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
-    | _FINALIZATION_REPLAY_LISTEN_ONLY,
+    | _FINALIZATION_REPLAY_LISTEN_ONLY
+    # SCA-2185 carries existing listen-only media-noise rollout; do not widen to pusher.
+    | frozenset({'MEDIA_NOISE_MODE', 'MEDIA_NOISE_MODE_SERVE_PERCENT'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -427,7 +429,15 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     )
-    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
+    # SCA-2185 records existing pusher rollout scope without enabling it on listen.
+    | frozenset(
+        [
+            'LIVE_CAPTURE_WINDOW_RETENTION',
+            'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION',
+            'REPEAT_WORK_LLM_VERSION',
+        ]
+    ),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the

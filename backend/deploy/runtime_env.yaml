@@ -2824,6 +2824,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+          MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
@@ -3103,6 +3106,10 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
+          LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: 'false', category: rollout}
+          NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
+          REPEAT_WORK_LLM_VERSION: {value: 2026-10-16-v1, category: rollout}
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'

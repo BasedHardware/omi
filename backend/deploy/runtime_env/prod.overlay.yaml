@@ -45,6 +45,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # SCA-2185: preserve this host's observed production bindings.
+        MEDIA_NOISE_MODE: {value: "shadow", category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: "0", category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: "true", category: rollout}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
@@ -277,6 +281,11 @@ overlay:
           category: rollout
     pusher:
       env:
+        # SCA-2185: preserve this host's observed production bindings.
+        LIVE_CAPTURE_WINDOW_RETENTION: {value: "false", category: rollout}
+        LIVE_CAPTURE_WINDOW_STRICT_PROJECTION: {value: "false", category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: "true", category: rollout}
+        REPEAT_WORK_LLM_VERSION: {value: "2026-10-16-v1", category: rollout}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
