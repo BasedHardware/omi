@@ -14,6 +14,7 @@ from google.cloud import firestore
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, privacy_owner_key
 from database.firestore_read_origin import read_origin
+from database.batch_pipeline_store import intake_reference
 
 SCHEMA = 'record_wal_handoff_v1'
 VERSION = 1
@@ -37,18 +38,12 @@ def bundle_id(uid, cid, files):
 
 
 def intake_collection(client, namespace):
-    # Reuse existing stage-qualified admission receipt collections. Metadata
-    # rows have explicit kinds; only WAL files own wal_pending_since discovery.
-    # No new work-state collection or independent scheduler is introduced.
-    if namespace == 'batch_pipeline_prod':
-        return client.collection('batch_pipeline_prod_intakes')
-    if namespace == 'batch_pipeline_dev':
-        return client.collection('batch_pipeline_dev_intakes')
-    raise ValueError('stage-qualified intake namespace required')
+    # Existing admission receipt storage; only tagged WAL files own this index.
+    return intake_reference(client, namespace, '_wal_schema').parent
 
 
 def _ref(client, namespace, key):
-    return intake_collection(client, namespace).document(key)
+    return intake_reference(client, namespace, key)
 
 
 def _file_ref(client, namespace, file_id):

@@ -29,6 +29,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
 from utils.audio_cleanup_custody import cleanup_hold_reason
+from utils.other.storage import purge_record_wal_owner
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
@@ -531,8 +532,10 @@ def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context:
     register_batch_artifact(store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item)
 
 
-def purge_batch_storage_owner(uid: str, namespace: str) -> None:
-    """Sweep all versions of the deterministic owner prefix, including orphans."""
+def purge_batch_storage_owner(uid: str, namespace: str, *, wal_originals: bool = False) -> None:
+    """Sweep deterministic owner prefixes; privacy callers include WAL orphans."""
+    if wal_originals:
+        purge_record_wal_owner(uid)
     bucket_name = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     if not bucket_name:
         return  # No artifact store can be constructed without an explicit bucket.

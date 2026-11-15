@@ -7,7 +7,7 @@ import pytest
 
 from tests.unit.test_owner_storage_purge_and_gate import _Bucket, _Client
 from utils.other import storage
-from utils.batch_pipeline.retention import delete_batch_object
+from utils.batch_pipeline.retention import delete_batch_object, purge_batch_storage_owner
 from scripts import retention_contract
 
 
@@ -29,7 +29,8 @@ def test_account_erasure_discovers_pre_receipt_crash_orphans(monkeypatch):
     bucket = _Bucket({'record-wal/synthetic/record/orphan.enc', 'record-wal/other/record/keep.enc'})
     monkeypatch.setattr(storage, '_get_storage_client', lambda: _Client({'private': bucket}))
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'private')
-    storage.purge_record_wal_owner('synthetic')
+    monkeypatch.delenv('BUCKET_BATCH_PIPELINE', raising=False)
+    purge_batch_storage_owner('synthetic', 'batch_pipeline_dev', wal_originals=True)
     assert bucket.names == {'record-wal/other/record/keep.enc'}
 
 

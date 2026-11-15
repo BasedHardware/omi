@@ -3,6 +3,9 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import os
+import json
+import struct
+from types import SimpleNamespace
 from uuid import uuid4
 
 from google.api_core.exceptions import ServiceUnavailable
@@ -13,6 +16,10 @@ import pytest
 from database import record_wal_handoff as handoff
 from database import batch_pipeline_purge as purge
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
+from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline import live_upload, intake
+from utils.other import storage, local_storage
+from utils.other.local_storage import LocalStorageClient
 
 pytestmark = pytest.mark.skipif(
     not os.getenv('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:')),
@@ -169,3 +176,60 @@ def test_privacy_generation_change_cannot_commit_and_erasure_finds_all_receipts(
     assert len(deleted) == 2 and all(owner == uid for owner, _ in deleted)
     assert not list(handoff.intake_collection(client, namespace).stream())
     assert handoff.read_status(client, namespace, uid, accepted['job_id']) is None
+
+
+async def test_registered_handoff_status_restart_and_actual_original_erasure(world, monkeypatch, tmp_path):
+    client, namespace, uid, cid, conversation, files, begin, originals = world
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-wal-combined-emulator-secret')
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', 'synthetic-wal-private')
+    monkeypatch.delenv('BUCKET_BATCH_PIPELINE', raising=False)
+    monkeypatch.delenv('RECORD_WAL_HANDOFF_ENABLED', raising=False)
+    monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'synthetic-wal-private')
+    objects = LocalStorageClient(tmp_path / 'durable-storage')
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: objects)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: objects)
+    monkeypatch.setattr(
+        storage.conversation_tombstones,
+        'is_deleted',
+        lambda owner, record: (
+            client.collection('users').document(owner).collection('deleted_conversations').document(record).get().exists
+        ),
+    )
+    store = FirestoreStore(namespace, firestore_client=client)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
+    paths = []
+    for ordinal in range(2):
+        path = tmp_path / files[ordinal]['name']
+        packet = struct.pack('<h', ordinal + 1) * 160
+        path.write_bytes(struct.pack('<I', len(packet)) + packet)
+        paths.append(path)
+    response = await live_upload.registered_record_response(
+        uid=uid,
+        conversation_id=cid,
+        content_id='synthetic-combined',
+        paths=paths,
+        source='omi',
+        client_device_id='synthetic-device',
+        loaded_conversation=conversation.get().to_dict(),
+        policy=SimpleNamespace(live_admission_enabled=False, live_record_enabled=True),
+    )
+    assert response.status_code == 202
+    job_id = json.loads(response.body)['job_id']
+    assert intake.durable_status(store, uid, job_id)['status'] == 'processing'
+    assert handoff.has_receipts(uid, cid, firestore_client=client)
+    restarted = firestore.Client(project=client.project, credentials=AnonymousCredentials())
+    try:
+        assert handoff.read_status(restarted, namespace, uid, job_id)['status'] == 'processing'
+    finally:
+        restarted.close()
+    assert handoff.pending_sample(client, namespace)[0] == 2
+    assert len(list(objects.bucket('synthetic-wal-private').list_blobs(prefix=f'record-wal/{uid}/'))) == 2
+    # Simulate object-only interrupted custody: account/protection erasure must
+    # also find media which no committed file receipt can reference yet.
+    orphan = objects.bucket('synthetic-wal-private').blob(f'record-wal/{uid}/{cid}/orphan.bin')
+    orphan.upload_from_string(b'synthetic crash orphan', if_generation_match=0)
+    purge.purge_batch_owner(uid, namespaces=(namespace,), firestore_client=client)
+    assert not list(objects.bucket('synthetic-wal-private').list_blobs(prefix=f'record-wal/{uid}/'))
+    assert not list(handoff.intake_collection(client, namespace).stream())
+    assert all(path.exists() for path in paths)  # 202 never released the phone copies.

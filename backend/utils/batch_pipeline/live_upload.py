@@ -139,8 +139,11 @@ async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
     cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
     if cached is None:
         return None
-    if await run_blocking(db_executor, record_wal_handoff.receipts.has_receipts, uid, conversation_id):
-        return None
+    try:
+        if await run_blocking(db_executor, record_wal_handoff.receipts.has_receipts, uid, conversation_id):
+            return None
+    except Exception:
+        return None  # Unknown receipt state must reach durable discovery, never a stale refusal.
     try:
         reason = RecordUploadWait(cached)
     except ValueError:

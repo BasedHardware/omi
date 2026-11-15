@@ -281,6 +281,15 @@ class FirestoreTransaction:
             self.transaction.set(ref, value)
 
 
+def intake_reference(client: Any, namespace: str, key: str):
+    """Join an existing canonical intake receipt to a raw transaction.
+
+    Keep collection naming in the same resolver used by normal admission;
+    callers do not create a parallel receipt namespace or construct clients.
+    """
+    return FirestoreTransaction(client, namespace, None)._ref('intakes', key)
+
+
 class FirestoreStore:
     def allowance_owners(self, now: float, limit: int) -> list[str]:
         return [
