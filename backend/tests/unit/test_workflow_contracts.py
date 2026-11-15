@@ -1571,7 +1571,9 @@ def test_firestore_gate_lane_source_and_target_bindings():
     assert 'source_sha: ${{ env.CHECKED_OUT_SHA }}' not in pusher
 
     listen = (workflows / 'gcp_backend_listen_helm.yml').read_text(encoding='utf-8')
-    assert 'echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"' in listen
+    assert 'REQUESTED_COMMIT=$(git rev-parse --verify "${REQUESTED_TAG}^{commit}")' in listen
+    assert 'REQUESTED_COMMIT="$TAG_COMMIT"' in listen
+    assert 'echo "BACKEND_LISTEN_SOURCE_SHA=$REQUESTED_COMMIT" >> "$GITHUB_ENV"' in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$CHECKED_OUT_SHA' not in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$ROLLBACK_SHA' not in listen
     assert 'BACKEND_LISTEN_SOURCE_SHA=$SELECTED_SHA' not in listen
@@ -1670,7 +1672,7 @@ def test_listen_gate_is_the_conditional_source_sha_gate():
     assert policy.workflow_gate_violations(after_config, name=name, dockerfiles=dockerfiles)
 
     no_source = workflow.replace(
-        '          echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"\n',
+        '          echo "BACKEND_LISTEN_SOURCE_SHA=$REQUESTED_COMMIT" >> "$GITHUB_ENV"\n',
         '',
         1,
     )
@@ -1896,7 +1898,10 @@ if cmd == 'cat-file':
             else list(tags.values()) + list(tags)
         )
         sys.exit(0 if spec.split(':', 1)[0] in cohort else 1)
-    sys.exit(0 if spec in tags else 1)
+    present = spec in tags or spec in tags.values()
+    if present and args[1] == '-t':
+        print('commit')
+    sys.exit(0 if present else 1)
 if cmd == 'merge-base':
     sys.exit(0 if args[2] in ancestors else 1)
 if cmd == 'rev-parse':
@@ -1905,7 +1910,8 @@ if cmd == 'rev-parse':
         print(os.environ['STUB_GIT_HEAD']); sys.exit(0)
     if ref == 'origin/main':
         print(os.environ.get('STUB_GIT_MAIN', '')); sys.exit(0)
-    sha = tags.get(ref.removesuffix('^{commit}'))
+    ref = ref.removesuffix('^{commit}')
+    sha = ref if ref in tags.values() else tags.get(ref)
     if sha:
         print(sha[:7] if '--short=7' in args else sha)
         sys.exit(0)

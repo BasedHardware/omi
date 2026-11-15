@@ -164,11 +164,28 @@ jobs:
           fetch-depth: 0
 
       - name: Admit checked-out production source and image identity
+        env:
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          DEPLOY_REF: ${{ github.event.inputs.branch }}
         run: |
           set -euo pipefail
+          if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            SELECTED_SOURCE_SHA=$(git rev-parse origin/main)
+            if [[ "${DEPLOY_REF:-main}" != main ]]; then
+              [[ "$DEPLOY_REF" =~ ^[0-9a-f]{40}$ && "$DEPLOY_REF" != 0000000000000000000000000000000000000000 ]] || {
+                echo 'Production source must be main or one non-zero lowercase full merged commit SHA.' >&2
+                exit 1
+              }
+              SELECTED_SOURCE_SHA="$DEPLOY_REF"
+            fi
+            [[ "$(git cat-file -t "$SELECTED_SOURCE_SHA")" == commit ]]
+            git merge-base --is-ancestor "$SELECTED_SOURCE_SHA" origin/main
+            git checkout --detach "$SELECTED_SOURCE_SHA"
+            [[ "$(git rev-parse HEAD)" == "$SELECTED_SOURCE_SHA" ]]
+          fi
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
           if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
-            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
             if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
               exit 1
@@ -252,9 +269,11 @@ jobs:
           # image's closure instead — the pusher target of Dockerfile.roles plus
           # the role Dockerfile and its venv lock — selected by the repository
           # the evidence names.
-          mapfile -t PUSHER_SOURCE_PATHS < <(python3 backend/scripts/verify_pusher_source_closure.py --image-repository "$DEV_PUSHER_REPOSITORY")
+          python3 backend/scripts/verify_pusher_source_closure.py --image-repository "$DEV_PUSHER_REPOSITORY" > "$QUALIFICATION_DIR/source-paths.txt"
+          mapfile -t PUSHER_SOURCE_PATHS < "$QUALIFICATION_DIR/source-paths.txt"
+          [[ "${#PUSHER_SOURCE_PATHS[@]}" -gt 0 ]]
           if ! git diff --quiet "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}"; then
-            echo "Current main changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
+            echo "Selected deployment source changed Pusher image source or chart since the selected dev qualification; run a new dev bake." >&2
             git diff --stat "$QUALIFIED_SOURCE_SHA" "$CHECKED_OUT_SHA" -- "${PUSHER_SOURCE_PATHS[@]}" >&2 || true
             exit 1
           fi

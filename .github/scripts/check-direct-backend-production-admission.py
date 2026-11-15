@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inventory direct prod writers and require checked-out main source identity."""
+"""Inventory direct prod writers and require checked-out merged source identity."""
 
 from __future__ import annotations
 
@@ -27,6 +27,15 @@ CONTROL_CHECKOUT = (
 )
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
 LISTEN_WORKFLOW = Path(".github/workflows/gcp_backend_listen_helm.yml")
+PINNED_GKE_WORKFLOWS = (LISTEN_WORKFLOW, Path(".github/workflows/gcp_backend_pusher.yml"))
+PINNED_GKE_FRAGMENTS = (
+    'DEPLOY_REF: ${{ github.event.inputs.branch }}',
+    '[[ "$DEPLOY_REF" =~ ^[0-9a-f]{40}$ && "$DEPLOY_REF" != 0000000000000000000000000000000000000000 ]]',
+    '[[ "$(git cat-file -t "$SELECTED_SOURCE_SHA")" == commit ]]',
+    'git merge-base --is-ancestor "$SELECTED_SOURCE_SHA" origin/main',
+    'git checkout --detach "$SELECTED_SOURCE_SHA"',
+    '[[ "$(git rev-parse HEAD)" == "$SELECTED_SOURCE_SHA" ]]',
+)
 LISTEN_EXPORTER_CHECKOUT = "ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}"
 GATEWAY_RELEASE_SHA_INPUT = (
     "      release_sha:\n"
@@ -132,6 +141,13 @@ def validate(root: Path) -> list[str]:
         text = path.read_text(encoding="utf-8") if path.exists() else ""
         if CHECKOUT not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
+        if relative in PINNED_GKE_WORKFLOWS:
+            for fragment in PINNED_GKE_FRAGMENTS:
+                if fragment not in text:
+                    errors.append(f"{relative} must preserve full merged GKE source selection: {fragment}")
+            if (HEAD_IDENTITY in text and 'git checkout --detach "$SELECTED_SOURCE_SHA"' in text and
+                    text.index('git checkout --detach "$SELECTED_SOURCE_SHA"') > text.index(HEAD_IDENTITY)):
+                errors.append(f"{relative} must select its merged source before deriving image identity")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
             errors.append(f"{relative} must prove production source is on fresh origin/main")
         if HEAD_IDENTITY not in text or IMAGE_IDENTITY not in text:
