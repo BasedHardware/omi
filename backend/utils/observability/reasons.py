@@ -91,6 +91,27 @@ class ReasonFamily(StrEnum):
     JOURNEY_FAILURE = 'journey_failure'
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
+    RECORD_SEAL_REPAIR = 'record_seal_repair'
+
+
+class RecordSealRepairRunOutcome(StrEnum):
+    """Terminal coordinator outcome, independent of individual row proof refusals."""
+
+    UNKNOWN = 'unknown'
+    COMPLETE = 'complete'
+    INCOMPLETE = 'incomplete'
+
+
+class RecordSealRepairRunStage(StrEnum):
+    """Primary unfinished repair phase; overall also identifies a completed run."""
+
+    UNKNOWN = 'unknown'
+    PREPASS = 'prepass'
+    SETUP = 'setup'
+    DISCOVERY = 'discovery'
+    ROWS = 'rows'
+    CHECKPOINT = 'checkpoint'
+    OVERALL = 'overall'
 
 
 class PusherPcmStage(StrEnum):

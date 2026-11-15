@@ -69,9 +69,12 @@ class AdmissionTests(unittest.TestCase):
             changed_index = copy.deepcopy(manifest)
             changed_index['manifests'][0]['digest'] = 'sha256:' + 'd' * 64
             wrong_build = copy.deepcopy(self.revision)
-            wrong_build['spec']['containers'][0]['image'] = self.runtime
+            wrong_build['spec']['containers'][0]['image'] = 'gcr.io/proj/app@sha256:' + 'd' * 64
+            normalized = copy.deepcopy(self.revision)
+            normalized['spec']['containers'][0]['image'] = self.runtime
             for name, revision, document, registry, succeeds in [
                 ('index differs from child', self.revision, receipt, manifest, True),
+                ('Cloud Run normalizes spec to verified child', normalized, receipt, manifest, True),
                 ('runtime changed', changed_runtime, receipt, manifest, False),
                 ('registry lineage changed', changed_runtime, receipt, changed_index, False),
                 ('receipt lineage changed', self.revision, wrong_receipt, manifest, False),
