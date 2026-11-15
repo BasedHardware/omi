@@ -167,10 +167,13 @@ def test_exhausted_total_budget_keeps_pcm_without_launching_encoder(monkeypatch)
 
 def test_budget_limited_child_timeout_is_a_deadline_not_a_codec_error(monkeypatch):
     seen = _decision_meter(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.2)
 
     def run(*args, **kwargs):
-        assert kwargs['timeout'] < audio_pcm_storage._TIMEOUT_SECONDS
+        # Deterministic: 0.2 s budget less the 0.08 s decode reserve.
+        assert kwargs['timeout'] == pytest.approx(0.12)
         raise subprocess.TimeoutExpired('ffmpeg', kwargs['timeout'])
 
     monkeypatch.setattr(subprocess, 'run', run)
