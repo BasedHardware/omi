@@ -991,7 +991,7 @@ def owns_record(uid, cid, *, shard, shards):
     return int(record_identity(uid, cid)[1], 16) % shards == shard
 
 
-def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None):
+def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None, phase_progress=None):
     validate_partition(shard, shards)
 
     def execute():
@@ -1003,6 +1003,7 @@ def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lam
                 shard=shard,
                 shards=shards,
                 **({'deadline': deadline} if deadline is not None else {}),
+                **({'phase_progress': phase_progress} if phase_progress is not None else {}),
             )
         finally:
             discovery_progress.flush()
@@ -1028,9 +1029,10 @@ def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lam
             lease.release()
 
 
-def _run(*, progress, shard, shards, deadline=None):
+def _run(*, progress, shard, shards, deadline=None, phase_progress=lambda _: None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
+    phase_progress('discovery')
     workers, row_seconds, run_seconds, mode = config.settings()
     fresh_slots = workers // 2 if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
     # Fresh borrows ordinary execution capacity; it never shrinks either
@@ -1205,6 +1207,7 @@ def _run(*, progress, shard, shards, deadline=None):
     )
     if deadline is not None:
         run_seconds = max(0, min(run_seconds, deadline - time.monotonic() - 30))
+    phase_progress('rows')
     report = coordinate(
         rows,
         workers=workers,
@@ -1218,6 +1221,7 @@ def _run(*, progress, shard, shards, deadline=None):
         bootstrap_rows=min(workers, len(rows)),
         backlog=backlog,
     )
+    phase_progress('checkpoint')
     report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
     if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
         # Preserve exact Firestore nanoseconds, not an age reconstructed clock.

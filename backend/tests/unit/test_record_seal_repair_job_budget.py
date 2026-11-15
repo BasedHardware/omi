@@ -25,6 +25,11 @@ def cron(monkeypatch):
     monkeypatch.setattr(job, 'process_deadline', lambda *a: job.time.monotonic() + 120)
     monkeypatch.setattr(job, 'partition_arguments', lambda _: (0, 5))
     monkeypatch.setattr(sys, 'argv', ['record_seal_repair_job.py'])
+    from prometheus_client import Counter
+    from utils.observability import firestore_probe_export as export
+
+    counter = Counter('omi_record_seal_repair_run_outcomes_total', 'test', ('outcome', 'phase'), registry=None)
+    monkeypatch.setattr(export, 'REPAIR_RUN_OUTCOMES', counter)
     previous = signal.getsignal(signal.SIGTERM)
     yield events
     signal.signal(signal.SIGTERM, previous)
@@ -84,6 +89,14 @@ def test_all_five_partitions_seal_when_only_explicit_prepass_shard_exhausts(cron
     assert len(summaries) == 5
     assert summaries[0]['projection_prepass_budget_exhausted'] == 1
     assert all('projection_prepass' not in summary for summary in summaries[1:])
+    assert [(s['run_outcome'], s['run_phase']) for s in summaries] == [
+        ('incomplete', 'prepass'),
+        *[('complete', 'overall')] * 4,
+    ]
+    from utils.observability import firestore_probe_export as export
+
+    assert export.REPAIR_RUN_OUTCOMES.labels('incomplete', 'prepass')._value.get() == 1
+    assert export.REPAIR_RUN_OUTCOMES.labels('complete', 'overall')._value.get() == 4
 
 
 def test_real_prepass_exception_still_surfaces_as_error_and_seal_continues(cron, monkeypatch):
@@ -177,4 +190,65 @@ def test_disabled_prepass_preserves_existing_disabled_exit_report(cron, monkeypa
         cluster, 'run', lambda *, before, **kw: (before(), {'event': 'record_seal_repair', 'outcome': 'disabled'})[1]
     )
     assert job.main() == 0
-    assert cron == [{'event': 'record_seal_repair', 'outcome': 'disabled'}]
+    assert len(cron) == 1 and cron[0]['outcome'] == 'disabled'
+    assert cron[0]['run_outcome'] == 'complete' and cron[0]['run_phase'] == 'overall'
+
+
+@pytest.mark.parametrize('phase', ['setup', 'prepass', 'discovery', 'rows', 'checkpoint', 'overall'])
+def test_budget_terminal_phase_is_counted_once_and_matches_summary(cron, monkeypatch, phase):
+    from utils.observability import firestore_probe_export as export
+
+    def run(*, phase_progress, **kwargs):
+        phase_progress(phase)
+        raise BudgetExhausted()
+
+    monkeypatch.setattr(cluster, 'run', run)
+    assert job.main() == 0
+    assert len(cron) == 1
+    summary = cron[0]
+    assert summary['repair_run_summary'] == 1
+    assert (summary['run_outcome'], summary['run_phase'], summary['shard'], summary['shards']) == (
+        'incomplete',
+        phase,
+        0,
+        5,
+    )
+    assert summary['exit_code'] == 0 and 'dispositions' not in summary
+    assert export.REPAIR_RUN_OUTCOMES.labels('incomplete', phase)._value.get() == 1
+
+
+@pytest.mark.parametrize(
+    'report,phase',
+    [
+        ({'cursor_checkpoint_outcome': 'budget_exhausted', 'work_incomplete': True}, 'checkpoint'),
+        ({'dispositions': {'sealed': 1, 'budget_exhausted': 2}}, 'rows'),
+        ({'outcome': 'overlap_refused'}, 'setup'),
+    ],
+)
+def test_returned_incomplete_work_uses_primary_phase(cron, monkeypatch, report, phase):
+    monkeypatch.setattr(cluster, 'run', lambda **kwargs: {'event': 'record_seal_repair', **report})
+    assert job.main() == 0
+    assert cron[-1]['run_outcome'] == 'incomplete' and cron[-1]['run_phase'] == phase
+
+
+def test_outcome_is_served_by_repair_registry_with_only_bounded_labels(cron):
+    import json
+    from pathlib import Path
+    from prometheus_client import CollectorRegistry, generate_latest
+    from utils.observability import firestore_probe_export as export
+
+    for outcome, phase in [('complete', 'overall'), ('incomplete', 'prepass')]:
+        export.record_repair_run_outcome(outcome, phase)
+    registry = CollectorRegistry()
+    export.register_probe_collectors(registry, repair_age=True)
+    rendered = generate_latest(registry).decode()
+    assert 'omi_record_seal_repair_run_outcomes_total{outcome="incomplete",phase="prepass"} 1.0' in rendered
+    samples = [s for f in export.REPAIR_RUN_OUTCOMES.collect() for s in f.samples if s.name.endswith('_total')]
+    assert all(set(s.labels) == {'outcome', 'phase'} for s in samples)
+    for labels in [('unknown', 'overall'), ('incomplete', 'uid-or-shard')]:
+        with pytest.raises(ValueError):
+            export.record_repair_run_outcome(*labels)
+    inventory = json.loads(
+        (Path(__file__).resolve().parents[2] / 'charts/monitoring/metric-inventory.prod.json').read_text()
+    )
+    assert 'omi_record_seal_repair_run_outcomes_total' in inventory['declared_metrics']
