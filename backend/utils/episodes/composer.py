@@ -1815,7 +1815,7 @@ def schedule_for_conversation(
         if episode and not policy.is_live(episode):
             if transcript_updated and (
                 conversation_id not in _retained_ids(episode)
-                or (row is not None and (hidden_member(row) or not conversations_db.is_visible_conversation(row)))
+                or (row is not None and (hidden_member(dict(row)) or not conversations_db.is_visible_conversation(row)))
             ):
                 return
             wait_until = _utc(episode.get('compose_transcript_wait_until'))
