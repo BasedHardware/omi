@@ -14,7 +14,7 @@
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }}) by ${{ inputs.requested_by || github.actor }}
+run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
 
 on:
   workflow_dispatch:
@@ -178,7 +178,7 @@ jobs:
           CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
           case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration) ;; *) exit 1 ;; esac
           if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
-            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod ]] || exit 1
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
           fi
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''

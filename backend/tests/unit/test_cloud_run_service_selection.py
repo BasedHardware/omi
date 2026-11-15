@@ -196,3 +196,37 @@ def test_named_service_does_not_reconcile_shared_dispatch_queues():
         summary['with']['service']
         == "${{ inputs.cloud_run_service != 'all' && inputs.cloud_run_service || inputs.service }}"
     )
+
+
+@pytest.mark.parametrize(
+    'extra',
+    [
+        {'BREAK_GLASS_LOCK': 'true'},
+        {'SKIP_ELIGIBILITY': 'true'},
+        {'WORKFLOW_MODE': 'build-only'},
+        {'DEPLOY_ENVIRONMENT': 'development'},
+    ],
+)
+def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp_path, extra):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    script = workflow['jobs']['validate-production-boundary']['steps'][0]['run']
+    script = script.replace("${{ github.event.inputs.deploy_gateway }}", 'false')
+    assert '${{' not in script
+    output = tmp_path / 'outputs'
+    env = dict(
+        os.environ,
+        DEPLOY_ENVIRONMENT='prod',
+        DEPLOY_TARGETS='cloud-run-only',
+        WORKFLOW_MODE='deploy',
+        CLOUD_RUN_SERVICE='backend-sync',
+        SERVICE_IMAGES='',
+        REQUESTED_BY='fixture',
+        RELEASE_SHA='a' * 40,
+        SKIP_ELIGIBILITY='false',
+        BREAK_GLASS_LOCK='false',
+        GITHUB_OUTPUT=str(output),
+    )
+    env.update(extra)
+    result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
+    assert result.returncode != 0
+    assert not output.exists()
