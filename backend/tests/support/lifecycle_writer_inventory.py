@@ -1,6 +1,26 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Client polling adapter only; never writes conversation lifecycle status.
+    'database/record_wal_handoff.py': [
+        (
+            'status',
+            'status',
+            "'processing'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     'utils/batch_pipeline/empty_transcription.py': [
         (
             'stamp',

@@ -868,6 +868,10 @@
       "review_by": "2026-12-14",
       "registry": "config/feature-flags.yaml"
     },
+    "RECORD_WAL_HANDOFF_ENABLED": {
+      "owner": "quality WAL custody",
+      "review_by": "2026-12-15"
+    },
     "RECORD_FRESH_MERGE_ENABLED": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-14",

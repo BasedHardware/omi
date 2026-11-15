@@ -27,6 +27,7 @@ from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_recovery_fence import RecoveryFence
@@ -239,6 +240,9 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
+    if job_id.startswith(wal_receipts.JOB_PREFIX):
+        authority_store = getattr(store, 'store', store)
+        return wal_receipts.read_status(authority_store.client, authority_store.namespace, uid, job_id)
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
     from utils.batch_pipeline.upload_coalescing import member_status
 

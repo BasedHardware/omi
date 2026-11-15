@@ -30,6 +30,10 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.record_wal_handoff.pending_sample',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'database.batch_pipeline_delivered_share.delivered_share_page',
             domains={'namespace': namespaces},
             neutrals={

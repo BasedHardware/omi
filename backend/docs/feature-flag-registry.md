@@ -650,6 +650,7 @@ and an explicit empty literal renders as `''`.
 | `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` | Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_WAKE_PRESERVED_ENABLED` | Default on; a concurrent seal due-now wake wins over an in-flight stale barrier retry deferral | backend | env | open | — | true (backend-listen (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: ops_kill} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | q12-post-seal |
+| `RECORD_WAL_HANDOFF_ENABLED` | Default on; exact all-file original WAL custody under the existing native record owner; off restores strict coverage refusal for new bundles | backend | env | open | — | — | — | — | keep | keep | — | quality |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | auditfix |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
@@ -1443,6 +1444,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
 - `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` — Default empty; digested uid serve cohort, inert in off and shadow modes (fail: closed)
+- `RECORD_WAL_HANDOFF_ENABLED` — Default on; exact all-file original WAL custody under the existing native record owner; off restores strict coverage refusal for new bundles (fail: open)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)

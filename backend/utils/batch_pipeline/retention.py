@@ -50,15 +50,21 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
         for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
         if (value := os.getenv(name, '').strip())
     }
+    wal_original = bucket_name == os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync') and path.startswith(
+        f'record-wal/{uid}/'
+    )
     if (
         parsed.scheme != 'gs'
-        or bucket_name not in allowed_buckets
+        or (bucket_name not in allowed_buckets and not wal_original)
         or parsed.query
-        or not path.startswith(
-            (
-                f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
-                f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
-                f'syncing/{uid}/',
+        or not (
+            wal_original
+            or path.startswith(
+                (
+                    f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
+                    f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
+                    f'syncing/{uid}/',
+                )
             )
         )
         or any(part in {'.', '..'} for part in path.split('/'))

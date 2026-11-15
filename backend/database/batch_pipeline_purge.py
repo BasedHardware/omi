@@ -221,6 +221,10 @@ def purge_batch_owner(
             'coalesce_sources',
             'coalesce_heads',
             'allowance_holds',
+            'wal_handoffs',
+            'wal_files',
+            'wal_obligations',
+            'wal_outbox',
         ):
             after = None
             while True:
@@ -288,6 +292,9 @@ def purge_batch_owner(
                 from utils.batch_pipeline.retention import purge_batch_storage_owner
 
                 purge_batch_storage_owner(uid, namespace)
+                from utils.other.storage import purge_record_wal_owner
+
+                purge_record_wal_owner(uid)
         # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
         # recorded as finished; a failure raises and the caller retries, even outside shadow mode.
         purge_jobstore_owner(namespace, uid)
