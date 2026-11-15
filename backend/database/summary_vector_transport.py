@@ -21,8 +21,6 @@ class SummaryVectorIndex:
             async with asyncio.timeout(_request_timeout):
                 config = copy(self.index._openapi_config)
                 config.retries = None
-                # The pinned SDK private transport is an adapter boundary,
-                # matching the dynamic input index/transport handles above.
                 controller: Any = Pinecone(api_key=self.index._config.api_key)
                 # 7.3.0 rejects the retired openapi_config constructor keyword.
                 # This is a new private controller, never the shared one.

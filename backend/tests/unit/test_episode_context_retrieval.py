@@ -232,7 +232,8 @@ def test_owner_summary_vector_calls_match_real_proxy_and_scope_signatures(monkey
     from database.pinecone_partition_index import OwnerIndex
 
     embeddings = create_autospec(_OpenAIEmbeddingsProxy, instance=True, spec_set=True)
-    embeddings.embed_query_once.return_value = [0.1]
+    once = create_autospec(vector_db.embed_query_once, return_value=[0.1], spec_set=True)
+    monkeypatch.setattr(vector_db, 'embed_query_once', once)
     owner = create_autospec(OwnerIndex, instance=True, spec_set=True)
     owner.query.return_value = {'matches': []}
     monkeypatch.setattr(vector_db, 'index', object())
@@ -247,9 +248,7 @@ def test_owner_summary_vector_calls_match_real_proxy_and_scope_signatures(monkey
             'synthetic', 'garden', timeout_seconds=8, owner_summary=True
         ).hits
     embeddings.embed_query.assert_not_called()
-    embeddings.embed_query_once.assert_called_once_with(
-        'garden', deadline_monotonic=pytest.approx(time.monotonic() + 8, abs=1)
-    )
+    once.assert_called_once_with('garden', deadline_monotonic=pytest.approx(time.monotonic() + 8, abs=1))
     options = owner.query.call_args.kwargs
     assert {'uid': {'$eq': 'synthetic'}} in options['filter']['$and']
     assert 0 < options['_request_timeout'] <= 8
