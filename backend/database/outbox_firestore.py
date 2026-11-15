@@ -62,6 +62,11 @@ def _outbox():
 
 
 def _claim(row: Mapping[str, Any], row_id: str) -> Claim:
+    fields = (
+        _PAYLOAD_FIELDS
+        if record_notes_eager_enabled()
+        else tuple(name for name in _PAYLOAD_FIELDS if name not in {'merge_hold', 'sync_hold_requested'})
+    )
     return Claim(
         kind=OutboxKind.ENRICHMENT,
         row_id=row_id,
@@ -70,7 +75,7 @@ def _claim(row: Mapping[str, Any], row_id: str) -> Claim:
         attempt=int(row.get('claim_attempts') or 1),
         lease_until=float(row['lease_until']),
         owner_id=row['uid'],
-        payload={name: row.get(name) for name in _PAYLOAD_FIELDS},
+        payload={name: row.get(name) for name in fields},
         policy_id=row.get('policy_id'),
     )
 
@@ -233,7 +238,7 @@ class FirestoreEnrichmentOutbox:
                 snapshot_summary=snapshot_summary,
                 stamps=stamps,
             )(old)
-            producer = payload.get('record_notes_producer')
+            producer = payload.get('record_notes_producer') if record_notes_eager_enabled() else None
             if producer:
                 # Sidecar metadata stays on the durable row, outside the <=4 KiB claim payload.
                 producers = {} if old and old.get('dormant') else dict(new.get('record_notes_producers') or {})
@@ -243,7 +248,7 @@ class FirestoreEnrichmentOutbox:
                 new['record_notes_producers'] = producers
             elif old and old.get('dormant'):
                 new.pop('record_notes_producers', None)
-            provenance = payload.get('record_notes_processing_hold')
+            provenance = payload.get('record_notes_processing_hold') if record_notes_eager_enabled() else None
             if isinstance(provenance, dict):
                 # Carry provenance without treating a notes wake as new content.
                 new['sync_hold'] = True
