@@ -397,7 +397,11 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         if step.get('name') == 'Reconcile bounded sync backfill queue'
     )
     assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
-    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
+    worker = next(step for step in yaml.safe_load(stack)['runs']['steps'] if step.get('id') == 'sync-backfill')
+    assert worker['with']['backfill_env_vars'].splitlines() == [
+        '${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}',
+        'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}',
+    ]
     assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
     assert '--max-dispatches-per-second=15' in action
     assert '--max-backoff=60s' in action
