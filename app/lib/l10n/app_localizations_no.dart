@@ -7029,6 +7029,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunne ikke logge inn med Apple, vennligst prøv igjen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Pålogging med Apple fungerte ikke. Prøv igjen, eller fortsett med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunne ikke hente Firebase-token, vennligst prøv igjen.';
 
   @override

@@ -1,6 +1,6 @@
 """Demand metadata work has bounded admission, single-flight and retry debt."""
 
-from concurrent.futures import Future
+from concurrent.futures import Future, TimeoutError
 from unittest.mock import Mock
 
 import pytest
@@ -30,18 +30,22 @@ def test_single_flight_and_user_process_bounds_keep_running_timeout_reserved(coo
     assert coordinator.get('two', 'b') is second
     with pytest.raises(module.MetadataPending):
         coordinator.get('three', 'c')
-    result = Mock(side_effect=TimeoutError)
-    with monkeypatch.context() as timeout_patch:
-        timeout_patch.setattr(first, 'result', result)
+    # Expire only this caller's wait; the running work keeps its real Future
+    # callbacks and admission slots until completion below.
+    expired_wait = Mock(side_effect=TimeoutError)
+    with monkeypatch.context() as wait_patch:
+        wait_patch.setattr(first, 'result', expired_wait)
         with pytest.raises(module.MetadataPending) as timeout:
             module.refresh_on_open('one', 'a')
-    result.assert_called_once_with(timeout=module.OPEN_TIMEOUT_SECONDS)
+        expired_wait.assert_called_once_with(timeout=module.OPEN_TIMEOUT_SECONDS)
     assert timeout.value.reason == 'timeout'
     assert len(coordinator.active) == 2 and not first.cancelled()
+    assert first.running() and second.running() and not second.cancelled()
     assert submit.call_count == 2  # Repeated open cannot launch another listing.
     first.set_result({'audio_files': [{'id': 'first'}]})
     second.set_result({'audio_files': [{'id': 'second'}]})
     assert not coordinator.active
+    assert not coordinator.cooldown  # Both real completion callbacks read successful results.
 
 
 @pytest.mark.parametrize('result', [{}, HTTPException(503, 'unavailable'), HTTPException(404, 'refused')])

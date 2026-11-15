@@ -8775,6 +8775,10 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Sign in with Apple didn't work. Try again or continue with Google.",
+    "@authAppleSignInFailedUseGoogle": {
+        "description": "Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen"
+    },
     "authFailedToRetrieveToken": "Failed to retrieve firebase token, please try again.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"

@@ -7055,6 +7055,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешно влизане с Apple, моля опитайте отново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Влизането с Apple не успя. Опитайте отново или продължете с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно извличане на Firebase токен, моля опитайте отново.';
 
   @override

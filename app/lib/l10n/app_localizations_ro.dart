@@ -7063,6 +7063,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Conectarea cu Apple nu a reușit. Încearcă din nou sau continuă cu Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
 
   @override

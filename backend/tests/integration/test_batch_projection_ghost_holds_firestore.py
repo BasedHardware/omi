@@ -202,6 +202,7 @@ def test_completed_assignment_receipt_cannot_expire(holds, monkeypatch, enabled,
                 'projection_state': 'ready',
                 'ghost_settled_cohort': 'g1',
                 'projection_finish_due_at': NOW,
+                'projection_followup_due_at': NOW,
                 'projection_finish_backoff_step': 0,
             }
             if settled
@@ -237,7 +238,12 @@ def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds, monkeypatch
         segment: {
             **row,
             **(
-                {'projection_state': 'ready', 'projection_finish_due_at': NOW, 'projection_finish_backoff_step': 0}
+                {
+                    'projection_state': 'ready',
+                    'projection_finish_due_at': NOW,
+                    'projection_followup_due_at': NOW,
+                    'projection_finish_backoff_step': 0,
+                }
                 if segment in GHOSTS
                 else {}
             ),
@@ -308,6 +314,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
         **ready,
         'ghost_settled_cohort': 'g1',
         'projection_finish_due_at': committed_at + 86400,
+        'projection_followup_due_at': committed_at + 86400,
         'projection_finish_backoff_step': 0,
     }
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
