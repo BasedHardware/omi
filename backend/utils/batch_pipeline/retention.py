@@ -19,6 +19,7 @@ from google.cloud import firestore
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
+from config.record_wal_storage import private_archive_bucket
 from database import rpc_deadline
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
@@ -29,7 +30,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
 from utils.audio_cleanup_custody import cleanup_hold_reason
-from utils.other.storage import purge_record_wal_owner
+from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
@@ -51,9 +52,7 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
         for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
         if (value := os.getenv(name, '').strip())
     }
-    wal_original = bucket_name == os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync') and path.startswith(
-        f'record-wal/{uid}/'
-    )
+    wal_original = bucket_name == private_archive_bucket() and path.startswith(f'record-wal/{uid}/')
     if (
         parsed.scheme != 'gs'
         or (bucket_name not in allowed_buckets and not wal_original)

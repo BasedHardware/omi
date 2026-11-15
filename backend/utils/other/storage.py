@@ -21,6 +21,7 @@ import wave
 from contextlib import contextmanager, nullcontext
 from itertools import chain
 from config import audio_archive
+from config.record_wal_storage import private_archive_bucket
 from utils.other.audio_singleflight import coalesce_rebuild
 from utils.other.playback_cache import write_once, cached_manifest
 from utils.other.playback_identity import playback_manifest_recovery_enabled
@@ -128,7 +129,7 @@ def _get_storage_client() -> Any:
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None
-private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
+private_cloud_sync_bucket = private_archive_bucket()
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
@@ -2645,12 +2646,6 @@ def delete_record_wal_original(uid, receipt):
         blob.delete(if_generation_match=int(receipt['generation']), timeout=10, retry=None)
     except NotFound:
         pass
-
-
-def purge_record_wal_owner(uid):
-    """Also erase pre-receipt crash orphans during protection/account purge."""
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-    _delete_owner_bucket_prefix(bucket, f'record-wal/{uid}/')
 
 
 def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optional[Dict[str, Any]] = None) -> List[str]:

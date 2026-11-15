@@ -164,6 +164,7 @@ async def test_all_files_accepted_before_decode_and_completed_native_job_never_c
     assert len(world.bucket.rows) == len(world.rows('wal_files')) == len(world.rows('wal_obligations')) == 2
     assert len(world.rows('wal_outbox')) == 2
     assert world.client.rows[ROW_PATH]['record_upload_revision'] == 8
+    assert next(iter(world.rows('wal_handoffs').values()))['base_upload_revision'] == 7
     assert all(
         'expires_at' not in row
         for table in ('wal_handoffs', 'wal_files', 'wal_obligations', 'wal_outbox')

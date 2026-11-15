@@ -17,7 +17,7 @@ from database import record_wal_handoff as handoff
 from database import batch_pipeline_purge as purge
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline import live_upload, intake
+from utils.batch_pipeline import live_upload, intake, record_wal_erasure
 from utils.other import storage, local_storage
 from utils.other.local_storage import LocalStorageClient
 
@@ -189,6 +189,7 @@ async def test_registered_handoff_status_restart_and_actual_original_erasure(wor
     objects = LocalStorageClient(tmp_path / 'durable-storage')
     monkeypatch.setattr(storage, '_get_storage_client', lambda: objects)
     monkeypatch.setattr(local_storage, 'create_storage_client', lambda: objects)
+    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: objects)
     monkeypatch.setattr(
         storage.conversation_tombstones,
         'is_deleted',

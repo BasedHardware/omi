@@ -86,7 +86,7 @@ def begin(client, namespace, uid, cid, files, source, device):
 
     @firestore.transactional
     def acquire(tx):
-        generation, protection, _ = _authority(client, tx, uid, cid, source, device)
+        generation, protection, row = _authority(client, tx, uid, cid, source, device)
         previous = ref.get(transaction=tx).to_dict() or {}
         if previous and (previous.get('schema') != SCHEMA or previous.get('version') != VERSION):
             raise HandoffConflict('unsupported custody receipt schema')
@@ -111,6 +111,7 @@ def begin(client, namespace, uid, cid, files, source, device):
             'client_device_id': device,
             'privacy_generation': generation,
             'data_protection_level': protection,
+            'base_upload_revision': int(row.get('record_upload_revision') or 0),
             'state': 'preparing',
             'fence_token': token,
             'fence_until': time.time() + FENCE_SECONDS,
@@ -136,6 +137,8 @@ def commit(client, namespace, fence, receipts):
         )
         if protection != fence['data_protection_level']:
             raise BatchPrivacyBlocked('data_protection_changed')
+        if int(row.get('record_upload_revision') or 0) < fence['base_upload_revision']:
+            raise HandoffConflict('record upload revision regressed')
         current = ref.get(transaction=tx).to_dict() or {}
         if current.get('state') == 'accepted':
             return current
