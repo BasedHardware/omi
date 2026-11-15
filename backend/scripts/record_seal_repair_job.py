@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Counts-only entrypoint for the isolated repair CronJob and its row children."""
 
+import time
+
+PROCESS_STARTED = time.monotonic()
+
+import socket
 import json
 import traceback
 import re
@@ -114,6 +119,25 @@ def partition_arguments(argv):
     return index, count
 
 
+def process_deadline(started, hostname, wall_now, monotonic_now):
+    """Bound imports, cold scheduling/image pull, all phases and cleanup.
+
+    The standard CronJob name contains its scheduled Unix minute; pod names
+    append an optional Indexed index and Kubernetes random suffix. This clock
+    is earlier than Job creation, so it conservatively includes scale-up waits.
+    """
+    deadline = started + 1560  # At least 120s before the hard Job ceiling.
+    match = re.fullmatch(r'record-seal-repair-(\d{8,})-(?:\d+-)?[a-z0-9]{5}', hostname)
+    if match:
+        scheduled = int(match.group(1)) * 60
+        if scheduled > wall_now + 60:
+            raise ValueError('invalid scheduled repair clock')
+        deadline = min(deadline, monotonic_now + scheduled + 1680 - 60 - wall_now)
+    elif os.environ.get('KUBERNETES_SERVICE_HOST'):
+        raise ValueError('unrecognized scheduled repair identity')
+    return deadline
+
+
 def main():
     def terminate(*_):
         # Unwind the coordinator's finally block and reap all children.
@@ -141,15 +165,34 @@ def main():
                     checkpoint(repair.row_main(payload, progress=checkpoint))
                 else:
                     shard, shards = partition_arguments(sys.argv[1:])
-                    try:
-                        from utils import record_projection_rebuild
+                    deadline = process_deadline(PROCESS_STARTED, socket.gethostname(), time.time(), time.monotonic())
 
-                        report = record_projection_rebuild.run_job() if shard == 0 else {'outcome': 'disabled'}
-                        if report['outcome'] != 'disabled':
-                            emit(report)
-                    except Exception as error:
-                        emit(failure('record_projection_rebuild', error))
-                    emit(repair.run(progress=emit, **({'shard': shard, 'shards': shards} if shards > 1 else {})))
+                    def projection():
+                        try:
+                            from utils import record_projection_rebuild
+                            from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+                            remaining = deadline - time.monotonic() - 30
+                            if shard == 0 and remaining > 0:
+                                with SweepBudget(min(60, remaining)).interrupt_io():
+                                    report = record_projection_rebuild.run_job()
+                                if report['outcome'] != 'disabled':
+                                    emit(report)
+                        except Exception as error:
+                            emit(failure('record_projection_rebuild', error))
+
+                    from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+                    with SweepBudget(max(0, deadline - time.monotonic())).interrupt_io():
+                        emit(
+                            repair.run(
+                                progress=emit,
+                                deadline=deadline,
+                                before=projection,
+                                **({'shard': shard, 'shards': shards} if shards > 1 else {}),
+                            )
+                        )
+
             except BaseException as error:
                 emit(failure('record_seal_repair', error))
                 return 1

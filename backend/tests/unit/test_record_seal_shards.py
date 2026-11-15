@@ -229,3 +229,54 @@ def test_malformed_pending_has_exactly_one_counted_owner_and_no_user_path(count,
     refusals = [e for e in events if e.get('outcome') == 'malformed_pending']
     assert sum(e['count'] for e in refusals) == 1
     assert all(set(e) == {'event', 'outcome', 'count'} for e in refusals)
+
+
+def test_process_deadline_counts_cold_start_and_reserves_cleanup(monkeypatch):
+    from scripts.record_seal_repair_job import process_deadline
+
+    minute = 30000000
+    now = minute * 60 + 600  # Ten minutes spent waiting for node/image.
+    assert process_deadline(100, f'record-seal-repair-{minute}-2-abcde', now, 105) == 1125
+    assert process_deadline(100, 'local-fixture', now, 105) == 1660
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'synthetic')
+    with pytest.raises(ValueError):
+        process_deadline(100, 'unrecognized', now, 105)
+
+
+def test_projection_callback_is_inside_lease_and_not_run_for_duplicate(monkeypatch):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper, record_seal_run_lease
+
+    lease = Mock()
+    lease.acquire.return_value = False
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: {})
+    monkeypatch.setattr(config, 'settings', lambda: (8, 270, 1500, 'apply'))
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', lambda: {})
+    monkeypatch.setattr(record_seal_sweeper, 'require_fresh_proof', lambda _: None)
+    monkeypatch.setattr(record_seal_run_lease, 'RepairRunLease', lambda *a: lease)
+    before = Mock()
+    cluster.run(shard=0, shards=5, before=before)
+    before.assert_not_called()
+
+
+def test_nested_io_budget_cannot_extend_outer_process_deadline(monkeypatch):
+    from utils.batch_pipeline import record_seal_budget as budgets
+
+    timer = [0.0, 0.0]
+    now = [0.0]
+    monkeypatch.setattr(budgets.signal, 'signal', lambda *a: None)
+    monkeypatch.setattr(budgets.signal, 'getitimer', lambda *a: tuple(timer))
+    monkeypatch.setattr(
+        budgets.signal,
+        'setitimer',
+        lambda kind, seconds, interval=0: timer.__setitem__(slice(None), [seconds, interval]),
+    )
+    with budgets.SweepBudget(10, clock=lambda: now[0]).interrupt_io():
+        assert timer[0] == 10
+        with budgets.SweepBudget(60, clock=lambda: now[0]).interrupt_io():
+            assert timer[0] == 10
+            now[0] = 3
+        assert timer[0] == 7
+    assert timer[0] == 0

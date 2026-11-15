@@ -965,10 +965,17 @@ def owns_record(uid, cid, *, shard, shards):
     return int(record_identity(uid, cid)[1], 16) % shards == shard
 
 
-def run(*, progress=lambda _: None, shard=0, shards=1):
+def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None):
     validate_partition(shard, shards)
+
+    def execute():
+        before()  # Projection rebuild is inside the same coordinator lease.
+        return _run(
+            progress=progress, shard=shard, shards=shards, **({'deadline': deadline} if deadline is not None else {})
+        )
+
     if shards == 1 or not config.enabled() or config.settings()[3] == 'plan':
-        return _run(progress=progress, shard=shard, shards=shards)
+        return execute()
     config.require_runtime()
     with silent_dependencies():
         from database._client import get_firestore_client
@@ -982,13 +989,13 @@ def run(*, progress=lambda _: None, shard=0, shards=1):
     if not acquired:
         return {'event': 'record_seal_repair', 'outcome': 'overlap_refused', 'shard': shard, 'shards': shards}
     try:
-        return _run(progress=progress, shard=shard, shards=shards)
+        return execute()
     finally:
         with silent_dependencies():
             lease.release()
 
 
-def _run(*, progress, shard, shards):
+def _run(*, progress, shard, shards, deadline=None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
     workers, row_seconds, run_seconds, mode = config.settings()
@@ -1163,6 +1170,8 @@ def _run(*, progress, shard, shards):
         if config.jobs_enabled()
         else None
     )
+    if deadline is not None:
+        run_seconds = max(0, min(run_seconds, deadline - time.monotonic() - 30))
     report = coordinate(
         rows,
         workers=workers,
