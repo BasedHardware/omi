@@ -22,6 +22,10 @@ from database.batch_pipeline_projection_release import ProjectionReleaseStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from scripts import redrive_staging_inputs as cli
+
+# This peer's fixtures preload provider/model modules. Load them at collection,
+# so the operator-policy call budget measures the release operations themselves.
+from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row, ledger_row
 from tests.unit.test_batch_pipeline_timeliness import _sample, NOW, EPOCH  # pyright: ignore[reportPrivateUsage]
 from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS, staged_enqueue
@@ -288,8 +292,6 @@ def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
 
 
 def test_terminal_assignment_is_not_automatically_released_but_operator_uses_existing_target_gate(monkeypatch):
-    from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
-
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
     seeded = rows()
     key = ('batch_pipeline_prod_jobs', 'held')
