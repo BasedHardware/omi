@@ -329,6 +329,63 @@ class PendantRingCustody {
 
   static final PendantRingCustody shared = PendantRingCustody();
 
+  /// Content-free ledger metadata only. Export never validates or advances.
+  /// Keep this getter separate from custody decisions (Q12-AC diagnostics).
+  Map<String, Map<String, Object?>> get diagnosticsByDevice => Map.unmodifiable({
+        for (final entry in _devices.entries)
+          entry.key: (() {
+            final s = entry.value;
+            final cp = s.checkpoint;
+            final ranges = [
+              for (final r in cp.ringRanges) (r.startSeq, r.endSeq),
+              for (final r in cp.liveRanges) (r.startSeq, r.endSeq),
+            ]..sort((a, b) => a.$1.compareTo(b.$1));
+            var span = 0, start = -1, end = -1;
+            var frontier = cp.reportedReadSeq > cp.durableSeq ? cp.reportedReadSeq : cp.durableSeq;
+            for (final r in ranges) {
+              if (r.$1 <= frontier && r.$2 > frontier) frontier = r.$2;
+              if (r.$2 <= r.$1) continue;
+              if (start < 0 || r.$1 > end) {
+                if (start >= 0) span += end - start;
+                start = r.$1;
+                end = r.$2;
+              } else if (r.$2 > end) {
+                end = r.$2;
+              }
+            }
+            if (start >= 0) span += end - start;
+            var gapEnd = cp.reportedWriteSeq;
+            for (final r in ranges) {
+              if (r.$1 > frontier && r.$1 < gapEnd) gapEnd = r.$1;
+            }
+            final gap = (gapEnd - frontier).clamp(0, 1 << 62);
+            return Map<String, Object?>.unmodifiable({
+              'connection_epoch': s.epoch,
+              'connected': s.connected,
+              'live_enabled': s.liveEnabled,
+              'ring_id': cp.ringId,
+              'read_seq': cp.reportedReadSeq,
+              'write_seq': cp.reportedWriteSeq,
+              'durable_frontier': frontier,
+              'last_advanced_seq': cp.lastAdvancedSeq,
+              'last_mark_seq': cp.lastMarkSeq,
+              'last_advanced_mark_seq': cp.lastAdvancedMarkSeq,
+              'evidence_broken': s.evidenceBroken,
+              'incarnation_invalid': s.incarnationInvalid,
+              'pending_marks': s.marks.length,
+              'last_observed_mark_seq': s.marks.lastOrNull?.ringSeq,
+              'last_observed_mark_index': s.marks.lastOrNull?.liveIndex,
+              'proof_range_count': ranges.length,
+              'proof_record_span': span,
+              'batch_proof_ranges':
+                  cp.liveRanges.where((r) => r.wals.any((w) => w.fileName.startsWith('audio_omimobilebatch'))).length,
+              'first_unproven_start': gap > 0 ? frontier : null,
+              'first_unproven_length': gap,
+              'records_held_behind_gap': gap > 0 ? (cp.reportedWriteSeq - gapEnd).clamp(0, 1 << 62) : 0,
+            });
+          })(),
+      });
+
   _DeviceCustody? _state(String deviceId, int epoch) {
     final s = _devices[deviceId];
     return (s != null && s.epoch == epoch) ? s : null;

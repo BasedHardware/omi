@@ -1,5 +1,6 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
+import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -762,6 +763,14 @@ class RingStorageSyncImpl implements RingStorageSync {
         }
         final audio = record.sublist(RingProtocol.timestampBytes);
         final frames = RingProtocol.parseAudioPayload(audio);
+        RingCustodyDiagnostics.shared.record(custodyDeviceId,
+            epoch: epoch,
+            ringId: ringId,
+            ordinal: seq,
+            record: record,
+            timestamp: rawTs,
+            frames: frames.length,
+            phoneSeconds: phoneNow);
         elapsedTotal += frames.length;
 
         // Anchor timerStart on the first usable timestamp.

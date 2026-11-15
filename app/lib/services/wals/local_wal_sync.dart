@@ -8,6 +8,7 @@
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'native_custody_diagnostics.dart';
+import 'ring_custody_diagnostics.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/watch_live_coverage.dart';
@@ -1204,6 +1205,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       'ordinal_end': end,
       'file_bytes': fileBytes,
     });
+    RingCustodyDiagnostics.shared
+        .route(deviceId, RingCaptureRoute.ordinaryWal, frames: wal.totalFrames, proofPublished: true);
     await _maybeAdvanceCustody(deviceId, epoch, ringId);
   }
 
@@ -1976,6 +1979,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames.add(positioned);
     _frameSynced.add(false);
     _lastFrameAccepted = true;
+    if (_isPendantFrame(frame) && _deviceId != null) {
+      RingCustodyDiagnostics.shared.route(_deviceId!, RingCaptureRoute.ordinaryWal);
+    }
     return positioned;
   }
 

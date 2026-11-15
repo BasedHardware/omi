@@ -1,0 +1,44 @@
+# Ring custody export
+
+Settings → device → Diagnostics → Share keeps its existing JSON bundle and adds
+`ring_custody` schema 1. No new screen, action, string, account request or upload.
+The section is a read-only observation, never custody authority.
+
+At export the app uses the existing connection (`connectionFor`, not connect or
+ensureConnection). It reads RTC characteristic 19b10032 as uint32 little-endian
+seconds, reads ring status and requests INFO; it never writes 19b10031, reads
+record bodies, validates proof files, or issues ADVANCE/DELETE. RTC request and
+completion phone timestamps bound transport latency. Epoch/link changes discard
+cross-connection readings. Absent/legacy/unreadable state is null with a bounded
+reason. There is no clock sync performed by this export.
+
+The flight recorder is process-local and bounded to four devices, 20 events,
+16 prefixes from the latest READ, 64 implausible prefixes retained up to 24 hours,
+and 60 route-count minute buckets. Restart removes observations; JSON explicitly
+reports the collection scope and start. It does not claim 24-hour completeness.
+Only eight prefix bytes are retained (timestamp and length/codec prefix), never
+an audio frame/body, transcript, title, path, owner or filename. Numeric ordinals,
+frame counts, decoded time and adjacent-record plausibility help distinguish
+stored timestamps from misframing. End-of-read neighbours remain null.
+
+The getter `PendantRingCustody.diagnosticsByDevice` copies numeric metadata only.
+The ledger summary uses the union of previously recorded proof ranges; export
+never revalidates files or authorizes reclaim. First gap is [frontier, next proof
+start), capped at current write_seq. `records_held_behind_gap` counts the suffix
+after that gap (including any later gaps), not proof of that suffix's durability.
+Batch proof-range count is derived internally from reference type/name prefix;
+no names are exported.
+
+Ordinary route counts are accepted LocalWalSync frames, and proof frame counts
+are observed publication calls; neither means server acceptance. Batch ingress
+and publication require the Q12-AA-owned observation hooks into the same typed
+recorder API. Missing batch counters are explicitly unknown, never zero. READ
+request/BEGIN/DONE/STOP and ADVANCE attempts/results are observed in the connector;
+STOP means incomplete/stopped, not necessarily a timeout. Actual TimeoutException
+reports project only its bounded reason and decoded-record count. Precise idle
+reason observation may be supplied by Q12-AA's owned loop. Mark outcomes are
+inferred from the custody manager's read-only before/after state, with duplicates
+reported separately. Nothing changes mark acceptance.
+
+Rollback: revert the diagnostics commit. This removes only observations/export;
+it does not alter files, clocks, identities, proof validation or device progress.
