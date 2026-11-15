@@ -3,6 +3,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 
 final _at = DateTime(2026, 11, 15, 9);
 
@@ -12,7 +13,7 @@ ServerConversation _member(int index, String step, {bool locked = false}) => Ser
       createdAt: _at.add(Duration(minutes: index)),
       startedAt: _at.add(Duration(minutes: index)),
       finishedAt: _at.add(Duration(minutes: index + 1)),
-      structured: Structured('Notes $index', 'Member overview $index'),
+      structured: step == 'noise' ? Structured('', '') : Structured('Notes $index', 'Member overview $index'),
       status: step == 'failed' ? ConversationStatus.failed : ConversationStatus.completed,
       homeStep: step,
       isLocked: locked,
@@ -51,11 +52,26 @@ List<HomeRow> _rows(List<ServerConversation> members, Episode episode,
         liveConversationIds: listening ? episode.conversationIds.toSet() : const {});
 
 void main() {
+  test('empty terminal outcomes never fall back to awaiting a transcript', () {
+    for (final step in ['ready', 'noise', 'failed', 'writing_notes']) {
+      final empty = ServerConversation(
+          id: 'empty-$step',
+          createdAt: _at,
+          status: ConversationStatus.completed,
+          homeStep: step,
+          structured: Structured('', ''));
+      expect(awaitingHomeTranscript(empty), isFalse, reason: 'server $step is authoritative');
+    }
+    final legacy = ServerConversation(
+        id: 'legacy-empty', createdAt: _at, status: ConversationStatus.completed, structured: Structured('', ''));
+    expect(awaitingHomeTranscript(legacy), isTrue);
+  });
+
   for (final live in [false, true]) {
     for (final composed in [false, true]) {
       for (final listening in live ? [false, true] : [false]) {
-        for (final a in ['ready', 'transcribing', 'failed']) {
-          for (final b in ['ready', 'transcribing', 'failed']) {
+        for (final a in ['ready', 'noise', 'transcribing', 'writing_notes', 'failed']) {
+          for (final b in ['ready', 'noise', 'transcribing', 'writing_notes', 'failed']) {
             test('members $a/$b live=$live composed=$composed listening=$listening', () {
               final members = [_member(0, a), _member(1, b)];
               final owner = _owner(members, live: live, composed: composed);
@@ -68,9 +84,20 @@ void main() {
                 expect(
                     memberRows.where((r) => r.conversation.homeStep == 'ready').map((r) => r.conversation.id).toSet(),
                     readyIds);
-                expect(pending.expand((r) => r.episode!.members).every((m) => m.homeStep == 'transcribing'), isTrue);
-                expect(pending.fold<int>(0, (n, r) => n + r.count),
-                    listening ? 0 : members.where((m) => m.homeStep == 'transcribing').length);
+                expect(
+                    pending
+                        .expand((r) => r.episode!.members)
+                        .every((m) => ['transcribing', 'writing_notes'].contains(m.homeStep)),
+                    isTrue);
+                expect(
+                    pending.fold<int>(0, (n, r) => n + r.count),
+                    listening
+                        ? 0
+                        : members.where((m) => ['transcribing', 'writing_notes'].contains(m.homeStep)).length);
+                if (pending.isNotEmpty) {
+                  expect(pending.single.step,
+                      members.any((m) => m.homeStep == 'transcribing') ? HomeStep.transcribing : HomeStep.writingNotes);
+                }
               } else {
                 expect(rows.where((r) => r.isTemporaryMember), isEmpty);
                 expect(pending, isEmpty, reason: 'composed notes never regress to processing');
@@ -83,7 +110,11 @@ void main() {
                   else
                     row.conversation.id,
               ];
-              expect(represented.toSet(), members.map((m) => m.id).toSet());
+              // Noise may remain a source on the composed page, but never
+              // creates work or a separate row on Home.
+              final noiseIds = members.where((m) => m.homeStep == 'noise').map((m) => m.id).toSet();
+              expect(represented.toSet().difference(noiseIds),
+                  members.where((m) => m.homeStep != 'noise').map((m) => m.id).toSet());
               expect(represented.length, represented.toSet().length, reason: 'each member has one Home owner');
               final reversed = _rows(members.reversed.toList(), owner, listening: listening);
               expect(reversed.map((r) => r.conversation.id), rows.map((r) => r.conversation.id));
