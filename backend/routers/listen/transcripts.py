@@ -62,9 +62,10 @@ from utils.stt.streaming import sort_segments_by_start
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.transcribe_decisions import (
     custom_stt_without_raw_audio,
+    has_upstream_speaker_identity,
     is_user_self_match,
+    mark_upstream_speaker_identity,
     person_id_for_client,
-    preserve_upstream_speaker_identity,
     resolve_photo_conversation_source,
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
@@ -734,7 +735,8 @@ class TranscriptProcessor:
                 )
             except Exception:
                 match_scores.record_failure(logger, reason='malformed_doc')
-            if preserve_upstream_speaker_identity(segment, segment_assignments=speaker.segment_assignments):
+            if has_upstream_speaker_identity(segment, segment_assignments=speaker.segment_assignments):
+                mark_upstream_speaker_identity(segment)
                 continue
             person_id = speaker.segment_assignments.get(cast(str, segment.id))
             if person_id is None and segment.speaker_id in speaker.speaker_to_person:
@@ -1134,7 +1136,7 @@ class TranscriptProcessor:
                         segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if getattr(self.host, 'use_custom_stt', False):
-                        preserve_upstream_speaker_identity(segment)
+                        mark_upstream_speaker_identity(segment)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
@@ -1512,7 +1514,7 @@ class TranscriptProcessor:
                         segment.capture_merge_proof = proof
                     segment.capture_window_reason = capture_window_reason(attribution)
                     if getattr(self.host, 'use_custom_stt', False):
-                        preserve_upstream_speaker_identity(segment)
+                        mark_upstream_speaker_identity(segment)
                     if (
                         self.host.onboarding_handler is not None
                         and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id

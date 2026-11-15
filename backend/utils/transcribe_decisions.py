@@ -168,15 +168,12 @@ def effective_conversation_timeout(conversation_timeout: int, is_multi_channel: 
     return timeout
 
 
-def should_load_speech_profile(
-    *, use_custom_stt: bool = False, is_multi_channel: bool, include_speech_profile: bool
-) -> bool:
+def should_load_speech_profile(*, is_multi_channel: bool, include_speech_profile: bool) -> bool:
     return not is_multi_channel and include_speech_profile
 
 
 def should_enable_speaker_identification(
     *,
-    use_custom_stt: bool = False,
     private_cloud_sync_enabled: bool,
     has_speech_profile: bool,
 ) -> bool:
@@ -462,17 +459,21 @@ def custom_stt_without_raw_audio(*, use_custom_stt: bool, ring_buffer: Any) -> b
     return bool(use_custom_stt) and (ring_buffer is None or ring_buffer.get_time_range() is None)
 
 
-def preserve_upstream_speaker_identity(segment: Any, *, segment_assignments: Any = ()) -> bool:
-    is_user = bool(getattr(segment, 'is_user', False))
-    has_person = bool(getattr(segment, 'person_id', None))
-    if not (is_user or has_person):
+def has_upstream_speaker_identity(segment: Any, *, segment_assignments: Any = ()) -> bool:
+    if not (getattr(segment, 'is_user', False) or bool(getattr(segment, 'person_id', None))):
         return False
     if getattr(segment, 'id', None) in segment_assignments:
         return False
-    if getattr(segment, 'speaker_label_source', None) is not None:
-        return False
-    if getattr(segment, 'speaker_match_source', None) is not None:
-        return False
+    return (
+        getattr(segment, 'speaker_label_source', None) is None
+        and getattr(segment, 'speaker_match_source', None) is None
+    )
+
+
+def mark_upstream_speaker_identity(segment: Any) -> None:
+    if not has_upstream_speaker_identity(segment):
+        return
     if getattr(segment, 'speaker_identity_status', None) == SpeakerIdentityStatus.unknown:
-        segment.speaker_identity_status = SpeakerIdentityStatus.user if is_user else SpeakerIdentityStatus.not_user
-    return True
+        segment.speaker_identity_status = (
+            SpeakerIdentityStatus.user if getattr(segment, 'is_user', False) else SpeakerIdentityStatus.not_user
+        )
