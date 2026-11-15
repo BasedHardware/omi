@@ -53,7 +53,8 @@ from prometheus_client import Counter, Histogram
 
 import database.jobstore.codec as codec
 from utils.observability.reasons import ReasonFamily, reason_label
-from utils.staging_fence import jobstore_shadow_admits
+from utils.staging_fence import jobstore_mirror_factory_admits
+from database.jobstore.cohort import production_policy_applies, project_document
 
 logger = logging.getLogger(__name__)
 
@@ -320,12 +321,17 @@ class DualStore:
 
         def observed(*args, **kwargs):
             result = method(*args, **kwargs)
-            # An additional operator opt-in; no query traffic with current defaults.
-            if os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
-                self._observe_query(name, args, kwargs)
+            self.observe_discovery(name, args, kwargs)
             return result
 
         return observed
+
+    def observe_discovery(self, name: str, args: tuple, kwargs: dict) -> None:
+        """Keep optional parity on its bounded queue when an index supplies the discovery answer."""
+        from database.jobstore.serving_parity import STORE_QUERIES
+
+        if name in STORE_QUERIES and os.getenv('JOBSTORE_SHADOW_QUERY_PARITY', '').strip().lower() == 'on':
+            self._observe_query(name, args, kwargs)
 
     def _observe_query(self, name, args, kwargs):
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
@@ -394,11 +400,23 @@ class DualStore:
             for table, _ in writes:
                 _count(table, 'write', ShadowParityOutcome.SKIPPED)
             return
+        reads = {
+            address: projected
+            for address, doc in view.reads.items()
+            if (
+                projected := (
+                    project_document(self.namespace, *address, doc)
+                    if doc or production_policy_applies(self.namespace)
+                    else {}
+                )
+            )
+            is not None
+        }
         if self.inline:
-            self.mirror(view.reads, writes)
+            self.mirror(reads, writes)
             return
         try:
-            self._queue.put_nowait(('txn', view.reads, writes))
+            self._queue.put_nowait(('txn', reads, writes))
         except queue.Full:
             for table, _ in writes:
                 _count(table, 'write', ShadowParityOutcome.DROPPED)
@@ -481,8 +499,9 @@ class DualStore:
         docs = (reader or read_current)(self.primary, keys)
         phase[0] = 'postgres_write'
         for (table, key), doc in docs.items():
-            if doc:
-                self.shadow.write_doc(conn, table, key, mirrored(doc, table))
+            projected = project_document(self.namespace, table, key, doc)
+            if projected:
+                self.shadow.write_doc(conn, table, key, mirrored(projected, table))
             else:
                 self.shadow.delete_doc(conn, table, key)
 
@@ -591,6 +610,14 @@ class DualStore:
                     conn.execute(f'SET LOCAL statement_timeout = {int(self.budget_s * 1000)}')
                     phase[0] = 'postgres_read'
                     for (table, key), primary_doc in reads.items():
+                        primary_doc = (
+                            project_document(self.namespace, table, key, primary_doc)
+                            if primary_doc or production_policy_applies(self.namespace)
+                            else {}
+                        )
+                        if primary_doc is None:
+                            _count(table, 'read', ShadowParityOutcome.SKIPPED)
+                            continue
                         shadow_doc = self.shadow.read_doc(conn, table, key)
                         outcome = compare(primary_doc, shadow_doc, table)
                         _count(table, 'read', outcome)
@@ -681,6 +708,14 @@ class DualStore:
         try:
             shadow_before = self._read_shadow(table, key)
             primary_doc = read_current(self.primary, [(table, key)]).get((table, key), {})
+            primary_doc = (
+                project_document(self.namespace, table, key, primary_doc)
+                if primary_doc or production_policy_applies(self.namespace)
+                else {}
+            )
+            if primary_doc is None:
+                _converge_count(table, ShadowConvergenceOutcome.UNKNOWN)
+                return
             shadow_after = self._read_shadow(table, key)
             elapsed = time.monotonic() - started
             in_window = elapsed <= self.convergence_delays[-1] + self.budget_s
@@ -753,6 +788,8 @@ class DualStore:
             for table, key, outcome, primary_doc, shadow_doc in allowed:
                 if now is None:
                     current = 'unread'
+                elif project_document(namespace, table, key, now.get((table, key), {})) is None:
+                    current = 'excluded'
                 elif compare(now.get((table, key), {}), shadow_doc, table) is ShadowParityOutcome.MATCH:
                     current = 'shadow_current'
                 else:
@@ -806,9 +843,9 @@ class _ErasurePrimary:
 
 
 def shadow_from_env(primary: Any) -> Any:
-    """``primary`` unchanged unless ``BATCH_JOBSTORE_MODE=shadow`` and the staging Postgres is configured.
+    """``primary`` unchanged unless shadow/index mode and an explicit mirror target are configured.
 
-    Fails closed to Firestore-only: any other mode, the prod namespace outside the staging DB, a missing
+    Fails closed to Firestore-only: any other mode, an unadmitted namespace/context, a missing
     setting, or an image
     without the Postgres driver returns
     ``primary`` and logs why. One ``DualStore`` (one mirror thread, one pool) serves each namespace per
@@ -816,24 +853,28 @@ def shadow_from_env(primary: Any) -> Any:
     (the pool dials lazily).
     """
     mode = os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower()
-    if mode != 'shadow':
+    if mode not in {'shadow', 'index'}:
         return primary
     namespace = getattr(primary, 'namespace', '')
-    if not jobstore_shadow_admits(namespace):
+    if not jobstore_mirror_factory_admits(namespace):
         logger.warning('event=jobstore_shadow outcome=refused reason=namespace_admission')
         return primary
     with _SHADOWED_LOCK:
-        if namespace in _SHADOWED:
-            return _SHADOWED[namespace]
-        try:
-            store = _configured_copy(primary)
-        except RuntimeError:
-            logger.warning('event=jobstore_shadow outcome=refused reason=configuration')
-            return primary
+        store = _SHADOWED.get(namespace)
         if store is None:
-            return primary
-        _SHADOWED[namespace] = store
-        return store
+            try:
+                store = _configured_copy(primary)
+            except RuntimeError:
+                logger.warning('event=jobstore_shadow outcome=refused reason=configuration')
+                return primary
+            if store is None:
+                return primary
+            _SHADOWED[namespace] = store
+    if mode == 'index':
+        from database.jobstore.index_config import index_from_env
+
+        return index_from_env(store)
+    return store
 
 
 def _configured_copy(primary: Any) -> DualStore | None:
@@ -885,9 +926,10 @@ def mirror_refresh(namespace: str, keys) -> None:
     A strict no-op (nothing constructed, nothing read) unless this process runs ``BATCH_JOBSTORE_MODE=shadow``;
     otherwise queued for the mirror thread. Never raises into the caller.
     """
-    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() != 'shadow' or not jobstore_shadow_admits(
-        namespace
-    ):
+    if os.getenv('BATCH_JOBSTORE_MODE', 'firestore').strip().lower() not in {
+        'shadow',
+        'index',
+    } or not jobstore_mirror_factory_admits(namespace):
         return
     try:
         store = _SHADOWED.get(namespace)
@@ -895,6 +937,8 @@ def mirror_refresh(namespace: str, keys) -> None:
             from database.batch_pipeline_store import FirestoreStore
 
             store = shadow_from_env(FirestoreStore(namespace))
+            # Index mode returns a discovery wrapper; the cached DualStore owns mirror refreshes.
+            store = _SHADOWED.get(namespace, store)
         if isinstance(store, DualStore):
             store.refresh(keys)
     except Exception:
