@@ -4755,6 +4755,64 @@
       ]
     },
     {
+      "collectionGroup": "episodes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "home_visible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "home_sort_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "home_visible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "home_sort_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "home_visible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "home_standalone",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "home_sort_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "memory_items",
       "queryScope": "COLLECTION",
       "fields": [

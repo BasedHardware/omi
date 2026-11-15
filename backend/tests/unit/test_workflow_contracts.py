@@ -2070,6 +2070,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
         '__init__.py',
         'firestore_index_registry.py',
         'firestore_query_types.py',
+        'home_feed_queries.py',
         'mcp_read_queries.py',
         'review_queries.py',
         'messaging_queries.py',
