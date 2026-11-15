@@ -24,15 +24,17 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert repair['concurrencyPolicy'] == 'Forbid'
     assert sweep['jobTemplate']['spec']['activeDeadlineSeconds'] == 240
     assert repair['jobTemplate']['spec']['activeDeadlineSeconds'] == 1680
-    assert repair['jobTemplate']['spec']['backoffLimit'] == 0
+    assert repair['jobTemplate']['spec']['backoffLimit'] == 5
+    assert repair['jobTemplate']['spec']['backoffLimitPerIndex'] == 0
+    assert repair['jobTemplate']['spec']['maxFailedIndexes'] == 5
     pod = repair['jobTemplate']['spec']['template']['spec']
     worker = next(doc for (kind, _), doc in docs.items() if kind == 'Deployment')['spec']['template']['spec']
     assert pod['serviceAccountName'] == worker['serviceAccountName']
     assert pod['containers'][0]['image'] == worker['containers'][0]['image']
     assert pod['containers'][0]['command'] == ['python', 'scripts/record_seal_repair_job.py']
     env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
-    # Prod runs repair at 16 workers: 48 saturated per-row I/O (2026-11-05, #24729 rolled back).
-    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '16'
+    # Match the live per-pod worker count; five independent CPU pods supply the extra capacity.
+    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '8'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'on'
@@ -56,7 +58,7 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert pod['containers'][0]['securityContext']['readOnlyRootFilesystem']
 
 
-def test_repair_pod_runs_on_batch_pipeline_pool_with_four_requested_cores():
+def test_repair_pod_runs_on_cpu_only_pool_with_three_requested_cores():
     pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
     terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
     assert terms == [
@@ -65,19 +67,15 @@ def test_repair_pod_runs_on_batch_pipeline_pool_with_four_requested_cores():
                 {
                     'key': 'cloud.google.com/gke-nodepool',
                     'operator': 'In',
-                    'values': ['batch-pipeline-pool'],
+                    'values': ['api-pool'],
                 }
             ]
         }
     ]
-    # The pool is tainted; without these the pod never schedules there.
-    assert {(t['key'], t['value'], t['effect']) for t in pod['tolerations']} == {
-        ('omi.ai/batch-pipeline', 'true', 'NoSchedule'),
-        ('nvidia.com/gpu', 'present', 'NoSchedule'),
-    }
+    assert 'tolerations' not in pod  # The CPU pool has no GPU/batch taint.
     resources = pod['containers'][0]['resources']
-    # Reserve the full CPU limit. Memory still differs, so pod QoS is Burstable.
-    assert resources['requests']['cpu'] == '4'
+    # Leave capacity for node daemons on n2-standard-4; limit stays four CPU.
+    assert resources['requests']['cpu'] == '3'
     assert resources['limits']['cpu'] == '4'
     assert 'nvidia.com/gpu' not in resources['limits']
 
