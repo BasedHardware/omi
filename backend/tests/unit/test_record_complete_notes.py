@@ -351,6 +351,9 @@ def test_complete_record_uses_processing_hold_deadline_without_another_settle(re
     assert row.get().to_dict()['due_at'] == min(NOW + remaining, NOW + 120)
     from utils.sync import processing_hold
 
+    if remaining > 120:
+        outcome, due = processing_hold.admission(f.conversation.get().to_dict(), row.get().to_dict(), now=NOW + 120)
+        assert outcome == 'quiet_wait' and due == NOW + remaining
     outcome, due = processing_hold.admission(
         f.conversation.get().to_dict(),
         row.get().to_dict(),

@@ -27,7 +27,6 @@ import functools
 import logging
 
 from database.outbox import Claim, EnqueueResult, Outbox, OutboxKind, Outcome, SweepCounts
-from config.sync_reprocess import settle_seconds
 
 logger = logging.getLogger(__name__)
 

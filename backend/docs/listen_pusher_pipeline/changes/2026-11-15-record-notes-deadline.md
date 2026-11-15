@@ -63,8 +63,10 @@ seconds of settle. An existing outbox sync/merge hold keeps its deadline and
 flags; a notes mark does not reassert them as a new content arrival. Earlier
 first-summary delivery still passes the same consumer hold check before paid
 work. These paths update the same coalesced obligation; the previous one-run
-normal / at-most-two late-completion budget is unchanged. No extra Firestore
-reads, document writes, polls or paid obligation are added by this composition.
+normal / at-most-two late-completion budget is unchanged. This composition adds
+no producer Firestore reads/writes, polls or paid obligation. Earlier delivery
+can cause a consumer deferral or stale-token read; that downstream delta is
+unmeasured.
 
 Projection admission-provenance instrumentation retains the bounded direct
 follow-up hint and the same four slots. Fresh guard cadence is independent
