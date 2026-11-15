@@ -53,6 +53,8 @@ async def test_overflow_writes_debt_and_never_discovers_in_audio_drain(inline_se
     client, path, _, _ = inline_session
     queue = SimpleNamespace(submit=MagicMock(return_value=False), wait_owner=AsyncMock())
     monkeypatch.setattr(module, 'coordinator', lambda: queue)
+    fallback = MagicMock()
+    monkeypatch.setattr('utils.pusher_audio_projection.record_fallback', fallback)
     discovery = MagicMock(side_effect=AssertionError('discovery must not run on overflow'))
     monkeypatch.setattr(PusherAudioProjection, 'refresh', discovery)
     await pusher._websocket_util_trigger(
@@ -62,6 +64,10 @@ async def test_overflow_writes_debt_and_never_discovers_in_audio_drain(inline_se
     assert client.rows[path]['record_upload_sessions'] == {}
     discovery.assert_not_called()
     queue.submit.assert_called()
+    assert any(
+        call.kwargs.get('reason') == 'capacity_full' and call.kwargs.get('outcome') == 'degraded'
+        for call in fallback.call_args_list
+    )
 
 
 @pytest.mark.asyncio

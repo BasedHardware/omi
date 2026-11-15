@@ -1622,6 +1622,14 @@ async def _run_websocket_util_trigger(
             uncommitted_closes = close_protocol.requests.keys() - close_protocol.committed
             if uncommitted_closes:
                 logger.warning('event=record_close_uncommitted_disconnect records=%d', len(uncommitted_closes))
+                record_fallback(
+                    component='pusher',
+                    from_mode='record_close_v2',
+                    to_mode='proof_based_repair',
+                    reason='client_disconnect',
+                    outcome='degraded',
+                    log=logger,
+                )
             for cid in uncommitted_closes:
                 record_barrier.hold_recording(cid)
                 record_close_requests.discard(cid)

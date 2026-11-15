@@ -6,7 +6,7 @@ import struct
 import threading
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 from routers.listen.receiver import ListenReceiver
 
 import pytest
@@ -252,7 +252,9 @@ def test_close_capacity_idempotence_watermark_and_uncommitted_fence():
 
 
 @pytest.mark.asyncio
-async def test_local_capacity_never_sends_an_unretained_close():
+async def test_local_capacity_never_sends_an_unretained_close(monkeypatch):
+    fallback = Mock()
+    monkeypatch.setattr('utils.listen_pusher_session.record_fallback', fallback)
     ws = FakePusherWebSocket()
     session = make_session(ws=ws, config_overrides={'max_pending_requests': 1})
     await session.connect()
@@ -261,6 +263,7 @@ async def test_local_capacity_never_sends_an_unretained_close():
     assert not await session.request_recording_close('new')
     assert set(session.pending_record_closes) == {'other'}
     assert not ws.sent
+    assert fallback.call_args.kwargs['reason'] == 'capacity_full'
 
 
 @pytest.mark.asyncio
@@ -501,6 +504,8 @@ async def _sequential_closes(inline_session, monkeypatch, *, total, limit):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('frozen', [False, True])
 async def test_unsupported_close_is_terminal_until_reconnect(monkeypatch, frozen):
+    fallback = Mock()
+    monkeypatch.setattr('utils.listen_pusher_session.record_fallback', fallback)
     active = {'active': True}
     ws = FakePusherWebSocket()
     session = make_session(ws=ws, active_ref=active)
@@ -515,6 +520,7 @@ async def test_unsupported_close_is_terminal_until_reconnect(monkeypatch, frozen
     active['active'] = True
     assert not session.pending_record_closes
     assert not session.record_close_supported
+    assert fallback.call_args.kwargs['reason'] == 'capability_mismatch'
     before = len(ws.sent)
     for cid in ['conv-1', 'next', 'later']:
         assert not await session.request_recording_close(cid)
@@ -549,3 +555,36 @@ async def test_evicted_lost_ack_reprepares_fresh_baseline_without_unfreezing():
     assert control['phase'] == 'prepare' and control['watermark'] == 0
     with pytest.raises(AudioBackpressure):
         session.audio_bytes_send(b'late', 100)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'status,reason',
+    [
+        ('capacity', 'capacity_full'),
+        ('invalid_watermark', 'usage_fence_blocked'),
+        ('producer_unavailable', 'usage_fence_blocked'),
+        ('conflict', 'usage_fence_blocked'),
+        ('unknown', 'local_heal'),
+    ],
+)
+async def test_close_refusal_fallback_is_bounded_per_pending_request(monkeypatch, status, reason):
+    fallback = Mock()
+    monkeypatch.setattr('utils.listen_pusher_session.record_fallback', fallback)
+    active = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active)
+    await session.connect()
+    session.record_close_supported = True
+    await session.request_recording_close('conv-1')
+    close = session.pending_record_closes['conv-1']
+    for _ in range(3):
+        close.socket = ws
+        active['active'] = True
+        ws.incoming.append(result_frame('conv-1', close.request_id, 'prepare', status))
+        ws.on_recv = lambda: active.update(active=False)
+        await session.pusher_receive()
+    assert fallback.call_count == 1
+    assert fallback.call_args.kwargs['reason'] == reason
+    assert fallback.call_args.kwargs['outcome'] == 'degraded'
+    assert 'conv-1' in session.pending_record_closes

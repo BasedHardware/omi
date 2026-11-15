@@ -236,6 +236,7 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
             assert [control['phase'] for control in close_controls] == ['prepare']
             assert row['record_upload_sessions'] and not row['record_audio_closed']
             assert 'event=record_close_uncommitted_disconnect records=1' in caplog.text
+            assert 'to=proof_based_repair reason=client_disconnect outcome=degraded' in caplog.text
             _assert_prepared_disconnect_selected_by_repair(row)
         else:
             assert not close_controls and not session.pending_record_closes

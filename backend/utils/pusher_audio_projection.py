@@ -334,7 +334,7 @@ class PusherAudioProjection:
             self.debt_versions.pop(conv_id, None)
         if not await self.defer_rebuild(conv_id):
             return False
-        coordinator().submit(
+        admitted = coordinator().submit(
             self.uid,
             conv_id,
             paths,
@@ -342,6 +342,15 @@ class PusherAudioProjection:
             self.on_refresh,
             observed_update_time=self.debt_versions.get(conv_id),
         )
+        if not admitted:
+            record_fallback(
+                component='pusher',
+                from_mode='playback_metadata',
+                to_mode='durable_repair',
+                reason='capacity_full',
+                outcome='degraded',
+                log=logger,
+            )
         self.inventory.pop(conv_id, None)
         self.has_uploaded_paths = True
         if closing and len(self.finished) < MAX_CONVERSATIONS:
@@ -462,5 +471,14 @@ class PusherAudioProjection:
         except TimeoutError:
             MARKER_WRITES.labels(outcome='marker_write_failed').inc()
             logger.warning('Projection marker_write_failed cleanup_budget_exhausted')
+            if self.defer_metadata:
+                record_fallback(
+                    component='pusher',
+                    from_mode='playback_metadata',
+                    to_mode='durable_repair',
+                    reason='timeout',
+                    outcome='degraded',
+                    log=logger,
+                )
         # Background work is bounded independently; socket close never waits
         # for a second round after the total cleanup budget expires.

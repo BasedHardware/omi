@@ -458,6 +458,7 @@ class ListenPusherSession:
         if conversation_id not in self.pending_record_closes:
             if len(self.pending_record_closes) >= self.config.max_pending_requests:
                 logger.warning('event=record_close_notify outcome=local_capacity')
+                self._record_close_fallback('capacity_full')
                 return False  # Never send an unretained fast close; use slow socket closure.
             self.pending_record_closes[conversation_id] = PendingClose()
         self.pending_request_event.set()
@@ -514,8 +515,25 @@ class ListenPusherSession:
                 )
             except Exception:
                 logger.warning('event=record_close_notify outcome=send_failed')
+                self._record_close_fallback('send_failed', close)
                 return False
             return False  # Transport completion is never an acceptance ACK.
+
+    def _record_close_fallback(self, reason: str, close: PendingClose | None = None) -> None:
+        # Reasons below are fixed call-site constants; at most a few flags per
+        # bounded pending close, so a one-second retry cannot flood diagnostics.
+        if close is not None:
+            if reason in close.reported_fallbacks:
+                return
+            close.reported_fallbacks.add(reason)
+        record_fallback(
+            component='pusher',
+            from_mode='record_close_v2',
+            to_mode='deferred_record_close',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
 
     async def _audio_bytes_flush(self, *, lock_held: bool = False):
         async with nullcontext() if lock_held else self.audio_flush_lock:
@@ -790,6 +808,7 @@ class ListenPusherSession:
                             self._remember_record_boundary(cid, accepted=True)
                             self.pending_record_closes.pop(cid, None)
                     elif ack.get('status') == 'unsupported':
+                        self._record_close_fallback('capability_mismatch', close)
                         self.pending_record_closes.pop(cid, None)
                         if close.frozen:
                             self._remember_record_boundary(cid, accepted=False)
@@ -800,6 +819,11 @@ class ListenPusherSession:
                         # Retired reply history may no longer know this request.
                         # Re-prepare a fresh byte baseline, preserving the freeze.
                         close.socket, close.prepared = None, False
+                        self._record_close_fallback('local_heal', close)
+                    elif ack.get('status') == 'capacity':
+                        self._record_close_fallback('capacity_full', close)
+                    elif ack.get('status') in {'invalid_watermark', 'producer_unavailable', 'conflict'}:
+                        self._record_close_fallback('usage_fence_blocked', close)
                     # Capacity and watermark refusals retain the exact request.
                 elif header_type == PUSHER_AUDIO_TIMELINE_ACK_OPCODE:
                     if self._audio_timeline_ack_check(msg):

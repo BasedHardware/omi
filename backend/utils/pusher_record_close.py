@@ -41,6 +41,7 @@ class PendingClose:
     frozen: bool = False
     base: int = 0
     sent: int = 0
+    reported_fallbacks: set[str] = field(default_factory=set)
 
 
 class PusherCloseState:
