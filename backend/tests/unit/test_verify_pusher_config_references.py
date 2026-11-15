@@ -189,6 +189,11 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "EPISODE_COMPOSER_CONTEXT_ENABLED": "true",
+        "EPISODE_COMPOSER_DETAIL_ENABLED": "true",
+        "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED": "true",
+        "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED": "true",
+        "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED": "true",
         # Dev-only canary (lead2 2afa3e); prod stays "0".
         "PUSHER_STORAGE_PCM_BUDGET_MB": "512",
         "CONVERSATION_TERMINAL_FAMILY_MODE": "on",

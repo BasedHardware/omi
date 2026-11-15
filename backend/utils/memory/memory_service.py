@@ -682,6 +682,8 @@ class CanonicalMemoryBackend:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
     ) -> List[MemorySearchMatch]:
         search_kwargs: Dict[str, Any] = {
             "limit": limit,
@@ -689,6 +691,8 @@ class CanonicalMemoryBackend:
             "device_scope_request": device_scope_request,
             "item_filter": item_filter,
         }
+        if vector_only:
+            search_kwargs.update(vector_only=True, budget=budget)
         if ledger_kinds is not None:
             search_kwargs["ledger_kinds"] = ledger_kinds
         if as_of is not None:
@@ -3424,6 +3428,8 @@ class MemoryService:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
@@ -3438,6 +3444,8 @@ class MemoryService:
                 "device_scope_request": device_scope_request,
                 "item_filter": canonical_item_filter,
             }
+            if vector_only:
+                canonical_kwargs.update(vector_only=True, budget=budget)
             if ledger_kinds is not None:
                 canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
@@ -3449,7 +3457,7 @@ class MemoryService:
             raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory search unavailable") from exc
-        if ledger_kinds is not None:
+        if ledger_kinds is not None or vector_only:
             # The ledger agent surface is explicitly canonical-only. Legacy
             # vector/storage search is a separate historical tool and must not
             # be merged here: aside from leaking stamped compatibility rows,
