@@ -1066,7 +1066,7 @@ runs:
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
     - name: Provision sync-backfill lane
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && (inputs.integration_only != 'true' && (success())) }}
+      if: ${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (success())) }}
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
         mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
@@ -1874,7 +1874,7 @@ runs:
         environment: ${{ inputs.environment }}
         release_version: ${{ inputs.release_version }}
         status: ${{ job.status }}
-        service: ${{ inputs.service }}
+        service: ${{ inputs.cloud_run_service != 'all' && inputs.cloud_run_service || inputs.service }}
 
     - name: Notify deployment status on Telegram
       if: >-

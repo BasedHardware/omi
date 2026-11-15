@@ -185,3 +185,14 @@ def test_custody_artifact_is_bound_to_the_native_serving_gate_and_contains_no_en
     assert upload['with']['path'] == 'artifacts/cloud-run-selection.json'
     assert set(record['env']) == {'ADMITTED_SOURCE', 'WORKFLOW_CONTROL', 'CLOUD_RUN_SELECTION'}
     assert record['env']['WORKFLOW_CONTROL'] == '${{ github.workflow_sha }}'
+
+
+def test_named_service_does_not_reconcile_shared_dispatch_queues():
+    # Dispatch reconciliation also writes the sync-jobs queue. Leave shared
+    # provisioning to the retained all-service path, not an isolated worker roll.
+    assert step('Provision sync-backfill lane')['if'].startswith("${{ inputs.cloud_run_service == 'all' &&")
+    summary = step('Generate deployment summary')
+    assert (
+        summary['with']['service']
+        == "${{ inputs.cloud_run_service != 'all' && inputs.cloud_run_service || inputs.service }}"
+    )
