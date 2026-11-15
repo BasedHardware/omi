@@ -531,7 +531,8 @@ ServerConversation localHomeProcessingEntry(ServerConversation c, {String? serve
       c.isHiddenFromDefaultList ||
       c.isLocked ||
       c.processingDeferred ||
-      c.clientProcessing != null) {
+      c.clientProcessing != null ||
+      homeStepOf(c) == HomeStep.failed) {
     return c;
   }
   if (serverStep != null) return c.withHomeStep(serverStep);

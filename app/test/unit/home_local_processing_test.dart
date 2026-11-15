@@ -31,6 +31,9 @@ void main() {
     for (final member in [ready, failed, discarded, deleted]) {
       expect(localHomeProcessingEntry(member), same(member));
     }
+    for (final terminal in [failed, discarded, deleted]) {
+      expect(localHomeProcessingEntry(terminal, serverStep: 'transcribing'), same(terminal));
+    }
     final rows = buildHomeCardRows([], [ready, failed, discarded, deleted], now: now, processingTitle: 'Processing');
     expect(rows, hasLength(1));
     expect(rows.single.isProcessing, isFalse);
