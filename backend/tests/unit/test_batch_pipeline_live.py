@@ -504,7 +504,27 @@ def _ledger_documents(monkeypatch, documents):
     """Route ledger writes through the real transition planner over an in-memory store."""
     from database import pipeline_ledger
 
-    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, **fields):
+    class _Ref:
+        def __init__(self, path):
+            self.path = path
+
+        def collection(self, name):
+            return _Ref(f'{self.path}/{name}')
+
+        def document(self, name):
+            return _Ref(f'{self.path}/{name}')
+
+    class _Client:
+        def collection(self, name):
+            return _Ref(name)
+
+    # Admission builds the fence references from the shared client; no test may reach a real one.
+    monkeypatch.setattr('database._client.get_firestore_client', lambda: _Client())
+
+    def advance(uid, capture_id, stage, *, now=None, firestore_client=None, source_ref=None, owner_ref=None, **fields):
+        # Every production ledger writer fences on the account and the source capture.
+        assert owner_ref.path == f'users/{uid}'
+        assert source_ref.path == f'users/{uid}/conversations/{capture_id}'
         plan = pipeline_ledger.plan_advance(documents.get((uid, capture_id)), stage, now=now, **fields)
         if plan.doc is None:
             return False

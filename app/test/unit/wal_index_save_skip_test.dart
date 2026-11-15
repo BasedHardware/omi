@@ -69,6 +69,7 @@ Wal _fullyPopulated() => Wal(
       syncedAt: 4,
       keptForTranscriptRecovery: true,
       clockRun: 'run',
+      clockRecoveryValidBatches: 11,
       uploadRejectionReason: WalUploadRejection.serverRefused,
     );
 
@@ -119,6 +120,7 @@ final _mutations = <String, void Function(Wal)>{
   'upload_rejection_status_code': (w) => w.uploadRejectionStatusCode = 413,
   'upload_rejected_at': (w) => w.uploadRejectedAt = 43,
   'upload_refusal_last_attempt_at': (w) => w.uploadRefusalLastAttemptAt = 44,
+  'clock_recovery_valid_batches': (w) => w.clockRecoveryValidBatches = 12,
   'synced_at': (w) => w.syncedAt = 8,
   'kept_for_transcript_recovery': (w) => w.keptForTranscriptRecovery = false,
   'clock_run': (w) => w.clockRun = 'run-2',
