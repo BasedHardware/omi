@@ -1,12 +1,12 @@
 # Future-date WAL recovery with unknown chronology
 
-`SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` is an on-by-default kill switch. V2
-batch uploads beyond `SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` (600 seconds
-by default) enter receipt recovery, including stamps only 601 seconds ahead.
-There is no 24-hour hole: clock error magnitude does not establish correctness.
-Unmarked within-tolerance skew, pre-2024 placement and deprecated V1 are unchanged.
-False/0/off/no restores typed HTTP 400 `invalid_capture_time` for new future
-admissions and the existing nonfuture estimated-upload behavior. The twelve dev/prod declarations are true, category `ops_kill`.
+`SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` defaults **off** in code and all twelve
+bindings, under the quality lead's 2026-11-15 rollout ruling. Only filename
+starts more than 24 hours ahead of receipt qualify for new future recovery.
+The ordinary 600-second tolerance stays unchanged; stamps above 600 seconds
+through exactly 24 hours ahead remain typed HTTP 400 `invalid_capture_time`.
+Previously anchored sources retain their provenance when time catches up.
+Nonfuture `_clke` estimates still use isolated untrusted admission when enabled.
 No customer data migration or GPU image change is included.
 
 ## App contract and dates
@@ -20,8 +20,9 @@ It cannot merge with a real conversation or use its estimate for coverage.
 These marked estimates remain backfill, rather than taking fresh capacity.
 A marked future run needs the stable client-device header. An unmarked file
 needs no device/run identity: its owner and canonical single-file content HMAC
-identify it. Recovered/estimated uploads must not attach an explicit conversation
-target: the server refuses it instead of treating estimated time as binding proof.
+identify it. Recovered/estimated uploads may carry a stale `conversation_id`. The server
+ignores that temporal target and admits only under isolated source identities;
+it never writes or attaches to the supplied conversation.
 
 For unmarked files an immutable transaction freezes a separate offset under
 `users/{uid}/sync_assignment/capture-clock-<source-scope>`, making the full
@@ -47,15 +48,19 @@ The dedicated decoder validates strict future frame counts/full decoded duration
 before yielding units. It never coalesces independent files. Normal marked estimates use the existing
 strict decoder per original source, without a new receipt offset or Auth/anchor
 read, and inherit the same identity/trust fences. Each source has
-a content-derived `receipt-<HMAC>` conversation identity; projection parts of
-that source may append to that same identity, but distinct sources never bind
-by synthetic time. Job, projection and assignment retain
+a content-derived `receipt-<HMAC>` source identity. Each admitted PCM unit/VAD part
+has a stable distinct `receipt-part-<UUID>` row identity from its source, unit start
+and VAD part index, independent of bundle IDs and provider word-edge jitter, so disconnected speech cannot overwrite another part.
+Distinct sources never bind by synthetic time. Job, projection and assignment retain
 `capture_time_trust=untrusted`. Conversation API serialization exposes that
 optional field, and the existing `clock` field is `imported`. This means date
 unknown; no app UI is added, so an older app shows the upload-date placement
 without a newly introduced visual badge. The existing `sync_clock_run` row
 partition also carries the opaque source identity, insulating upgraded rows
-from older temporal row readers that already honor clock partitions.
+from older temporal assignment readers that already honor clock partitions.
+This does not protect against old projectors dropping job trust before writing
+a row. Every untrusted source also skips canonical/temporal episode attachment
+and wall-clock duplicate proposals, so it remains a standalone Home recording.
 
 Nearest/overlap discovery, absorption and time-only coverage cannot bind
 another source in either direction. Same-source frame coverage remains valid
@@ -75,35 +80,42 @@ instead of falling through to legacy processing without isolation. The server ca
 older app stopped retrying: the client must resend/requeue it. Manual Sync
 retries eligible rows now; otherwise the existing retry scheduler applies.
 
-## Reader-first deployment, with final admissions on
+## Reader-first rollout and same-day enablement
 
-An old generic CPU job reader can discard the trust marker; a new optional
-field alone cannot exclude it. Deploy in this exact order:
+The code default, ten runtime overlay bindings and two listener chart bindings
+are false. An image-only rollout is safe without a prerequisite operator env
+mutation. Keep these committed false values while upgrading **and draining**
+every CPU reader and admitter: Cloud Run `backend`, `backend-sync`,
+`backend-sync-backfill` (including its CPU-guard-pinned image),
+`backend-integration`, and GKE `backend-listen`. Include active/terminating
+workers, traffic/tagged revisions, task URLs, operator restored-upload,
+projection and speech-redrive jobs/checkouts. An unset `OMI_ROLE` mounts both
+APIs and workers, so no service may be assumed reader-only.
 
-1. Temporarily apply `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED=false` to every
-   reachable admission host. This is a deployment override, not the committed
-   steady-state configuration. Verify the false value on all traffic targets.
-2. Roll and qualify all CPU readers on the new source: Cloud Run `backend`,
-   `backend-sync`, `backend-sync-backfill`, `backend-integration`, and GKE
-   `backend-listen`, including terminating pods, active CPU jobs, task URLs and
-   tagged revisions. Operator restored-upload/projection/speech-redrive
-   checkouts must also use the new build before operating on future jobs.
-   Ordinary/early job and RPC envelopes retain old-reader compatibility while
-   admissions are false; tests compare them to the fresh-main baseline.
-3. Record every traffic revision's `OMI_BACKEND_RELEASE_SHA` or build-proven
-   source digest, imageID, readiness, percentages and environment. No unknown
-   reachable CPU projector may remain. Apply this commit's true bindings to
-   all five hosts (ten environment overlay values and two listener chart
-   values), regenerate the runtime manifest, and verify serving readback.
+Owner: **quality lead**. Target: **the same day as image rollout**. Once every
+reachable reader and admitter serves an image containing this change, enable
+**everyone in one config change** setting all twelve bindings true, regenerate
+the runtime manifest and verify serving env/release readback. Do not leave a
+David-only cohort or an unexpanded default-off gate overnight.
 
-The ordinary full-manifest deploy renders the committed true values. Merely
-setting false on old services before invoking that deploy is insufficient:
-it would overwrite the override as readers roll one by one. Build the exact
-immutable CPU image through the existing backend `build-only` Actions mode,
-then perform the reader image roll retaining the temporary false admission
-value (or use an explicit transition manifest with all twelve values false).
-Only after the reader vector is qualified may the release owner apply the
-committed true manifest/charts. No deployment workflow is changed here.
+Required clean metrics after enablement: **zero new conversations from untrusted
+sources sharing an episode or duplicate group with a trusted source**, and
+**zero `invalid_capture_time` 400s for recoverable files**. Existing batch funding,
+capacity and safety refusals remain separate signals. Qualify using every
+traffic revision's `OMI_BACKEND_RELEASE_SHA` or source-proven image digest,
+imageID, readiness, percentages, env and actual task targets.
+
+At base `b23851a`, old `projection.py:588,696`, `live_upload.py:191` and
+`scheduler.py:666` filter new fields from WorkItem. Old `projection.py:322-327`
+then generates an ordinary capture-time identity and omits the clock partition.
+Such an old projector is unsafe for a new recovery job. By contrast, an already
+projected new row carries `sync_clock_run=<isolated part ID>`, and base
+`utils/sync/live_overlap.py:36-42` compares that existing partition, preventing
+time-only assignment to trusted rows. Old episode/duplicate readers lack the
+new guards. This is a limited row-level fence, not an order-independent
+capability gate. Adding an unknown WorkItem discriminator would also reject
+jobs on the unchanged GPU image; this patch does not add that incompatible belt.
+The committed false default and complete reader rollout remain mandatory.
 
 The GPU scheduler/compute/OrderedMerge path does not project conversations and
 updates the original full job map, retaining unknown fields. Its existing
@@ -133,3 +145,21 @@ provider-unit limit. The recovery threshold changes from 86400 seconds to the
 existing normal tolerance (600 seconds by default). No new numeric env or
 queue/provider capacity is added. Existing early-clock request packing remains
 unchanged; correcting its cross-request chronology needs a separate migration.
+
+## Owner-visible cardinality
+
+For N input files, expect N standalone recordings when each fits one decoded
+unit and has one connected speech region. Disconnected speech or unit splitting
+can produce more: rows = sum of connected projection parts over decoded units
+of each file. Requests are bounded by 20 files, 64 MiB, 3,600 seconds and
+360,000 WAL frames. For total bytes B, duration D and frame count F, the lower
+bound is max(ceil(N/20), ceil(B/64MiB), ceil(D/3600), ceil(F/360000)); actual
+packing can need more. About 20 hours requires at least 20 requests, with file
+count/byte limits potentially higher. Actual retained file sizes were not read.
+A 30-second-file example is 2,400 files, at least 120 requests and normally
+2,400 standalone recordings; this is an example, not an owner measurement.
+
+A future explicit, owner-scoped import-session container could reference these
+unchanged source rows without merging trusted chronology or audio. It needs a
+stable session identity across requests and Home rendering support; no such
+container or app UI is built here, pending the lead's go.

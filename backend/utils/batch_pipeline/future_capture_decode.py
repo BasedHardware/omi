@@ -11,11 +11,16 @@ from utils.sync.content_id import compute_sync_content_id
 from utils.sync.files import decode_files_to_wav
 from utils.capture.batch_coverage import prepare, piece_runs, provenance_unit
 from utils.sync.files import get_timestamp_from_path
-from utils.sync.receipt_clock import receipt_clock_offsets, require_future_upload
+from utils.sync.receipt_clock import receipt_clock_offsets, require_future_upload, retained_source_offsets
 
 
 def decode_future_units(paths, *, uid, device_id, received_at, max_seconds=3600, coverage_context=None):
-    future = [p for p in paths if is_implausible_future_capture_time(get_timestamp_from_path(p), now=received_at)]
+    retained = retained_source_offsets(paths, uid=uid, device_id=device_id, received_at=received_at)
+    future = [
+        p
+        for p in paths
+        if p in retained or is_implausible_future_capture_time(get_timestamp_from_path(p), now=received_at)
+    ]
     estimated = [
         p
         for p in paths
@@ -31,6 +36,7 @@ def decode_future_units(paths, *, uid, device_id, received_at, max_seconds=3600,
             received_at=received_at,
             max_seconds=max_seconds,
             coverage_context=coverage_context,
+            retained=retained,
         )
     for path in sorted(estimated, key=lambda p: (get_timestamp_from_path(p), os.path.basename(p))):
         identity = 'receipt-' + compute_sync_content_id(uid, [path])
@@ -47,7 +53,7 @@ def decode_future_units(paths, *, uid, device_id, received_at, max_seconds=3600,
         )
 
 
-def _future_units(paths, *, uid, device_id, received_at, max_seconds, coverage_context):
+def _future_units(paths, *, uid, device_id, received_at, max_seconds, coverage_context, retained):
     frames_per_unit = int(max_seconds * RATE)
     if frames_per_unit < 1 or max_seconds > 7200:
         raise ValueError('invalid dedicated capture-unit ceiling')
@@ -66,6 +72,7 @@ def _future_units(paths, *, uid, device_id, received_at, max_seconds, coverage_c
             device_id=device_id,
             received_at=received_at,
             source_ids=source_ids,
+            retained_offsets={p.replace('.bin', '.wav'): offset for p, offset in retained.items()},
         )
         for source in sorted(wavs, key=lambda p: (get_timestamp_from_path(p), os.path.basename(p))):
             pieces, maps, derivatives = prepare(uid, [source], decoded_frames, coverage_context)

@@ -188,6 +188,9 @@ def client(monkeypatch, tmp_path):
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *_a: 'content-1')
+    # This ordinary-route fixture has no retained source metadata service.
+    # Recovery admission overrides this with the real owner/content lookup.
+    monkeypatch.setattr(router, 'retained_source_offsets', lambda *a, **k: {})
     monkeypatch.setattr(router, 'create_sync_job', Mock())
     monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'held', 'result': {}})
     monkeypatch.setattr(router, 'mark_job_completed', Mock())

@@ -54,11 +54,16 @@ def receipt_clock_offsets(
     device_id: str | None,
     received_at: float,
     source_ids: dict[str, str] | None = None,
+    retained_offsets: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Freeze decoded-end offsets before staging or acknowledging any unit."""
     if not uid or not math.isfinite(received_at):
         raise FutureCaptureRetry('capture_clock_identity_required')
-    require_future_upload([path for path, _, _ in spans], received_at=received_at)
+    if not spans:
+        raise FutureCaptureRefused()
+    new_paths = [path for path, _, _ in spans if path not in (retained_offsets or {})]
+    if new_paths:
+        require_future_upload(new_paths, received_at=received_at)
     groups: dict[str, list[tuple[str, float, float]]] = {}
     for path, start, duration in spans:
         if not all(math.isfinite(value) for value in (start, duration)) or duration <= 0:
@@ -104,4 +109,31 @@ def receipt_clock_offsets(
     except Exception as error:
         # Includes exhausted Firestore transaction retries. No alternate
         # offset or successful acknowledgement can escape a failed anchor.
+        raise FutureCaptureRetry() from error
+
+
+def retained_source_offsets(paths, *, uid, device_id, received_at):
+    """Reclassification can never erase an already admitted owner/source anchor."""
+    from database.sync_capture_clock import retained_offsets
+    from utils.sync.capture_clock import is_early_capture_time
+    from utils.sync.content_id import compute_sync_content_id
+
+    scopes = {}
+    for path in paths:
+        stamp = get_timestamp_from_path(path)
+        if is_early_capture_time(stamp) or is_implausible_future_capture_time(stamp, now=received_at):
+            continue
+        if capture_clock_run_from_path(path):
+            if not device_id:
+                continue
+            scopes[path] = clock_scope(path, device_id)
+        else:
+            source_id = compute_sync_content_id(uid, [path])
+            scopes[path] = hashlib.sha256(f'file:{source_id}'.encode()).hexdigest()
+    try:
+        offsets = retained_offsets(uid, list(scopes.values()))
+        return {path: offsets[scope] for path, scope in scopes.items() if scope in offsets}
+    except Exception as error:
+        # An unavailable provenance read cannot turn accepted unknown time into
+        # trusted time or authorize a second conversation in a different bundle.
         raise FutureCaptureRetry() from error

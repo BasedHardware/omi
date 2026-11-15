@@ -145,6 +145,7 @@ def test_exhausted_anchor_transaction_is_retryable_without_alternate_offset(anch
 
 
 def test_coverage_trim_inherits_full_decode_anchor_and_retains_source_proof(anchors, tmp_path, monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')  # Accepted audio still drains after rollback.
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
     monkeypatch.setenv('CAPTURE_COVERAGE_PERCENT', '100')
     monkeypatch.setattr(coverage, 'admit', lambda *_a, **_k: SimpleNamespace(covered=[FrameRange(start=0, end=1)]))
@@ -220,8 +221,8 @@ def test_distinct_unmarked_bytes_with_identical_raw_stamp_never_share_identity(a
     assert len(anchors.rows) == 2
 
 
-@pytest.mark.parametrize('ahead', [601, 3600, 86400])
-def test_unmarked_clock_in_former_gap_is_receipt_recovered(anchors, tmp_path, ahead):
+@pytest.mark.parametrize('ahead', [86401, 90000])
+def test_unmarked_clock_beyond_day_is_receipt_recovered(anchors, tmp_path, ahead):
     [unit] = units(tmp_path / str(ahead), [RECEIVED + ahead], run=None, device=None)
     assert unit.stored_capture_at == RECEIVED - 1
 

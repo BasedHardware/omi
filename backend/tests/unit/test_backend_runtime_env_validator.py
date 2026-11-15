@@ -207,7 +207,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
-        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "true"},
+        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "false"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
         {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
@@ -4057,16 +4057,18 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_on_behind_kill_switch(environment):
+def test_future_capture_admissions_default_off_until_reader_rollout(environment):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'true', 'category': 'ops_kill'}
+    expected = {'value': 'false', 'category': 'ops_kill'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
     assert len(hosts) == 5
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for host in hosts:
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
         assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'true'}
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
-    assert {entry['name']: entry.get('value') for entry in values['env']}['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == 'true'
+    assert {entry['name']: entry.get('value') for entry in values['env']}[
+        'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
+    ] == 'false'

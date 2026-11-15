@@ -425,7 +425,7 @@ environments:
             value: 'true'
             category: ops_kill
           SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
@@ -1311,7 +1311,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -1703,7 +1703,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -2080,7 +2080,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -2420,7 +2420,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -3171,7 +3171,7 @@ environments:
             value: 'true'
             category: ops_kill
           SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
@@ -4190,7 +4190,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -4719,7 +4719,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -5240,7 +5240,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
@@ -5707,7 +5707,7 @@ environments:
               value: 'true'
               category: ops_kill
             SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'

@@ -177,7 +177,38 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
             actual = actual.replace(
                 'validated_frame_count = _frame_count\n', ''
             )  # New export only, no changed early code.
-        assert actual == main_source(path), path
+        baseline = main_source(path)
+        if path.endswith(('/pipeline.py', '/wal_audio_coverage.py')):
+            # Only the staging seam gains an opt-in provenance probe. Compare
+            # every other byte, then execute the default seam below as well.
+            def without_staging(text):
+                node = next(
+                    n
+                    for n in ast.parse(text).body
+                    if isinstance(n, ast.FunctionDef)
+                    and n.name
+                    == (
+                        'apply_wal_audio_coverage'
+                        if path.endswith('/wal_audio_coverage.py')
+                        else '_retrieve_file_paths_v2'
+                    )
+                )
+                lines = text.splitlines(keepends=True)
+                return ''.join(lines[: node.lineno - 1] + lines[node.end_lineno :])
+
+            if path.endswith('/wal_audio_coverage.py'):
+                actual = actual.replace(
+                    '        # This is an already decoded/admitted source. A later admission-switch\n'
+                    '        # rollback cannot revoke its clock or its exact source-frame proof.\n',
+                    '',
+                )
+                actual = actual.replace(
+                    'parse_sync_filename_timestamp(wav_path, enforce_window=False)',
+                    'parse_sync_filename_timestamp(wav_path)',
+                )
+            else:
+                actual, baseline = without_staging(actual), without_staging(baseline)
+        assert actual == baseline, path
 
 
 def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monkeypatch, tmp_path):
@@ -313,6 +344,29 @@ def test_old_readers_require_reader_first_roll_and_existing_row_partition_fences
     # New generic jobs must never reach an old CPU constructor/projector.
     with pytest.raises(TypeError, match='capture_time_trust'):
         old_contract.WorkItem(**future.to_dict())
+    # Real old readers filter before construction, so direct-constructor
+    # rejection above is not an admission capability fence.
+    filtered = old_contract.WorkItem(
+        **{key: value for key, value in future.to_dict().items() if key in old_contract.WorkItem.__dataclass_fields__}
+    )
+    assert not hasattr(filtered, 'capture_time_trust')
+    assert filtered.capture_at == future.capture_at
+    from utils.batch_pipeline import projection
+
+    tree = ast.parse(main_source('backend/utils/batch_pipeline/projection.py'))
+    function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_incoming')
+    scope = dict(projection.__dict__)
+    exec(compile(ast.Module(body=[function], type_ignores=[]), 'old:projection-build', 'exec'), scope)
+    binding = contracts.ProjectionBinding('synthetic', 'job', 'content', ('segment',))
+    payload = {
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'words': [{'word': 'Recovered source.', 'timestamp': [0, 1]}],
+        'diarization': {'turns': [{'start': 0, 'end': 1, 'speaker': 'SPEAKER_00'}]},
+    }
+    old_row = scope['build_incoming'](filtered, binding, payload)
+    assert old_row['id'] != future.conversation_id
+    assert old_row.get('capture_time_trust') is None and old_row.get('sync_clock_run') is None
     old_overlap = main_module('backend/utils/sync/live_overlap.py', monkeypatch)
     first = {
         'id': 'receipt-one',
@@ -355,3 +409,31 @@ def test_existing_gpu_scheduler_filters_unknown_work_fields_but_retains_full_job
     # The upgraded CPU reader reconstructs full admission provenance after compute.
     recovered = contracts.WorkItem(**{key: row[key] for key in contracts.WorkItem.__dataclass_fields__ if key in row})
     assert recovered.capture_time_trust == 'untrusted'
+
+
+@pytest.mark.parametrize('stamp', [788918400, NOW - 10, NOW + 170, NOW + 601, NOW + 86401])
+def test_default_staging_preserves_main_clock_and_bytes(monkeypatch, tmp_path, stamp):
+    from datetime import datetime, timezone
+    from tests.unit.test_sync_capture_time_skew import _Upload
+    from utils.sync import pipeline
+    from utils.sync.capture_clock import SyncCaptureTimeRejected
+
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+    monkeypatch.chdir(tmp_path)
+    clock = types.SimpleNamespace(
+        fromtimestamp=datetime.fromtimestamp, now=lambda *a: datetime.fromtimestamp(NOW, timezone.utc)
+    )
+    monkeypatch.setattr(pipeline, 'datetime', clock)
+    tree = ast.parse(main_source('backend/utils/sync/pipeline.py'))
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_retrieve_file_paths_v2')
+    scope = dict(pipeline.__dict__)
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), 'main:stage', 'exec'), scope)
+    outcomes = []
+    for index, stage in enumerate([scope['_retrieve_file_paths_v2'], pipeline._retrieve_file_paths_v2]):
+        upload = _Upload(f'audio_omi_pcm16_16000_{int(stamp)}.bin')
+        try:
+            [path] = stage([upload], 'synthetic', str(index))
+            outcomes.append(('accepted', Path(path).name, Path(path).read_bytes()))
+        except SyncCaptureTimeRejected as error:
+            outcomes.append(('refused', error.status_code, error.detail))
+    assert outcomes[0] == outcomes[1]

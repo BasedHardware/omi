@@ -33,9 +33,9 @@ NAME = f'audio_omi_pcm16_16000_clkeone_{int(FUTURE)}.bin'
 
 
 @pytest.mark.parametrize(
-    'ahead,accepted', [(170, True), (600, True), (601, True), (3600, True), (86400, True), (86401, True)]
+    'ahead,accepted', [(170, True), (600, True), (601, False), (3600, False), (86400, False), (86401, True)]
 )
-def test_future_recovery_covers_every_clock_beyond_normal_skew(ahead, accepted):
+def test_future_recovery_only_beyond_day_and_retains_normal_skew_refusal(ahead, accepted):
     now = datetime(2026, 11, 15, tzinfo=timezone.utc)
     reason = capture_clock.capture_time_rejection(now + timedelta(seconds=ahead), now=now)
     assert reason is (None if accepted else SyncCaptureTimeReason.REJECTED_FUTURE)
@@ -224,7 +224,7 @@ def test_requeued_estimate_cannot_fall_through_to_legacy(client, monkeypatch):
     router.create_sync_job.assert_not_called()
 
 
-def test_requeued_estimate_refuses_explicit_conversation_binding(client):
+def test_requeued_estimate_ignores_explicit_target_without_legacy_fallback(client):
     stamp = int(router.time.time()) - 10
     response = client.post(
         '/v2/sync-local-files',
@@ -233,5 +233,5 @@ def test_requeued_estimate_refuses_explicit_conversation_binding(client):
             ('files', (f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin', b'\x00' * 32, 'application/octet-stream'))
         ],
     )
-    assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
+    assert response.status_code == 503 and response.json()['code'] == 'sync_batch_unavailable'
     router.create_sync_job.assert_not_called()

@@ -190,7 +190,12 @@ from utils.subscription import (
     resolve_transcription_allowance,
 )
 from utils.sync import playback as sync_playback
-from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
+from utils.sync.input_limits import (
+    BackfillInputLimitExceeded,
+    BackfillStoragePressure,
+    validate_backfill_uploads,
+    validate_backfill_paths,
+)
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
@@ -214,6 +219,7 @@ from utils.sync.pipeline import (
     _reprocess_merged_conversations,
     _RESPONSE_FENCED_CONVERSATION_IDS,
     _retrieve_file_paths_v2,
+    _record_capture_time_admission,
     run_full_pipeline_background_async,
     _stage_files_to_gcs,
     build_person_embeddings_cache,
@@ -228,6 +234,7 @@ from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_DETAIL,
     SyncCaptureTimeRejected,
     capture_clock_offset,
+    capture_time_rejection,
     future_capture_clamp_enabled,
     is_early_capture_time,
     is_implausible_future_capture_time,
@@ -238,6 +245,7 @@ from utils.sync.receipt_clock import (
     ESTIMATED_POLICY,
     FutureCaptureRefused,
     require_future_upload,
+    retained_source_offsets,
 )
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -726,6 +734,7 @@ async def sync_local_files_v2(
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
     upload_filenames = [f.filename or '' for f in files]
+    supplied_conversation_id = conversation_id  # Authenticate original custody proof before ignoring a stale target.
     repair_identity = repair_job_id if isinstance(repair_job_id, str) else None
     capture_received_at = time.time()
     # Measurement only: how long the oldest file waited on the phone, and why.
@@ -744,6 +753,19 @@ async def sync_local_files_v2(
                 },
             )
         return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
+    try:
+        recovery_hint = future_capture_clamp_enabled() and any(
+            is_implausible_future_capture_time(get_timestamp_from_path(file.filename or ''), now=capture_received_at)
+            or (
+                capture_clock_run_from_path(file.filename or '')
+                and not is_early_capture_time(get_timestamp_from_path(file.filename or ''))
+            )
+            for file in files
+        )
+    except (IndexError, ValueError):
+        recovery_hint = False  # Ordinary staging still returns the typed malformed-name refusal.
+    if recovery_hint:
+        conversation_id = None  # No stale record wait, live-owner lookup or explicit binding for unknown time.
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
         # it before saving, archiving or decoding these bytes (audio retained).
@@ -783,19 +805,23 @@ async def sync_local_files_v2(
         x_omi_sync_capture_manifest,
         uid,
         client_device_context.client_device_id,
-        conversation_id,
+        supplied_conversation_id,
         upload_filenames,
     )
     manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
-    has_server_capture_proof = manifest_claims is not None and await run_blocking(
-        db_executor,
-        _capture_matches_server_conversation,
-        uid,
-        conversation_id,
-        filenames,
-        client_device_context.client_device_id,
-        snapshot_out=record_snapshot,
+    has_server_capture_proof = (
+        not recovery_hint
+        and manifest_claims is not None
+        and await run_blocking(
+            db_executor,
+            _capture_matches_server_conversation,
+            uid,
+            conversation_id,
+            filenames,
+            client_device_context.client_device_id,
+            snapshot_out=record_snapshot,
+        )
     )
     # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
@@ -928,7 +954,7 @@ async def sync_local_files_v2(
         # Use sync_executor, NOT storage_executor — storage is saturated with
         # background pipeline cleanup/GCS work and would queue the 202 response.
         try:
-            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
+            paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id, probe_future=True)
         except SyncCaptureTimeRejected:
             logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
@@ -939,6 +965,38 @@ async def sync_local_files_v2(
                 content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL},
             )
 
+        retained_capture_offsets = await run_blocking(
+            db_executor,
+            retained_source_offsets,
+            paths,
+            uid=uid,
+            device_id=client_device_context.client_device_id,
+            received_at=capture_received_at,
+        )
+        # Staging a future clock is only a probe. New 600s-to-24h stamps and
+        # disabled recovery still get today's typed 400; retained source proof
+        # alone can carry an admitted file through that band on a later retry.
+        for path in paths:
+            stamp = get_timestamp_from_path(path)
+            rejection = capture_time_rejection(
+                datetime.fromtimestamp(stamp, timezone.utc),
+                now=datetime.fromtimestamp(capture_received_at, timezone.utc),
+            )
+            if path not in retained_capture_offsets and rejection is not None:
+                _record_capture_time_admission(rejection, ahead_seconds=max(0, stamp - capture_received_at))
+                raise FutureCaptureRefused()
+        retained_capture = bool(retained_capture_offsets)
+        if retained_capture:
+            await run_blocking(sync_executor, validate_backfill_paths, paths)
+            if os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
+                raise HTTPException(503, detail='Historical recovery is paused; retain local audio')
+            lane_decision = replace(
+                lane_decision,
+                lane=SyncLane.BACKFILL,
+                trust=CaptureTimeTrust.UNTRUSTED,
+                reason='retained_capture_recovery',
+                maximum_age_seconds=None,
+            )
         early_capture_received_at = (
             capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
         )
@@ -949,10 +1007,15 @@ async def sync_local_files_v2(
             capture_clock_run_from_path(path) and not is_early_capture_time(get_timestamp_from_path(path))
             for path in paths
         )
-        if estimated_capture and isinstance(conversation_id, str):
-            # An estimated wall clock cannot authorize a named temporal bind.
-            raise FutureCaptureRefused()
-        capture_clock_policy = ESTIMATED_POLICY if estimated_capture else None
+        if future_capture or estimated_capture or retained_capture:
+            # Old WALs may carry a live conversation stamp. Keep custody proof
+            # authenticated against the submitted ID, but never use it as a
+            # temporal target for this isolated recovery source.
+            conversation_id = None
+            record_snapshot = {}
+        capture_clock_policy = (
+            RECEIPT_CLOCK_POLICY if retained_capture else ESTIMATED_POLICY if estimated_capture else None
+        )
         if future_capture:
             future_paths = [
                 path
@@ -971,8 +1034,6 @@ async def sync_local_files_v2(
                 )
             # Future clocks are a batch-only extension. Legacy and early-clock
             # admission/placement keep main's existing context and behavior.
-            if isinstance(conversation_id, str):
-                raise FutureCaptureRefused()
             capture_clock_policy = RECEIPT_CLOCK_POLICY
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
@@ -993,10 +1054,10 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                if early_capture_received_at is not None or future_capture or estimated_capture:
+                if early_capture_received_at is not None or future_capture or estimated_capture or retained_capture:
                     # Reset clocks prove no server-clock interval. Do not use
                     # a possibly years-wide client claim for session lookup;
-                    # explicit targets and source-frame evidence stay intact.
+                    # source-frame custody evidence keeps its original meaning.
                     audio_start_seconds = audio_end_seconds = None
                 else:
                     admitted_end = max(admitted_file_starts) + SESSION_CLAIM_TRAILING_SLACK_SECONDS
@@ -1077,7 +1138,9 @@ async def sync_local_files_v2(
                 source=source.value,
                 client_device_id=client_device_context.client_device_id,
                 byok_enabled=byok_enabled,
-                recording_session_id=recording_session_id,
+                recording_session_id=(
+                    None if future_capture or estimated_capture or retained_capture else recording_session_id
+                ),
                 policy=batch_policy,
                 loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
                 # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
@@ -1120,11 +1183,14 @@ async def sync_local_files_v2(
                         {
                             'capture_received_at': (
                                 capture_received_at
-                                if future_capture or estimated_capture
+                                if future_capture or estimated_capture or retained_capture
                                 else early_capture_received_at
                             )
                         }
-                        if early_capture_received_at is not None or future_capture or estimated_capture
+                        if early_capture_received_at is not None
+                        or future_capture
+                        or estimated_capture
+                        or retained_capture
                         else {}
                     ),
                     'recording_session_id': recording_session_id,
@@ -1155,7 +1221,7 @@ async def sync_local_files_v2(
             # this policy can never fall through to a legacy reader.
             raise FutureCaptureRefused()
 
-        if estimated_capture:
+        if estimated_capture or retained_capture:
             # A repaired clock must retain its per-source isolation even when
             # the batch cohort/language/capacity path declines this upload.
             return JSONResponse(

@@ -49,3 +49,23 @@ def frozen_offset(
         return float(offset)
 
     return anchor(client.transaction())
+
+
+def retained_offsets(uid: str, scopes: list[str]) -> dict[str, float]:
+    """Read immutable provenance before a source's filename can appear ordinary."""
+    if not scopes:
+        return {}
+    client = get_firestore_client()
+    collection = client.collection('users').document(uid).collection('sync_assignment')
+    refs = [collection.document(f'capture-clock-{scope}') for scope in set(scopes)]
+    offsets = {}
+    # One bounded BatchGet for the upload, including missing-document snapshots.
+    for snapshot in client.get_all(refs, transaction=client.transaction()):
+        row = snapshot.to_dict()
+        if row is None:
+            continue
+        offset = row.get('offset')
+        if row.get('version') != 1 or type(offset) not in (int, float) or not math.isfinite(offset):
+            raise ValueError('invalid retained capture-clock anchor')
+        offsets[snapshot.reference.id.removeprefix('capture-clock-')] = float(offset)
+    return offsets

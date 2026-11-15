@@ -52,12 +52,12 @@ def is_early_capture_time(capture_time: float) -> bool:
 
 
 def future_capture_clamp_enabled() -> bool:
-    return os.getenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true').strip().lower() not in ('false', '0', 'off', 'no')
+    return os.getenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false').strip().lower() in ('true', '1', 'on', 'yes')
 
 
 def is_implausible_future_capture_time(capture_time: float, *, now: float | None = None) -> bool:
     effective_now = time.time() if now is None else now
-    return capture_time > effective_now + maximum_future_skew_seconds()
+    return capture_time > effective_now + 24 * 60 * 60
 
 
 def is_receipt_clock_capture_time(capture_time: float, *, now: float | None = None) -> bool:

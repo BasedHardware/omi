@@ -43,6 +43,9 @@ def admission(client, anchors, monkeypatch):
     monkeypatch.setattr(intake, 'language_guard_enabled', lambda: False)
     monkeypatch.setattr(intake, 'resolve_batch_policy', lambda *a: BatchUnitPolicy(batch_enabled=True))
     monkeypatch.setattr(router, 'compute_sync_content_id', compute_sync_content_id)
+    from utils.sync.receipt_clock import retained_source_offsets
+
+    monkeypatch.setattr(router, 'retained_source_offsets', retained_source_offsets)
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda *a: BatchUnitPolicy(batch_enabled=True))
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda *a: legacy_dark.LegacySyncMode.ON)
     monkeypatch.setattr(
@@ -227,3 +230,56 @@ def test_requeued_estimate_with_run_token_meets_existing_upload_contract(admissi
     assert staged[0][0].capture_at == stamp
     assert result['lane'] == 'backfill'
     assert not anchors.rows  # The client's estimate is not replaced by a future-clock anchor.
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_changed_bundle_after_future_skew_clears_keeps_recovery_identity(admission, tmp_path, monkeypatch, enabled):
+    import time as system_time
+    from utils.sync import lanes
+
+    client, store, anchors, staged = admission
+    received = int(system_time.time())
+    clock = SimpleNamespace(time=lambda: received, monotonic=system_time.monotonic)
+    monkeypatch.setattr(router, 'time', clock)
+    monkeypatch.setattr(lanes, 'time', clock)
+    first = Path(pcm(tmp_path, received + 86400 + 300, 16000))
+    assert upload(client, first.name, first.read_bytes()).status_code == 202
+    original = staged[0][0]
+    monkeypatch.setattr(router, 'time', SimpleNamespace(time=lambda: received + 700, monotonic=system_time.monotonic))
+    monkeypatch.setattr(lanes, 'time', SimpleNamespace(time=lambda: received + 700))
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', enabled)
+    sibling = Path(pcm(tmp_path, received + 690, 16000))
+    response = client.post(
+        '/v2/sync-local-files',
+        files=[('files', (p.name, p.read_bytes(), 'application/octet-stream')) for p in (first, sibling)],
+    )
+    assert response.status_code == 202, response.text
+    recovered = next(item for item, _ in staged[1:] if item.capture_time_trust == 'untrusted')
+    assert recovered.capture_at == original.capture_at
+    assert recovered.conversation_id == original.conversation_id
+    assert response.json()['lane'] == 'backfill'
+
+
+@pytest.mark.parametrize('token', [False, True])
+def test_recovery_discards_stale_legacy_conversation_target(admission, tmp_path, monkeypatch, token):
+    client, store, anchors, staged = admission
+    verified_targets = []
+
+    def verify(_token, _uid, _device, target, _names):
+        verified_targets.append(target)
+        return None
+
+    monkeypatch.setattr(router, 'verify_capture_manifest', verify)
+    stamp = int(FUTURE) if not token else int(router.time.time()) - 10
+    path = Path(pcm(tmp_path, stamp, 16000))
+    if token:
+        path = path.rename(tmp_path / f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin')
+    response = client.post(
+        '/v2/sync-local-files?conversation_id=stale-live-conversation',
+        files=[('files', (path.name, path.read_bytes(), 'application/octet-stream'))],
+    )
+    assert response.status_code == 202, response.text
+    assert staged[0][0].capture_time_trust == 'untrusted'
+    assert staged[0][0].conversation_id.startswith('receipt-')
+    assert staged[0][0].conversation_id != 'stale-live-conversation'
+    assert verified_targets == ['stale-live-conversation']
