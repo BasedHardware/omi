@@ -2327,6 +2327,9 @@ class CaptureController extends ChangeNotifier
                 _recordingDevice?.type != DeviceType.omi,
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
+            deviceId: deviceId,
+            packetCounter: snapshot[0] | (snapshot[1] << 8),
+            fragmentIndex: snapshot[2],
           );
           // No wall timer: the silence end is checked as packets arrive.
           if (batched) _reportCaptureEnd(_captureEnd.packet(activeRecordingId, DateTime.now()));

@@ -82,7 +82,7 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
-from utils.episodes import composer_context, metrics, policy, transcript_receipts
+from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.episodes.visibility import hidden_member
@@ -782,9 +782,25 @@ def _named(uid: str, row: Mapping[str, Any], c: Any) -> list[dict[str, Any]]:
     return owner._named_segments(uid, _segments(row), c)
 
 
+def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
+    """A wait persisted under a longer limit never outlives the current limit."""
+    until = _utc(episode.get('compose_transcript_wait_until'))
+    started = _utc(episode.get('compose_transcript_wait_started_at'))
+    if until and started:
+        until = min(until, started + timedelta(seconds=episode_compose_transcript_wait_seconds()))
+    return compose_wait.stored_deadline(episode, until)
+
+
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
-    pending = _utc(row.get('home_transcription_pending_at')) or _utc(row.get('episode_transcription_pending_at'))
-    if episode_compose_transcript_wait_enabled() and pending and not _segments(row):
+    pending = compose_wait.transcript_anchor(row)
+    if pending is None and compose_wait.unstamped_audio_wait(row):
+        pending = datetime.now(timezone.utc)
+    if (
+        episode_compose_transcript_wait_enabled()
+        and pending
+        and not _segments(row)
+        and not compose_wait.settled_terminal(row)
+    ):
         return pending + timedelta(seconds=episode_compose_transcript_wait_seconds())
     return None
 
@@ -797,6 +813,7 @@ def _members(
     revisions: Optional[dict[str, Optional[datetime]]] = None,
     waiting_until: Optional[list[datetime]] = None,
     waiting_members: Optional[list[str]] = None,
+    wait_observations: Optional[dict[str, Any]] = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
@@ -812,6 +829,15 @@ def _members(
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
         due = _transcript_wait_until(row)
+        if due:
+            due = compose_wait.member_deadline(
+                row,
+                episode,
+                cid,
+                due,
+                datetime.now(timezone.utc),
+                wait_observations if wait_observations is not None else {},
+            )
         if due and due > datetime.now(timezone.utc):
             if waiting_until is not None:
                 waiting_until.append(due)
@@ -1150,9 +1176,15 @@ def _compose(
     member_revisions: dict[str, Optional[datetime]] = {}
     waiting_until: list[datetime] = []
     waiting_members: list[str] = []
-    wait_observed_at = datetime.now(timezone.utc)
+    wait_observations: dict[str, Any] = {}
     state, members = _members(
-        uid, episode, c, revisions=member_revisions, waiting_until=waiting_until, waiting_members=waiting_members
+        uid,
+        episode,
+        c,
+        revisions=member_revisions,
+        waiting_until=waiting_until,
+        waiting_members=waiting_members,
+        wait_observations=wait_observations,
     )
     if state == 'waiting':
         if waiting_until:
@@ -1162,15 +1194,20 @@ def _compose(
                 _utc(episode.get('compose_transcript_wait_until')) != due
                 or episode.get('compose_pending_membership') != sorted(_retained_ids(episode))
                 or episode.get('compose_transcript_wait_members') != waiting_members
+                or (
+                    compose_wait.anchored_wait_enabled() and episode.get(compose_wait.OBSERVATIONS) != wait_observations
+                )
             ):
                 written = _write(
                     uid,
                     episode_id,
                     c,
-                    {
-                        'compose_pending_since': episode.get('compose_pending_since') or now,
+                    lambda current: {
+                        'compose_pending_since': current.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
-                        'compose_transcript_wait_started_at': wait_observed_at,
+                        **compose_wait.observation_updates(
+                            wait_observations, waiting_members, now, current=current, due=due
+                        ),
                         'compose_transcript_wait_members': waiting_members,
                         'compose_pending_membership': sorted(_retained_ids(episode)),
                     },
@@ -1179,6 +1216,22 @@ def _compose(
                 if written != 'written':
                     return written  # A concurrent transcript cannot acquire a stale six-hour wait.
             _defer(uid, episode_id, c, max(0.0, (due - now).total_seconds()))
+        elif episode.get('compose_transcript_wait_until') and all(
+            cid in member_revisions for cid in episode.get('compose_transcript_wait_members') or []
+        ):
+            written = _write(
+                uid,
+                episode_id,
+                c,
+                {
+                    'compose_transcript_wait_until': None,
+                    'compose_transcript_wait_started_at': None,
+                    'compose_transcript_wait_members': None,
+                },
+                expected_member_revisions=member_revisions,
+            )
+            if written != 'written':
+                return written
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):
@@ -1243,6 +1296,7 @@ def _compose(
             episode.get('compose_pending_since')
             or _unacknowledged_transcript(episode, members)
             or (episode_compose_settle_enabled() and episode.get('composed_evidence') is None)
+            or episode.get('composed_membership') != sorted(_retained_ids(episode))
         ):
             _write(uid, episode_id, c, _trigger_stamp(episode, members), expected_member_revisions=member_revisions)
         return 'unchanged'
@@ -1603,7 +1657,7 @@ def needs_compose(
         (at for at in (_utc(episode.get('composed_at')), _utc(episode.get('composed_transcript_updated_at'))) if at),
         default=None,
     )
-    wait_until = _utc(episode.get('compose_transcript_wait_until'))
+    wait_until = _stored_wait_until(episode)
     wait_started = _utc(episode.get('compose_transcript_wait_started_at'))
     if episode_compose_transcript_wait_enabled() and wait_until and wait_until > datetime.now(timezone.utc):
         retained = sorted(_retained_ids(episode))
@@ -1611,9 +1665,14 @@ def needs_compose(
         if (
             episode.get('summary_needs_regeneration')
             or (waiting_members is not None and sorted(waiting_members) != retained)
-            or (visible_member_ids is not None and sorted(visible_member_ids) != retained)
+            or (
+                visible_member_ids is not None
+                and sorted(visible_member_ids) != sorted(set(retained) - set(episode.get('_member_absent_ids') or []))
+            )
         ):
             return True  # A removed blocker must reach _members again without a transcript receipt.
+        if set(episode.get('compose_transcript_wait_members') or []) & set(episode.get('_member_absent_ids') or []):
+            return True
         # Home already read the bounded member metadata. A newer transcript receipt
         # can wake this wait, including an episode that has never been composed.
         blockers = episode.get('compose_transcript_wait_members')
@@ -1839,7 +1898,7 @@ def schedule_for_conversation(
                 or (row is not None and (hidden_member(dict(row)) or not conversations_db.is_visible_conversation(row)))
             ):
                 return
-            wait_until = _utc(episode.get('compose_transcript_wait_until'))
+            wait_until = _stored_wait_until(episode)
             blockers = episode.get('compose_transcript_wait_members')
             if (
                 episode_compose_transcript_wait_enabled()

@@ -36,7 +36,14 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define RAW_BATCH_BYTES (RAW_BATCH_SECTORS * DISK_SECTOR_SIZE)
 #define RAW_BATCH_HEADER_BYTES 32U
 #define RAW_PACKETS_PER_BATCH ((RAW_BATCH_BYTES - RAW_BATCH_HEADER_BYTES) / RAW_AUDIO_PACKET_BYTES)
+/* Longest a record that exists only on the pendant waits in RAM before it is
+ * written to the card. */
 #define RAW_FLUSH_INTERVAL_MS 1000
+/* A partly filled batch whose records were all delivered to the phone live is a
+ * second copy, so it may wait this long for more audio. A full batch is still
+ * written at once: at speech rate that is one write about every four seconds
+ * instead of the whole 16 KiB batch being rewritten every second. */
+#define RAW_LIVE_FLUSH_INTERVAL_MS 4000
 
 #define RAW_META_MAGIC 0x4F4D4952U
 #define RAW_BATCH_MAGIC 0x4F4D4942U
@@ -153,6 +160,7 @@ typedef struct {
         } advance;
         struct {
             struct info_resp *resp;
+            bool flush; /* false: report without writing the card (status polls) */
         } info;
         struct {
             struct status_resp *resp;
@@ -175,7 +183,7 @@ static k_tid_t sd_worker_tid;
 static atomic_t sd_boot_ready;
 static atomic_t sd_io_low_power = ATOMIC_INIT(0);
 static atomic_t sd_dev_pm_supported = ATOMIC_INIT(1);
-static atomic_t pending_flush_on_ble_connect;
+static atomic_t pending_flush_on_ble_change;
 
 static bool is_mounted;
 static bool sd_enabled;
@@ -203,6 +211,9 @@ static bool current_batch_loaded;
 static bool current_batch_dirty;
 static bool cached_read_batch_valid;
 static int64_t batch_dirty_since_ms;
+/* The dirty batch holds a record the phone was never sent, and since when. */
+static bool batch_sole_copy_pending;
+static int64_t batch_sole_copy_since_ms;
 static uint8_t writing_error_counter;
 static uint32_t sd_write_drop_count;
 
@@ -286,6 +297,27 @@ static void start_empty_batch(uint64_t base_seq)
     current_batch_packets = 0;
     current_batch_loaded = true;
     current_batch_dirty = false;
+    batch_sole_copy_pending = false;
+}
+
+/* Whether the dirty batch has waited long enough to be written without filling
+ * up. Audio that exists only on the pendant keeps the one-second bound; a batch
+ * of records the phone is receiving live may wait for more audio.
+ *
+ * The longer wait needs a link. A record is marked live when the stack accepts
+ * it, not when the phone has it, and one queued just before a disconnect can
+ * reach the batch after the disconnect flush has already run. With no link,
+ * every record is back on the one-second bound. */
+static bool timed_flush_due(int64_t now_ms)
+{
+    if (!current_batch_dirty) {
+        return false;
+    }
+    if (batch_sole_copy_pending && (now_ms - batch_sole_copy_since_ms) >= RAW_FLUSH_INTERVAL_MS) {
+        return true;
+    }
+    int64_t limit_ms = ble_connected ? RAW_LIVE_FLUSH_INTERVAL_MS : RAW_FLUSH_INTERVAL_MS;
+    return (now_ms - batch_dirty_since_ms) >= limit_ms;
 }
 
 static int sync_media(void)
@@ -445,6 +477,7 @@ static int resolve_pending_commit(void)
 
     if (finalize_batch) {
         current_batch_dirty = false;
+        batch_sole_copy_pending = false;
         invalidate_read_batch_cache();
         writing_error_counter = 0;
         live_mark_eval_committed();
@@ -724,6 +757,7 @@ static int restore_tail_batch(void)
     current_batch_packets = header.packet_count;
     current_batch_loaded = true;
     current_batch_dirty = false;
+    batch_sole_copy_pending = false;
     return 0;
 }
 
@@ -817,6 +851,25 @@ static void live_mark_eval_committed(void)
     }
 }
 
+/* Ring position as a status reader should see it without touching the card:
+ * the committed state plus records still buffered in RAM. Never used to decide
+ * what may be read or reclaimed; those paths take the committed state. */
+static sd_ring_info_t ring_info_with_buffered(void)
+{
+    sd_ring_info_t info = ring_state;
+
+    if (current_batch_loaded && current_batch_dirty) {
+        uint64_t buffered_end = current_batch_base_seq + current_batch_packets;
+        if (buffered_end > info.write_seq) {
+            info.write_seq = buffered_end;
+        }
+        if (info.capacity_packets > 0U && (info.write_seq - info.read_seq) > info.capacity_packets) {
+            info.read_seq = info.write_seq - info.capacity_packets;
+        }
+    }
+    return info;
+}
+
 static int flush_current_batch(bool sync_requested)
 {
     int pending_ret = ensure_pending_resolved();
@@ -898,6 +951,7 @@ static int flush_current_batch(bool sync_requested)
     }
 
     current_batch_dirty = false;
+    batch_sole_copy_pending = false;
     invalidate_read_batch_cache();
     writing_error_counter = 0;
     live_mark_eval_committed();
@@ -907,6 +961,45 @@ static int flush_current_batch(bool sync_requested)
     }
 
     return 0;
+}
+
+/* Answer a ring info request. Only a flushing request touches the card: it
+ * commits the buffered batch first so the caller sees every queued record as
+ * readable. A peek reports the same position from RAM. */
+static void handle_ring_info_req(const sd_req_t *req)
+{
+    struct info_resp *resp = req->u.info.resp;
+    int res = 0;
+
+    if (req->u.info.flush) {
+        if (pending_commit_valid && resolve_pending_commit() < 0) {
+            res = -EIO;
+        } else if (current_batch_dirty) {
+            int flush_ret = flush_current_batch(false);
+            if (flush_ret < 0) {
+                res = flush_ret;
+            }
+        }
+    }
+
+    if (!resp) {
+        return;
+    }
+    if (res == 0) {
+        resp->info = req->u.info.flush ? ring_state : ring_info_with_buffered();
+    }
+    resp->res = res;
+    k_sem_give(&resp->sem);
+    release_resp_busy(resp->busy_flag);
+}
+
+/* Requests answered from RAM leave the SD host suspended. */
+static bool req_needs_card(const sd_req_t *req)
+{
+    if (req->type == REQ_WRITE_DATA) {
+        return false; /* the write path resumes the host itself when it flushes */
+    }
+    return !(req->type == REQ_GET_RING_INFO && !req->u.info.flush);
 }
 
 static int clear_ring_internal(bool sync_requested)
@@ -1078,8 +1171,13 @@ static void process_write_data_req(const sd_req_t *req)
     batch_live_session[current_batch_packets] = req->u.write.live_session;
     batch_live_index[current_batch_packets] = req->u.write.live_index;
     current_batch_packets++;
+    int64_t now_ms = k_uptime_get();
     if (!current_batch_dirty) {
-        batch_dirty_since_ms = k_uptime_get();
+        batch_dirty_since_ms = now_ms;
+    }
+    if (req->u.write.live_session == 0U && !batch_sole_copy_pending) {
+        batch_sole_copy_pending = true;
+        batch_sole_copy_since_ms = now_ms;
     }
     current_batch_dirty = true;
     format_timestamp_name(timestamp, compat_current_name, sizeof(compat_current_name));
@@ -1433,7 +1531,7 @@ void sd_worker_thread(void)
     sd_set_io_low_power(true);
 
     while (1) {
-        if (atomic_cas(&pending_flush_on_ble_connect, 1, 0)) {
+        if (atomic_cas(&pending_flush_on_ble_change, 1, 0)) {
             req.type = REQ_FLUSH;
             req.u.status.resp = NULL;
             goto handle_req;
@@ -1449,7 +1547,7 @@ void sd_worker_thread(void)
             sd_set_io_low_power(true);
         }
 
-        if (current_batch_dirty && (k_uptime_get() - batch_dirty_since_ms) >= RAW_FLUSH_INTERVAL_MS) {
+        if (timed_flush_due(k_uptime_get())) {
             sd_set_io_low_power(false);
             (void) flush_current_batch(false);
             sd_set_io_low_power(true);
@@ -1474,7 +1572,7 @@ void sd_worker_thread(void)
         }
 
     handle_req:
-        if (req.type != REQ_WRITE_DATA) {
+        if (req_needs_card(&req)) {
             sd_set_io_low_power(false);
         }
 
@@ -1522,29 +1620,7 @@ void sd_worker_thread(void)
             break;
 
         case REQ_GET_RING_INFO:
-            if (pending_commit_valid && resolve_pending_commit() < 0) {
-                if (req.u.info.resp) {
-                    req.u.info.resp->res = -EIO;
-                    k_sem_give(&req.u.info.resp->sem);
-                    release_resp_busy(req.u.info.resp->busy_flag);
-                }
-                break;
-            }
-            if (current_batch_dirty) {
-                int flush_ret = flush_current_batch(false);
-                if (req.u.info.resp && flush_ret < 0) {
-                    req.u.info.resp->res = flush_ret;
-                    k_sem_give(&req.u.info.resp->sem);
-                    release_resp_busy(req.u.info.resp->busy_flag);
-                    break;
-                }
-            }
-            if (req.u.info.resp) {
-                req.u.info.resp->info = ring_state;
-                req.u.info.resp->res = 0;
-                k_sem_give(&req.u.info.resp->sem);
-                release_resp_busy(req.u.info.resp->busy_flag);
-            }
+            handle_ring_info_req(&req);
             break;
 
         case REQ_READ_PACKETS:
@@ -1642,7 +1718,7 @@ void sd_worker_thread(void)
             break;
         }
 
-        if (req.type != REQ_WRITE_DATA) {
+        if (req_needs_card(&req)) {
             sd_set_io_low_power(true);
         }
     }
@@ -1766,13 +1842,17 @@ void sd_notify_time_synced(uint32_t utc_time)
 
 void sd_notify_ble_state(bool connected)
 {
-    if (connected && !ble_connected) {
+    /* Connect: publish buffered audio before the app first asks for the ring.
+     * Disconnect: records marked as sent live may never have reached the phone,
+     * so write what is buffered now. Records still queued behind this request
+     * are caught by timed_flush_due(), which allows one second without a link. */
+    if (connected != ble_connected) {
         sd_req_t req = {0};
         req.type = REQ_FLUSH;
         req.u.status.resp = NULL;
         int ret = k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
         if (ret != 0) {
-            atomic_set(&pending_flush_on_ble_connect, 1);
+            atomic_set(&pending_flush_on_ble_change, 1);
         }
     }
 
@@ -1845,7 +1925,7 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     return length;
 }
 
-int sd_ring_get_info(sd_ring_info_t *info)
+static int ring_info_request(sd_ring_info_t *info, bool flush, const char *op_name)
 {
     if (!info) {
         return -EINVAL;
@@ -1864,6 +1944,7 @@ int sd_ring_get_info(sd_ring_info_t *info)
     sd_req_t req = {0};
     req.type = REQ_GET_RING_INFO;
     req.u.info.resp = &resp;
+    req.u.info.flush = flush;
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
     if (ret != 0) {
@@ -1872,13 +1953,23 @@ int sd_ring_get_info(sd_ring_info_t *info)
         return ret;
     }
 
-    ret = wait_for_sd_worker_response(&resp.sem, 5000, "sd_ring_get_info");
+    ret = wait_for_sd_worker_response(&resp.sem, 5000, op_name);
     if (ret < 0) {
         return ret;
     }
 
     *info = resp.info;
     return resp.res;
+}
+
+int sd_ring_get_info(sd_ring_info_t *info)
+{
+    return ring_info_request(info, true, "sd_ring_get_info");
+}
+
+int sd_ring_peek_info(sd_ring_info_t *info)
+{
+    return ring_info_request(info, false, "sd_ring_peek_info");
 }
 
 int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read)

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง",
     "authenticationFailed": "การยืนยันตัวตนล้มเหลว กรุณาลองอีกครั้ง",
     "authFailedToSignInWithApple": "ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง",
+    "authAppleSignInFailedUseGoogle": "ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google",
     "authFailedToRetrieveToken": "ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง",
     "authUnexpectedErrorFirebase": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ ข้อผิดพลาด Firebase กรุณาลองอีกครั้ง",
     "authUnexpectedError": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ กรุณาลองอีกครั้ง",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "เรียกเก็บเงินรายปี",
     "paywallTrialSaveAmount": "ประหยัด {amount}",
     "paywallTrialCta": "เริ่มต้นในราคา {price}",
+    "paywallTrialCodeHint": "มีโค้ด Omi Pro ไหม ใส่โค้ดได้ในหน้าจอถัดไป",
     "paywallTrialCancelNote": "ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ",
     "paywallMonthlyFallbackTitle": "ยังไม่พร้อมสำหรับทั้งปีใช่ไหม",
     "paywallMonthlyFallbackTrialBody": "เริ่มแบบรายเดือนแทน ฟรี {days} วันเท่าเดิม จากนั้น {price} ต่อเดือน ยกเลิกได้ทุกเมื่อ",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "การชำระเงินถูกปฏิเสธ แพ็กเกจของคุณไม่เปลี่ยนแปลง",
     "monthlySwitchUnavailable": "ตอนนี้ยังเปลี่ยนไม่ได้ อัปเดตบัตรแทน",
     "monthlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายเดือนแล้ว",
-    "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน"
+    "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน",
+    "processingDeleteScopeChanged": "รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง"
 }

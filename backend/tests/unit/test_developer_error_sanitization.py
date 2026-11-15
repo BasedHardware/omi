@@ -175,15 +175,7 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
                 'source',
                 'geolocation',
                 'folder_id',
-                'created_at',
-                'home_transcription_pending_at',
-                'home_transcription_deadline_at',
-                'record_lane_owner',
-                'status',
-                'record_projection_revision',
-                'record_upload_failed',
-                'finalization_status',
-                'user_title',
+                *developer.transcribing_hold.READ_FIELDS,
             ],
         )
 

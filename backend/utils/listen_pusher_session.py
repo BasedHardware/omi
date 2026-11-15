@@ -36,6 +36,7 @@ from config.audio_outbox import enabled as audio_outbox_enabled
 from config.pusher_record import close_notify_enabled
 from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, RESULT_OPCODE, PendingClose
+from utils.listen_record_boundary import ListenRecordBoundary
 
 # Typed wrapper because utils.pusher.connect_to_trigger_pusher uses the untyped
 # `callable` builtin as a parameter annotation; cast to the proper signature.
@@ -118,6 +119,8 @@ FINALIZATION_STALE_GENERATION_ERROR = 'job_stale_generation'
 # the session falls back to v1 audio (before any v2 capture is committed) or
 # suspends v2 audio (mid-recording capability loss) — never blind v2.
 AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS = 4.0
+RECORD_CLOSE_DEADLINE_SECONDS = 30.0
+RECORD_CLOSE_ATTEMPT_SECONDS = 5.0
 
 
 @dataclass
@@ -166,6 +169,7 @@ class AudioRun:
     uncertain: bool = False
     failed_socket: Any = field(default=None, repr=False, compare=False)
     source_runs: Optional[List['AudioRun']] = field(default=None, repr=False, compare=False)
+    binding_pinned: bool = False
 
 
 @dataclass
@@ -181,6 +185,7 @@ class ListenPusherSessionDeps:
     random: Callable[[], float] = random.random
     now: Callable[[], float] = time.time
     monotonic: Callable[[], float] = time.monotonic
+    finish_recording_audio: Callable[[str], Awaitable[bool]] | None = None
 
 
 class ListenPusherSession:
@@ -218,9 +223,29 @@ class ListenPusherSession:
         self.audio_timeline_active = False
         self.audio_timeline_suspended = False
         self.record_close_supported = False
+        self.record_close_abort_supported = False
         self.record_close_unsupported_socket: object = None
-        self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled() else None
-        self.record_close_boundaries: OrderedDict[str, bool] | None = OrderedDict() if close_notify_enabled() else None
+        self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled(self.uid) else None
+        self.record_close_boundaries: OrderedDict[str, bool] | None = (
+            OrderedDict() if close_notify_enabled(self.uid) else None
+        )
+        self.deferred_record_closes: OrderedDict[str, None] | None = (
+            OrderedDict() if close_notify_enabled(self.uid) else None
+        )
+        self.record_boundary = (
+            ListenRecordBoundary(config.max_pending_requests) if close_notify_enabled(self.uid) else None
+        )
+
+    def audio_frame(self, conversation_id: str | None):
+        if (
+            close_notify_enabled(self.uid)
+            and audio_outbox_enabled()
+            and self.deps.finish_recording_audio is not None
+            and not self.config.is_multi_channel
+            and self.record_boundary is not None
+        ):
+            return self.record_boundary.frame(conversation_id)
+        return nullcontext(None)
 
     @property
     def uid(self):
@@ -389,6 +414,7 @@ class ListenPusherSession:
         *,
         conversation_id: Optional[str] = None,
         start_wall: Optional[float] = None,
+        binding_pinned: bool = False,
     ):
         """Buffer one accepted audio run with its binding and projected start.
 
@@ -400,16 +426,25 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
-        # Notify off is main's behaviour: an implicit run stays unbound until flush.
-        notify = close_notify_enabled()
+        # Notify off preserves main's implicit binding resolution at flush.
+        notify = close_notify_enabled(self.uid)
         current_conversation = self.deps.get_current_conversation_id() if notify else None
-        bound_conversation = (conversation_id or current_conversation) if notify else conversation_id
+        bound_conversation = (
+            conversation_id
+            if binding_pinned
+            else (conversation_id or current_conversation) if notify else conversation_id
+        )
         if notify and self.pending_record_closes is not None and self.record_close_boundaries is not None:
             if (
                 self.record_close_supported
                 and bound_conversation
                 and bound_conversation != current_conversation
                 and bound_conversation not in self.pending_record_closes
+                and not (
+                    binding_pinned
+                    and self.record_boundary is not None
+                    and self.record_boundary.inflight.get(bound_conversation)
+                )
             ):
                 # Terminal history is bounded. An old explicit offer cannot reopen a
                 # forgotten boundary: reject before acceptance; accepted/replay runs
@@ -436,7 +471,14 @@ class ListenPusherSession:
         while self.audio_total_size + len(chunk) > self.config.max_audio_buffer_size and self.audio_runs:
             old = self.audio_runs.popleft()
             self.audio_total_size -= len(old.data)
-        self.audio_runs.append(AudioRun(conversation_id=bound_conversation, start_wall=chunk_start_wall, data=chunk))
+        self.audio_runs.append(
+            AudioRun(
+                conversation_id=bound_conversation,
+                start_wall=chunk_start_wall,
+                data=chunk,
+                binding_pinned=binding_pinned,
+            )
+        )
         self.audio_total_size += len(chunk)
         self.audio_buffer_last_received = received_at
 
@@ -454,7 +496,7 @@ class ListenPusherSession:
             # completed there; leave the unprepared owner to socket-end drainage.
             return False
         if (
-            not close_notify_enabled()
+            not close_notify_enabled(self.uid)
             or not audio_outbox_enabled()
             or self.pending_record_closes is None
             or self.record_close_boundaries is None
@@ -464,15 +506,54 @@ class ListenPusherSession:
             return False  # Negative capability is terminal until a new connection.
         if conversation_id in self.record_close_boundaries:
             return self.record_close_boundaries[conversation_id]
+        if self.deferred_record_closes is not None and conversation_id in self.deferred_record_closes:
+            return False
         if conversation_id not in self.pending_record_closes:
             if len(self.pending_record_closes) >= self.config.max_pending_requests:
                 logger.warning('event=record_close_notify outcome=local_capacity')
                 self._record_close_fallback('capacity_full')
                 return False  # Never send an unretained fast close; use slow socket closure.
-            self.pending_record_closes[conversation_id] = PendingClose()
+            self.pending_record_closes[conversation_id] = PendingClose(
+                deadline=self.deps.monotonic() + RECORD_CLOSE_DEADLINE_SECONDS
+            )
         self.pending_request_event.set()
+        close = self.pending_record_closes[conversation_id]
+        if self.deps.monotonic() >= close.deadline:
+            if (
+                not close.abort_deadline
+                and self.record_close_abort_supported
+                and close.socket is self.pusher_ws
+                and self.pusher_connected
+            ):
+                close.abort_deadline = self.deps.monotonic() + RECORD_CLOSE_DEADLINE_SECONDS
+            if not close.abort_deadline or self.deps.monotonic() >= close.abort_deadline:
+                self.pending_record_closes.pop(conversation_id)
+                if self.deferred_record_closes is not None:
+                    self.deferred_record_closes[conversation_id] = None
+                    while len(self.deferred_record_closes) > self.config.max_pending_requests:
+                        self.deferred_record_closes.popitem(last=False)
+                self._record_close_fallback('timeout', close)
+                # No durable-tail proof/ACK within the separate abort deadline:
+                # retain the producer fence until actual EOF and repair.
+                return False
         if not self.record_close_supported or not self.pusher_connected:
             return False  # An old pusher must never interpret this as finalization.
+        if self.deps.finish_recording_audio is not None and self.record_boundary is not None:
+            self.record_boundary.retire(conversation_id, current=self.deps.get_current_conversation_id())
+            # No await before the ingress cutoff, including when a successor
+            # has not been persisted. Reservations also cover capability wait.
+        try:
+            async with asyncio.timeout(
+                min(RECORD_CLOSE_ATTEMPT_SECONDS, (close.abort_deadline or close.deadline) - self.deps.monotonic())
+            ):
+                return await self._send_recording_close(conversation_id)
+        except TimeoutError:
+            self._record_close_fallback('timeout', close)
+            return False
+
+    async def _send_recording_close(self, conversation_id: str) -> bool:
+        assert self.pending_record_closes is not None
+        assert self.record_close_boundaries is not None
         socket = self.pusher_ws
         async with self.audio_flush_lock:
             if not self.deps.is_active():
@@ -480,20 +561,37 @@ class ListenPusherSession:
             close = self.pending_record_closes.get(conversation_id)
             if close is None:
                 return conversation_id in self.record_close_boundaries
+            if close.abort_deadline and (
+                close.socket is not socket
+                or not self.record_close_abort_supported
+                or self.deps.finish_recording_audio is None
+            ):
+                return False  # A replacement socket cannot prove the old request.
             if close.socket is not socket:
                 close.socket, close.prepared, close.base, close.sent = socket, False, 0, 0
             phase = 'prepare'
             if close.prepared:
-                if self.deps.get_current_conversation_id() == conversation_id:
+                if self.deps.finish_recording_audio is not None:
+                    if not await self.deps.finish_recording_audio(conversation_id):
+                        return False
+                elif self.deps.get_current_conversation_id() == conversation_id:
                     # Lifecycle finalization precedes successor persistence. The
                     # receiver still owns this binding until that await finishes;
                     # keep accepting its tail and retain the prepared fence.
                     return False
                 await self._audio_bytes_flush(lock_held=True)
-                if self.deps.get_current_conversation_id() == conversation_id:
+                if (
+                    self.deps.finish_recording_audio is None
+                    and self.deps.get_current_conversation_id() == conversation_id
+                ):
                     return False
                 if any(
-                    (run.conversation_id or self.deps.get_current_conversation_id()) == conversation_id
+                    (
+                        run.conversation_id
+                        if run.binding_pinned
+                        else run.conversation_id or self.deps.get_current_conversation_id()
+                    )
+                    == conversation_id
                     for run in self.audio_runs
                 ):
                     return False
@@ -501,7 +599,7 @@ class ListenPusherSession:
                 # The earlier prepare control can yield while new runs are accepted;
                 # the final commit cannot. Late input is refused before acceptance.
                 close.frozen = True
-                phase = 'commit'
+                phase = 'abort' if close.abort_deadline else 'commit'
             if (
                 not self.pusher_connected
                 or not self.record_close_supported
@@ -519,6 +617,7 @@ class ListenPusherSession:
                             'request_id': close.request_id,
                             'phase': phase,
                             'watermark': close.base + close.sent,
+                            **({'source_tail_durable': True} if phase == 'abort' else {}),
                         }
                     ).encode()
                 )
@@ -618,6 +717,7 @@ class ListenPusherSession:
                         # envelope retries its pinned payload, so keeping its source
                         # runs would retain reconciled-away PCM outside the byte cap.
                         source_runs=None if timeline_active else list(group),
+                        binding_pinned=True,
                     )
                     envelope.header_timestamp = (
                         envelope.start_wall if honor_projection and envelope.start_wall is not None else legacy_header
@@ -630,7 +730,9 @@ class ListenPusherSession:
                         close_group()
                         envelopes.append(run)
                         continue
-                    run_conversation = run.conversation_id or current_conversation_id
+                    run_conversation = (
+                        run.conversation_id if run.binding_pinned else run.conversation_id or current_conversation_id
+                    )
                     if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
                         close_group()
                     group.append(run)
@@ -704,7 +806,18 @@ class ListenPusherSession:
                     )
                     if close is not None and close.socket is pusher_ws:
                         close.sent += len(envelope.data)
-                if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
+                if (
+                    current_conversation_id
+                    and current_conversation_id != self.last_synced_conversation_id
+                    and not (
+                        close_notify_enabled(self.uid)
+                        and self.record_boundary is not None
+                        and (
+                            current_conversation_id in self.record_boundary.retired
+                            or current_conversation_id == self.record_boundary.retired_current
+                        )
+                    )
+                ):
                     # Standalone announcement when no run carried the current
                     # conversation yet (legacy sessions with no buffered audio,
                     # or after every buffered rollover tail was flushed).
@@ -751,7 +864,7 @@ class ListenPusherSession:
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
                 await self._audio_bytes_flush()
-            if self.record_close_supported and self.pending_record_closes is not None:
+            if close_notify_enabled(self.uid) and self.pending_record_closes is not None:
                 for cid in list(self.pending_record_closes):
                     await self.request_recording_close(cid)
 
@@ -785,19 +898,28 @@ class ListenPusherSession:
                         continue  # An old socket cannot qualify its replacement.
                     ack = json.loads(msg[4:].decode('utf-8'))
                     self.record_close_supported = (
-                        close_notify_enabled()
+                        close_notify_enabled(self.uid)
                         and audio_outbox_enabled()
+                        and self.deps.finish_recording_audio is not None
+                        and not self.config.is_multi_channel
                         and self.record_close_unsupported_socket is not sock
                         and isinstance(ack, dict)
                         and ack.get('type') == 'record_close_ack'
                         and type(ack.get('version')) is int
                         and ack['version'] == RECORD_CLOSE_VERSION
                     )
+                    self.record_close_abort_supported = (
+                        self.record_close_supported and ack.get('abort_to_legacy') is True
+                    )
                     if self.record_close_supported and self.pending_record_closes is not None:
                         for cid in list(self.pending_record_closes):
                             await self.request_recording_close(cid)
                 elif header_type == RESULT_OPCODE:
-                    if not close_notify_enabled() or self.pending_record_closes is None or self.pusher_ws is not sock:
+                    if (
+                        not close_notify_enabled(self.uid)
+                        or self.pending_record_closes is None
+                        or self.pusher_ws is not sock
+                    ):
                         continue
                     ack = json.loads(msg[4:].decode('utf-8'))
                     if (
@@ -819,6 +941,10 @@ class ListenPusherSession:
                     elif ack.get('phase') == 'commit' and ack.get('status') == 'accepted' and close.frozen:
                         if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
                             self._remember_record_boundary(cid, accepted=True)
+                            self.pending_record_closes.pop(cid, None)
+                    elif ack.get('phase') == 'abort' and ack.get('status') in {'aborted', 'committed'} and close.frozen:
+                        if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
+                            self._remember_record_boundary(cid, accepted=ack['status'] == 'committed')
                             self.pending_record_closes.pop(cid, None)
                     elif ack.get('status') == 'unsupported':
                         self._record_close_fallback('capability_mismatch', close)
@@ -1188,8 +1314,14 @@ class ListenPusherSession:
             }
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
             self.record_close_supported = False
+            self.record_close_abort_supported = False
             self.record_close_unsupported_socket = None
-            if close_notify_enabled() and audio_outbox_enabled():
+            if (
+                close_notify_enabled(self.uid)
+                and audio_outbox_enabled()
+                and not self.config.is_multi_channel
+                and self.deps.finish_recording_audio is not None
+            ):
                 connect_kwargs['record_close_protocol'] = RECORD_CLOSE_VERSION
             if wants_timeline:
                 connect_kwargs['audio_timeline'] = AUDIO_TIMELINE_PROTOCOL

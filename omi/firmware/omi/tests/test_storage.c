@@ -146,8 +146,18 @@ bool sd_is_ready(void)
 {
     return z_sd_ready;
 }
+static int z_info_flush_calls;
+static int z_info_peek_calls;
+
 int sd_ring_get_info(sd_ring_info_t *info)
 {
+    z_info_flush_calls++;
+    *info = z_sd;
+    return 0;
+}
+int sd_ring_peek_info(sd_ring_info_t *info)
+{
+    z_info_peek_calls++;
     *info = z_sd;
     return 0;
 }
@@ -243,6 +253,10 @@ static void z_reset_all(void)
     z_notify_err = 0;
     z_advance_calls = 0;
     z_clear_calls = 0;
+    z_info_flush_calls = 0;
+    z_info_peek_calls = 0;
+    k_sem_init(&storage_wake_sem, 0, 1);
+    storage_status_refresh_deadline_ms = 0;
     z_on_sd_read = NULL;
     z_read_calls = 0;
     z_sd.read_seq = 0;
@@ -461,6 +475,83 @@ static void test_clear_terminates_read(void)
     printf("clear_read ok\n");
 }
 
+/* Status polling must not write the card. sd_ring_get_info() flushes the
+ * buffered batch, so with live persist a poll every 250 ms rewrote the whole
+ * batch four times a second for as long as a phone stayed connected. */
+static void test_status_poll_never_flushes(void)
+{
+    z_reset_all();
+    z_connect(&z_conn_b);
+    for (int i = 0; i < 40; i++) {
+        z_stub_now_ms += 250;
+        z_run(1);
+    }
+    CHECK(z_info_peek_calls >= 40);
+    CHECK(z_info_flush_calls == 0);
+
+    /* The app asking for the ring still gets the committed, flushed state. */
+    uint8_t info_cmd = 0x10;
+    z_send_cmd(&z_conn_b, &info_cmd, 1);
+    z_run(1);
+    CHECK(z_find_notify(0x02, &z_conn_b, 0) >= 0);
+    CHECK(z_info_flush_calls == 1);
+
+    /* So does starting a read, which must see every record queued so far. */
+    uint8_t rd[9] = {0x11};
+    sys_put_be64(0, rd + 1);
+    z_send_cmd(&z_conn_b, rd, sizeof(rd));
+    z_run(1);
+    CHECK(transfer_active);
+    CHECK(z_info_flush_calls == 2);
+    printf("status_poll_no_flush ok\n");
+}
+
+/* The worker sleeps on its wake semaphore when idle instead of polling each
+ * millisecond. The harness clock only moves when the code calls k_msleep(), so
+ * an idle connected worker must leave it untouched. */
+static void test_idle_worker_waits_for_wake(void)
+{
+    z_reset_all();
+    z_connect(&z_conn_b);
+    z_run(1);
+    int64_t before = z_stub_now_ms;
+    z_run(500);
+    CHECK(z_stub_now_ms == before);
+    CHECK(storage_wake_sem.count == 0);
+
+    /* Each source of work wakes it: a command, */
+    uint8_t info_cmd = 0x10;
+    z_send_cmd(&z_conn_b, &info_cmd, 1);
+    CHECK(storage_wake_sem.count == 1);
+    z_run(2);
+    CHECK(z_find_notify(0x02, &z_conn_b, 0) >= 0);
+    CHECK(storage_wake_sem.count == 0);
+
+    /* a stop request, */
+    uint8_t stop_cmd = 0x03;
+    z_send_cmd(&z_conn_b, &stop_cmd, 1);
+    CHECK(storage_wake_sem.count == 1);
+    z_run(2);
+    CHECK(storage_wake_sem.count == 0);
+
+    /* and a live mark from the SD worker. */
+    storage_queue_live_mark(z_sd.ring_id, 5, 9, 1);
+    CHECK(storage_wake_sem.count == 1);
+    z_run(2);
+    CHECK(storage_wake_sem.count == 0);
+
+    /* A request still waiting on the card keeps the short retry pace. */
+    z_sd_ready = false;
+    z_send_cmd(&z_conn_b, &info_cmd, 1);
+    before = z_stub_now_ms;
+    z_run(10);
+    CHECK(z_stub_now_ms > before);
+    z_sd_ready = true;
+    z_run(2);
+    CHECK(info_requested == 0);
+    printf("idle_wait ok\n");
+}
+
 int main(void)
 {
     test_epoch_command_survival();
@@ -471,6 +562,8 @@ int main(void)
     test_read_advance_done();
     test_disconnect_mid_read();
     test_clear_terminates_read();
+    test_status_poll_never_flushes();
+    test_idle_worker_waits_for_wake();
     printf("storage harness: %d failures\n", failures);
     return failures ? 1 : 0;
 }

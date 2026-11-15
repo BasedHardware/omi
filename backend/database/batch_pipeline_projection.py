@@ -28,6 +28,7 @@ from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_ASYNC_CLOCK,
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES,
     PROJECTION_FINISH_STEP_FIELD,
@@ -293,6 +294,31 @@ class ProjectionStore:
             log_projection_hold('sibling')
         receipt.update(settled)
         self._mirror(binding)
+
+    def retire_async_finish(self, segment_id: str) -> bool:
+        """Classify a legacy async receipt; never change its state or obligation.
+
+        The pinned job policy is authoritative. Re-read both documents before
+        writing so a concurrent completion or policy pin cannot retire sync work.
+        """
+
+        @firestore.transactional
+        def commit(transaction):
+            job = self.ref('jobs', segment_id).get(transaction=transaction).to_dict() or {}
+            ref = self.ref('results', segment_id)
+            row = ref.get(transaction=transaction).to_dict() or {}
+            raw = (job.get('policy_parts') or {}).get('projection')
+            if raw is None or not ProjectionPolicy.from_dict(raw).async_projection:
+                return False
+            if (
+                row.get('projection_state') not in PROJECTION_FINISH_STATES
+                or row.get(PROJECTION_FINISH_DUE_FIELD) == PROJECTION_FINISH_ASYNC_CLOCK
+            ):
+                return False
+            transaction.update(ref, {PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK})
+            return True
+
+        return bool(self.run(commit))
 
     def defer_finish(self, segment_id: str, state: str | None, now: float) -> bool:
         """Bound when the finish page retries a row whose last walk changed nothing.

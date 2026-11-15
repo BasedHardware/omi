@@ -8,6 +8,7 @@ import pycountry
 import stripe
 
 from database import redis_db
+from utils.trial_reminder import checkout_trial_terms
 import logging
 
 logger = logging.getLogger(__name__)
@@ -256,13 +257,25 @@ def create_subscription_checkout_session(
             'adaptive_pricing': {'enabled': False},
         }
 
+        submit_lines = []
+        if trial_period_days:
+            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            # The first charge is the most-disputed moment: say when and how much, above the button.
+            recurring = getattr(price, 'recurring', None)
+            submit_lines.append(
+                checkout_trial_terms(
+                    trial_period_days,
+                    getattr(price, 'unit_amount', None),
+                    currency,
+                    recurring.get('interval') if recurring else None,
+                )
+            )
         if currency == 'usd':
             # Stripe owns its currency glyphs. Keep USD explicit even where its
             # hosted template uses a dollar glyph rather than the app's US$.
-            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
-
-        if trial_period_days:
-            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            submit_lines.append('All amounts are in USD (US dollars).')
+        if submit_lines:
+            session_params['custom_text'] = {'submit': {'message': ' '.join(submit_lines)}}
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]

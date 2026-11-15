@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Offline storage sync for new multi-file firmware protocol (CMD_LIST_FILES 0x10,
@@ -44,6 +45,7 @@ class StorageSyncImpl implements StorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   final Timer Function(Duration, void Function()) _transferTimer;
+  final DateTime Function() _clock;
   // Restores the 5s any-packet first-data deadline and disables audio idle.
   // Incomplete transfers still throw; custody and cleanup are never rolled back.
   static const _audioLivenessOff = bool.fromEnvironment('OMI_STORAGE_AUDIO_LIVENESS_OFF');
@@ -54,8 +56,9 @@ class StorageSyncImpl implements StorageSync {
   static const _audioIdleTimeout = Duration(seconds: 60);
   static const _firstAudioTimeout = _audioLivenessOff ? Duration(seconds: 5) : _audioIdleTimeout;
 
-  StorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
-      : _transferTimer = transferTimer ?? ((delay, callback) => Timer(delay, callback));
+  StorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock})
+      : _transferTimer = transferTimer ?? ((delay, callback) => Timer(delay, callback)),
+        _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -806,10 +809,14 @@ class StorageSyncImpl implements StorageSync {
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     int totalFrames = bytesData.length;
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
-    int timerStart =
-        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
-    // A file without a device timestamp gets an estimated start: one run per file.
-    final clockRun = wal.timerStart > 0 ? null : (wal.clockRun ?? Wal.newClockRun());
+    final captureClock = deviceFileCaptureClock(
+      deviceSeconds: wal.timerStart,
+      durationSeconds: accurateDuration,
+      nowSeconds: _clock().millisecondsSinceEpoch ~/ 1000,
+      existingRun: wal.clockRun,
+    );
+    int timerStart = captureClock.start;
+    final clockRun = captureClock.run;
     int bytesLeft = 0;
 
     try {

@@ -80,6 +80,11 @@ def record_review_submission(
         raise HTTPException(status_code=401, detail="invalid submission token") from None
     supplied = submission_token.encode("utf-8") if submission_token is not None else b""
     if not supplied or not hmac.compare_digest(supplied, expected.encode("utf-8")):
+        report_lifecycle_alert(
+            body.platform,
+            'submission_token_rejected',
+            'Codemagic submission receipt token was rejected',
+        )
         raise HTTPException(status_code=401, detail='invalid submission token')
     if not is_recent_submission_timestamp(body.submitted_at):
         raise HTTPException(status_code=409, detail="submission receipt is stale")

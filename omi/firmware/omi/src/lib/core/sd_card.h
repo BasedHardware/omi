@@ -51,7 +51,15 @@ void sd_request_power(bool on);
 
 uint32_t write_to_file(uint8_t *data, uint32_t length);
 
+/** @brief Ring state after writing any buffered records to the card. */
 int sd_ring_get_info(sd_ring_info_t *info);
+/**
+ * @brief Ring state for status reporting, without writing the card.
+ *
+ * write_seq includes records still buffered in RAM. Use sd_ring_get_info()
+ * before reading or reclaiming, which need the committed state.
+ */
+int sd_ring_peek_info(sd_ring_info_t *info);
 int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read);
 int sd_ring_advance(uint64_t new_read_seq);
 int sd_ring_advance_id(uint64_t ring_id, uint64_t new_read_seq);

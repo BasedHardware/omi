@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "فشل تسجيل الدخول باستخدام Google، يرجى المحاولة مرة أخرى.",
     "authenticationFailed": "فشلت المصادقة. يرجى المحاولة مرة أخرى.",
     "authFailedToSignInWithApple": "فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.",
+    "authAppleSignInFailedUseGoogle": "لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.",
     "authFailedToRetrieveToken": "فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedErrorFirebase": "خطأ غير متوقع أثناء تسجيل الدخول، خطأ في Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedError": "خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "يتم الفوترة سنويًا",
     "paywallTrialSaveAmount": "وفر {amount}",
     "paywallTrialCta": "ابدأ مقابل {price}",
+    "paywallTrialCodeHint": "لديك رمز Omi Pro؟ أدخله في الشاشة التالية.",
     "paywallTrialCancelNote": "يمكنك الإلغاء في أي وقت. لا توجد رسوم أو غرامات.",
     "paywallMonthlyFallbackTitle": "لست مستعدًا لعام كامل؟",
     "paywallMonthlyFallbackTrialBody": "ابدأ بالاشتراك الشهري بدلًا من ذلك. نفس {days} أيام مجانًا، ثم {price} شهريًا. يمكنك الإلغاء في أي وقت.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "تم رفض الدفع. لم تتغير خطتك.",
     "monthlySwitchUnavailable": "التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.",
     "monthlySwitchDoneTitle": "أصبحت على الدفع الشهري",
-    "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا."
+    "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا.",
+    "processingDeleteScopeChanged": "تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى."
 }

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Accesso con Google non riuscito, riprova.",
     "authenticationFailed": "Autenticazione fallita. Riprova.",
     "authFailedToSignInWithApple": "Accesso con Apple non riuscito, riprova.",
+    "authAppleSignInFailedUseGoogle": "L'accesso con Apple non è riuscito. Riprova o continua con Google.",
     "authFailedToRetrieveToken": "Impossibile recuperare il token Firebase, riprova.",
     "authUnexpectedErrorFirebase": "Errore imprevisto durante l'accesso, errore Firebase, riprova.",
     "authUnexpectedError": "Errore imprevisto durante l'accesso, riprova",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Fatturato annualmente",
     "paywallTrialSaveAmount": "Risparmia {amount}",
     "paywallTrialCta": "Inizia per {price}",
+    "paywallTrialCodeHint": "Hai un codice Omi Pro? Inseriscilo nella schermata successiva.",
     "paywallTrialCancelNote": "Annulla in qualsiasi momento. Nessun costo, nessuna penale.",
     "paywallMonthlyFallbackTitle": "Non te la senti per un anno intero?",
     "paywallMonthlyFallbackTrialBody": "Inizia con il mensile. Gli stessi {days} giorni gratis, poi {price} al mese. Annulla quando vuoi.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Pagamento rifiutato. Il tuo piano non è cambiato.",
     "monthlySwitchUnavailable": "Il passaggio non è disponibile ora. Aggiorna invece la carta.",
     "monthlySwitchDoneTitle": "Ora sei sul mensile",
-    "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese."
+    "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese.",
+    "processingDeleteScopeChanged": "L'elenco in elaborazione è cambiato. Controllalo e riprova."
 }

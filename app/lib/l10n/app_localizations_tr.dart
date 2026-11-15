@@ -7040,6 +7040,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ile giriş yapılamadı, lütfen tekrar deneyin.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple ile giriş yapılamadı. Tekrar deneyin veya Google ile devam edin.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase jetonu alınamadı, lütfen tekrar deneyin.';
 
   @override
@@ -13416,6 +13419,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro kodunuz mu var? Bir sonraki ekranda girin.';
+
+  @override
   String get paywallTrialCancelNote => 'İstediğiniz zaman iptal edin. Ücret yok, ceza yok.';
 
   @override
@@ -15465,4 +15471,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Bugün $price ödendi. Her ay yenilenir.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
 }

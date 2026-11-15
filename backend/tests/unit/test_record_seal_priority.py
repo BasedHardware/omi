@@ -173,7 +173,7 @@ def test_coordinator_orders_urgent_first_deduplicates_and_keeps_existing_budget(
         monkeypatch.setattr(entrypoint, 'emit', events.append)
         monkeypatch.setattr(entrypoint.signal, 'signal', lambda *_: None)
         monkeypatch.setattr(entrypoint.sys, 'argv', ['record_seal_repair_job.py'])
-        monkeypatch.setattr(record_projection_rebuild, 'run_job', lambda: {'outcome': 'disabled'})
+        monkeypatch.setattr(record_projection_rebuild, 'run_job', lambda **kwargs: {'outcome': 'disabled'})
         assert entrypoint.main() == 0
         assert events[0] == {'event': 'record_seal_repair_urgent', 'outcome': 'index_unavailable'}
         assert events[-1]['outcome'] == 'ok'

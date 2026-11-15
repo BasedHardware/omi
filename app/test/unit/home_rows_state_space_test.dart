@@ -126,12 +126,10 @@ bool _serverUnfinished(ServerConversation m) =>
     m.homeStep != 'failed' && (m.clientProcessing != null || m.processingDeferred || homeStepOf(m) != null);
 
 bool _covers(HomeRow row, ServerConversation member) {
-  // Full episode IDs remain available for Delete, but cannot stand in for a failed
+  // Full episode IDs retain owner identity, but cannot stand in for a failed
   // member's own openable terminal row.
   if (member.homeStep == 'failed') return row.episode == null && row.conversation.id == member.id;
-  return row.conversation.id == member.id ||
-      row.episodeConversationIds.contains(member.id) ||
-      (row.episode?.members.any((m) => m.id == member.id) ?? false);
+  return row.conversation.id == member.id || (row.episode?.members.any((m) => m.id == member.id) ?? false);
 }
 
 List<String> _violations(_Scenario s, List<ServerConversation> members, Episode episode,
@@ -145,6 +143,17 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     // Episode-level rows only: a single recording's own row keeps its conversation id, and
     // the fold's synthetic episode carries an empty id.
     final isEpisodeRow = row.episode?.id == episode.id;
+    if (isEpisodeRow && !row.isTemporaryMember && !row.episodeConversationIds.containsAll(episode.conversationIds)) {
+      out.add('full-owner-identities-lost');
+    }
+    if (row.isTemporaryMember &&
+        (row.isProcessing ||
+            row.episode == null ||
+            row.episode!.members.length != 1 ||
+            row.episode!.members.single.id != row.conversation.id ||
+            (row.conversation.homeStep != 'ready' && !row.conversation.isLocked))) {
+      out.add('invalid-temporary-member');
+    }
     if (!episode.live && episode.composed && row.isProcessing && isEpisodeRow) {
       out.add('composed-episode-shows-processing');
     }
@@ -172,7 +181,9 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     if (rows[i].isProcessing && rows[i + 1].isProcessing && rows[i].day == rows[i + 1].day) {
       out.add('adjacent-processing-rows-not-folded');
     }
-    if (rows[i].startedAt.isBefore(rows[i + 1].startedAt)) out.add('rows-out-of-order');
+    if (!rows[i].isProcessing && rows[i].startedAt.isBefore(rows[i + 1].startedAt)) {
+      out.add('finished-rows-out-of-order');
+    }
   }
   for (var i = 0; i < members.length; i++) {
     final state = s.states[i];
@@ -185,7 +196,7 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
 }
 
 void main() {
-  test('a live owner hides every combination of closed member states', () {
+  test('a live owner retains unfinished members while ready and locked members have their own rows', () {
     for (final a in _Member.values) {
       for (final b in _Member.values) {
         final members = [_conversation('a', a, 0), _conversation('b', b, 1)];
@@ -197,7 +208,10 @@ void main() {
             processingConversations: members,
             groupAwaitingTranscript: true,
             now: _now);
-        expect(rows, isEmpty, reason: '$a / $b are owned by Listening');
+        final independent = members.where((m) => m.homeStep == 'ready' || m.isLocked).map((m) => m.id).toSet();
+        expect(rows.map((r) => r.conversation.id).toSet(), independent,
+            reason: '$a / $b: Listening owns unfinished members, while READY notes are immediately readable');
+        expect(rows.every((r) => r.isTemporaryMember && !r.isProcessing && r.episode?.id == episode.id), isTrue);
       }
     }
   });

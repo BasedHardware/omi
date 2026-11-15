@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google ile giriş yapılamadı, lütfen tekrar deneyin.",
     "authenticationFailed": "Kimlik doğrulama başarısız. Lütfen tekrar deneyin.",
     "authFailedToSignInWithApple": "Apple ile giriş yapılamadı, lütfen tekrar deneyin.",
+    "authAppleSignInFailedUseGoogle": "Apple ile giriş yapılamadı. Tekrar deneyin veya Google ile devam edin.",
     "authFailedToRetrieveToken": "Firebase jetonu alınamadı, lütfen tekrar deneyin.",
     "authUnexpectedErrorFirebase": "Giriş yaparken beklenmeyen hata, Firebase hatası, lütfen tekrar deneyin.",
     "authUnexpectedError": "Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin",
@@ -4143,6 +4144,7 @@
     "paywallTrialBilledYearly": "Yıllık faturalandırılır",
     "paywallTrialSaveAmount": "{amount} tasarruf edin",
     "paywallTrialCta": "{price} karşılığında başlayın",
+    "paywallTrialCodeHint": "Omi Pro kodunuz mu var? Bir sonraki ekranda girin.",
     "paywallTrialCancelNote": "İstediğiniz zaman iptal edin. Ücret yok, ceza yok.",
     "paywallMonthlyFallbackTitle": "Tam bir yıla henüz hazır değil misin?",
     "paywallMonthlyFallbackTrialBody": "Bunun yerine aylıkla başla. Yine {days} gün ücretsiz, ardından ayda {price}. İstediğin zaman iptal et.",
@@ -4688,5 +4690,6 @@
     "monthlySwitchDeclined": "Ödeme reddedildi. Planınız değişmedi.",
     "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
-    "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir."
+    "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
+    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin."
 }

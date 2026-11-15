@@ -243,12 +243,17 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
         'EPISODE_COMPOSER_DETAIL_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
+        'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+        'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+        'HOME_SETTLED_EMPTY_WIRE_ENABLED',
         'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
     ],
 )
 def test_episode_switch_missing_on_either_cohost_refuses_roll(gate, chart_fixture, env, key):
     values = chart_fixture / f'backend/charts/pusher/{env}_omi_pusher_values.yaml'
-    replace_once(values, f'  - name: {key}\n    value: "true"\n', '')
+    value = 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true'
+    replace_once(values, f'  - name: {key}\n    value: "{value}"\n', '')
     assert any(
         f'required identical flag {key} is missing on pusher' in error
         for error in gate.validate_preflight(chart_fixture)
@@ -428,5 +433,6 @@ def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkey
 )
 def test_quality_switch_binding_cannot_disappear_from_its_owning_cohost(gate, chart_fixture, environment, chart, key):
     values = chart_fixture / 'backend/charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
-    replace_once(values, f'  - name: {key}\n    value: "true"\n', '')
+    value = 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true'
+    replace_once(values, f'  - name: {key}\n    value: "{value}"\n', '')
     assert any(key in error and 'no longer' in error for error in gate.validate_preflight(chart_fixture))

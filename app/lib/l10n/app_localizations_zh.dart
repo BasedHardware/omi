@@ -6921,6 +6921,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => '无法通过 Apple 登录。请重试，或使用 Google 继续。';
+
+  @override
   String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
 
   @override
@@ -13195,6 +13198,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '有 Omi Pro 兑换码？请在下一个页面输入。';
+
+  @override
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
@@ -15203,4 +15209,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '今日已支付 $price。按月续订。';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
 }

@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "ورود با Apple انجام نشد. دوباره امتحان کنید یا با Google ادامه دهید.",
     "authFailedToRetrieveToken": "بازیابی نشانهِ Firebase ناموفق بود، لطفاً دوباره تلاش کنید.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "صورت‌حساب سالانه",
     "paywallTrialSaveAmount": "{amount} صرفه‌جویی کنید",
     "paywallTrialCta": "شروع با {price}",
+    "paywallTrialCodeHint": "کد Omi Pro دارید؟ آن را در صفحه بعد وارد کنید.",
     "paywallTrialCancelNote": "هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.",
     "paywallMonthlyFallbackTitle": "هنوز برای یک سال کامل آماده نیستید؟",
     "paywallMonthlyFallbackTrialBody": "به‌جای آن ماهانه شروع کنید. همان {days} روز رایگان، سپس ماهی {price}. هر زمان خواستید لغو کنید.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "پرداخت رد شد. طرح شما تغییری نکرد.",
     "monthlySwitchUnavailable": "تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.",
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
-    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود."
+    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
+    "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید."
 }

@@ -199,6 +199,10 @@ def with_memory_env(payload: str) -> str:
         {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED", "value": "true"},
+        {"name": "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED", "value": "false"},
+        {"name": "HOME_SETTLED_EMPTY_WIRE_ENABLED", "value": "true"},
         {"name": "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
@@ -207,6 +211,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "false"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
         {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
@@ -634,6 +639,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
+        r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -709,6 +715,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             for name in (
                 'HOSTED_LID_API_URL',
                 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
                 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
@@ -2040,75 +2048,40 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 '''
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+@pytest.fixture(scope='module')
+def missing_gateway_cloud_run_state():
+    # Normalize the complete synthetic revision once; the test still mutates
+    # independent on-disk JSON snapshots and runs the full real validator.
+    return with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        None,
+        'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
+        'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
+    ],
+)
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path, missing_gateway_cloud_run_state, missing):
     validator = load_validator()
+    state = missing_gateway_cloud_run_state
+    expected = {('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL')}
+    if missing is not None:
+        marker = f'{{"name": "{missing}", "value": "true"}},\n        '
+        assert marker in state
+        state = state.replace(marker, '')
+        expected.update(
+            (f'cloud_run/{host}', f'missing env {missing}')
+            for host in ('backend', 'backend-sync', 'backend-integration')
+        )
     state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
-        encoding='utf-8',
-    )
-
+    state_path.write_text(state, encoding='utf-8')
     errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-
-    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
-    assert errors[0].scope == 'cloud_run/backend'
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_INPUT_EXPIRING_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    # A complete synthetic revision carries the new kill switch. Removing it
-    # must still fail validation; completing the fixture must not weaken the guard.
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
+    assert len(errors) == len(expected)
+    assert {(error.scope, error.message) for error in errors} == expected
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
@@ -2649,11 +2622,46 @@ def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
     assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
 
 
-def test_backend_listen_chart_only_workflow_preserves_runtime_project():
+def test_backend_listen_chart_only_workflow_preserves_runtime_project(tmp_path):
+    import subprocess
+
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
     workflow_text = workflow_path.read_text(encoding='utf-8')
-
-    assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
+    workflow = yaml.safe_load(workflow_text)
+    steps = {s['name']: s for s in workflow['jobs']['helm-upgrade']['steps']}
+    dry_run = steps['Helm diff (dry run)']['run']
+    upgrade = steps['Upgrade backend-listen Helm chart']['run']
+    assert dry_run.count('--runtime-project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"') == 1
+    assert 'DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)' in dry_run
+    assert 'mapfile -t DEPLOY_ARGV < "$RUNNER_TEMP/listen-deploy.argv"' in upgrade
+    assert '"${DEPLOY_ARGV[@]}"' in upgrade
+    # Exercise the actual shared builder with distinct control/runtime projects;
+    # matching two old literal strings would miss a swapped or dropped binding.
+    argv_file = tmp_path / 'listen.argv'
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT.parent / '.github/scripts/listen_overlay_evidence.py'),
+            'argv',
+            '--output',
+            str(argv_file),
+            '--image-tag',
+            'abcdef1',
+            '--environment',
+            'prod',
+            '--project',
+            'infra-control',
+            '--runtime-project',
+            'based-hardware',
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    argv = argv_file.read_text().splitlines()
+    assert 'gcpProjectId=infra-control' in argv
+    assert 'runtimeGcpProjectId=based-hardware' in argv
+    assert 'runtimeGcpProjectId=infra-control' not in argv
 
 
 def test_repo_rendered_cloud_run_artifact_matches_manifest(tmp_path, monkeypatch):
@@ -4041,6 +4049,14 @@ def _assert_record_close_listener_bindings(config):
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
         assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT') == {
+            'value': '100',
+            'category': 'rollout',
+        }
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S') == {
+            'value': '',
+            'category': 'rollout',
+        }
         assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
@@ -4057,11 +4073,18 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
-@pytest.mark.parametrize('key', ['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'])
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false'),
+        ('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
+    ],
+)
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
     validator = load_validator()
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
-    value = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'
     path.write_text(payload)
@@ -4070,3 +4093,21 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key)
         ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
         *(('cloud_run/' + name, 'missing env ' + key) for name in ('backend', 'backend-sync', 'backend-integration')),
     }
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'false', 'category': 'rollout'}
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
+    for host in hosts:
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
+        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+        ]
+    values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
+    assert {entry['name']: entry.get('value') for entry in values['env']}[
+        'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
+    ] == 'false'

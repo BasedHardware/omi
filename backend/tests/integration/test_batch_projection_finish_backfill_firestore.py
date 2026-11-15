@@ -102,3 +102,23 @@ def test_competing_operator_cannot_commit_stale_checkpoint(store, monkeypatch):
     with pytest.raises(RuntimeError, match='checkpoint changed'):
         stamp_page(store, 100.0, apply=True)
     assert not store.projection_finish_backfill_complete()
+
+
+def test_async_clock_exclusion_rollback_and_retirement(store):
+    from database.batch_pipeline_projection import ProjectionStore
+
+    rows = store.client.collection(f'{store.namespace}_results')
+    jobs = store.client.collection(f'{store.namespace}_jobs')
+    for sid, clock, async_policy in [('async', -1.0, True), ('legacy', 1.0, True), ('sync', 2.0, False)]:
+        rows.document(sid).set({'projection_state': 'persisted', 'committed_at': 1.0, DUE: clock})
+        jobs.document(sid).set({'policy_parts': {'projection': {'async_projection': async_policy}}})
+    filtered = dict(states=('persisted', 'ready'), due_before=100.0, exclude_async=True)
+    assert store.projection_page(**filtered)[0] == ['legacy', 'sync']
+    projector_store = ProjectionStore(store)
+    assert projector_store.retire_async_finish('legacy')
+    assert not projector_store.retire_async_finish('sync')
+    assert store.projection_page(**filtered)[0] == ['sync']
+    # Drain discovery and rollback both retain every async obligation.
+    assert set(store.projection_page(states=('persisted', 'ready'))[0]) == {'async', 'legacy', 'sync'}
+    assert set(store.projection_page(states=('persisted', 'ready'), due_before=100.0)[0]) == {'async', 'legacy', 'sync'}
+    assert store.projection_page(**{**filtered, 'due_before': float('inf')})[0] == ['sync']
