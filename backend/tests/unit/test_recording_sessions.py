@@ -669,10 +669,10 @@ def _stored_conversation_with_audio(audio_files: list[dict[str, Any]]) -> dict[s
 
 
 @pytest.mark.parametrize('repair_enabled', [False, True])
-def test_empty_cleanup_publishes_the_snapshot_it_deleted(recording_store, monkeypatch, repair_enabled):
+@pytest.mark.parametrize('audio_files', [[], [{'path': 'chunks/uid/conversation/0.wav'}]])
+def test_empty_cleanup_publishes_the_snapshot_it_deleted(recording_store, monkeypatch, repair_enabled, audio_files):
     monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', str(repair_enabled).lower())
     conversation_path = ('users', 'uid', 'conversations', 'conversation')
-    audio_files = [{'path': 'chunks/uid/conversation/0.wav'}]
     recording_store.documents[conversation_path] = _stored_conversation_with_audio(audio_files)
     recording_sessions.create_or_get_recording_session(
         'uid', 'recording', 'conversation', firestore_client=recording_store
@@ -687,8 +687,8 @@ def test_empty_cleanup_publishes_the_snapshot_it_deleted(recording_store, monkey
         deleted_conversation=captured,
     )
 
-    if repair_enabled:
-        # Registered audio is protected before deletion under the new repair.
+    if audio_files:
+        # Registered audio is protected independently of transactional detach.
         assert deleted is False and conversation_path in recording_store.documents
         assert captured == {}
         return
