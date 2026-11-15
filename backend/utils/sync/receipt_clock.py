@@ -1,8 +1,4 @@
-"""Cross-request placement of admitted untrusted audio without changing identity.
-
-A frozen affine offset retains the device clock's order and gaps. It never
-slides after a later request; an interval ahead of trusted server time waits.
-"""
+"""Future-only receipt placement; existing early-clock intake never enters here."""
 
 import hashlib
 import json
@@ -11,64 +7,87 @@ from time import time
 
 from fastapi import HTTPException
 
-from database.sync_capture_clock import frozen_offset
-from utils.sync.capture_clock import is_early_capture_time
+from database.sync_capture_clock import CaptureClockRangeError, account_created_at, frozen_offset
+from utils.sync.capture_clock import (
+    INVALID_CAPTURE_TIME_CODE,
+    INVALID_CAPTURE_TIME_DETAIL,
+    is_implausible_future_capture_time,
+)
 from utils.sync.clock_run import capture_clock_run_from_path
+from utils.sync.files import get_timestamp_from_path
 
-POLICY = 'device_offset_v1'
-
-
-def clock_scope(path: str, origin: float, device_id: str) -> str:
-    identity = [device_id, capture_clock_run_from_path(path), 'early' if is_early_capture_time(origin) else 'future']
-    return hashlib.sha256(json.dumps(identity, separators=(',', ':')).encode()).hexdigest()
+POLICY = 'future_device_offset_v1'
 
 
-def inherited_offsets(
-    spans: list[tuple[str, float, float]],
-    *,
-    scope_offsets: dict[str, float],
-    device_id: str | None,
-    source_starts: dict[str, float] | None = None,
-    source_paths: dict[str, str] | None = None,
-) -> dict[str, float]:
-    """Derived/VAD spans inherit the original decoded file's immutable offset."""
-    return {
-        key: scope_offsets[
-            clock_scope((source_paths or {}).get(key, key), (source_starts or {}).get(key, start), device_id or '')
-        ]
-        for key, start, _ in spans
-    }
+class FutureCaptureRefused(HTTPException):
+    def __init__(self):
+        super().__init__(400, detail={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL})
+
+
+class FutureCaptureRetry(HTTPException):
+    def __init__(self, code: str = 'capture_clock_anchor_unavailable'):
+        super().__init__(
+            503, detail={'code': code, 'detail': 'Retain local audio and retry'}, headers={'Retry-After': '30'}
+        )
+
+
+def require_future_run(paths: list[str], *, received_at: float) -> None:
+    # Arrival order cannot distinguish an old backlog file from a backward
+    # reset without a run identity. Never infer a permanent unmarked run.
+    if not paths or any(
+        not capture_clock_run_from_path(path)
+        or not is_implausible_future_capture_time(get_timestamp_from_path(path), now=received_at)
+        for path in paths
+    ):
+        raise FutureCaptureRefused()
+
+
+def clock_scope(path: str, device_id: str) -> str:
+    run = capture_clock_run_from_path(path)
+    if not run:
+        raise FutureCaptureRefused()
+    return hashlib.sha256(json.dumps([device_id, run], separators=(',', ':')).encode()).hexdigest()
 
 
 def receipt_clock_offsets(
-    spans: list[tuple[str, float, float]],
-    *,
-    uid: str,
-    device_id: str,
-    received_at: float,
-    source_starts: dict[str, float] | None = None,
-    source_paths: dict[str, str] | None = None,
+    spans: list[tuple[str, float, float]], *, uid: str, device_id: str, received_at: float
 ) -> dict[str, float]:
-    """Resolve once per original decoded clock run, before coverage/VAD trim."""
+    """Freeze decoded-end offsets before staging or acknowledging any unit."""
     if not uid or not device_id or not math.isfinite(received_at):
-        raise HTTPException(status_code=503, detail='capture_clock_identity_required')
+        raise FutureCaptureRetry('capture_clock_identity_required')
+    require_future_run([path for path, _, _ in spans], received_at=received_at)
     groups: dict[str, list[tuple[str, float, float]]] = {}
-    for key, start, duration in spans:
+    for path, start, duration in spans:
         if not all(math.isfinite(value) for value in (start, duration)) or duration <= 0:
-            raise ValueError('invalid decoded capture-clock span')
-        origin = (source_starts or {}).get(key, start)
-        scope = clock_scope((source_paths or {}).get(key, key), origin, device_id)
-        groups.setdefault(scope, []).append((key, start, duration))
-    offsets = {}
-    # Receipt creates the immutable anchor. Processing time only releases a
-    # deferred interval when due; replaying its frozen receipt must not wedge it.
-    trusted_now = max(received_at, time())
-    for scope, members in groups.items():
-        raw_end = max(start + duration for _, start, duration in members)
-        offset = frozen_offset(uid, scope, raw_end, received_at)
-        if raw_end - offset > trusted_now + 0.000001 or min(start - offset for _, start, _ in members) < 0:
-            # Re-clamping one request would reverse/overlap earlier intervals.
-            # Keep all custody and retry when the immutable mapping is due.
-            raise HTTPException(status_code=503, detail='capture_clock_anchor_pending')
-        offsets.update({key: offset for key, _, _ in members})
-    return offsets
+            raise FutureCaptureRefused()
+        groups.setdefault(clock_scope(path, device_id), []).append((path, start, duration))
+    try:
+        lower_bound = account_created_at(uid)
+        offsets = {}
+        for scope, members in groups.items():
+            raw_end = max(start + duration for _, start, duration in members)
+            offset = frozen_offset(
+                uid,
+                scope,
+                raw_end,
+                received_at,
+                raw_start=min(start for _, start, _ in members),
+                lower_bound=lower_bound,
+            )
+            # Never slide an admitted run. A future mapped interval waits for
+            # trusted processing time; a reused/discontinuous clock is refused.
+            ahead = raw_end - offset - max(received_at, time())
+            if ahead > 24 * 60 * 60:
+                raise FutureCaptureRefused()
+            if ahead > 0.000001:
+                raise FutureCaptureRetry('capture_clock_anchor_pending')
+            offsets.update({path: offset for path, _, _ in members})
+        return offsets
+    except CaptureClockRangeError as error:
+        raise FutureCaptureRefused() from error
+    except HTTPException:
+        raise
+    except Exception as error:
+        # Includes exhausted Firestore transaction retries. No alternate
+        # offset or successful acknowledgement can escape a failed anchor.
+        raise FutureCaptureRetry() from error

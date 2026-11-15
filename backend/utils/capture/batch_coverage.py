@@ -10,7 +10,6 @@ from config import refactor_modes
 from models.capture_coverage import CaptureKey, CoverageRecord, FrameRange
 from utils.capture import coverage
 from utils.capture.sync_coverage import failed, key_for_claim, trim_maps
-from utils.sync.receipt_clock import POLICY as RECEIPT_CLOCK_POLICY
 
 logger = logging.getLogger(__name__)
 MAX_RUNS = 32
@@ -71,8 +70,6 @@ def provenance_unit(unit, runs):
 def decode_for_intake(paths, max_seconds, uid, context, *, decoder):
     receipt = (context or {}).get('capture_received_at')
     clock_kwargs = {'received_at': receipt} if receipt is not None else {}
-    if (context or {}).get('capture_clock_policy') == RECEIPT_CLOCK_POLICY:
-        clock_kwargs['clock_context'] = {'uid': uid, 'device_id': context.get('client_device_id')}
     if not context or not context.get('capture_evidence_claims') or not refactor_modes.shadow_or_serve(coverage.FLAG):
         return decoder(paths, max_seconds=max_seconds, **clock_kwargs)
     return decoder(paths, max_seconds=max_seconds, coverage_context={**context, 'uid': uid}, **clock_kwargs)

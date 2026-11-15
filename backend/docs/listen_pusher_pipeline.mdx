@@ -644,6 +644,11 @@ projection without deleting its archived bytes. Raw capacity/upload failures
 retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
 are audio receipts; `capture_committed` remains transcript coverage.
 `AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED` defaults to `true`; only literal `true`
+enables optional lossless FLAC for new mono PCM16 custody writes. Other values
+retain PCM. Both formats retain the same decoded samples and frame positions;
+media hashes pin stored plaintext, while `pcm_sha256` pins original samples.
+Existing FLAC readers remain available with this writer switch off.
 `AUDIO_CUSTODY_FRAMED_PERCENT` defaults to `0`, independently of archive percent.
 Admitted v2 16 kHz pusher windows retain frame starts, sample counts and gap
 markers across send pauses. The 60 s / 16 MiB and 4096-frame bounds still
@@ -6778,37 +6783,12 @@ unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
 jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
 
-V2 also recovers capture stamps strictly more than 24 hours ahead of server
-receive time under `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED` (code default on;
-`false`, `0`, `off`, or `no` stops new admissions). Dev/prod overlays and listener
-charts explicitly bind false for the first roll; enable only after every
-processing, projection and recovery reader is proven compatible. This does not
-increase the 600-second skew allowance; stamps between it and 24 hours remain
-refused. The existing upload normalizer still canonicalizes collision names before
-clock admission and content hashing; recovery does not change that identity.
-
-New identified early/future-clock admissions use durable context
-`capture_clock_policy=device_offset_v1`. One owner/device/clock-run offset maps
-original decoded ends to the first receive anchor, then preserves source
-clock differences/gaps across requests in any arrival order. Derived spans
-inherit that original scope. A future mapped end waits instead of moving the
-anchor. Future clocks missing stable device identity return retryable 503;
-already admitted contexts without this policy and unidentified early clocks
-retain the request packing described above. The same switch gates selecting
-the new policy for early clocks during the staged rollout.
-
-Recovered WorkItems and conversation rows retain `capture_time_trust=untrusted`:
-receipt placement cannot bind distinct conversations or cover other audio by
-time. Explicit identity and committed source-frame proofs retain their checks.
-Already admitted tasks and holds retain their frozen policy when admission is
-off or the worker clock later catches up. The phased rollout, exact config
-flip and required serving-reader readbacks are in
-[future-clock recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
+The future-clock batch extension is staged off with `SYNC_FUTURE_CAPTURE_CLAMP_ENABLED=false` in dev/prod. It requires an explicit `clke` run token and stable device identity, freezes `capture_clock_policy=future_device_offset_v1` only for future uploads, and marks only those WorkItems `capture_time_trust=untrusted`. Existing early-clock placement/documents remain unchanged. Details: [future capture recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final fresh-gate decision. Reasons include `recent_legacy_capture`,
 `legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
-capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`, `accepted_future_clamped`,
+capture-time admission dispositions (accepted, `accepted_future_skew`, `accepted_early_clamped`,
 `rejected_future`, `rejected_early`, `rejected_malformed`) are counted in
 `omi_sync_capture_time_total{outcome}` with an `event=sync_capture_time` log for
 every non-plain-accepted outcome. No account
@@ -9278,7 +9258,9 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 `sync_processing_hold.pending_since` and `last_content_at` in the existing
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
-rechecks the current row before any full notes/title/memory/task work. The
+rechecks the current row before any full notes/title/memory/task work.
+`SYNC_PROCESSING_QUIET_SECONDS` tunes that quiet window per call (default 600, clamped to 120 to 600; a
+malformed value keeps the default), so clients that send no end-of-recording proof can be moved without a release. The
 shared outbox remains production/emulator-only; dev hosts keep local eager
 processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account

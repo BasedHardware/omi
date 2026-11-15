@@ -199,15 +199,8 @@ from utils.stt.speaker_match import mean_embedding, select_speaker_match
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
 from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
-from utils.sync.clock_run import (
-    SYNC_CLOCK_RUN_FIELD,
-    clock_run_from_path,
-    segment_name_prefix,
-    capture_clock_run_from_path,
-)
-from utils.sync import receipt_clock
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD, clock_run_from_path, segment_name_prefix
 from utils.sync.capture_clock import (
-    CAPTURE_TIME_TRUST_FIELD,
     CaptureTimeWindowError,
     SyncCaptureTimeRejected,
     capture_clock_offset,
@@ -215,7 +208,6 @@ from utils.sync.capture_clock import (
     clamp_capture_time,
     early_capture_clock_offsets,
     is_early_capture_time,
-    is_receipt_clock_capture_time,
 )
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.recording_intent import user_selected_recording
@@ -1021,9 +1013,6 @@ def retrieve_vad_segments(
     path_dir = '/'.join(path.split('/')[:-1])
     # An estimated-clock run follows the audio into every derived segment.
     clock_prefix = segment_name_prefix(path)
-    if early_segment_times is not None:
-        run = capture_clock_run_from_path((source_frame_map or {}).get('capture_clock_source', path))
-        clock_prefix = f'clke{run}_' if run else ''
 
     try:
         for i, segment in enumerate(segments):
@@ -1773,28 +1762,24 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         server_timestamp = timestamp - capture_time_offset
         server_segment_end_timestamp = segment_end_timestamp - capture_time_offset
         # Minimal redrive attaches first; lineage-bound segments keep their plan.
-        target_conversation_id = (
-            target_conversation_id
-            if early_capture_offset
-            else minimal_redrive.segment_target(
-                redrive_mode,
-                target_conversation_id,
-                lineage_binding,
-                uid,
-                server_timestamp,
-                server_segment_end_timestamp,
-                source,
-                client_device_id,
-                is_locked,
-                clock_run,
-            )
+        target_conversation_id = minimal_redrive.segment_target(
+            redrive_mode,
+            target_conversation_id,
+            lineage_binding,
+            uid,
+            server_timestamp,
+            server_segment_end_timestamp,
+            source,
+            client_device_id,
+            is_locked,
+            clock_run,
         )
         target_conversation_id = target_conversation_id or covering_target(
             uid, source_position_map, path, device_id=client_device_id, recording_session_id=recording_session_id
         )
         closest_memory = (
             None
-            if target_conversation_id or early_capture_offset
+            if target_conversation_id
             else get_closest_conversation_to_timestamps(uid, server_timestamp, server_segment_end_timestamp)
         )
         candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
@@ -1881,8 +1866,6 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
-        if early_capture_offset:
-            incoming[CAPTURE_TIME_TRUST_FIELD] = 'untrusted'
         if clock_run:
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
@@ -2320,7 +2303,7 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
             closed_outcome,
             ahead_seconds,
         )
-    if outcome in (SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED, SyncCaptureTimeReason.ACCEPTED_FUTURE_CLAMPED):
+    if outcome is SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED:
         record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
@@ -2364,15 +2347,7 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             (
                 SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
                 if is_early_capture_time(timestamp)
-                else (
-                    SyncCaptureTimeReason.ACCEPTED_FUTURE_CLAMPED
-                    if is_receipt_clock_capture_time(timestamp, now=now.timestamp())
-                    else (
-                        SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW
-                        if ahead_seconds > 0
-                        else SyncCaptureTimeReason.ACCEPTED
-                    )
-                )
+                else SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED
             ),
             ahead_seconds=max(0.0, ahead_seconds),
         )
@@ -2521,7 +2496,6 @@ async def _run_sync_vad_phase(
     source_frame_maps: dict | None = None,
     segment_source_maps: dict | None = None,
     early_segment_times: dict[str, float] | None = None,
-    capture_received_at: float | None = None,
 ) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
@@ -2531,9 +2505,8 @@ async def _run_sync_vad_phase(
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
-            source_early = early_segment_times is not None and is_receipt_clock_capture_time(
-                ((source_frame_maps or {}).get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path)),
-                now=capture_received_at,
+            source_early = early_segment_times is not None and is_early_capture_time(
+                ((source_frame_maps or {}).get(path) or {}).get('capture_clock_at', get_timestamp_from_path(path))
             )
         except (IndexError, ValueError):
             source_early = False  # Internal invalid names retain their existing later validation.
@@ -2633,7 +2606,6 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
     raw_capture_paths: Optional[list[str]] = None,
     redrive_mode: Optional[str] = None,
     capture_received_at: Optional[float] = None,
-    capture_clock_policy: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -2738,7 +2710,6 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
         coverage_suppressed_all = False
         wav_paths = []
         decoded_frames: dict[str, list[int]] = {}
-        receipt_scope_offsets: dict[str, float] = {}
         source_frame_maps: dict[str, dict] = {}
         segment_source_maps: dict[str, tuple[dict, int] | None] = {}
         stage_timings = {}
@@ -2871,24 +2842,6 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     failure_key='invalid_audio',
                 )
                 return
-            if capture_clock_policy == receipt_clock.POLICY and capture_received_at is not None:
-                original_offsets = await run_blocking(
-                    sync_executor,
-                    lambda: receipt_clock.receipt_clock_offsets(
-                        [
-                            (path, get_timestamp_from_path(path), get_wav_duration(path))
-                            for path in wav_paths
-                            if is_receipt_clock_capture_time(get_timestamp_from_path(path), now=capture_received_at)
-                        ],
-                        uid=uid,
-                        device_id=client_device_id,
-                        received_at=capture_received_at,
-                    ),
-                )
-                receipt_scope_offsets = {
-                    receipt_clock.clock_scope(path, get_timestamp_from_path(path), client_device_id): offset
-                    for path, offset in original_offsets.items()
-                }
             try:
                 wav_paths, source_frame_maps, coverage_suppressed_all = await apply_sync_wal_audio_coverage(
                     uid,
@@ -2936,11 +2889,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     job_ref=_bounded_correlation_ref(job_id),
                     protected_paths=(
                         set(source_frame_maps)
-                        | {
-                            path
-                            for path in wav_paths
-                            if is_receipt_clock_capture_time(get_timestamp_from_path(path), now=capture_received_at)
-                        }
+                        | {path for path in wav_paths if is_early_capture_time(get_timestamp_from_path(path))}
                         if capture_received_at is not None
                         else source_frame_maps
                     ),
@@ -2975,11 +2924,10 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                             (path, get_timestamp_from_path(path), get_wav_duration(path))
                             for path in wav_paths
                             if capture_received_at is not None
-                            and is_receipt_clock_capture_time(
+                            and is_early_capture_time(
                                 (source_frame_maps.get(path) or {}).get(
                                     'capture_clock_at', get_timestamp_from_path(path)
-                                ),
-                                now=capture_received_at,
+                                )
                             )
                         ],
                         now=capture_received_at if capture_received_at is not None else time.time(),
@@ -2990,22 +2938,6 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                         },
                     ),
                 )
-                if receipt_scope_offsets:
-                    hold_clock_offsets = receipt_clock.inherited_offsets(
-                        [(path, get_timestamp_from_path(path), 0) for path in hold_clock_offsets],
-                        scope_offsets=receipt_scope_offsets,
-                        device_id=client_device_id,
-                        source_starts={
-                            path: (source_frame_maps.get(path) or {}).get(
-                                'capture_clock_at', get_timestamp_from_path(path)
-                            )
-                            for path in hold_clock_offsets
-                        },
-                        source_paths={
-                            path: (source_frame_maps.get(path) or {}).get('capture_clock_source', path)
-                            for path in hold_clock_offsets
-                        },
-                    )
                 cap_held = await hold_capture_if_exhausted(
                     uid,
                     wav_paths,
@@ -3078,19 +3010,11 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             admitted_early_times = early_segment_times if capture_received_at is not None else None
             if source_frame_maps:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths,
-                    segmented_paths,
-                    source_frame_maps,
-                    segment_source_maps,
-                    admitted_early_times,
-                    capture_received_at,
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps, admitted_early_times
                 )
             else:
                 vad_errors, vad_ms = await _run_sync_vad_phase(
-                    wav_paths,
-                    segmented_paths,
-                    early_segment_times=admitted_early_times,
-                    capture_received_at=capture_received_at,
+                    wav_paths, segmented_paths, early_segment_times=admitted_early_times
                 )
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
@@ -3395,14 +3319,7 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             request_capture_offset = await run_blocking(
                 sync_executor,
                 lambda: capture_clock_offset(
-                    max(
-                        (
-                            get_timestamp_from_path(path) + get_wav_duration(path)
-                            for path in segmented_paths
-                            if path not in early_segment_times
-                        ),
-                        default=0.0,
-                    )
+                    max(get_timestamp_from_path(path) + get_wav_duration(path) for path in segmented_paths)
                 ),
             )
             request_early_offsets = await run_blocking(
@@ -3417,14 +3334,6 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
                     source_starts=early_segment_times,
                 ),
             )
-
-            if receipt_scope_offsets:
-                request_early_offsets = receipt_clock.inherited_offsets(
-                    [(path, get_timestamp_from_path(path), 0) for path in request_early_offsets],
-                    scope_offsets=receipt_scope_offsets,
-                    device_id=client_device_id,
-                    source_starts=early_segment_times,
-                )
 
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge

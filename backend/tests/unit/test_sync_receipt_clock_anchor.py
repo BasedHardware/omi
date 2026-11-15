@@ -1,17 +1,17 @@
-"""Newest-first requests retain device/run chronology through immutable anchors."""
+"""Future-only run anchors retain chronology and fail closed at account bounds."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+import struct
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from database import sync_capture_clock as database
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_audio import pcm
-from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.future_capture_decode import decode_future_units
 from utils.sync import receipt_clock
 from utils.capture import coverage
 from models.capture_coverage import FrameRange
@@ -24,6 +24,7 @@ FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
 def anchors(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(receipt_clock, 'time', lambda: RECEIVED)
+    monkeypatch.setattr(receipt_clock, 'account_created_at', lambda _: RECEIVED - 4000)
 
     def transactional(fn):
         def commit(tx):
@@ -39,7 +40,7 @@ def anchors(monkeypatch):
     return store
 
 
-def units(directory, starts, *, received=RECEIVED, device='ios_abcd1234', owner='synthetic', run=None):
+def units(directory, starts, *, received=RECEIVED, device='ios_abcd1234', owner='synthetic', run='one', context=None):
     directory.mkdir()
     paths = []
     for stamp in starts:
@@ -48,30 +49,28 @@ def units(directory, starts, *, received=RECEIVED, device='ios_abcd1234', owner=
         target = source.with_name(name)
         source.rename(target)
         paths.append(str(target))
-    return list(decode_units(paths, received_at=received, clock_context={'uid': owner, 'device_id': device}))
+    return list(decode_future_units(paths, received_at=received, uid=owner, device_id=device, coverage_context=context))
 
 
-@pytest.mark.parametrize('clock', [FUTURE, 788918400.0], ids=['future', 'early'])
-def test_newest_first_requests_preserve_order_gaps_and_nonoverlap(anchors, tmp_path, clock):
-    newer = units(tmp_path / 'newer', [clock + 600, clock + 610])
+def test_newest_first_requests_preserve_order_gaps_and_nonoverlap(anchors, tmp_path):
+    newer = units(tmp_path / 'newer', [FUTURE + 600, FUTURE + 610])
     before = deepcopy(anchors.rows)
-    older = units(tmp_path / 'older', [clock, clock + 10], received=RECEIVED + 2)
+    older = units(tmp_path / 'older', [FUTURE, FUTURE + 10], received=RECEIVED + 2)
     all_units = sorted(older + newer, key=lambda unit: unit.capture_at)
-    assert anchors.rows == before  # Offset never moves on a later request.
+    assert anchors.rows == before
     assert [u.stored_capture_at for u in all_units] == [RECEIVED - 611, RECEIVED - 601, RECEIVED - 11, RECEIVED - 1]
     for left, right in zip(all_units, all_units[1:]):
         assert left.stored_capture_at + left.duration_seconds <= right.stored_capture_at
         assert right.stored_capture_at - left.stored_capture_at == right.capture_at - left.capture_at
-    assert all(u.stored_capture_at + u.duration_seconds <= RECEIVED for u in all_units)
 
 
 def test_devices_owners_and_runs_have_distinct_anchors(anchors, tmp_path, monkeypatch):
     monkeypatch.setenv('SYNC_CLOCK_RUN_PARTITION_ENABLED', 'false')
     scopes = [
-        ('ios_aabbccdd', 'one', 'owner-a'),
-        ('ios_11223344', 'one', 'owner-a'),
-        ('ios_aabbccdd', 'two', 'owner-a'),
-        ('ios_aabbccdd', 'one', 'owner-b'),
+        ('ios_aabbccdd', 'one', 'a'),
+        ('ios_11223344', 'one', 'a'),
+        ('ios_aabbccdd', 'two', 'a'),
+        ('ios_aabbccdd', 'one', 'b'),
     ]
     for index, (device, run, owner) in enumerate(scopes):
         [unit] = units(
@@ -81,7 +80,7 @@ def test_devices_owners_and_runs_have_distinct_anchors(anchors, tmp_path, monkey
     assert len(anchors.rows) == 4
 
 
-def test_admission_kill_switch_cannot_change_a_retained_anchor(anchors, tmp_path, monkeypatch):
+def test_admission_switch_cannot_change_an_admitted_anchor(anchors, tmp_path, monkeypatch):
     units(tmp_path / 'first', [FUTURE + 100])
     before = deepcopy(anchors.rows)
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
@@ -90,49 +89,71 @@ def test_admission_kill_switch_cannot_change_a_retained_anchor(anchors, tmp_path
     assert anchors.rows == before
 
 
-def test_newer_clock_jump_waits_instead_of_moving_or_clamping_an_anchor(anchors, tmp_path):
-    units(tmp_path / 'first', [FUTURE])
-    before = deepcopy(anchors.rows)
-    with pytest.raises(HTTPException) as error:
-        units(tmp_path / 'jump', [FUTURE + 1000], received=RECEIVED + 1)
-    assert error.value.status_code == 503
-    assert error.value.detail == 'capture_clock_anchor_pending'
-    assert anchors.rows == before
-
-
-def test_derived_source_preserves_the_original_run_scope(anchors):
-    path = 'audio_omi_pcm16_16000_u0_clkeabc_2147472000.wav'
-    offsets = receipt_clock.receipt_clock_offsets(
-        [(path, FUTURE, 10)], uid='synthetic', device_id='phone', received_at=RECEIVED
-    )
-    scope = receipt_clock.clock_scope(path, FUTURE, 'phone')
-    derivative = 'unrelated_2147472005.wav'
-    inherited = receipt_clock.inherited_offsets(
-        [(derivative, FUTURE + 5, 2)],
-        scope_offsets={scope: offsets[path]},
-        device_id='phone',
-        source_starts={derivative: FUTURE},
-        source_paths={derivative: path},
-    )
-    assert inherited[derivative] == offsets[path]
-
-
-def test_missing_device_cannot_create_an_account_wide_anchor(anchors):
-    with pytest.raises(HTTPException, match='capture_clock_identity_required'):
-        receipt_clock.receipt_clock_offsets(
-            [('file.wav', FUTURE, 1)], uid='synthetic', device_id='', received_at=RECEIVED
-        )
+@pytest.mark.parametrize('stamp', [FUTURE, 788918400])
+def test_unmarked_or_early_clock_never_gets_a_future_anchor(anchors, tmp_path, stamp):
+    with pytest.raises(receipt_clock.FutureCaptureRefused) as error:
+        units(tmp_path / 'unmarked', [stamp], run=None)
+    assert error.value.status_code == 400 and error.value.detail['code'] == 'invalid_capture_time'
     assert not anchors.rows
 
 
-def test_trimmed_collision_upload_keeps_original_run_and_full_decode_anchor(anchors, tmp_path, monkeypatch):
+def test_discontinuous_forward_run_requires_a_new_token(anchors, tmp_path):
+    units(tmp_path / 'first', [FUTURE])
+    before = deepcopy(anchors.rows)
+    with pytest.raises(receipt_clock.FutureCaptureRefused):
+        units(tmp_path / 'reset', [FUTURE + 90000], received=RECEIVED + 1)
+    assert anchors.rows == before
+    [unit] = units(tmp_path / 'new-run', [FUTURE + 90000], received=RECEIVED + 1, run='two')
+    assert unit.stored_capture_at == RECEIVED
+
+
+def test_pending_frozen_mapping_can_drain_when_server_clock_catches_up(anchors, tmp_path, monkeypatch):
+    units(tmp_path / 'first', [FUTURE])
+    before = deepcopy(anchors.rows)
+    with pytest.raises(receipt_clock.FutureCaptureRetry) as error:
+        units(tmp_path / 'pending', [FUTURE + 1000], received=RECEIVED + 1)
+    assert error.value.detail['code'] == 'capture_clock_anchor_pending'
+    monkeypatch.setattr(receipt_clock, 'time', lambda: RECEIVED + 1001)
+    [unit] = units(tmp_path / 'retry', [FUTURE + 1000], received=RECEIVED + 1)
+    assert unit.stored_capture_at == RECEIVED + 999 and anchors.rows == before
+
+
+def test_account_bound_refuses_a_wide_gap_before_creating_an_anchor(anchors, tmp_path):
+    with pytest.raises(receipt_clock.FutureCaptureRefused):
+        units(tmp_path / 'too-old', [FUTURE - 10000, FUTURE])
+    assert not anchors.rows
+
+
+def test_account_bound_also_checks_later_requests_without_moving_anchor(anchors, tmp_path):
+    units(tmp_path / 'first', [FUTURE])
+    before = deepcopy(anchors.rows)
+    with pytest.raises(receipt_clock.FutureCaptureRefused):
+        units(tmp_path / 'older', [FUTURE - 10000])
+    assert anchors.rows == before
+
+
+def test_exhausted_anchor_transaction_is_retryable_without_alternate_offset(anchors, tmp_path, monkeypatch):
+    def exhausted(*args, **kwargs):
+        raise ValueError('Failed to commit transaction in 5 attempts')
+
+    monkeypatch.setattr(receipt_clock, 'frozen_offset', exhausted)
+    with pytest.raises(receipt_clock.FutureCaptureRetry) as error:
+        units(tmp_path / 'contended', [FUTURE])
+    assert error.value.status_code == 503
+    assert error.value.headers == {'Retry-After': '30'}
+    assert not anchors.rows
+
+
+def test_coverage_trim_inherits_full_decode_anchor_and_retains_source_proof(anchors, tmp_path, monkeypatch):
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SERVE_PERCENT', '100')
-    monkeypatch.setenv('SYNC_CLOCK_RUN_PARTITION_ENABLED', 'false')
-    source = Path(pcm(tmp_path, int(FUTURE), 16000))
-    target = source.with_name(f'audio_omi_pcm16_16000_u0_clkeone_{int(FUTURE)}.bin')
-    target.write_bytes(source.read_bytes() * 2)  # Two one-second source frames.
-    source.unlink()
+    monkeypatch.setenv('CAPTURE_COVERAGE_PERCENT', '100')
+    monkeypatch.setattr(coverage, 'admit', lambda *_a, **_k: SimpleNamespace(covered=[FrameRange(start=0, end=1)]))
+    directory = tmp_path / 'trim'
+    directory.mkdir()
+    path = Path(pcm(directory, int(FUTURE), 32000)).rename(
+        directory / f'audio_omi_pcm16_16000_u0_clkeone_{int(FUTURE)}.bin'
+    )
+    path.write_bytes(b''.join(struct.pack('<I', 32000) + struct.pack('<h', sample) * 16000 for sample in (1, 2)))
     claim = {
         'capture_root': '123e4567-e89b-12d3-a456-426614174000',
         'clock_epoch': 1,
@@ -142,37 +163,25 @@ def test_trimmed_collision_upload_keeps_original_run_and_full_decode_anchor(anch
         'codec': 'pcm16',
         'channel': 'mono',
     }
-    monkeypatch.setattr(
-        coverage, 'admit', lambda *args, **kwargs: SimpleNamespace(covered=[FrameRange(start=1, end=2)])
-    )
     [unit] = list(
-        decode_units(
-            [str(target)],
+        decode_future_units(
+            [str(path)],
             received_at=RECEIVED,
-            clock_context={'uid': 'synthetic', 'device_id': 'phone'},
+            uid='synthetic',
+            device_id='ios_abcd1234',
             coverage_context={
                 'uid': 'synthetic',
-                'client_device_id': 'phone',
-                'capture_evidence_claims': {target.name: claim},
+                'capture_evidence_claims': {path.name: claim},
+                'client_device_id': 'ios_abcd1234',
             },
         )
     )
-    assert unit.duration_seconds == 1
-    assert unit.capture_at == FUTURE and unit.stored_capture_at == RECEIVED - 2
-    assert unit.coverage_runs[0]['start'] == 0 and unit.coverage_runs[0]['end'] == 1
-    before = deepcopy(anchors.rows)
-    [older] = units(tmp_path / 'older', [FUTURE - 10], device='phone', run='one')
-    assert older.stored_capture_at == RECEIVED - 12
-    assert anchors.rows == before and len(before) == 1
+    assert unit.capture_at == FUTURE + 1 and unit.stored_capture_at == RECEIVED - 1
+    assert unit.coverage_runs and unit.coverage_runs[0]['start'] == 1
 
 
-def test_pending_job_with_frozen_receipt_can_drain_when_server_time_catches_up(anchors, tmp_path, monkeypatch):
-    units(tmp_path / 'first', [FUTURE])
-    before = deepcopy(anchors.rows)
-    with pytest.raises(HTTPException, match='capture_clock_anchor_pending'):
-        units(tmp_path / 'pending', [FUTURE + 1000], received=RECEIVED + 1)
-    monkeypatch.setattr(receipt_clock, 'time', lambda: RECEIVED + 1001)
-    [unit] = units(tmp_path / 'retry', [FUTURE + 1000], received=RECEIVED + 1)
-    assert unit.stored_capture_at == RECEIVED + 999
-    assert unit.stored_capture_at + unit.duration_seconds <= receipt_clock.time()
-    assert anchors.rows == before
+def test_account_lower_bound_uses_auth_creation_metadata(monkeypatch):
+    monkeypatch.setattr(
+        database.auth, 'get_user', lambda _: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=100_000))
+    )
+    assert database.account_created_at('synthetic') == 100

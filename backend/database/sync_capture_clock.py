@@ -1,19 +1,35 @@
-"""Immutable per-device clock offsets in the existing sync-assignment metadata.
-
-One direct document transaction per decoded request/run; the first writer
-creates the anchor and every later request only reads it. No query or TTL can
-forget an offset while retained audio might still be retried.
-"""
+"""Immutable future-clock offsets in the existing sync-assignment metadata."""
 
 import math
 from typing import Any
 
+from firebase_admin import auth
 from google.cloud import firestore
 
 from database._client import get_firestore_client
 
 
-def frozen_offset(uid: str, scope: str, raw_end: float, received_at: float, *, firestore_client: Any = None) -> float:
+class CaptureClockRangeError(ValueError):
+    """The fixed mapping would place source audio before its owner's account."""
+
+
+def account_created_at(uid: str) -> float:
+    value = auth.get_user(uid).user_metadata.creation_timestamp
+    if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError('account creation time unavailable')
+    return value / 1000
+
+
+def frozen_offset(
+    uid: str,
+    scope: str,
+    raw_end: float,
+    received_at: float,
+    *,
+    raw_start: float,
+    lower_bound: float,
+    firestore_client: Any = None,
+) -> float:
     client = firestore_client or get_firestore_client()
     ref = client.collection('users').document(uid).collection('sync_assignment').document(f'capture-clock-{scope}')
 
@@ -24,9 +40,12 @@ def frozen_offset(uid: str, scope: str, raw_end: float, received_at: float, *, f
             offset = row.get('offset')
             if row.get('version') != 1 or type(offset) not in (int, float) or not math.isfinite(offset):
                 raise ValueError('invalid retained capture-clock anchor')
-            return float(offset)
-        offset = raw_end - received_at
-        transaction.set(ref, {'version': 1, 'offset': offset, 'raw_end': raw_end, 'received_at': received_at})
-        return offset
+        else:
+            offset = raw_end - received_at
+        if raw_start - offset < lower_bound:
+            raise CaptureClockRangeError('mapped capture predates account')
+        if row is None:
+            transaction.set(ref, {'version': 1, 'offset': offset, 'raw_end': raw_end, 'received_at': received_at})
+        return float(offset)
 
     return anchor(client.transaction())

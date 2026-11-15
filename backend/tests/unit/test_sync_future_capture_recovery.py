@@ -14,8 +14,6 @@ from tests.unit.test_sync_capture_time_skew import (
     client,
     _default_skew,
     _post_sync,
-    _run_skewed_segment,
-    _capture_time_counter,
     _Upload,
 )
 from tests.unit.test_batch_pipeline_audio import pcm
@@ -31,7 +29,7 @@ from utils.sync.content_id import compute_sync_content_id
 from routers import sync as router
 
 FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
-NAME = f'audio_omi_pcm16_16000_{int(FUTURE)}.bin'
+NAME = f'audio_omi_pcm16_16000_clkeone_{int(FUTURE)}.bin'
 
 
 @pytest.mark.parametrize('ahead,accepted', [(170, True), (601, False), (3600, False), (86400, False), (86401, True)])
@@ -42,15 +40,13 @@ def test_future_recovery_has_a_wide_closed_margin(ahead, accepted):
     assert capture_clock.maximum_future_skew_seconds() == 600
 
 
-def test_future_staging_keeps_filename_bytes_identity_and_closed_metric(tmp_path, monkeypatch):
+def test_future_staging_keeps_filename_bytes_and_identity(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    before = _capture_time_counter('accepted_future_clamped')
     upload = _Upload(NAME)
     original = upload.file.getvalue()
     [path] = pipeline._retrieve_file_paths_v2([upload], 'synthetic', 'job')
     assert Path(path).name == NAME and Path(path).read_bytes() == original
     assert get_timestamp_from_path(NAME) == FUTURE
-    assert _capture_time_counter('accepted_future_clamped') == before + 1
 
 
 def test_future_recovery_is_untrusted_backfill_and_historical_siblings_keep_lookback():
@@ -103,7 +99,7 @@ def test_future_batch_admission_freezes_receipt_and_discards_session_clock_bound
     assert start <= context['capture_received_at'] <= datetime.now(timezone.utc).timestamp()
     assert context['audio_start_seconds'] is context['audio_end_seconds'] is None
     assert context['filenames'] == [NAME]
-    assert context['capture_clock_policy'] == 'device_offset_v1'
+    assert context['capture_clock_policy'] == 'future_device_offset_v1'
 
 
 def test_future_recovery_without_device_identity_keeps_phone_custody(client):
@@ -148,67 +144,6 @@ def test_combined_suffix_and_future_route_uses_main_normalizer_and_content_ident
     assert captured['lane'] == ('backfill' if untrusted else 'fresh')
 
 
-@pytest.mark.parametrize('off', [False, True])
-def test_admitted_future_decode_keeps_raw_order_pcm_and_receipt_after_kill_switch(tmp_path, monkeypatch, off):
-    if off:
-        monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
-    receipt = 1800000000.0
-    paths = [pcm(tmp_path, int(FUTURE) + 100, 16000, sample=2), pcm(tmp_path, int(FUTURE), 16000, sample=1)]
-    units = list(capture_decode.decode_units(paths, received_at=receipt, max_seconds=1))
-    assert [u.capture_at for u in units] == [FUTURE, FUTURE + 100]
-    assert [u.stored_capture_at for u in units] == [receipt - 2, receipt - 1]
-    for index, unit in enumerate(units):
-        with wave.open(io.BytesIO(unit.wav)) as wav:
-            assert wav.readframes(16000) == bytes([index + 1, 0]) * 16000
-
-
-def test_mixed_future_and_trusted_audio_keep_separate_clock_policies(tmp_path):
-    receipt = 1800000000.0
-    paths = [pcm(tmp_path, int(FUTURE), 16000), pcm(tmp_path, int(receipt) - 10, 16000)]
-    trusted, untrusted = list(capture_decode.decode_units(paths, received_at=receipt))
-    assert trusted.capture_at == receipt - 10 and trusted.stored_capture_at is None
-    assert untrusted.capture_at == FUTURE and untrusted.stored_capture_at == receipt - 1
-
-
-@pytest.mark.asyncio
-async def test_future_vad_uses_frozen_receive_clock_after_real_time_catches_up(tmp_path, monkeypatch):
-    receipt = 1800000000.0
-    source = str(tmp_path / f'audio_omi_pcm16_16000_{int(FUTURE)}.wav')
-    pipeline.AudioSegment.silent(duration=2000, frame_rate=16000).export(source, format='wav')
-
-    async def inline(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
-    monkeypatch.setattr(capture_clock.time, 'time', lambda: FUTURE + 86400)
-    monkeypatch.setattr(pipeline, 'run_blocking', inline)
-    monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 0, 'end': 2}])
-    segments, origins = set(), {}
-    errors, _ = await pipeline._run_sync_vad_phase(
-        [source], segments, early_segment_times=origins, capture_received_at=receipt
-    )
-    assert not errors and set(origins) == segments
-    assert list(origins.values()) == [FUTURE]
-    offsets = capture_clock.early_capture_clock_offsets(
-        [(path, pipeline.get_timestamp_from_path(path), 2) for path in segments], now=receipt, source_starts=origins
-    )
-    assert all(pipeline.get_timestamp_from_path(path) - offsets[path] == receipt - 2 for path in segments)
-
-
-def test_receipt_clock_segment_never_uses_closest_conversation_and_retains_raw_identity():
-    receipt = datetime.now(timezone.utc).timestamp()
-    offset = capture_clock.early_capture_clock_offsets([('seg', FUTURE, 10)], now=receipt)['seg']
-    store, response, closest, _ = _run_skewed_segment(FUTURE, offset, True, receipt_clock=True)
-    assert closest == {} and not response['updated_memories']
-    rows = conversations(store)
-    assert len(rows) == 2
-    [stored] = [row for row in rows if row['id'] != 'live']
-    assert stored['capture_time_trust'] == 'untrusted'
-    assert stored['started_at'].timestamp() == pytest.approx(receipt - 10, abs=0.01)
-    assert stored['finished_at'].timestamp() == pytest.approx(receipt, abs=0.01)
-    assert not compatible_capture(stored, rows[0] if rows[0]['id'] == 'live' else rows[1])
-
-
 @pytest.mark.parametrize('untrusted_first', [False, True])
 def test_assignment_blocks_time_only_binding_in_both_directions_and_replays_identity(untrusted_first):
     store = StrictFirestore()
@@ -235,3 +170,22 @@ def test_batch_job_freezes_untrusted_time_even_without_manifest_or_compute_admis
     assert 'capture_time_trust' not in replace(item, capture_time_trust=None).to_dict()
     with pytest.raises(ValueError, match='capture_time_trust'):
         replace(item, capture_time_trust='device_bound')
+
+
+def test_unmarked_future_file_keeps_the_typed_refusal(client):
+    response = _post_sync(client, f'audio_omi_pcm16_16000_{int(FUTURE)}.bin')
+    assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
+
+
+def test_future_upload_cannot_fall_through_to_legacy(client, monkeypatch):
+    async def legacy(**kwargs):
+        return router.RecordUploadRoute.LEGACY
+
+    monkeypatch.setattr(router, 'registered_record_response', legacy)
+    response = client.post(
+        '/v2/sync-local-files',
+        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
+        files=[('files', (NAME, b'\x00' * 32, 'application/octet-stream'))],
+    )
+    assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
+    router.create_sync_job.assert_not_called()

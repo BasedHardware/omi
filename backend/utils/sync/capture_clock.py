@@ -7,8 +7,8 @@ naming-semantics mismatch. Every admission check tolerates that skew through
 the one bound owned here; stored/derived capture times clamp to server now so
 skew can never break ordering or windows. Clearly broken early/future clocks
 use receipt-clock placement with raw identity and explicit untrusted time.
-New device/run contexts use the durable offset in ``receipt_clock``; older
-contexts retain their request-frozen packing.
+Only the future batch extension uses ``receipt_clock``. Existing early-clock
+placement and persisted documents remain unchanged.
 
 Keep this module import-light: ``utils.request_validation`` imports it.
 """
@@ -75,9 +75,7 @@ def is_receipt_clock_capture_time(capture_time: float, *, now: float | None = No
 def early_capture_clock_offsets(
     spans: list[tuple[str, float, float]], *, now: float, source_starts: dict[str, float] | None = None
 ) -> dict[str, float]:
-    """Legacy placement for admitted contexts without a stable device/run policy.
-
-    Pack audio in raw order, ending at this request's receipt time.
+    """Place admitted reset-clock audio in raw order, ending at receipt time.
 
     Invalid clocks prove order, not wall-clock gaps (two resets can be years
     apart). Pack their durations together; keep raw keys and normal clocks.

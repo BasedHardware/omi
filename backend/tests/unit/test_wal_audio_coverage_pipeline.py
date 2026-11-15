@@ -111,6 +111,7 @@ def _wire(pipeline, monkeypatch, tmp_path, *, lineage_rows, frame_values=range(1
     pipeline._record_sync_job_outcome_async = AsyncMock(side_effect=lambda outcome, **kw: outcomes.append(outcome))
     monkeypatch.setattr(coverage_mod, 'get_timestamp_from_path', _ts)
     monkeypatch.setattr(coverage_mod, 'get_wav_duration', _duration)
+    monkeypatch.setattr(coverage_mod, 'parse_sync_filename_timestamp', _ts)
 
     lineage_module = sys.modules[pipeline.plan_segment_targets.__module__]
     lineage_calls = []
@@ -159,17 +160,7 @@ def _coverage_env(monkeypatch, coverage_flag=None):
         monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', coverage_flag)
 
 
-async def _run_batch(
-    module,
-    stubs,
-    tmp_path,
-    *,
-    claims=True,
-    session=ORIGIN,
-    raw_name=BIN_NAME,
-    capture_received_at=None,
-    capture_clock_policy=None,
-):
+async def _run_batch(module, stubs, tmp_path, *, claims=True, session=ORIGIN, raw_name=BIN_NAME):
     kwargs = dict(
         target_conversation_id=None,
         client_device_id='pendant',
@@ -178,134 +169,10 @@ async def _run_batch(
         audio_end_seconds=1760000100.0,
         task_mode=True,
         capture_evidence_claims={BIN_NAME: _claim()} if claims is True else claims,
-        capture_received_at=capture_received_at,
-        capture_clock_policy=capture_clock_policy,
     )
     await module.run_full_pipeline_background_async(
         'job-coverage', 'uid', [f'/tmp/{raw_name}'], 'omi', False, str(tmp_path / 'job'), **kwargs
     )
-
-
-@pytest.mark.asyncio
-async def test_future_receipt_clock_skips_time_coverage_and_preserves_every_unproven_frame(
-    coordinator, monkeypatch, tmp_path
-):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'off')
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
-    future_name = 'audio_pcm16_2147472000'
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[], wav_name=future_name)
-    coverage = pipeline.apply_safety_wal_coverage
-    captured = {}
-
-    async def observe(uid, paths, target, **kwargs):
-        captured.update(paths=paths, protected=kwargs['protected_paths'])
-        return await coverage(uid, paths, target, **kwargs)
-
-    monkeypatch.setattr(pipeline, 'apply_safety_wal_coverage', observe)
-    await _run_batch(
-        module,
-        stubs,
-        tmp_path,
-        claims=None,
-        session=None,
-        raw_name=f'{future_name}.bin',
-        capture_received_at=1800000000.0,
-    )
-    assert captured['protected'] == set(captured['paths'])
-    assert len(state.vad_seen) == len(state.processed) == 1
-    assert _read_payload(state.vad_seen[0]) == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in range(10))
-    assert not state.coverage_calls()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('raw', [2147472000, 788918400], ids=['future', 'early'])
-async def test_legacy_newest_first_requests_inherit_one_device_clock_offset(coordinator, monkeypatch, tmp_path, raw):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    retained = {}
-
-    def anchor(uid, scope, raw_end, receipt):
-        return retained.setdefault((uid, scope), raw_end - receipt)
-
-    monkeypatch.setattr(pipeline.receipt_clock, 'frozen_offset', anchor)
-    stored = {}
-    for index, stamp in enumerate([raw + 600, raw]):
-        directory = tmp_path / str(index)
-        directory.mkdir()
-        name = f'audio_pcm16_{stamp}'
-        _wire(pipeline, monkeypatch, directory, lineage_rows=[], wav_name=name, frame_values=[1, 2])
-        pipeline.sync_safety_wal_enabled = lambda: False
-
-        async def vad_phase(wavs, segments, early_segment_times=None, **kwargs):
-            segments.update(wavs)
-            early_segment_times.update({path: _ts(path) for path in wavs})
-            return [], 0
-
-        def process(path, uid, response, lock, errors, *args, **kwargs):
-            stored[_ts(path)] = _ts(path) - kwargs['early_capture_offset']
-            response['new_memories'].add(path)
-            return True
-
-        pipeline._run_sync_vad_phase = vad_phase
-        pipeline.process_segment = process
-        await _run_batch(
-            module,
-            stubs,
-            directory,
-            claims=None,
-            session=None,
-            raw_name=name + '.bin',
-            capture_received_at=1800000000.0 + index * 2,
-            capture_clock_policy=pipeline.receipt_clock.POLICY,
-        )
-    assert len(retained) == 1
-    assert stored == {raw: 1799999399.0, raw + 600: 1799999999.0}
-    assert stored[raw] + 1 < stored[raw + 600]
-
-
-@pytest.mark.asyncio
-async def test_future_member_cannot_shift_a_trusted_siblings_request_clock(coordinator, monkeypatch, tmp_path):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
-    receipt = pipeline.time.time()
-    paths = [str(tmp_path / f'audio_pcm16_{int(receipt) - 10}.wav'), str(tmp_path / 'audio_pcm16_2147472000.wav')]
-    for path in paths:
-        _write_labeled_wav(Path(path), [1, 2])  # One second per file.
-    pipeline.decode_files_to_wav = MagicMock(return_value=paths)
-    pipeline.sync_safety_wal_enabled = lambda: False
-
-    async def vad_phase(
-        wavs,
-        segments,
-        source_frame_maps=None,
-        segment_source_maps=None,
-        early_segment_times=None,
-        capture_received_at=None,
-    ):
-        segments.update(wavs)
-        early_segment_times[paths[1]] = _ts(paths[1])
-        return [], 0
-
-    pipeline._run_sync_vad_phase = vad_phase
-    offsets = {}
-
-    def process(path, uid, response, lock, errors, *args, **kwargs):
-        offsets[path] = kwargs['capture_time_offset'], kwargs['early_capture_offset']
-        response['new_memories'].add(path)
-        return True
-
-    pipeline.process_segment = process
-    await _run_batch(module, stubs, tmp_path, claims=None, session=None, capture_received_at=receipt)
-    assert offsets[paths[0]] == (0.0, 0.0)
-    assert offsets[paths[1]][0] == 0.0
-    assert _ts(paths[1]) - offsets[paths[1]][1] == pytest.approx(receipt - 1, abs=0.000001)
 
 
 @pytest.mark.asyncio
@@ -462,6 +329,7 @@ def _wire_real(
     )
     monkeypatch.setattr(coverage_mod, 'get_timestamp_from_path', _ts)
     monkeypatch.setattr(coverage_mod, 'get_wav_duration', _duration)
+    monkeypatch.setattr(coverage_mod, 'parse_sync_filename_timestamp', _ts)
     monkeypatch.setattr(recording_lineage, 'load_lineage', lambda *a, **k: (list(lineage_rows), None, False))
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda path, **k: [{'start': 0, 'end': _duration(path)}])
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')

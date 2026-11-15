@@ -50,7 +50,6 @@ def _filename(seconds_from_now: float) -> str:
 def _default_skew(monkeypatch):
     monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
-    monkeypatch.delenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', raising=False)
 
 
 # --- shared window ---
@@ -62,10 +61,10 @@ def test_within_tolerance_future_capture_time_is_admissible():
 
 
 def test_beyond_tolerance_future_capture_time_is_rejected_with_closed_reason():
-    one_hour_ahead = datetime.now(timezone.utc) + timedelta(hours=1)
-    assert capture_time_rejection(one_hour_ahead) is SyncCaptureTimeReason.REJECTED_FUTURE
+    five_years_ahead = datetime.now(timezone.utc) + timedelta(days=5 * 365)
+    assert capture_time_rejection(five_years_ahead) is SyncCaptureTimeReason.REJECTED_FUTURE
     with pytest.raises(CaptureTimeWindowError) as exc_info:
-        parse_sync_filename_timestamp(_filename(3600))
+        parse_sync_filename_timestamp(_filename(5 * 365 * 86400))
     assert exc_info.value.capture_time_reason is SyncCaptureTimeReason.REJECTED_FUTURE
     assert str(exc_info.value) == 'invalid timestamp'
 
@@ -106,7 +105,7 @@ def test_within_tolerance_skew_stays_fresh_and_clamps_decision_times():
 
 
 def test_beyond_tolerance_skew_is_untrusted_backfill():
-    decision = lanes.classify_sync_lane([_filename(3600)], client_device_id='dev-1')
+    decision = lanes.classify_sync_lane([_filename(5 * 365 * 86400)], client_device_id='dev-1')
     assert decision.lane is lanes.SyncLane.BACKFILL
     assert decision.trust is lanes.CaptureTimeTrust.UNTRUSTED
     assert decision.reason == 'invalid_capture_time'
@@ -142,7 +141,6 @@ def test_retrieve_file_paths_v2_accepts_and_stages_within_tolerance_skew(tmp_pat
 )
 def test_retrieve_file_paths_v2_rejects_implausible_times_typed(tmp_path, monkeypatch, filename, expected_outcome):
     monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     monkeypatch.chdir(tmp_path)
     before = _capture_time_counter(expected_outcome)
 
@@ -477,8 +475,7 @@ async def test_capture_hold_resolves_independently_of_admission_lever(
         assert admission == {'reason': reason}
 
 
-def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client, monkeypatch):
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+def test_v2_route_rejects_five_year_future_stamp_with_typed_400(client):
     before = _capture_time_counter('rejected_future')
     response = _post_sync(client, _filename(5 * 365 * 86400))
 
@@ -597,14 +594,10 @@ async def test_vad_segments_inherit_early_source_clock_even_after_crossing_floor
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('retrim', [False, True])
-@pytest.mark.parametrize('raw_capture', [1704067199, 2147472000], ids=['early', 'future'])
-async def test_coverage_derivatives_keep_original_receipt_clock_through_vad(monkeypatch, tmp_path, retrim, raw_capture):
+async def test_coverage_derivatives_keep_original_early_clock_through_vad(monkeypatch, tmp_path, retrim):
     from utils.sync.wal_audio_coverage import apply_wal_audio_coverage, build_sync_source_frame_maps
 
-    source = str(tmp_path / f'audio_omi_pcm16_16000_{raw_capture}.wav')
-    # Processing already accepted source-frame proof is independent of new
-    # upload admission, including a repeated trim with a rebased claim.
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+    source = str(tmp_path / 'audio_omi_pcm16_16000_1704067199.wav')
     pipeline.AudioSegment.silent(duration=4000, frame_rate=16000).export(source, format='wav')
     claim = {
         'capture_root': '123e4567-e89b-12d3-a456-426614174000',
@@ -633,11 +626,8 @@ async def test_coverage_derivatives_keep_original_receipt_clock_through_vad(monk
     monkeypatch.setattr(pipeline, 'run_blocking', inline)
     monkeypatch.setattr(pipeline, 'vad_is_empty', lambda *_a, **_k: [{'start': 0, 'end': duration}])
     segments, early = set(), {}
-    errors, _ = await pipeline._run_sync_vad_phase(
-        trimmed['wav_paths'], segments, trimmed['frame_maps'], {}, early, capture_received_at=1800000000.0
-    )
+    errors, _ = await pipeline._run_sync_vad_phase(trimmed['wav_paths'], segments, trimmed['frame_maps'], {}, early)
     assert not errors and segments == set(early) and len(early) == 1
-    assert list(early.values()) == [raw_capture]
     [path] = segments
     stamp = pipeline.get_timestamp_from_path(path)
     assert stamp >= capture_clock.EARLIEST_CAPTURE_TIME.timestamp()
@@ -815,15 +805,7 @@ def test_v2_route_shifts_recording_session_bounds_to_server_clock(client, monkey
 @patch('utils.sync.pipeline.postprocess_words')
 @patch('utils.sync.pipeline.get_timestamp_from_path')
 def _run_skewed_segment(
-    raw_start,
-    request_offset,
-    bind_closest,
-    mock_timestamp,
-    mock_postprocess,
-    _mock_prerecorded,
-    _mock_signed_url,
-    *,
-    receipt_clock=False,
+    raw_start, request_offset, bind_closest, mock_timestamp, mock_postprocess, _mock_prerecorded, _mock_signed_url
 ):
     """Run process_segment for a skewed-stamped file with the request offset applied.
 
@@ -877,7 +859,6 @@ def _run_skewed_segment(
             errors,
             client_device_id='pendant',
             capture_time_offset=request_offset,
-            early_capture_offset=request_offset if receipt_clock else 0.0,
         )
     assert result and errors == []
     return store, response, closest_seen, now_test
@@ -1484,8 +1465,7 @@ def test_v2_route_keeps_manifest_proof_for_collision_suffixed_upload(client, mon
     assert seen_names == [collided, plain]
 
 
-def test_v2_route_still_refuses_collision_suffixed_upload_with_broken_clock(client, monkeypatch):
-    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+def test_v2_route_still_refuses_collision_suffixed_upload_with_broken_clock(client):
     before = _capture_time_counter('rejected_future')
 
     response = _post_sync(client, _collided(5 * 365 * 86400, run='ab12cd'))

@@ -1,6 +1,7 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
 from dataclasses import replace
+from functools import partial
 import hashlib
 import io
 import logging
@@ -38,6 +39,8 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.future_capture_decode import decode_future_units
+from utils.sync.receipt_clock import POLICY as FUTURE_CLOCK_POLICY, FutureCaptureRefused, FutureCaptureRetry
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
@@ -422,6 +425,16 @@ def start_response(status: dict) -> JSONResponse:
             key: status[key] for key in ('job_id', 'status', 'total_files', 'total_segments', 'poll_after_ms', 'lane')
         },
     )
+
+
+def upload_decoder(uid, device_id, context):
+    if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY:
+        return partial(decode_future_units, uid=uid, device_id=device_id)
+    return decode_units
+
+
+def upload_capture_trust(context):
+    return 'untrusted' if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY else None
 
 
 async def accept_upload(
@@ -816,7 +829,7 @@ async def accept_upload(
                 max_unit_seconds,
                 uid,
                 {**(intake_context or {}), 'client_device_id': client_device_id},
-                decoder=decode_units,
+                decoder=upload_decoder(uid, client_device_id, intake_context),
             )
         )
         items = []
@@ -836,7 +849,7 @@ async def accept_upload(
                 # The built-in decoder times WAL PCM from sync filenames.
                 # Alternate adapters (for example held WAV) have no such proof.
                 timing_store='sync' if decode is None else None,
-                capture_time_trust='untrusted' if getattr(unit, 'stored_capture_at', None) is not None else None,
+                capture_time_trust=upload_capture_trust(intake_context),
             )
 
         from utils.stt.batch_language import resolve_language
@@ -995,6 +1008,8 @@ async def accept_upload(
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
+    except (FutureCaptureRefused, FutureCaptureRetry) as error:
+        return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     except Exception as error:

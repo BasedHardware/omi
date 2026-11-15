@@ -25,6 +25,7 @@ from config.sync_audio_coverage import sync_wal_audio_coverage_active_for
 from utils.capture_evidence import decoded_frame_map
 from utils.executors import submit_with_context
 from utils.observability.fallback import record_fallback
+from utils.request_validation import parse_sync_filename_timestamp
 from utils.sync import recording_lineage
 from utils.sync.wal_audio_coverage_metrics import bounded_reason, record_coverage_outcome
 from utils.sync.audio_coverage import (
@@ -35,6 +36,7 @@ from utils.sync.audio_coverage import (
     validated_live_ranges,
 )
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
+from utils.sync.capture_clock import is_early_capture_time
 from utils.sync.lineage_diagnostics import classify_generation_row
 from utils.sync.recording_session_target import clean_text, source_value
 
@@ -178,9 +180,7 @@ def apply_wal_audio_coverage(
         return None
 
     try:
-        # Internal derivative of an already admitted source. Admission switches
-        # must never invalidate its retained frame/custody proofs on a retry.
-        base_timestamp = Decimal(str(get_timestamp_from_path(wav_path)))
+        base_timestamp = Decimal(str(parse_sync_filename_timestamp(wav_path)))
     except ValueError:
         return None
 
@@ -232,10 +232,8 @@ def apply_wal_audio_coverage(
                     'coverage_trimmed': True,
                 }
                 clock_origin = (frame_map or {}).get('capture_clock_at', float(base_timestamp))
-                frame_maps[derivative_path]['capture_clock_at'] = clock_origin
-                frame_maps[derivative_path]['capture_clock_source'] = (frame_map or {}).get(
-                    'capture_clock_source', wav_path
-                )
+                if is_early_capture_time(clock_origin):
+                    frame_maps[derivative_path]['capture_clock_at'] = clock_origin
                 wav_paths.append(derivative_path)
     except Exception as e:
         _remove_generated(generated)
@@ -468,9 +466,8 @@ def build_sync_source_frame_maps(
                 clock_origin = get_timestamp_from_path(wav_path)
             except (IndexError, ValueError):
                 clock_origin = None
-            if clock_origin is not None:
+            if clock_origin is not None and is_early_capture_time(clock_origin):
                 mapping['capture_clock_at'] = clock_origin
-                mapping['capture_clock_source'] = wav_path
             source_frame_maps[wav_path] = mapping
     return source_frame_maps
 
