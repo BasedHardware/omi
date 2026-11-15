@@ -1248,6 +1248,7 @@ class HistoricalMemoryAdapter:
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
         budget: Optional[ListReadBudget] = None,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         try:
@@ -1255,7 +1256,12 @@ class HistoricalMemoryAdapter:
                 budget.check()
             if budget is not None:
                 matches = vector_db.find_similar_memories(
-                    uid, query, threshold=0.0, limit=min(capped * 3, 60), timeout_seconds=budget.rpc_timeout()
+                    uid,
+                    query,
+                    threshold=0.0,
+                    limit=min(capped * 3, 60),
+                    timeout_seconds=budget.rpc_timeout(),
+                    owner_summary=owner_summary,
                 )
             else:
                 matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
@@ -3502,7 +3508,7 @@ class MemoryService:
                 query,
                 limit=candidate_cap,
                 device_scope_request=device_scope_request,
-                **({'budget': budget} if owner_summary and budget is not None else {}),
+                **({'budget': budget, 'owner_summary': True} if owner_summary and budget is not None else {}),
             )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:

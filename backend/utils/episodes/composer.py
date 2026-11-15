@@ -178,6 +178,14 @@ def fingerprint(members: Sequence[Mapping[str, Any]]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
+def _member_note_revision(row: Mapping[str, Any]) -> str:
+    """Finalized note content; title/emoji/category and transcript bookkeeping are labels."""
+    notes = {
+        key: value for key, value in (row.get('structured') or {}).items() if key not in {'title', 'emoji', 'category'}
+    }
+    return hashlib.sha256(json.dumps(notes, sort_keys=True, default=str).encode()).hexdigest()[:24]
+
+
 def evidence_trigger(row: Mapping[str, Any]) -> str:
     """Only speech and resolved names buy a new compose; labels and summaries remain prompt inputs."""
     raw = json.dumps(
@@ -1243,7 +1251,16 @@ def _compose(
         return _write_single_member(uid, episode_id, c, episode, members, print_, member_ids, member_revisions)
     if not force and _backed_off(episode, print_):
         return 'backoff'
-    if episode_compose_settle_enabled() and background and not force:
+    if (
+        episode_compose_settle_enabled()
+        and background
+        and not force
+        and not (
+            episode.get('compose_notes_refresh_pending')
+            and episode.get('composed_evidence') == _evidence(members)
+            and episode.get('composed_membership') == sorted(_retained_ids(episode))
+        )
+    ):
         observed = _observe_evidence(uid, episode, c, _evidence(members))
         if observed is not None:
             episode = observed
@@ -1489,6 +1506,8 @@ def _trigger_stamp(episode: Mapping[str, Any], members: Sequence[Mapping[str, An
     # Keep collecting stamps during rollback so re-enabling never requires a paid migration wave.
     return {
         'composed_evidence': _evidence(members),
+        'composed_member_notes': {str(row['id']): _member_note_revision(row) for row in members},
+        'compose_notes_refresh_pending': None,
         'composed_transcript_updated_at': _latest_transcript(members),
         'composed_membership': sorted(_retained_ids(episode)),
         'compose_pending_since': None,
@@ -1892,7 +1911,24 @@ def schedule_for_conversation(
                     ):
                         named_member = {**member, 'id': conversation_id, 'transcript_segments': _named(uid, member, c)}
                         changed = changed or fingerprint([named_member]) != episode.get('composed_fingerprint')
-                    if not changed and not needs_compose(episode):
+                    notes = episode.get('composed_member_notes')
+                    finalized_notes_changed = (
+                        not transcript_updated
+                        and member
+                        and isinstance(notes, Mapping)
+                        and conversation_id in notes
+                        and notes[conversation_id] != _member_note_revision(member)
+                    )
+                    if finalized_notes_changed:
+                        # A finalized output changed after its minimum notes were consumed.
+                        # Persist the invalidation, without restarting speech's quiet window.
+                        _write(
+                            uid,
+                            str(episode['id']),
+                            c,
+                            {'summary_needs_regeneration': True, 'compose_notes_refresh_pending': True},
+                        )
+                    if not changed and not finalized_notes_changed and not needs_compose(episode):
                         metrics.record_compose_trigger_skipped('evidence_unchanged')
                         return
                     if changed:

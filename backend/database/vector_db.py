@@ -14,6 +14,7 @@ from pinecone import Pinecone
 
 from database import projection_repair
 from database.pinecone_partition_index import owner_index
+from database.summary_vector_transport import SummaryVectorIndex
 from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 
@@ -562,6 +563,7 @@ def find_similar_memories(
     subject_entity_id: str | None = None,
     *,
     timeout_seconds: Optional[float] = None,
+    owner_summary: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Find memories similar to the given content.
@@ -577,7 +579,13 @@ def find_similar_memories(
     deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
     if timeout_seconds is not None and timeout_seconds <= 0:
         raise TimeoutError('memory query deadline')
-    vector = embeddings.embed_query(content)
+    if owner_summary and deadline is None:
+        raise ValueError('owner summary requires a deadline')
+    vector = (
+        embeddings.embed_query_once(content, deadline_monotonic=deadline)
+        if owner_summary and deadline is not None
+        else embeddings.embed_query(content)
+    )
     options = {}
     if deadline is not None:
         remaining = deadline - time.monotonic()
@@ -586,7 +594,7 @@ def find_similar_memories(
         options.update(_request_timeout=remaining, deadline_monotonic=deadline)
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
-    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+    xc = owner_index(SummaryVectorIndex(index) if owner_summary else index, uid, index_name=_pinecone_index_name).query(
         caller='find_similar_memories',
         vector=vector,
         top_k=limit,
@@ -811,7 +819,13 @@ def query_memory_vector_candidates(
         raise TimeoutError('memory query deadline')
     # The production embedding proxy accepts text only. The caller deadline
     # bounds waiting; recheck it below before issuing any vector RPC.
-    vector = embeddings.embed_query(query)
+    if owner_summary and deadline is None:
+        raise ValueError('owner summary requires a deadline')
+    vector = (
+        embeddings.embed_query_once(query, deadline_monotonic=deadline)
+        if owner_summary and deadline is not None
+        else embeddings.embed_query(query)
+    )
     query_options = {}
     if deadline is not None:
         remaining = deadline - time.monotonic()
@@ -831,7 +845,9 @@ def query_memory_vector_candidates(
             if mode == SearchMode.archive_explicit
             else build_default_memory_vector_filter(uid)
         )
-    response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+    response = owner_index(
+        SummaryVectorIndex(index) if owner_summary else index, uid, index_name=_pinecone_index_name
+    ).query(
         caller='query_memory_vector_candidates',
         vector=vector,
         top_k=bounded_limit,

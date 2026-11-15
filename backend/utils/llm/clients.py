@@ -11,9 +11,11 @@ accounting stay one decision instead of per-feature copies
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
+import time
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
@@ -38,6 +40,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
+from openai import AsyncOpenAI
+from openai.resources.embeddings import AsyncEmbeddings
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
@@ -493,6 +497,35 @@ class _OpenAIEmbeddingsProxy:
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return self._default_client().embed_query(text)
             raise
+
+    def embed_query_once(self, text: str, *, deadline_monotonic: float) -> List[float]:
+        """Optional summary IO: one key, no fallback/retry, cancellable absolute deadline."""
+        _require_client_budget('openai_embeddings', provider='openai')
+        byok = get_byok_key('openai')
+        remaining = deadline_monotonic - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('summary embedding deadline')
+
+        async def request() -> List[float]:
+            async with asyncio.timeout(remaining):
+                if self._gateway_mode():
+                    return (
+                        await ainvoke_openai_embeddings_gateway(
+                            [text], timeout_seconds=remaining, byok_api_key=byok, isolated=True
+                        )
+                    )[0]
+                async with httpx.AsyncClient(
+                    timeout=remaining, transport=httpx.AsyncHTTPTransport(retries=0)
+                ) as transport:
+                    # Bypass LangChain's retry/chunking layers for this single,
+                    # already token-bounded query. Other proxy methods are unchanged.
+                    async with AsyncOpenAI(
+                        api_key=byok, max_retries=0, timeout=remaining, http_client=transport
+                    ) as client:
+                        response = await AsyncEmbeddings(client).create(model=self._model, input=text)
+                        return response.data[0].embedding
+
+        return asyncio.run(request())
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         _require_client_budget('openai_embeddings', provider='openai')
