@@ -379,6 +379,19 @@ runs:
           --database='(default)' \
           --project="$FIRESTORE_PROJECT_ID" \
           --format='value(name)' | grep '/fields/expires_at$'
+        # The in-flight capture ledger is a sibling collection group. Terminal
+        # rows carry a 26h TTL; nonterminal rows carry a refreshed max lifetime.
+        gcloud firestore fields ttls update expires_at \
+          --collection-group=pipeline_ledger \
+          --database='(default)' \
+          --project="$FIRESTORE_PROJECT_ID" \
+          --enable-ttl \
+          --quiet
+        gcloud firestore fields ttls list \
+          --collection-group=pipeline_ledger \
+          --database='(default)' \
+          --project="$FIRESTORE_PROJECT_ID" \
+          --format='value(name)' | grep '/fields/expires_at$'
 
     - name: Provision routed backfill budget alerts
       if: ${{ inputs.mode == 'platform' && inputs.provision_budget_alerts == 'true' }}

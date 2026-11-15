@@ -272,16 +272,18 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       // Audio up to the end that is still being written or published counts
       // as pending until the capture lifecycle seals it and it is accepted.
       // Later chunks of trailing silence are not part of the ended recording.
-      pendingWals: (signal) {
-        final through = signal.decidedAt.millisecondsSinceEpoch ~/ 1000;
-        final unregistered =
-            lane.buffer.unregisteredStarts(signal.recordingSessionId).where((start) => start <= through).length;
-        final registered = phone is LocalWalSyncImpl
-            ? phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt)
-            : 0;
+      pendingWals: (signal) async {
+        if (phone is! LocalWalSyncImpl) throw StateError('Capture-end WAL inventory unavailable');
+        final unregistered = await lane.buffer.pendingJournalCount(signal.recordingSessionId,
+            ownerUid: SharedPreferencesUtil().uid,
+            through: signal.decidedAt,
+            acceptedFileBytes: phone.captureEndAcceptedFileBytes(signal.recordingSessionId));
+        final registered = phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt);
         return unregistered + registered;
       },
-      disabled: CaptureEndMarkerPolicy.disabled,
+      disabled: () async => SharedPreferencesUtil().uid.isEmpty || await CaptureEndMarkerPolicy.disabled(),
+      scope: () => (SharedPreferencesUtil().uid, phone.sessionGeneration),
+      observationVersion: () => MobileBatchBuffer.journalRevision,
     );
     provider.captureEndReporter = reporter;
     if (phone is LocalWalSyncImpl) phone.onRecordingUploadAccepted = reporter.uploadAccepted;
