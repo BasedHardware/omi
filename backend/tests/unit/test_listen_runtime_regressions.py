@@ -25,6 +25,10 @@ from utils.stt.live_failure import terminate_live_stt_backoff
 from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
+from fastapi.websockets import WebSocketDisconnect
+from routers import pusher
+from tests.unit.test_audio_durable_outbox import inline_session, remote
+from tests.unit.utils.test_listen_pusher_session import make_session
 
 
 @pytest.fixture
@@ -99,6 +103,125 @@ def _assert_deletion_teardown_skipped_owner_writes(runtime):
     runtime._flush_usage.assert_not_awaited()
     runtime.conversations.process_conversation.assert_not_awaited()
     runtime.parity_capture.persist.assert_not_called()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('answer_prepare', [True, False])
+async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_prepare(
+    inline_session, monkeypatch, answer_prepare
+):
+    """Real teardown/controller, relay parser, receipts and seal; no repair runner."""
+    client, path, _, _ = inline_session
+    row = client.rows[path]
+    row.update(
+        id='conversation',
+        source='omi',
+        status='completed',
+        server_batch_only=True,
+        has_content=True,
+        server_batch_audio_start=100,
+        server_batch_audio_end=101,
+    )
+    incoming, replies = asyncio.Queue(), asyncio.Queue()
+    close_controls, proven_pcm, finalizations = [], [], []
+    read = pusher.read_pcm
+
+    def readback(*args):
+        pcm = read(*args)
+        proven_pcm.append(pcm)
+        return pcm
+
+    monkeypatch.setattr(pusher, 'read_pcm', readback)
+
+    class Server:
+        client_state = WebSocketState.CONNECTED
+
+        async def accept(self):
+            pass
+
+        async def send_bytes(self, data):
+            if not answer_prepare and struct.unpack('<I', data[:4])[0] == 206:
+                if json.loads(data[4:])['phase'] == 'prepare':
+                    return
+            replies.put_nowait(data)
+
+        async def receive_bytes(self):
+            data = await incoming.get()
+            if data is None:
+                raise WebSocketDisconnect(1000)
+            return data
+
+        async def close(self, **kwargs):
+            self.client_state = WebSocketState.DISCONNECTED
+
+    class Relay:
+        async def send(self, data):
+            if struct.unpack('<I', data[:4])[0] == 104:
+                close_controls.append(json.loads(data[4:]))
+            incoming.put_nowait(data)
+
+        async def recv(self):
+            return await replies.get()
+
+        async def close(self, code=1000):
+            incoming.put_nowait(None)
+
+    async def persist(fn, *args, **kwargs):
+        if fn.__name__ == '_account_deletion_blocks_owner_persistence':
+            return False
+        if fn is conversation_module.conversations_db.get_conversation:
+            return dict(row)
+        if fn is conversation_module.lifecycle_service.request_finalization:
+            finalizations.append(args[1])
+            return {'route': 'cloud_tasks'}
+        return None
+
+    request = ListenRequest(websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED), uid='owner')
+    runtime = _deletion_teardown_runtime(request, persist)
+    runtime.state.current_conversation_id = 'conversation'
+    runtime.client_kind = 'ios'
+    runtime._record_session_transcript_outcome = MagicMock()
+    runtime.conversation_creation_timeout = 120
+    runtime.conversations = LiveConversationController(runtime)
+    runtime.conversations.on_conversation_processing_started = MagicMock()
+    monkeypatch.setattr(conversation_module, 'close_batch_archive', AsyncMock(return_value=dict(row)))
+    monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
+    session = make_session(
+        ws=Relay(),
+        current_conversation_id='conversation',
+        config_overrides={'uid': 'owner', 'sample_rate': 16000},
+        deps_overrides={'is_active': lambda: runtime.state.active},
+    )
+    runtime.request_recording_close = session.request_recording_close
+    runtime.request_conversation_processing = session.request_conversation_processing
+    runtime.pusher_close = session.close
+    handler = asyncio.create_task(
+        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
+    )
+    await session.connect()
+    receiver = asyncio.create_task(session.pusher_receive())
+    try:
+        async with asyncio.timeout(5):
+            while not session.record_close_supported:
+                await asyncio.sleep(0.001)
+        session.audio_bytes_send(b'\x01\x00', 100)
+        await session._audio_bytes_flush()
+        session.audio_bytes_send(b'\x02\x00', 101)  # Accepted tail is still in listen at disconnect.
+        receiver.cancel()  # Real supervisor drains the receive/tick tasks before teardown.
+        await asyncio.gather(receiver, return_exceptions=True)
+        await asyncio.wait_for(runtime._teardown_components(), 5)
+        await asyncio.wait_for(handler, 5)
+        assert finalizations == ['conversation']
+        assert not close_controls and not session.pending_record_closes
+        assert row['record_audio_closed'] and row['record_upload_sessions'] == {}
+        assert b''.join(proven_pcm) == b'\x01\x00\x02\x00'
+        assert not session.audio_runs and not session.audio_total_size
+    finally:
+        receiver.cancel()
+        await asyncio.gather(receiver, return_exceptions=True)
+        if not handler.done():
+            incoming.put_nowait(None)
+        await asyncio.wait_for(handler, 5)
 
 
 @pytest.mark.anyio

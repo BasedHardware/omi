@@ -445,6 +445,10 @@ class ListenPusherSession:
 
     async def request_recording_close(self, conversation_id: str) -> bool:
         """Order accepted audio before a close-only request; never run a finalizer."""
+        if not self.deps.is_active():
+            # Teardown has drained the receiver/tick. A new prepare cannot be
+            # completed there; leave the unprepared owner to socket-end drainage.
+            return False
         if not close_notify_enabled() or not audio_outbox_enabled():
             return False
         if self.pusher_ws is not None and self.pusher_ws is self.record_close_unsupported_socket:
@@ -461,6 +465,8 @@ class ListenPusherSession:
             return False  # An old pusher must never interpret this as finalization.
         socket = self.pusher_ws
         async with self.audio_flush_lock:
+            if not self.deps.is_active():
+                return False  # Shutdown may have begun while waiting for this lock.
             close = self.pending_record_closes.get(conversation_id)
             if close is None:
                 return conversation_id in self.record_close_boundaries
