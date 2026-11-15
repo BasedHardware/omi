@@ -2047,6 +2047,7 @@ async def _run_websocket_util_trigger(
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
     receive_task: asyncio.Task[Any] | None = None
+    record_worker: asyncio.Task[Any] | None = None
     record_drain_observed = False
 
     async def drain_socket_tasks() -> None:
@@ -2089,6 +2090,7 @@ async def _run_websocket_util_trigger(
                 create_named_task(process_audio_bytes_queue(), name=f"ws:{uid}:audio_bytes"),
             ]
 
+        record_worker = bg_main_tasks[1]
         exit_result = await supervise_tasks(
             receive_task=receive_task,
             bg_tasks=bg_main_tasks,
@@ -2142,6 +2144,20 @@ async def _run_websocket_util_trigger(
         all_to_cancel = [t for t in bg_main_tasks if not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
         await audio_projection.persist_pending()
+
+        if (
+            close_protocol is not None
+            and close_notify_enabled()
+            and receive_task is not None
+            and receive_task.done()
+            and record_worker is not None
+            and all(task.done() for task in bg_main_tasks if task is not record_worker)
+        ):
+            prepared = close_protocol.requests.keys() - close_protocol.committed
+            if prepared:
+                # Actual socket/receive exit is required. A live handshake deadline
+                # has no authority to stop a source or attest its producer token.
+                abandon_evicted_record_drain(record_worker, record_barrier, record_futures, prepared=prepared)
 
         if application_failed and observation.reason == 'peer':
             observation.reason = 'application_error'
