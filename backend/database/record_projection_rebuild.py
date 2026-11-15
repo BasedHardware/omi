@@ -45,6 +45,24 @@ def pending_version(uid, cid, *, firestore_client=None):
     return snapshot.update_time if snapshot.exists else None
 
 
+def preflight_projection(uid, cid, *, firestore_client=None):
+    """Consent/privacy authority before demand discovery; commit still rechecks."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshots = {}
+    try:
+        assert_batch_write_allowed(client, None, uid, conversation_ids=(cid,), snapshots=snapshots)
+    except BatchPrivacyBlocked:
+        return False
+    row = snapshots.get('conversations', {}).get(cid)
+    return bool(
+        row
+        and not row.get('deleted')
+        and not row.get('discarded')
+        and row.get('private_cloud_sync_enabled') is not False
+        and snapshots.get('user', {}).get('private_cloud_sync_enabled', True)
+    )
+
+
 def mark_many(uid, conversation_ids, *, firestore_client=None):
     """One bounded cleanup RPC, rather than one timeout per socket obligation."""
     owners = set(conversation_ids)

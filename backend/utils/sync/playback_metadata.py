@@ -16,6 +16,8 @@ def _refresh(uid: str, cid: str):
     version = debt.pending_version(uid, cid)
     # Reuse cold repair's strict discovery, deletion/privacy transaction and CAS.
     # This is metadata only. Existing /urls demand handling builds real artifacts.
+    if version is not None and not debt.preflight_projection(uid, cid):
+        raise HTTPException(404, 'Conversation not found')
     applied = rebuild(uid, cid) if version is not None else None
     if applied is False:
         raise HTTPException(404, 'Conversation not found')

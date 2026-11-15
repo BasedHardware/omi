@@ -620,6 +620,7 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', readback)
     read = Mock(return_value=None if mode == 'marker_retired_before_read' else 'old')
     monkeypatch.setattr(record_projection_rebuild, 'pending_version', read)
+    monkeypatch.setattr(record_projection_rebuild, 'preflight_projection', lambda *args: True)
     release, finished = threading.Event(), threading.Event()
     marker = {'version': 'old'}
 

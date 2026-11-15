@@ -500,3 +500,69 @@ def test_successful_close_retires_only_acknowledged_marker_version(replacement):
     assert state['present'] is replacement
     ref.get.assert_not_called()
     ref.update.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'fence',
+    [
+        'account',
+        'missing',
+        'tombstone',
+        'deleted',
+        'discarded',
+        'e2ee',
+        'migration',
+        'sync',
+        'owner_sync',
+        'generation',
+    ],
+)
+def test_demand_privacy_preflight_refuses_before_encoded_or_raw_discovery(client, monkeypatch, fence):
+    from fastapi import HTTPException
+    from database.batch_pipeline_privacy import privacy_owner_key
+    from utils.sync import playback_metadata
+    from utils.other import storage
+
+    client.rows[ROW]['record_lane_owner'] = 'batch_live_v1'
+    if fence == 'account':
+        client.rows[('account_deletions', 'u')] = {'wipe_status': 'completed'}
+    elif fence == 'missing':
+        client.rows.pop(('users', 'u'))
+    elif fence == 'tombstone':
+        client.rows[('users', 'u', 'deleted_conversations', 'c')] = {}
+    elif fence == 'e2ee':
+        client.rows[('users', 'u')]['data_protection_level'] = 'e2ee'
+    elif fence == 'migration':
+        client.rows[('users', 'u')]['migration_status'] = 'migrating'
+    elif fence == 'sync':
+        client.rows[ROW]['private_cloud_sync_enabled'] = False
+    elif fence == 'owner_sync':
+        client.rows[('users', 'u')]['private_cloud_sync_enabled'] = False
+    elif fence == 'generation':
+        client.rows[('batch_pipeline_privacy', privacy_owner_key('u'))] = {'purging': True}
+    else:
+        client.rows[ROW][fence] = True
+    monkeypatch.setattr(jobs, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(jobs, 'pending_version', lambda *args: 'version')
+    encoded, raw = MagicMock(), MagicMock()
+    monkeypatch.setattr(storage, 'list_audio_chunks', encoded)
+    monkeypatch.setattr(storage, 'list_packs', raw)
+    before = deepcopy(client.rows)
+    with pytest.raises(HTTPException) as error:
+        playback_metadata._refresh('u', 'c')
+    assert error.value.status_code == 404
+    encoded.assert_not_called()
+    raw.assert_not_called()
+    assert client.rows == before
+
+
+def test_demand_preflight_and_transactional_recheck_are_independent(client):
+    assert jobs.preflight_projection('u', 'c', firestore_client=client)
+    client.rows[('users', 'u')]['data_protection_level'] = 'e2ee'
+    assert (
+        jobs.apply_projection(
+            'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
+        )
+        is None
+    )
+    assert client.rows[ROW]['audio_files'] == []
