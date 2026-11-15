@@ -322,8 +322,8 @@ class PusherAudioProjection:
 
         if not closing:
             self.finished.discard(conv_id)
-        if closing and conv_id in self.finished:
-            return conv_id in self.durable_debt
+        if closing and conv_id in self.finished and conv_id in self.durable_debt:
+            return True
         if not durable_debt_enabled():
             return False
         self.defer_metadata = True
@@ -369,13 +369,23 @@ class PusherAudioProjection:
             logger.warning('Projection marker_write_failed exception_type=%s', type(exc).__name__)
             return False
         self.marker_retry.pop(conv_id, None)
-        if len(self.durable_debt) < MAX_CONVERSATIONS:
-            self.durable_debt.add(conv_id)
-            if type(versions) is dict and (version := versions.get(conv_id)) is not None:
-                self.debt_versions[conv_id] = version
+        self._remember_durable_debt(conv_id, versions)
         self.close_debt.discard(conv_id)
         MARKER_WRITES.labels(outcome='persisted').inc()
         return True
+
+    def _remember_durable_debt(self, cid: str, versions) -> None:
+        # Metadata ACKs are a cache, not custody authority. Reclaim an old ACK
+        # rather than refusing every new recording after an all-day stream.
+        if MAX_CONVERSATIONS <= 0:
+            return
+        if cid not in self.durable_debt and len(self.durable_debt) >= MAX_CONVERSATIONS:
+            old = next(iter(self.durable_debt))
+            self.durable_debt.discard(old)
+            self.debt_versions.pop(old, None)
+        self.durable_debt.add(cid)
+        if type(versions) is dict and (version := versions.get(cid)) is not None:
+            self.debt_versions[cid] = version
 
     def _defer_rebuild_legacy(self, conv_id: str) -> bool:
         """Original optional-debt handoff, unchanged with fast closure disabled."""
@@ -417,10 +427,8 @@ class PusherAudioProjection:
                 if self.marker_retry.get(cid) == sequence:
                     self.marker_retry.pop(cid, None)
                     self.close_debt.discard(cid)
-                    if close_fast_path_enabled() and len(self.durable_debt) < MAX_CONVERSATIONS:
-                        self.durable_debt.add(cid)
-                        if type(versions) is dict and (version := versions.get(cid)) is not None:
-                            self.debt_versions[cid] = version
+                    if close_fast_path_enabled():
+                        self._remember_durable_debt(cid, versions)
             MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 
     async def persist_pending(self) -> None:

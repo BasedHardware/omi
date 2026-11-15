@@ -883,3 +883,27 @@ async def test_all_close_switches_off_preserves_legacy_debt_handoff(world, monke
     assert calls == [projection.db_executor]
     assert not cache.durable_debt
     projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})
+
+
+@pytest.mark.asyncio
+async def test_all_day_stream_keeps_new_marker_versions_and_reproves_evicted_ack(world, monkeypatch):
+    from utils import pusher_playback_coordinator
+
+    queue = SimpleNamespace(submit=MagicMock())
+    monkeypatch.setattr(pusher_playback_coordinator, 'coordinator', lambda: queue)
+    projection.record_projection_rebuild.mark_many.side_effect = lambda uid, cids: {
+        cid: 'version-' + cid for cid in cids
+    }
+    cache = projection.PusherAudioProjection('u')
+    for i in range(150):
+        cid = f'c-{i}'
+        assert await cache.defer_close_refresh(cid, [f'path-{i}'])
+        assert queue.submit.call_args.kwargs['observed_update_time'] == 'version-' + cid
+        assert len(cache.durable_debt) <= projection.MAX_CONVERSATIONS
+        assert len(cache.debt_versions) <= projection.MAX_CONVERSATIONS
+    # An evicted dedupe ACK is never a permanent False/failed-close result.
+    cache.finished.add('c-0')
+    cache.durable_debt.discard('c-0')
+    cache.debt_versions.pop('c-0', None)
+    assert await cache.defer_close_refresh('c-0')
+    assert queue.submit.call_args.kwargs['observed_update_time'] == 'version-c-0'

@@ -161,3 +161,9 @@ producer-pending retirement after6 refusals. All are safe code defaults or
 constants. Existing GKE env overrides survive an image-only patch. RSS remains
 unmeasured. Cloud Run rendered bindings are declared; GKE image-only activation
 and any kill-switch env patch require independent runtime verification.
+
+The socket's durable marker ACK/version cache also reclaims old entries at128;
+it never stops acknowledging marker versions after the first128 recordings.
+An evicted completed ACK is re-proven by a committed marker write, rather than
+returning a permanent failed-close result. All150 recorded marker versions are
+passed to background retirement in its focused regression.
