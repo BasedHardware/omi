@@ -240,7 +240,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
     require_fresh_proof(proof)  # Tail downloads can exhaust the five-minute inventory window.
     budget.check()
     record_seal_profile.enter('apply')
-    result = apply(store, plan, plan['plan_sha256'])
+    result = apply(store, plan, plan['plan_sha256'], **({'observation_counts': reason_out} if job else {}))
     if sum(result.values()) != 1 or len(result) != 1:
         return 'unknown'
     disposition = next(iter(result))
@@ -381,6 +381,27 @@ def pending_blocker(row):
     return 'seal_eligible'
 
 
+class DiscoveryProgress:
+    """One content-free malformed-row count across all polls/legs in a run."""
+
+    def __init__(self, progress):
+        self.progress = progress
+        self.malformed = set()
+
+    def __call__(self, event):
+        self.progress(event)
+
+    def refuse_malformed(self, document_id):
+        self.malformed.add(hashlib.sha256(document_id.encode()).digest())
+
+    def flush(self):
+        if self.malformed:
+            self.progress(
+                {'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': len(self.malformed)}
+            )
+            self.malformed.clear()
+
+
 @read_origin('job:record_seal_cluster_repair:discover_jobs')
 def discover_jobs(
     client,
@@ -515,7 +536,10 @@ def discover_jobs(
             # the legacy single-shard path (which previously skipped silently).
             owner = int(hashlib.sha256(doc.id.encode()).hexdigest(), 16) % shards
             if shard == owner:
-                progress({'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': 1})
+                if isinstance(progress, DiscoveryProgress):
+                    progress.refuse_malformed(doc.id)
+                else:
+                    progress({'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': 1})
             continue
         if not owns_record(uid, cid, shard=shard, shards=shards):
             continue
@@ -734,6 +758,7 @@ def coordinate(
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
     gaps, partial_reasons, blocker_outcomes = Counter(), Counter(), Counter()
+    ledger_misses = 0
     started = clock()
     deadline = started + run_seconds
     max_age, sealed_age, invalid_clock_rows = 0, 0, 0
@@ -831,6 +856,9 @@ def coordinate(
                 if finished:
                     try:
                         result = output.result
+                        miss = result.get('ledger_misses')
+                        if type(miss) is int and miss == 1:
+                            ledger_misses += 1
                         candidate = result.get('trimmed_divergent_overlaps', 0)
                         trimmed = candidate if type(candidate) is int and 0 <= candidate <= 4096 else 0
                         disposition = result.get('disposition')
@@ -904,6 +932,7 @@ def coordinate(
         'tail_gap_buckets': dict(sorted(gaps.items())),
         'partial_finishes': dict(sorted(partial_reasons.items())),
         'blocker_outcomes': dict(sorted(blocker_outcomes.items())),
+        **({'ledger_misses': ledger_misses} if ledger_misses else {}),
         'rows': sum(counts.values()),
         'oldest_unsealed_seconds': max_age,
         'oldest_seal_age_seconds': sealed_age,
@@ -966,10 +995,17 @@ def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lam
     validate_partition(shard, shards)
 
     def execute():
-        before()  # Projection rebuild is inside the same coordinator lease.
-        return _run(
-            progress=progress, shard=shard, shards=shards, **({'deadline': deadline} if deadline is not None else {})
-        )
+        discovery_progress = DiscoveryProgress(progress)
+        try:
+            before()  # Projection rebuild is inside the same coordinator lease.
+            return _run(
+                progress=discovery_progress,
+                shard=shard,
+                shards=shards,
+                **({'deadline': deadline} if deadline is not None else {}),
+            )
+        finally:
+            discovery_progress.flush()
 
     if shards == 1 or not config.enabled() or config.settings()[3] == 'plan':
         return execute()

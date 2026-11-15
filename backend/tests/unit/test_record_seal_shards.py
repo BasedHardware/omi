@@ -236,7 +236,7 @@ def test_process_deadline_counts_cold_start_and_reserves_cleanup(monkeypatch):
 
     minute = 30000000
     now = minute * 60 + 600  # Ten minutes spent waiting for node/image.
-    assert process_deadline(100, f'record-seal-repair-{minute}-2-abcde', now, 105) == 1125
+    assert process_deadline(100, f'record-seal-repair-{minute}-2', now, 105) == 1125
     assert process_deadline(100, 'local-fixture', now, 105) == 1660
     monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'synthetic')
     with pytest.raises(ValueError):
@@ -246,11 +246,11 @@ def test_process_deadline_counts_cold_start_and_reserves_cleanup(monkeypatch):
 @pytest.mark.parametrize(
     'hostname',
     [
-        'record-seal-repair-29912640-0',
-        'record-seal-repair-29912640-2',
-        'record-seal-repair-29912640-4',
-        'record-seal-repair-29912640-abcde',
-        'record-seal-repair-29912640-2-abcde',
+        pytest.param('record-seal-repair-29912640-0', id='indexed-hostname-0'),
+        pytest.param('record-seal-repair-29912640-2', id='indexed-hostname-2'),
+        pytest.param('record-seal-repair-29912640-4', id='indexed-hostname-4'),
+        pytest.param('record-seal-repair-29912640-abcde', id='ordinary-hostname'),
+        pytest.param('record-seal-repair-29912640-2-abcde', id='indexed-metadata-name-not-hostname'),
     ],
 )
 def test_scheduled_deadline_accepts_literal_indexed_and_ordinary_hostnames(monkeypatch, hostname):
@@ -306,3 +306,61 @@ def test_nested_io_budget_cannot_extend_outer_process_deadline(monkeypatch):
             now[0] = 3
         assert timer[0] == 7
     assert timer[0] == 0
+
+
+@pytest.mark.parametrize('count', [1, 2, 5])
+def test_malformed_refusals_emit_once_per_run_across_repeated_discovery_legs(monkeypatch, count):
+    stamp = datetime.now(timezone.utc).timestamp()
+    docs = [pending_job(0, stamp - 100, owner_id=None), pending_job(1, stamp - 100, record_content_id=None)]
+    events = []
+    monkeypatch.setattr(config, 'enabled', lambda: True)
+    monkeypatch.setattr(config, 'settings', lambda: (8, 270, 1500, 'plan'))
+
+    def run_legs(*, progress, **kwargs):
+        client = OrderedJobsClient(docs)
+        lane = cluster.FreshLane(client, progress=progress, **kwargs)
+        refill = backlog.BacklogLane(
+            client, SimpleNamespace(read=lambda _: None), mode='plan', progress=progress, **kwargs
+        )
+        for _ in range(4):
+            cluster.discover_jobs(client, budget=SweepBudget(10), progress=progress, **kwargs)
+            assert lane(set()) == []
+            assert refill(set()) == []
+        assert not events_for_run  # Deferred until the run's single summary.
+        return {'outcome': 'ok'}
+
+    monkeypatch.setattr(cluster, '_run', run_legs)
+    for shard in range(count):
+        events_for_run = []
+        cluster.run(shard=shard, shards=count, progress=events_for_run.append)
+        refusals = [e for e in events_for_run if e.get('outcome') == 'malformed_pending']
+        assert len(refusals) <= 1
+        events.extend(refusals)
+    assert sum(e['count'] for e in events) == 2
+    assert all(set(e) == {'event', 'outcome', 'count'} for e in events)
+
+
+def test_ledger_misses_are_aggregated_without_changing_seal_disposition():
+    import io
+    import json
+    from tests.unit.test_record_seal_cluster_repair import FakeProcess
+
+    clock = [0.0]
+
+    def launch(*args):
+        child = FakeProcess(clock, 0, 'sealed')
+        child.stdout = io.BytesIO(json.dumps({'disposition': 'sealed', 'ledger_misses': 1}).encode())
+        return child
+
+    report = cluster.coordinate(
+        [('synthetic', 100)],
+        workers=1,
+        row_seconds=270,
+        run_seconds=10,
+        mode='apply',
+        launch=launch,
+        clock=lambda: clock[0],
+        pause=lambda t: clock.__setitem__(0, clock[0] + t),
+    )
+    assert report['dispositions'] == {'sealed': 1}
+    assert report['ledger_misses'] == 1

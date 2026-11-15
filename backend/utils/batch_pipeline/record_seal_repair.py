@@ -27,6 +27,9 @@ from config import record_seal_rules as lease
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
+from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
+
+LEDGER_OBSERVATION_SECONDS = 3
 
 ROW_FIELDS = (
     'record_lane_owner',
@@ -304,7 +307,7 @@ def plan_seals(
     return {**plan, 'plan_sha256': plan_digest(plan)}
 
 
-def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None):
+def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None, observation_counts=None):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
     if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
@@ -383,7 +386,18 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
             if result in {'sealed', 'upload_failed_cleared'}:
-                observe_record_sealed(store.client, uid, cid, ref, refresh_revision=True, **sealed_observation)
+                try:
+                    # The real seal has committed. Optional ledger IO must not
+                    # occupy a row slot for its entire audio-proof budget.
+                    with SweepBudget(LEDGER_OBSERVATION_SECONDS).interrupt_io():
+                        observe_record_sealed(store.client, uid, cid, ref, refresh_revision=True, **sealed_observation)
+                except (Exception, BudgetExhausted) as error:
+                    # Catch cancellation only after the seal transaction. It is
+                    # a ledger miss, never a failed seal or permission bypass.
+                    pipeline_ledger._observe_write('error')
+                    pipeline_ledger._observe_failure(TimeoutError() if isinstance(error, BudgetExhausted) else error)
+                    if observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

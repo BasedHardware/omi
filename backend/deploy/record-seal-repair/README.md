@@ -9,9 +9,10 @@ The host-side repair loop remains an operator fallback. This job reuses the
 worker image, KSA/GSA and encryption-secret reference. It runs on CPU nodes,
 independently of the unchanged 240-second sweeper. No GPU is allocated.
 
-When unsuspended: 16 disposable row processes (production values), 270 seconds per row (configurable
-1–270), 1500 seconds per cycle, 1680-second Kubernetes Job ceiling, every five
-minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
+When unsuspended: 8 disposable row processes per pod (live and pinned production values),
+270 seconds per row (configurable1–270), 1500 seconds per cycle, and a1680-second
+Kubernetes Job ceiling. Schedule: every minute after the first-shipment patch;
+every five minutes before it, with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have
 committed: the next canonical plan reconciles the row instead of blindly
 replaying a write. The controller kills/reaps each row's process group, including

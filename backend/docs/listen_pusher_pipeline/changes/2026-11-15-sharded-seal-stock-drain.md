@@ -229,7 +229,9 @@ The release owner holds further expansion and prepares the exact inverse on:
    baseline, with fresh-ready count growing.
 
 Also watch overlap_refused, missing/failed indexes and effective4/5 throughput;
-record per-index dispositions and CPU usage. A CronJob inverse controls future
+record per-index dispositions and CPU usage. A green CronJob/Job status is not
+evidence that every shard repaired work: overlap_refused exits0, so watch each
+index's outcomes. A CronJob inverse controls future
 Jobs; immediate termination of running Jobs is a separate release-owner action,
 not part of this tool. Verify the unchanged GPU Deployment identities and the
 new repair image identity, and retain the private before/after packet.

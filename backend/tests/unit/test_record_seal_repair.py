@@ -552,3 +552,30 @@ def test_repair_admission_is_once_and_ledger_failure_is_fail_open(source, monkey
     result = plan(source)
     assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
     assert admissions.call_count == 1
+
+
+def test_slow_post_commit_ledger_is_bounded_counted_and_still_sealed(source, monkeypatch):
+    import signal
+    import time
+
+    store, client, _ = source
+    counts = {}
+    failures = Mock()
+    monkeypatch.setattr(repair, 'LEDGER_OBSERVATION_SECONDS', 0.02)
+    monkeypatch.setattr(repair.pipeline_ledger, '_observe_failure', failures)
+
+    def slow_ledger(*args, **kwargs):
+        assert client.rows[PATH]['record_audio_closed']  # The real commit already happened.
+        time.sleep(30)  # The real signal deadline must interrupt this IO wait.
+
+    monkeypatch.setattr(repair.pipeline_ledger, 'advance', slow_ledger)
+    result = plan(source)
+    started = time.monotonic()
+    with repair.SweepBudget(270).interrupt_io():
+        assert repair.apply_seals(store, result, result['plan_sha256'], observation_counts=counts) == {'sealed': 1}
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 269
+    assert time.monotonic() - started < 1
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[PATH]['record_admitted_at'] is not None
+    assert counts == {'ledger_misses': 1}
+    assert isinstance(failures.call_args.args[0], TimeoutError)
