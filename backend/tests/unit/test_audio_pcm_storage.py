@@ -27,7 +27,12 @@ def compression_enabled(monkeypatch):
 
 
 @pytest.mark.parametrize('kind', ['silence', 'quiet', 'mixed'])
-def test_real_encoder_preserves_every_sample_and_is_deterministic(kind):
+def test_real_encoder_preserves_every_sample_and_is_deterministic(kind, monkeypatch):
+    # Native codec correctness is independent of admission scheduling. Keep real
+    # ffmpeg encode/decode, with a test-harness child bound instead of the shared
+    # production deadline. Dedicated deadline tests below exercise that policy,
+    # including a real hung child and the original-PCM custody commit.
+    monkeypatch.setattr(audio_pcm_storage, '_stage_timeout', lambda *_args: 30.0)
     samples = [
         0 if kind == 'silence' or (kind == 'mixed' and i < 16000) else round(20 * math.sin(i * 0.13))
         for i in range(32000)

@@ -646,11 +646,19 @@ def alert_episodes(rule, samples, end_day):
     def counter_at(t):
         return max([value for at, value in samples if at <= t], default=0)
 
+    # Evaluation is pure for a fixed rule and query frame. The nightly counter
+    # has few distinct increases; reuse those results without thinning the
+    # five-minute timeline that drives pending/firing and episode durations.
+    evaluated = {}
+
+    def frame_at(t):
+        increase = counter_at(t) - counter_at(t - window)
+        if increase not in evaluated:
+            evaluated[increase] = b.evaluate(rule, {'A': {(): [increase]}})
+        return evaluated[increase]
+
     step = 300
-    frames = [
-        (t, b.evaluate(rule, {'A': {(): [counter_at(t) - counter_at(t - window)]}}))
-        for t in range(0, end_day * 86400, step)
-    ]
+    frames = [(t, frame_at(t)) for t in range(0, end_day * 86400, step)]
     return b.episodes(rule, frames, 0, end_day * 86400 - step, step)
 
 
