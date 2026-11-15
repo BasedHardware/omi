@@ -11529,6 +11529,7 @@
     "paywallTrialBilledYearly": "Letno zaračunavanje",
     "paywallTrialSaveAmount": "Prihranite {amount}",
     "paywallTrialCta": "Začnite za {price}",
+    "paywallTrialCodeHint": "Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.",
     "paywallTrialCancelNote": "Prekličite kadar koli. Brez stroškov, brez kazni.",
     "paywallMonthlyFallbackTitle": "Celo leto je za zdaj preveč?",
     "paywallMonthlyFallbackTrialBody": "Začnite z mesečnim paketom. Enakih {days} dni brezplačno, nato {price} na mesec. Prekličite kadar koli.",

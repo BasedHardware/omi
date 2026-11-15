@@ -4151,6 +4151,7 @@
     "paywallTrialBilledYearly": "Faktureres årligt",
     "paywallTrialSaveAmount": "Spar {amount}",
     "paywallTrialCta": "Start for {price}",
+    "paywallTrialCodeHint": "Har du en Omi Pro-kode? Indtast den på næste skærm.",
     "paywallTrialCancelNote": "Opsig når som helst. Ingen gebyrer, ingen straf.",
     "paywallMonthlyFallbackTitle": "Ikke klar til et helt år?",
     "paywallMonthlyFallbackTrialBody": "Start med månedlig i stedet. De samme {days} dage gratis, derefter {price} om måneden. Opsig når som helst.",

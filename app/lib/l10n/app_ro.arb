@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Facturat anual",
     "paywallTrialSaveAmount": "Economisește {amount}",
     "paywallTrialCta": "Începe pentru {price}",
+    "paywallTrialCodeHint": "Ai un cod Omi Pro? Introdu-l pe ecranul următor.",
     "paywallTrialCancelNote": "Anulează oricând. Fără taxe, fără penalități.",
     "paywallMonthlyFallbackTitle": "Încă nu ești gata pentru un an întreg?",
     "paywallMonthlyFallbackTrialBody": "Începe cu planul lunar. Aceleași {days} zile gratuite, apoi {price} pe lună. Anulezi oricând.",

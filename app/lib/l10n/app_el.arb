@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Χρέωση ετήσια",
     "paywallTrialSaveAmount": "Εξοικονομήστε {amount}",
     "paywallTrialCta": "Ξεκινήστε για {price}",
+    "paywallTrialCodeHint": "Έχετε κωδικό Omi Pro; Εισαγάγετέ τον στην επόμενη οθόνη.",
     "paywallTrialCancelNote": "Ακύρωση ανά πάσα στιγμή. Χωρίς χρεώσεις, χωρίς ποινές.",
     "paywallMonthlyFallbackTitle": "Όχι ακόμα για ολόκληρο χρόνο;",
     "paywallMonthlyFallbackTrialBody": "Ξεκίνα με το μηνιαίο. Ίδιες {days} ημέρες δωρεάν, μετά {price} τον μήνα. Ακύρωση ανά πάσα στιγμή.",

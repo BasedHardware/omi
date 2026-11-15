@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Arveldatakse iga-aastaselt",
     "paywallTrialSaveAmount": "Säästa {amount}",
     "paywallTrialCta": "Alusta hinnaga {price}",
+    "paywallTrialCodeHint": "Kas sul on Omi Pro kood? Sisesta see järgmisel ekraanil.",
     "paywallTrialCancelNote": "Tühista igal ajal. Ei mingeid tasusid ega trahve.",
     "paywallMonthlyFallbackTitle": "Pole veel terveks aastaks valmis?",
     "paywallMonthlyFallbackTrialBody": "Alusta hoopis kuupaketiga. Samad {days} päeva tasuta, seejärel {price} kuus. Tühista igal ajal.",

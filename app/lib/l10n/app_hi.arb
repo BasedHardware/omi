@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "वार्षिक बिलिंग",
     "paywallTrialSaveAmount": "{amount} बचाएं",
     "paywallTrialCta": "{price} में शुरू करें",
+    "paywallTrialCodeHint": "Omi Pro कोड है? अगली स्क्रीन पर उसे डालें।",
     "paywallTrialCancelNote": "कभी भी रद्द करें। कोई शुल्क नहीं, कोई जुर्माना नहीं।",
     "paywallMonthlyFallbackTitle": "पूरे साल के लिए अभी तैयार नहीं?",
     "paywallMonthlyFallbackTrialBody": "इसके बजाय मासिक से शुरू करें। वही {days} दिन मुफ़्त, फिर {price} प्रति माह। कभी भी रद्द करें।",
