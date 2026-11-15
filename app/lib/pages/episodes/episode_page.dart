@@ -12,6 +12,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_tabs.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/pages/episodes/episode_sections.dart';
@@ -34,7 +35,7 @@ class EpisodePage extends StatelessWidget {
   final bool processingAggregate;
   final List<Episode> processingEpisodes;
 
-  Future<void> _delete(BuildContext context) async {
+  Future<void> _delete(BuildContext context, List<ServerConversation> displayedMembers) async {
     final history = context.read<ConversationProvider>();
     final l10n = context.l10n;
     if (!context.read<ConnectivityProvider>().isConnected) {
@@ -45,10 +46,16 @@ class EpisodePage extends StatelessWidget {
       );
       return;
     }
-    // conversationIds includes discarded members; the visible list intentionally does not.
-    final known = {for (final c in episode.members) c.id: c, for (final c in history.conversations) c.id: c};
+    // A finished episode owns all its records. A processing collection owns only
+    // its displayed pending members; source identity is navigation metadata.
+    final ids = processingAggregate ? displayedMembers.map((m) => m.id).toSet() : episode.conversationIds.toSet();
+    final known = {
+      for (final c in episode.members) c.id: c,
+      for (final c in history.conversations) c.id: c,
+      for (final c in displayedMembers) c.id: c,
+    };
     final targets = [
-      for (final id in episode.conversationIds.toSet())
+      for (final id in ids)
         if (!history.memoriesToDelete.containsKey(id))
           known[id] ??
               ServerConversation(id: id, createdAt: episode.startedAt, discarded: true, structured: Structured('', '')),
@@ -92,22 +99,27 @@ class EpisodePage extends StatelessWidget {
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
     final opened = this.episode;
+    final openedMemberIds = opened.members.map((m) => m.id).toSet();
+    final replacement = episodes?.openedEpisode(opened.id) ??
+        episodes?.homeEpisodes
+            .where((e) => opened.id.isEmpty ? e.conversationIds.any(openedMemberIds.contains) : e.id == opened.id)
+            .firstOrNull;
+    // One owner's finished notes can arrive on this page. A collection spanning
+    // owners never adopts only the first; its source links remain independent.
     final episode = processingAggregate
-        ? opened
-        : episodes?.openedEpisode(opened.id) ??
-            episodes?.homeEpisodes
-                .where(
-                  (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id,
-                )
-                .firstOrNull ??
-            opened;
+        ? replacement != null &&
+                replacement.composed &&
+                replacement.conversationIds.toSet().containsAll(openedMemberIds)
+            ? replacement
+            : opened
+        : replacement ?? opened;
     // A processing aggregate is a collection of owners, never the first matching
     // owner. Keep every recording and provide a link to each real episode's notes.
     final owners = {
       for (final source in processingEpisodes) source.id: source,
       if (processingAggregate)
         for (final source in episodes?.homeEpisodes ?? const <Episode>[])
-          if (source.id.isNotEmpty && !source.live && source.conversationIds.any(opened.conversationIds.contains))
+          if (source.id.isNotEmpty && !source.live && source.conversationIds.any(openedMemberIds.contains))
             source.id: source,
     };
     final sources = [
@@ -123,10 +135,7 @@ class EpisodePage extends StatelessWidget {
       for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c,
     };
     final retained = {
-      for (final member in episode.members) member.id: member,
-      if (processingAggregate)
-        for (final source in sources)
-          for (final member in source.members) member.id: member,
+      for (final member in processingAggregate ? opened.members : episode.members) member.id: member,
     };
     final members = [for (final member in retained.values) known[member.id] ?? member]
         .where(
@@ -134,7 +143,9 @@ class EpisodePage extends StatelessWidget {
               !m.discarded &&
               !m.deleted &&
               !hidden.contains(m.id) &&
-              !(history?.memoriesToDelete.containsKey(m.id) ?? false),
+              !(history?.memoriesToDelete.containsKey(m.id) ?? false) &&
+              (!processingAggregate ||
+                  (homeStepOf(m) != HomeStep.failed && m.homeStep != 'ready' && m.homeStep != 'noise' && !m.isLocked)),
         )
         .toList();
     final memberIds = members.map((m) => m.id).toSet();
@@ -160,7 +171,7 @@ class EpisodePage extends StatelessWidget {
     ];
     final memberRows = <Widget>[
       for (final source in sources)
-        if (source.conversationIds.any(memberIds.contains))
+        if (source.conversationIds.any(openedMemberIds.contains))
           ConversationListItem(
             key: ValueKey('processing_episode_${source.id}'),
             conversation: ServerConversation(
@@ -205,7 +216,7 @@ class EpisodePage extends StatelessWidget {
                 title: context.l10n.delete,
                 iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
                 isDestructive: true,
-                onTap: () => _delete(context),
+                onTap: () => _delete(context, members),
               ),
             ],
             buttonBuilder: (_, showMenu) => OmiIconButton.filled(

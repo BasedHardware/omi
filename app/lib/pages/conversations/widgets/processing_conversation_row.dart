@@ -41,7 +41,9 @@ class ProcessingConversationRow extends StatelessWidget {
     routeToPage(
       context,
       EpisodePage(
-        processingAggregate: episode?.id.isEmpty == true,
+        // Even one real owner is a pending-member projection, not its full
+        // episode. Finished/source-only records must never join its actions.
+        processingAggregate: true,
         processingEpisodes: processingEpisodes,
         episode: episode ??
             Episode(
