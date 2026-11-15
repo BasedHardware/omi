@@ -93,3 +93,11 @@ def test_pg_sim_forwards_finish_marker_to_postgres():
     store.pg.projection_finish_backfill_complete.return_value = False
     assert store.projection_finish_backfill_complete() is False
     store.pg.projection_finish_backfill_complete.assert_called_once_with()
+
+
+def test_pg_sim_forwards_the_independent_record_ready_page():
+    store = object.__new__(PgSimStore)
+    store.pg = Mock()
+    store.pg.ready_pending.return_value = [{'segment_id': 'independent'}]
+    assert store.ready_pending('synthetic-owner', 160) == [{'segment_id': 'independent'}]
+    store.pg.ready_pending.assert_called_once_with('synthetic-owner', 160)

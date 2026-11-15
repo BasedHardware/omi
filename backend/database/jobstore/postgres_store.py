@@ -380,6 +380,15 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
+    def ready_pending(self, owner_key: str, limit: int) -> list[dict]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                "AND state = 'result_ready' ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (self.namespace, owner_key, max(1, min(limit, 160))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]:

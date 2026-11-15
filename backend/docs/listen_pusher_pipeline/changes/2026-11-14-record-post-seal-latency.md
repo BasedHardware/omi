@@ -202,9 +202,9 @@ merge writer remains; chart rendering here is not that runtime proof.
 
 Only after that readback, flip `RECORD_FRESH_MERGE_ENABLED` to `'true'` in
 both runtime overlays (all five CPU hosts per stage), both backend-listen env
-lists. The GPU runtime has no admission switch; its guard-qualified image is still required before CPU stamping can be enabled.
-both stage values files. Regenerate `runtime_env.yaml`, deploy the admitted
-CPU/worker configuration, and read back the actual revision/pod env values.
+lists. The GPU runtime has no admission switch; its guard-qualified image is
+still required before CPU stamping can be enabled. Regenerate `runtime_env.yaml`,
+deploy the admitted CPU configuration, and read back every CPU revision/pod env.
 Rollback is the same values to false; already stamped jobs retain their class,
 so the sibling guard must remain deployed when disabling.
 

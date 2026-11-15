@@ -4,6 +4,7 @@ import uuid
 
 from config.record_audio import require_record_audio_barrier
 from database import pipeline_ledger
+from utils.sync import processing_hold
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 
 RETRY_SECONDS = 120  # Existing enrichment delivery cadence; no additional poller.
@@ -11,11 +12,12 @@ RETRY_SECONDS = 120  # Existing enrichment delivery cadence; no additional polle
 
 def inspect(client, uid, producers):
     """Read current custody, including upload revision, before a paid callback."""
-    blocked = []
+    blocked, snapshots = [], {}
     for capture_id, revision in producers.items():
         ref = client.collection('users').document(uid).collection('conversations').document(capture_id)
         snapshot = ref.get()
         row = snapshot.to_dict() or {}
+        snapshots[capture_id] = row
         try:
             require_record_audio_barrier(row)
             if row.get('record_audio_partial') or not row.get('record_audio_closed'):
@@ -24,7 +26,7 @@ def inspect(client, uid, producers):
                 raise ValueError('new upload has not projected')
         except ValueError:
             blocked.append((ref, snapshot, row))
-    return blocked
+    return blocked, snapshots
 
 
 def deadline(row):
@@ -65,8 +67,24 @@ def admit(row, client, *, now):
     """Mutate a due row only when custody refuses; shared by both delivery adapters."""
     if not row.get('record_notes_producers'):
         return None, []
-    blocked = inspect(client, row['uid'], row['record_notes_producers'])
+    blocked, sources = inspect(client, row['uid'], row['record_notes_producers'])
     if not blocked:
+        canonical = sources.get(row['conversation_id'])
+        if canonical is None:
+            canonical = (
+                client.collection('users')
+                .document(row['uid'])
+                .collection('conversations')
+                .document(row['conversation_id'])
+                .get()
+                .to_dict()
+                or {}
+            )
+        if processing_hold.FIELD in canonical and processing_hold.enabled_for(canonical):
+            # Refreshes need a callback context even before completion; do not restart quiet.
+            row['sync_hold'] = True
+            origin = (canonical.get(processing_hold.FIELD) or {}).get('merge_first')
+            row['merge_hold' if origin else 'sync_hold_requested'] = True
         return None, []
     until = deadline(row)
     if now >= until:

@@ -184,3 +184,21 @@ def test_redirect_transfers_every_source_producer_fence_without_renewing_deadlin
     assert moved['record_notes_producers'] == {'capture': 1, 'another-capture': 3}
     assert moved['first_pending_at'] == NOW
     assert not d.ref.get().exists
+
+
+def test_fallback_refresh_rechecks_canonical_hold_before_any_sibling_completion(delivery, monkeypatch):
+    d = delivery
+    d.f.client.rows[d.ref.path].update(summary_seen=True, due_at=NOW + 600, sync_hold=False)
+    d.f.client.rows[d.f.conversation.path]['sync_processing_hold'] = {
+        'held': True,
+        'pending_since': NOW,
+        'last_content_at': NOW + 100,
+    }
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '600')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a, **k: d.f.conversation.get().to_dict())
+    paid = Mock()
+    monkeypatch.setattr(callback, 'process_conversation', paid)
+    d.worker._process = callback.enrich_conversation
+    assert d.deliver(NOW + 600).outcome == 'deferred'
+    assert d.ref.get().to_dict()['due_at'] == NOW + 700
+    paid.assert_not_called()
