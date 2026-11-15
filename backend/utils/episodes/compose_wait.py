@@ -97,7 +97,7 @@ def observation_updates(
     caps = [merged[cid]['observed_at'] + seconds for cid in waiting if cid in merged]
     return {
         OBSERVATIONS: merged,
-        'compose_transcript_wait_until': min(due, *caps),
+        'compose_transcript_wait_until': min([due, *caps]),
         'compose_transcript_wait_started_at': min(
             (merged[cid]['observed_at'] for cid in waiting if cid in merged), default=now
         ),
