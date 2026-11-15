@@ -383,7 +383,7 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
             if result in {'sealed', 'upload_failed_cleared'}:
-                observe_record_sealed(store.client, uid, cid, ref, **sealed_observation)
+                observe_record_sealed(store.client, uid, cid, ref, refresh_revision=True, **sealed_observation)
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

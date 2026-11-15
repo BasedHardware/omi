@@ -40,4 +40,4 @@ def test_uncontended_canonical_seal_read_budget_with_live_privacy_walk(source, p
     )
     # Discovery, transaction retries, SDK-installed write fences and optional
     # policy/cache probes are outside this uncontended leaf-read measurement.
-    assert counts['total'] == 19  # Includes three post-commit ledger fence reads.
+    assert counts['total'] == 20  # Committed revision + three ledger fence reads.

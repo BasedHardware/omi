@@ -100,17 +100,22 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     return result
 
 
-def observe_record_sealed(client, uid, conversation_id, ref, *, source_revision, admitted):
+def observe_record_sealed(client, uid, conversation_id, ref, *, source_revision, admitted, refresh_revision=False):
     """Shared fail-open, deletion-fenced observation after a real seal commits."""
     try:
         if admitted:
             pipeline_ledger.observe_admission()
+        if refresh_revision:
+            committed = ref.get(timeout=3, retry=None)
+            if not (committed.to_dict() or {}).get('record_audio_closed'):
+                return
+            source_revision = pipeline_ledger.source_revision(committed)
         pipeline_ledger.advance(
             uid,
             conversation_id,
             pipeline_ledger.SEALED,
             revision=max(1, source_revision),
-            reopen=admitted,
+            reopen=True,
             source_ref=ref,
             owner_ref=client.collection('users').document(uid),
             firestore_client=client,
