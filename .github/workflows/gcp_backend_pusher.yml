@@ -160,15 +160,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.environment == 'prod' && github.workflow_sha || github.event.inputs.branch }}
           fetch-depth: 0
 
       - name: Admit checked-out production source and image identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_INPUT: ${{ github.event.inputs.branch }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            # Dispatch stays on main for WIF. Execute admission using immutable
+            # workflow controls before switching to the separately pinned runtime.
+            if [[ "$GITHUB_REF" != refs/heads/main || "$GITHUB_SHA" != "$WORKFLOW_CONTROL_SHA" ]]; then
+              echo "Production Pusher requires an immutable main workflow dispatch." >&2
+              exit 1
+            fi
+            PINNED_PUSHER_RELEASE_SHA="$BRANCH_INPUT"
+            if [[ "$BRANCH_INPUT" == main ]]; then
+              PINNED_PUSHER_RELEASE_SHA=''
+            elif [[ ! "$BRANCH_INPUT" =~ ^[0-9a-f]{40}$ || "$BRANCH_INPUT" == "0000000000000000000000000000000000000000" ]]; then
+              echo "Production branch must be main or a full nonzero lowercase commit SHA." >&2
+              exit 1
+            fi
+            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            # Admission compares only the Pusher/shared ConfigMap projection.
+            python3 -m pip install -q pyyaml
+            DEPLOY_SHA="$(python3 backend/scripts/verify_pusher_promotion_evidence.py --admit-source \
+              --release-sha "$PINNED_PUSHER_RELEASE_SHA" --workflow-sha "$WORKFLOW_CONTROL_SHA")"
+            if [[ -n "$PINNED_PUSHER_RELEASE_SHA" ]]; then
+              PROOF="$RUNNER_TEMP/pusher-release-eligibility.json"
+              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}" > "$PROOF"
+              python3 .github/scripts/verify_backend_release_admission.py \
+                --sha "$DEPLOY_SHA" --repository "$GITHUB_REPOSITORY" \
+                --workflow-runs "$PROOF" --require-first-attempt
+            fi
+            git checkout --detach "$DEPLOY_SHA"
+          fi
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
           if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
-            git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+            if [[ "$CHECKED_OUT_SHA" != "$DEPLOY_SHA" ]]; then
+              echo "Runtime checkout does not match admitted source." >&2
+              exit 1
+            fi
             if ! git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main; then
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
               exit 1
@@ -178,6 +213,9 @@ jobs:
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            echo "PINNED_PUSHER_RELEASE_SHA=$PINNED_PUSHER_RELEASE_SHA" >> "$GITHUB_ENV"
+          fi
 
       - name: Select development-qualified Pusher digest for production
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -195,8 +233,6 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
-          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
-          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"
@@ -236,8 +272,13 @@ jobs:
             --expected-digest "$REQUESTED_DIGEST" \
             --expected-repository "$DEV_PUSHER_REPOSITORIES" \
             --expected-workflow-id "$EXPECTED_WORKFLOW_ID" \
+            --expected-qualification-source-sha "$PINNED_PUSHER_RELEASE_SHA" \
             --expected-run-id "$QUALIFICATION_RUN_ID"
           QUALIFIED_SOURCE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_sha"])' "${EVIDENCE_FILES[0]}")"
+          if [[ -n "$PINNED_PUSHER_RELEASE_SHA" && "$QUALIFIED_SOURCE_SHA" != "$CHECKED_OUT_SHA" ]]; then
+            echo "Explicit production source must match the development qualification source exactly." >&2
+            exit 1
+          fi
           # git 2.54 regressed "<full-sha>^{commit}" peeling; type check instead.
           if ! [ "$(git cat-file -t "${QUALIFIED_SOURCE_SHA}" 2>/dev/null)" = "commit" ] || ! git merge-base --is-ancestor "$QUALIFIED_SOURCE_SHA" origin/main; then
             echo "Development qualification source is not a commit on fresh origin/main." >&2
@@ -679,7 +720,8 @@ jobs:
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
             --expected-canary-run-id "$GITHUB_RUN_ID" \
-            --expected-canary-source-sha "$CHECKED_OUT_SHA"
+            --expected-canary-source-sha "$CHECKED_OUT_SHA" \
+            --expected-canary-workflow-sha "$GITHUB_SHA"
 
       - name: Upload protected production Pusher canary evidence
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -860,7 +902,8 @@ jobs:
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
             --expected-canary-run-id "$GITHUB_RUN_ID" \
-            --expected-canary-source-sha "$CHECKED_OUT_SHA"
+            --expected-canary-source-sha "$CHECKED_OUT_SHA" \
+            --expected-canary-workflow-sha "$GITHUB_SHA"
 
       - name: Upload exact live production Pusher deployment receipt
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -981,6 +1024,7 @@ jobs:
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary
         with:
+          deployment_tag: ${{ env.IMAGE_TAG }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
@@ -990,6 +1034,7 @@ jobs:
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-notifier
         with:
+          deployment_tag: ${{ env.IMAGE_TAG }}
           environment: ${{ github.event.inputs.environment }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
