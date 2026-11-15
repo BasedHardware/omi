@@ -85,6 +85,85 @@ void main() {
     );
   }
 
+  test('R16b 10002-row read snapshot hashes only notification overlaps and rechecks changed bytes', () async {
+    final a = await audio('island-a.bin', start: 110, end: 111);
+    final b = await audio('island-b.bin', start: 120, end: 121);
+    final indexed = [
+      a.$1,
+      b.$1,
+      for (var i = 0; i < 10000; i++)
+        Wal(
+            timerStart: 1000 + i,
+            codec: BleAudioCodec.opus,
+            seconds: 1,
+            filePath: 'unrelated-$i.bin',
+            storage: WalStorage.disk,
+            status: WalStatus.miss)
+    ];
+    await WalFileManager.saveWals(indexed);
+    var loads = 0, hashes = 0;
+    final c = PendantRingCustody(
+        store: store,
+        indexLoader: () async {
+          loads++;
+          return WalFileManager.loadIndexedWals();
+        },
+        fileDigest: (file) async {
+          hashes++;
+          return (await sha256.bind(file.openRead()).first).toString();
+        });
+    managers.add(c);
+    await c.beginConnection('device', 1, v1Info(readSeq: 100, writeSeq: 130));
+    await c.recordDurableRingRange('device', 1, 7, 110, 111, [a.$2]);
+    await c.recordDurableRingRange('device', 1, 7, 120, 121, [b.$2]);
+    loads = 0;
+    hashes = 0;
+    final validate = await c.createReadValidator();
+    for (var seq = 100; seq < 121; seq++) {
+      expect(await c.validatedRecordRanges('device', 1, 7, startSeq: seq, endSeq: seq + 1, readValidator: validate),
+          seq == 110 || seq == 120 ? [(seq, seq + 1)] : isEmpty);
+    }
+    expect(loads, 1, reason: 'one persisted index decode for this READ, not each DATA');
+    expect(hashes, 2, reason: 'no hashing unrelated ranges or 10000 unrelated rows');
+    await File('${directory.path}/island-a.bin').writeAsBytes([1, 18], flush: true);
+    expect(await c.validatedRecordRanges('device', 1, 7, startSeq: 110, endSeq: 111, readValidator: validate), isEmpty);
+    expect(hashes, 3, reason: 'suppression must hash fresh bytes, never cache a positive result');
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('R16b read snapshot rehashes before ADVANCE and rejects a revoked index', () async {
+    final a = await audio('contiguous.bin', start: 100, end: 120);
+    await WalFileManager.saveWals([a.$1]);
+    var loads = 0, hashes = 0;
+    final c = PendantRingCustody(
+        store: store,
+        indexLoader: () async {
+          loads++;
+          return WalFileManager.loadIndexedWals();
+        },
+        fileDigest: (file) async {
+          hashes++;
+          return (await sha256.bind(file.openRead()).first).toString();
+        });
+    managers.add(c);
+    await c.beginConnection('device', 1, v1Info(readSeq: 100, writeSeq: 130));
+    loads = 0;
+    hashes = 0;
+    final snapshot = await c.createReadValidator();
+    expect(await c.validatedAdvanceTarget('device', 1, 7, readValidator: snapshot), 120);
+    final firstHashes = hashes;
+    expect(firstHashes, greaterThan(0));
+    expect(await c.validatedAdvanceTarget('device', 1, 7, readValidator: snapshot), 120);
+    expect(hashes, firstHashes * 2, reason: 'each ADVANCE decision hashes again');
+    expect(loads, 1);
+    await WalFileManager.saveWals([a.$1..status = WalStatus.corrupted]);
+    expect(snapshot.isCurrent, isFalse);
+    expect(await c.validatedAdvanceTarget('device', 1, 7, readValidator: snapshot), isNull);
+    expect(await c.validatedRecordRanges('device', 1, 7, startSeq: 100, endSeq: 120, readValidator: snapshot), isEmpty);
+    final refreshed = await c.createReadValidator();
+    expect(await c.validatedAdvanceTarget('device', 1, 7, readValidator: refreshed), isNull);
+    expect(loads, 2, reason: 'a new snapshot is explicit, never per notification');
+  }, skip: !ringDrainRecoveryEnabled);
+
   test('synthetic slow ACK, fast buffered burst, disconnect and restart replay exact indexed prefix', () async {
     final first = await audio('slow.bin', end: 110);
     final burst = await audio('burst.bin', start: 110, end: 150);

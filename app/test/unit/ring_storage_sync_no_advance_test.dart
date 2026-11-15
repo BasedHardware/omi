@@ -389,7 +389,7 @@ void main() {
     expect(card.advanceCalls, [8]);
   });
 
-  test('a bad phone clock cannot estimate an unset ring; no file or ADVANCE', () async {
+  test('R16b a bad phone clock keeps unset ring audio with unknown time', () async {
     if (deviceCaptureClockRepairOff) return;
     final card = _FakeRingDevice(
         ringInfo: RingInfo(readSeq: 5, writeSeq: 6, capacityPackets: 100, droppedPackets: 0, packetSize: 444));
@@ -399,15 +399,16 @@ void main() {
     addTearDown(sync.stop);
     addTearDown(card.controller.close);
     final transfer = sync.syncWal(wal: wal);
-    final failed = expectLater(transfer, throwsException);
+    final finished = expectLater(transfer, completes);
     await _until(() => card.readCalls.isNotEmpty);
     card.emit(_readBegin(5, 1));
     card.emit(_record(timestamp: 0));
     card.emit(_done(0, 6));
-    await failed;
-    expect(local.added, isEmpty);
-    expect(card.advanceCalls, isEmpty);
-    expect(wal.status, WalStatus.miss);
+    await finished;
+    expect(local.added.single.timerStart, 0);
+    expect(local.added.single.clockRun, isNotNull);
+    expect(card.advanceCalls, [6]);
+    expect(wal.status, WalStatus.synced);
   });
 
   test('a healthy DONE cancels the idle watchdog without a spurious STOP', () async {

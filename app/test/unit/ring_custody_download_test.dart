@@ -21,6 +21,7 @@ import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -34,6 +35,7 @@ class _FakeLocalSync implements LocalWalSync {
   _FakeLocalSync();
 
   bool failIndexSave = false;
+  bool persistRealIndex = false;
   Completer<void>? indexGate;
   int indexAttempts = 0;
   final added = <Wal>[];
@@ -47,6 +49,10 @@ class _FakeLocalSync implements LocalWalSync {
     await indexGate?.future;
     if (failIndexSave) throw const FileSystemException('index write failed');
     added.add(wal);
+    if (persistRealIndex) {
+      wal.ownerUid = 'owner';
+      await WalFileManager.saveWals([...await WalFileManager.loadIndexedWals(), wal]);
+    }
   }
 
   @override
@@ -249,20 +255,28 @@ void main() {
   });
 
   RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
-      {Timer Function(Duration, void Function())? timer, Timer Function(Duration, void Function())? persistenceTimer}) {
-    final custody = PendantRingCustody(
-      walValidator: (ref) async {
-        final path = await Wal.getFilePath(ref.fileName);
-        if (path == null) return false;
-        final f = File(path);
-        return f.existsSync() && await f.length() == ref.bytes;
-      },
-    );
+      {Timer Function(Duration, void Function())? timer,
+      Timer Function(Duration, void Function())? persistenceTimer,
+      DateTime Function()? clock,
+      bool productionValidation = false,
+      PendantRingCustody? custodyOverride}) {
+    final custody = custodyOverride ??
+        PendantRingCustody(
+          walValidator: productionValidation
+              ? null
+              : (ref) async {
+                  final path = await Wal.getFilePath(ref.fileName);
+                  if (path == null) return false;
+                  final f = File(path);
+                  return f.existsSync() && await f.length() == ref.bytes;
+                },
+        );
     custodies.add(custody);
-    final sync = RingStorageSyncImpl(_Listener(), transferTimer: timer, persistenceTimer: persistenceTimer)
-      ..testConnection = card
-      ..testCustody = custody
-      ..testWals = [wal];
+    final sync =
+        RingStorageSyncImpl(_Listener(), transferTimer: timer, persistenceTimer: persistenceTimer, clock: clock)
+          ..testConnection = card
+          ..testCustody = custody
+          ..testWals = [wal];
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40));
     return sync;
@@ -277,6 +291,137 @@ void main() {
         device: 'devkit-1',
         storageTotalBytes: records * 444,
       );
+
+  for (final scenario in ['bad phone', 'absurd duration', 'zero duration', 'good bad good']) {
+    test('R16b every decoded record is indexed and provable despite $scenario', () async {
+      await WalFileManager.init();
+      await WalFileManager.saveWals([]);
+      final goodPhone = DateTime.utc(2026, 11, 15);
+      final phone = scenario == 'bad phone' || scenario == 'good bad good' ? DateTime.utc(1970) : goodPhone;
+      final count = scenario == 'good bad good' ? 3 : 1;
+      final card = _FakeRingDevice(
+          ringInfo: _info(writeSeq: 5 + count, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+      final local = _FakeLocalSync()..persistRealIndex = true;
+      final wal = ringWal(records: count)..totalFrames = scenario == 'absurd duration' ? 1000000000000 : 0;
+      final sync = syncWith(local, card, wal, clock: () => phone, productionValidation: true);
+      addTearDown(sync.stop);
+      addTearDown(card.controller.close);
+      final transfer = sync.syncWal(wal: wal);
+      // Attach an error listener before notification work starts on the baseline.
+      final finished = expectLater(transfer, completes);
+      await card.readReady;
+      card.emit(_readBegin(5, count));
+      final good = goodPhone.millisecondsSinceEpoch ~/ 1000;
+      for (final ts in scenario == 'good bad good' ? [good, 0, good + 1] : [0]) {
+        card.emit(_record(timestamp: ts));
+      }
+      card.emit(_done(0, 5 + count));
+      await finished;
+      final indexed = await WalFileManager.loadIndexedWals();
+      expect(indexed.fold<int>(0, (sum, row) => sum + row.totalFrames), count);
+      expect(card.advances.last.seq, 5 + count);
+      final ranges = <int>[];
+      for (final row in indexed) {
+        final bytes = await File((await Wal.getFilePath(row.filePath))!).readAsBytes();
+        expect(bytes, List.generate(row.totalFrames, (_) => [10, 0, 0, 0, ...List.filled(10, 0xAB)]).expand((v) => v));
+        expect(row.fileSha256, sha256.convert(bytes).toString());
+        expect(row.ownerUid, 'owner');
+        expect(row.device, 'devkit-1');
+        expect(row.downloadRingId, 42);
+        ranges.addAll(List.generate(row.downloadSeqEnd! - row.downloadSeqStart!, (i) => row.downloadSeqStart! + i));
+        expect(
+            await walFileManagerCustodyValidator(CustodyWalRef(
+                fileName: row.filePath!,
+                bytes: bytes.length,
+                frames: row.totalFrames,
+                ownerUid: row.ownerUid,
+                fileSha256: row.fileSha256,
+                downloadDeviceId: row.device,
+                downloadRingId: 42,
+                downloadSeqStart: row.downloadSeqStart,
+                downloadSeqEnd: row.downloadSeqEnd)),
+            isTrue);
+      }
+      expect(ranges..sort(), List.generate(count, (i) => 5 + i));
+      if (!deviceCaptureClockRepairOff && scenario != 'zero duration') {
+        final unknown = indexed.where((row) => row.timerStart == 0);
+        expect(unknown, isNotEmpty);
+        expect(
+            unknown
+                .every((row) => row.clockRun != null && walCaptureTimeClass(row, good) == WalCaptureTimeClass.unknown),
+            isTrue);
+      }
+      if (deviceCaptureClockRepairOff && count == 1) {
+        final oldStart = phone.millisecondsSinceEpoch ~/ 1000 - wal.totalFrames ~/ wal.codec.getFramesPerSecond();
+        expect(indexed.single.timerStart, oldStart, reason: 'OFF retains the old estimate exactly');
+      }
+    }, skip: !ringDrainRecoveryEnabled);
+  }
+
+  test('R16b DATA uses one 10001-row index snapshot until its own durable write', () async {
+    await WalFileManager.init();
+    final bytes = [10, 0, 0, 0, ...List.filled(10, 0xAB), 10, 0, 0, 0, ...List.filled(10, 0xAB)];
+    await File('${tempDir.path}/existing.bin').writeAsBytes(bytes, flush: true);
+    final row = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 2,
+        filePath: 'existing.bin',
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        ownerUid: 'owner',
+        device: 'devkit-1',
+        downloadRingId: 42,
+        downloadSeqStart: 6,
+        downloadSeqEnd: 8,
+        downloadFileBytes: bytes.length,
+        fileSha256: sha256.convert(bytes).toString());
+    await WalFileManager.saveWals([
+      row,
+      for (var i = 0; i < 10000; i++)
+        Wal(
+            timerStart: i + 1000,
+            codec: BleAudioCodec.opus,
+            seconds: 1,
+            filePath: 'unrelated-$i.bin',
+            storage: WalStorage.disk,
+            status: WalStatus.miss)
+    ]);
+    var loads = 0, hashes = 0;
+    final custody = PendantRingCustody(indexLoader: () async {
+      loads++;
+      return WalFileManager.loadIndexedWals();
+    }, fileDigest: (file) async {
+      hashes++;
+      return (await sha256.bind(file.openRead()).first).toString();
+    });
+    final local = _FakeLocalSync()..persistRealIndex = true;
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 8, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final wal = ringWal(records: 3);
+    final sync = syncWith(local, card, wal, custodyOverride: custody);
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    final transfer = sync.syncWal(wal: wal);
+    await card.readReady;
+    final initialLoads = loads, initialHashes = hashes;
+    card.emit(_readBegin(5, 3));
+    for (var i = 0; i < 3; i++) {
+      card.emit(_record(timestamp: 0));
+    }
+    final wait = Stopwatch()..start();
+    while (hashes - initialHashes < 2 && wait.elapsed < const Duration(seconds: 5)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(hashes - initialHashes, 2, reason: 'only records 6 and 7 overlap; each skip hashes fresh');
+    expect(loads, initialLoads, reason: 'DATA performs no whole-index loads');
+    card.emit(_done(0, 8));
+    await transfer;
+    expect(local.added.single.totalFrames, 1, reason: 'existing records never become a second audio file');
+    expect(loads - initialLoads, 1, reason: 'only an indexed gap write by this read refreshes the snapshot');
+    expect(card.advances.last.seq, 8);
+  }, skip: !ringDrainRecoveryEnabled);
 
   test('syncAll persists the failure cause, original stack and phase for list and transfer errors', () async {
     SharedPreferences.setMockInitialValues({});

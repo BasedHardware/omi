@@ -325,7 +325,7 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
   }
 }
 
-Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
+Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed, {Future<String> Function(File)? fileDigest}) async {
   try {
     if (indexed == null || indexed.status == WalStatus.corrupted) return false;
     if (ref.ownerUid == null ||
@@ -389,7 +389,11 @@ Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
     final file = File(path);
     if (!file.existsSync()) return false;
     final matches = (await file.length()) == ref.bytes;
-    if (!matches || (await sha256.bind(file.openRead()).first).toString() != ref.fileSha256) return false;
+    if (!matches ||
+        (await (fileDigest?.call(file) ?? sha256.bind(file.openRead()).first.then((hash) => hash.toString()))) !=
+            ref.fileSha256) {
+      return false;
+    }
     // Zero-frame proof is an explicit durable index row + canonical marker,
     // never the vacuous truth of an empty list of audio WALs.
     if (ref.frames == 0) {
@@ -499,15 +503,34 @@ class _DeviceCustody {
 
 typedef LiveFrameObservation = int?;
 
+/// One read's index authority, never a cache of successful file hashes.
+/// An unrelated index mutation revokes it; only the read's own durable write
+/// obtains a replacement snapshot. Account/session fences remain independent.
+class CustodyReadValidation {
+  final CustodyWalValidator _validate;
+  final bool Function() _current;
+  CustodyReadValidation(this._validate, this._current);
+  bool get isCurrent => _current();
+  Future<bool> call(CustodyWalRef ref) async => isCurrent && await _validate(ref) && isCurrent;
+}
+
 class PendantRingCustody {
   final Map<String, _DeviceCustody> _devices = {};
   final PendantCustodyStore _store;
   final CustodyWalValidator _walValidator;
+  final Future<List<Wal>> Function() _indexLoader;
+  final Future<String> Function(File)? _fileDigest;
 
   Future<void> _saveQueue = Future.value();
 
-  PendantRingCustody({PendantCustodyStore? store, CustodyWalValidator? walValidator})
+  PendantRingCustody(
+      {PendantCustodyStore? store,
+      CustodyWalValidator? walValidator,
+      Future<List<Wal>> Function()? indexLoader,
+      Future<String> Function(File)? fileDigest})
       : _store = store ?? PendantCustodyStore(),
+        _indexLoader = indexLoader ?? WalFileManager.loadIndexedWals,
+        _fileDigest = fileDigest,
         _walValidator = walValidator ?? walFileManagerCustodyValidator;
 
   static final PendantRingCustody shared = PendantRingCustody();
@@ -515,16 +538,22 @@ class PendantRingCustody {
   Future<CustodyWalValidator> _validationSnapshot() async {
     if (!ringDrainRecoveryEnabled || _walValidator != walFileManagerCustodyValidator) return _walValidator;
     try {
-      // One persisted index snapshot per validation operation, never a cache
-      // carried to another ACK. File bytes and ownership are still checked.
+      // One persisted index snapshot per operation, or per owned READ.
+      // Only index rows are reused; file bytes are hashed on every decision.
       final indexed = <String, Wal>{
-        for (final wal in await WalFileManager.loadIndexedWals())
-          (wal.filePath ?? wal.getFileName()).split('/').last as String: wal,
+        for (final wal in await _indexLoader()) (wal.filePath ?? wal.getFileName()).split('/').last as String: wal,
       };
-      return (ref) => _validateIndexedWal(ref, indexed[ref.fileName]);
+      return (ref) => _validateIndexedWal(ref, indexed[ref.fileName], fileDigest: _fileDigest);
     } catch (_) {
       return (_) async => false;
     }
+  }
+
+  Future<CustodyReadValidation> createReadValidator() async {
+    final revision = WalFileManager.indexRevision;
+    final validate = await _validationSnapshot();
+    return CustodyReadValidation(
+        validate, () => _walValidator != walFileManagerCustodyValidator || revision == WalFileManager.indexRevision);
   }
 
   /// Constant work per connected device, independent of the ledger's size.
@@ -963,21 +992,27 @@ class PendantRingCustody {
   /// Stable exact ranges for avoiding duplicate files inside an interrupted
   /// READ. Skipping payload is not ADVANCE authority: the release path validates
   /// the refs again, so later deletion/index loss still retains the pendant copy.
-  Future<List<(int, int)>> validatedRecordRanges(String deviceId, int epoch, int ringId) async {
+  Future<List<(int, int)>> validatedRecordRanges(String deviceId, int epoch, int ringId,
+      {int? startSeq, int? endSeq, CustodyReadValidation? readValidator}) async {
     final state = _state(deviceId, epoch);
     if (state == null || state.incarnationInvalid || state.checkpoint.ringId != ringId) return [];
     final token = state.sessionToken;
     final cp = state.checkpoint;
     final candidates = <(int, int, List<CustodyWalRef>)>[
-      for (final r in cp.ringRanges) (r.startSeq, r.endSeq, List.of(r.wals)),
-      for (final r in cp.liveRanges) (r.startSeq, r.endSeq, List.of(r.wals)),
+      for (final r in cp.ringRanges)
+        if ((startSeq == null || r.endSeq > startSeq) && (endSeq == null || r.startSeq < endSeq))
+          (r.startSeq, r.endSeq, List.of(r.wals)),
+      for (final r in cp.liveRanges)
+        if ((startSeq == null || r.endSeq > startSeq) && (endSeq == null || r.startSeq < endSeq))
+          (r.startSeq, r.endSeq, List.of(r.wals)),
     ];
     final result = <(int, int)>[];
-    final validate = await _validationSnapshot();
+    final CustodyWalValidator validate = readValidator == null ? await _validationSnapshot() : readValidator.call;
+    final checked = <String, Future<bool>>{};
     for (final range in candidates) {
       var valid = range.$3.isNotEmpty && range.$3.every((r) => _referenceScopeMatches(r, deviceId, ringId));
       for (final ref in range.$3) {
-        if (!await validate(ref)) {
+        if (!await checked.putIfAbsent(jsonEncode(ref.toJson()), () => validate(ref))) {
           valid = false;
           break;
         }
@@ -988,9 +1023,9 @@ class PendantRingCustody {
           cp.ringId != ringId) {
         return [];
       }
-      if (valid) result.add((range.$1, range.$2));
+      if (valid && !result.contains((range.$1, range.$2))) result.add((range.$1, range.$2));
     }
-    return result;
+    return readValidator != null && !readValidator.isCurrent ? [] : result;
   }
 
   int? advanceTarget(String deviceId, int epoch) {
@@ -1028,7 +1063,8 @@ class PendantRingCustody {
     return true;
   }
 
-  Future<int?> validatedAdvanceTarget(String deviceId, int epoch, int? ringId) async {
+  Future<int?> validatedAdvanceTarget(String deviceId, int epoch, int? ringId,
+      {CustodyReadValidation? readValidator}) async {
     final state = _state(deviceId, epoch);
     if (state?.incarnationInvalid ?? true) return null;
     final token = state!.sessionToken;
@@ -1049,11 +1085,12 @@ class PendantRingCustody {
     for (final r in state.checkpoint.liveRanges) {
       if (r.endSeq > from && r.startSeq < target) refs.addAll(r.wals);
     }
-    final validate = await _validationSnapshot();
+    final CustodyWalValidator validate = readValidator == null ? await _validationSnapshot() : readValidator.call;
     for (final w in refs) {
       final ok = _referenceScopeMatches(w, deviceId, ringId) && await validate(w);
       final s = _state(deviceId, epoch);
       if (s == null || !identical(s.sessionToken, token) || s.checkpoint.ringId != cpRingId) return null;
+      if (readValidator != null && !readValidator.isCurrent) return null;
       if (!ok) {
         s.checkpoint.ringRanges.removeWhere((r) => r.wals.contains(w));
         s.checkpoint.liveRanges.removeWhere((r) => r.wals.contains(w));
@@ -1085,7 +1122,11 @@ class PendantRingCustody {
     final after = _state(deviceId, epoch);
     if (after == null || !identical(after.sessionToken, token) || after.checkpoint.ringId != cpRingId) return null;
     final current = advanceTarget(deviceId, epoch);
-    if (current == null || !_batchAuthorityValid(after, current)) return null;
+    if (current == null ||
+        (readValidator != null && !readValidator.isCurrent) ||
+        !_batchAuthorityValid(after, current)) {
+      return null;
+    }
     return current < target ? current : target;
   }
 

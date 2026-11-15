@@ -29,7 +29,14 @@ class WalFileManager {
   // Both writers use the same main/backup temporary paths.
   static final _saveLock = Pool(1);
 
+  // Revokes per-read custody snapshots before any index mutation, including
+  // worker writes and recovery. A stale row must never hide a corruption or
+  // deletion recorded by another writer while the audio file still exists.
+  static int _indexRevision = 0;
+  static int get indexRevision => _indexRevision;
+
   static Future<void> init() async {
+    _indexRevision++;
     final directory = await getApplicationDocumentsDirectory();
     _walFile = File('${directory.path}/$_walFileName');
     _walBackupFile = File('${directory.path}/$_walBackupFileName');
@@ -94,7 +101,10 @@ class WalFileManager {
             seedFromDisk: seedFromDisk,
             seedPath: seedPath,
             beforeWriteForTesting: beforeWriteForTesting,
-            serialize: (write) => _saveLock.withResource(write));
+            serialize: (write) => _saveLock.withResource(() async {
+                  _indexRevision++;
+                  await write();
+                }));
       });
 
   static ({List<Wal> wals, bool invalid}) _decodeIndex(String content, String path) {
@@ -166,6 +176,7 @@ class WalFileManager {
   static Future<void> Function(File file)? quarantineRenameForTesting;
 
   static Future<void> _quarantineIndex(File file, String reason) async {
+    _indexRevision++;
     try {
       if (await file.exists()) {
         final rename = quarantineRenameForTesting;
@@ -202,6 +213,7 @@ class WalFileManager {
   static ({String path, int length, DateTime modified})? _lastWritten;
 
   static Future<bool> saveWals(List<Wal> wals) {
+    _indexRevision++;
     final queued = _queued;
     if (queued != null) {
       queued.superseded = queued.wals;
@@ -218,6 +230,7 @@ class WalFileManager {
   }
 
   static Future<bool> _saveWals(List<Wal> wals, {List<Wal>? superseded}) async {
+    _indexRevision++;
     if (_walFile == null) {
       await init();
     }
@@ -324,6 +337,7 @@ class WalFileManager {
   }
 
   static Future<void> clearAll() async {
+    _indexRevision++;
     if (_walFile != null && _walFile!.existsSync()) {
       await _walFile!.delete();
     }

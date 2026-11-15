@@ -570,12 +570,18 @@ class RingStorageSyncImpl implements RingStorageSync {
         ringInfo = afterReplay;
       }
     }
+    CustodyReadValidation? readValidator;
     Future<void> advanceDurablePrefix(String reason) async {
       if (ringId == null || (effectiveCaps & RingProtocol.capAppAckReclaim) == 0) return;
       if (connection.ringCustodyEpoch != epoch || _localSync?.sessionGeneration != admittedGeneration) return;
       try {
-        final target = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
-        if (target == null || _localSync?.sessionGeneration != admittedGeneration) return;
+        final target =
+            await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId, readValidator: readValidator);
+        if (target == null ||
+            (readValidator != null && !readValidator!.isCurrent) ||
+            _localSync?.sessionGeneration != admittedGeneration) {
+          return;
+        }
         await _custodyAdvance(connection, custodyDeviceId, epoch, target, ringId, reason: reason);
       } catch (error) {
         // The durable receipt survives a failed ACK/checkpoint write. Never
@@ -596,9 +602,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (fresh.unreadPackets <= 0) return true;
     }
     final readStart = ringInfo.readSeq;
-    final alreadyDurable = ringDrainRecoveryEnabled && ringId != null
-        ? await _custody.validatedRecordRanges(custodyDeviceId, epoch, ringId)
-        : const <(int, int)>[];
+    if (ringDrainRecoveryEnabled && ringId != null) readValidator = await _custody.createReadValidator();
     if (!stillEpoch()) return false;
     final droppedKey = '$custodyDeviceId:${ringInfo.ringId}';
     final lastDropped = _droppedBaseline[droppedKey];
@@ -706,10 +710,12 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final chunkSeqs = recordSeqs.sublist(0, recordsToTake);
         final chunk = bytesData.sublist(0, framesToTake);
-        final chunkTimerStart = (recordTimestamps.isNotEmpty && useRecordTime(recordTimestamps.first))
+        var chunkTimerStart = (recordTimestamps.isNotEmpty && useRecordTime(recordTimestamps.first))
             ? recordTimestamps.first
-            : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+            : !deviceCaptureClockRepairOff && firstRecordTs == 0
+                ? 0
+                : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
+                    bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
         final chunkClockRun = recordRuns.isNotEmpty ? recordRuns.first : null;
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
@@ -718,13 +724,13 @@ class RingStorageSyncImpl implements RingStorageSync {
           if (chunk.isEmpty && (!ringDrainRecoveryEnabled || ringId == null)) {
             throw StateError('Empty ring records require indexed markers');
           }
-          // An underestimate of the unread region must not let a long untimed
-          // stream run into an impossible date. Fail closed before persistence
-          // and leave its unproven records on the pendant.
+          // Capture time is metadata, never admission to phone custody. If
+          // estimation fails, preserve every decoded byte with explicit unknown
+          // time (zero + clock-run), without manufacturing a calendar date.
           if (!deviceCaptureClockRepairOff &&
               chunkClockRun != null &&
               (!phoneCaptureClockPlausible(phoneNow) || !deviceCaptureTimePlausible(chunkTimerStart, phoneNow))) {
-            throw StateError('Estimated ring clock outside plausible window; retain unproven records');
+            chunkTimerStart = 0;
           }
           final localSync = _localSync;
           if (localSync == null) throw StateError('LocalWalSync unavailable; refusing release');
@@ -750,6 +756,9 @@ class RingStorageSyncImpl implements RingStorageSync {
                     downloadSeqStart: indexedRing != null ? chunkSeqs.first : null,
                     downloadSeqEnd: indexedRing != null ? chunkSeqs.last + 1 : null,
                     nextCollisionSequence: () => _storageFileSeq++);
+            if (ringDrainRecoveryEnabled && ringId != null) {
+              readValidator = await _custody.createReadValidator();
+            }
             final file = File((await Wal.getFilePath(localWal.filePath))!);
             final fileBytes = await file.length();
             if (ringDrainRecoveryEnabled && localSync.sessionGeneration != admittedGeneration) {
@@ -880,10 +889,13 @@ class RingStorageSyncImpl implements RingStorageSync {
       reassembler.append(payload);
       _updateSpeed(payload.length);
 
-      final durableNow = ringDrainRecoveryEnabled && ringId != null && alreadyDurable.isNotEmpty
-          ? await _custody.validatedRecordRanges(custodyDeviceId, epoch, ringId)
+      final records = reassembler.drainRecords();
+      final intervalStart = readStart + recordsConsumed;
+      final durableNow = ringDrainRecoveryEnabled && ringId != null && records.isNotEmpty
+          ? await _custody.validatedRecordRanges(custodyDeviceId, epoch, ringId,
+              startSeq: intervalStart, endSeq: intervalStart + records.length, readValidator: readValidator)
           : const <(int, int)>[];
-      for (final record in reassembler.drainRecords()) {
+      for (final record in records) {
         final seq = readStart + recordsConsumed;
         recordsConsumed += 1;
         final rawTs = RingProtocol.readRecordTimestamp(record);
@@ -918,13 +930,18 @@ class RingStorageSyncImpl implements RingStorageSync {
           } else {
             // Fallback: now - estimated duration of the unread region.
             final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = estimatedDeviceStart(
-                deviceCaptureClockRepairOff ? _clock().millisecondsSinceEpoch ~/ 1000 : phoneNow, estSecs);
+            try {
+              firstRecordTs = estimatedDeviceStart(
+                  deviceCaptureClockRepairOff ? _clock().millisecondsSinceEpoch ~/ 1000 : phoneNow, estSecs);
+            } on StateError {
+              firstRecordTs = 0; // Unknown capture time must never discard decoded audio.
+            }
           }
         }
 
         if (durableNow.any((r) => r.$1 <= seq && seq < r.$2) ||
-            await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
+            ((!ringDrainRecoveryEnabled || ringId == null) &&
+                await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq))) {
           skippedDuplicates++;
           skippedProofGap = true;
           if (seq == provenSeq) provenSeq = seq + 1;
