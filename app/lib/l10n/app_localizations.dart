@@ -13251,6 +13251,12 @@ abstract class AppLocalizations {
   /// **'Failed to sign in with Apple, please try again.'**
   String get authFailedToSignInWithApple;
 
+  /// Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple didn\'t work. Try again or continue with Google.'**
+  String get authAppleSignInFailedUseGoogle;
+
   /// Error message when retrieving Firebase token fails
   ///
   /// In en, this message translates to:

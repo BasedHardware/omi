@@ -7089,6 +7089,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ஆக உள்நுழைக தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple மூலம் உள்நுழைய முடியவில்லை. மீண்டும் முயலவும் அல்லது Google மூலம் தொடரவும்.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase டோகனை பெற தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override

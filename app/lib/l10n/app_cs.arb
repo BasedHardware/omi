@@ -2197,6 +2197,7 @@
     "authFailedToSignInWithGoogle": "Přihlášení přes Google se nezdařilo, zkuste to prosím znovu.",
     "authenticationFailed": "Ověření se nezdařilo. Zkuste to prosím znovu.",
     "authFailedToSignInWithApple": "Přihlášení přes Apple se nezdařilo, zkuste to prosím znovu.",
+    "authAppleSignInFailedUseGoogle": "Přihlášení přes Apple se nezdařilo. Zkuste to znovu nebo pokračujte přes Google.",
     "authFailedToRetrieveToken": "Nepodařilo se získat Firebase token, zkuste to prosím znovu.",
     "authUnexpectedErrorFirebase": "Neočekávaná chyba při přihlašování, chyba Firebase, zkuste to prosím znovu.",
     "authUnexpectedError": "Neočekávaná chyba při přihlašování, zkuste to prosím znovu",

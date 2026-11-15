@@ -7050,6 +7050,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не удалось войти через Apple, пожалуйста, попробуйте снова.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не удалось войти через Apple. Попробуйте ещё раз или продолжите с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не удалось получить токен Firebase, пожалуйста, попробуйте снова.';
 
   @override

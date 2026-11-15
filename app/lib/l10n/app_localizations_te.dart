@@ -7073,6 +7073,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple సాથে సైన్ ఇన్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.';
+
+  @override
   String get authFailedToRetrieveToken => 'firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
