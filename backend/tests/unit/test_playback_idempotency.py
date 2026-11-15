@@ -573,3 +573,133 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
     marker.assert_not_called()
     encoder.assert_called_once()
     assert cache.cached_manifest(blob) == (3, _SPANS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'success',
+        'timeout',
+        'off',
+        'newer_marker',
+        'refused',
+        'saturated',
+        'error',
+        'marker_retired_before_read',
+        'retire_error',
+        'no_objects',
+    ],
+)
+async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, caplog, mode):
+    import httpx
+    import threading
+    import asyncio
+    from database import record_projection_rebuild
+    from utils.batch_pipeline import record_projection_rebuild as repair
+    from utils.sync import playback_metadata
+    from utils.executors import ExecutorSaturatedError
+
+    app, sync = route_app
+    monkeypatch.setattr(playback_metadata, '_coordinator', playback_metadata.DemandCoordinator())
+    enabled = mode != 'off'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'true' if enabled else 'false')
+    app.dependency_overrides[sync.auth.get_current_user_uid] = lambda: 'synthetic'
+    row = {'audio_files': [], 'record_lane_owner': 'batch_live_v1', 'record_audio_closed': True}
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *a, **kw: dict(row))
+
+    def readback(*args, **kwargs):
+        if mode == 'marker_retired_before_read':
+            return {**row, 'audio_files': [dict(id='part', duration=1, chunk_timestamps=[100])]}
+        return dict(row)
+
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', readback)
+    read = Mock(return_value=None if mode == 'marker_retired_before_read' else 'old')
+    monkeypatch.setattr(record_projection_rebuild, 'pending_version', read)
+    monkeypatch.setattr(record_projection_rebuild, 'preflight_projection', lambda *args: True)
+    release, finished = threading.Event(), threading.Event()
+    marker = {'version': 'old'}
+
+    def rebuild(*args):
+        if mode == 'timeout':
+            assert release.wait(5)
+        if mode == 'refused':
+            finished.set()
+            return False
+        if mode == 'no_objects':
+            finished.set()
+            return 'no_objects'
+        if mode == 'error':
+            finished.set()
+            raise RuntimeError('PRIVATE-SDK-DETAIL-CANARY')
+        row['audio_files'] = [dict(id='part', duration=1, chunk_timestamps=[100])]
+        if mode == 'newer_marker':
+            marker['version'] = 'new'
+        return True
+
+    def retire(*args, observed_update_time):
+        assert observed_update_time == 'old'
+        if mode == 'retire_error':
+            finished.set()
+            raise OSError('PRIVATE-SDK-DETAIL-CANARY')
+        if marker.get('version') == observed_update_time:
+            marker.clear()
+        finished.set()
+        return not marker
+
+    discovery = Mock(side_effect=rebuild)
+    deletion = Mock(side_effect=retire)
+    monkeypatch.setattr(repair, 'rebuild', discovery)
+    monkeypatch.setattr(record_projection_rebuild, 'retire_observed', deletion)
+    monkeypatch.setattr(playback_metadata, 'OPEN_TIMEOUT_SECONDS', 0.01 if mode == 'timeout' else 2)
+    if mode == 'saturated':
+        monkeypatch.setattr(playback_metadata, 'submit_with_context', Mock(side_effect=ExecutorSaturatedError()))
+    monkeypatch.setattr(sync.sync_playback, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(sync.sync_playback, 'get_playback_artifact_signed_url', lambda *a: 'signed')
+    monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: {'status': 'unavailable'})
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            response = await client.get('/v1/sync/audio/conversation/urls')
+            if mode == 'no_objects':
+                repeat = await client.get('/v1/sync/audio/conversation/urls')
+                assert repeat.status_code == 200 and repeat.json()['poll_after_ms'] == 5000
+        if mode == 'error':
+            assert response.status_code == 200 and response.json()['poll_after_ms'] == 5000 and marker
+            assert 'PRIVATE-SDK-DETAIL-CANARY' not in response.text + caplog.text
+            deletion.assert_not_called()
+        elif mode == 'refused':
+            assert response.status_code == 404 and marker
+            deletion.assert_not_called()
+        elif mode in {'timeout', 'off', 'saturated', 'no_objects'}:
+            assert response.status_code == 200
+            assert response.json() == {
+                'audio_files': [],
+                'conversation_audio': None,
+                'poll_after_ms': 5000 if enabled else None,
+            }
+            deletion.assert_not_called()
+        else:
+            assert response.status_code == 200
+            assert response.json()['audio_files'][0]['id'] == 'part'
+            assert response.json()['audio_files'][0]['signed_url'] == 'signed'
+            if mode == 'marker_retired_before_read':
+                deletion.assert_not_called()
+            else:
+                assert marker == (
+                    {'version': 'new'}
+                    if mode == 'newer_marker'
+                    else {'version': 'old'} if mode == 'retire_error' else {}
+                )
+                deletion.assert_called_once()
+    finally:
+        release.set()
+        if enabled and mode not in {'saturated', 'marker_retired_before_read'}:
+            assert await asyncio.to_thread(finished.wait, 5)
+    assert read.call_count == int(enabled and mode != 'saturated')
+    assert discovery.call_count == int(enabled and mode not in {'saturated', 'marker_retired_before_read'})

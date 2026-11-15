@@ -189,6 +189,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED": "true",
         "EPISODE_COMPOSER_CONTEXT_ENABLED": "true",
         "EPISODE_COMPOSER_DETAIL_ENABLED": "true",
         "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED": "true",
@@ -206,6 +207,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",
         "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
         "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": "false",
+        "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": "true",
+        "PUSHER_RECORD_SEAL_WAKE_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",

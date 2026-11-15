@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 
 from google.cloud import firestore
+from google.api_core.exceptions import FailedPrecondition, NotFound
 
 from database._client import get_firestore_client, run_transactional
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
@@ -30,6 +31,38 @@ def mark_due(uid, cid, *, firestore_client=None):
     )
 
 
+def pending(uid, cid, *, firestore_client=None):
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return client.collection(COLLECTION).document(marker_id(uid, cid)).get(field_paths=['kind']).exists
+
+
+def pending_version(uid, cid, *, firestore_client=None):
+    """One bounded point read for demand repair and version-conditional retirement."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = (
+        client.collection(COLLECTION).document(marker_id(uid, cid)).get(field_paths=['kind'], timeout=1, retry=None)
+    )
+    return snapshot.update_time if snapshot.exists else None
+
+
+def preflight_projection(uid, cid, *, firestore_client=None):
+    """Consent/privacy authority before demand discovery; commit still rechecks."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshots = {}
+    try:
+        assert_batch_write_allowed(client, None, uid, conversation_ids=(cid,), snapshots=snapshots)
+    except BatchPrivacyBlocked:
+        return False
+    row = snapshots.get('conversations', {}).get(cid)
+    return bool(
+        row
+        and not row.get('deleted')
+        and not row.get('discarded')
+        and row.get('private_cloud_sync_enabled') is not False
+        and snapshots.get('user', {}).get('private_cloud_sync_enabled', True)
+    )
+
+
 def mark_many(uid, conversation_ids, *, firestore_client=None):
     """One bounded cleanup RPC, rather than one timeout per socket obligation."""
     owners = set(conversation_ids)
@@ -41,7 +74,23 @@ def mark_many(uid, conversation_ids, *, firestore_client=None):
     for cid in owners:
         ref = client.collection(COLLECTION).document(marker_id(uid, cid))
         batch.set(ref, {'kind': KIND, 'owner_id': uid, 'conversation_id': cid, 'requested_at': requested_at})
-    batch.commit(timeout=1, retry=None)
+    results = batch.commit(timeout=1, retry=None)
+    # WriteResult order matches this batch's write order. Retire only that exact
+    # committed version; another producer/repair request must survive.
+    return {cid: result.update_time for cid, result in zip(owners, results)}
+
+
+def retire_observed(uid, cid, *, observed_update_time, firestore_client=None):
+    """Delete acknowledged metadata debt only if no writer replaced its version."""
+    if observed_update_time is None:
+        raise ValueError('observed projection marker version required')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection(COLLECTION).document(marker_id(uid, cid))
+    try:
+        ref.delete(option=client.write_option(last_update_time=observed_update_time), timeout=1, retry=None)
+    except (FailedPrecondition, NotFound):
+        return False
+    return True
 
 
 def retire_empty(uid, cid, *, observed_update_time, firestore_client=None):

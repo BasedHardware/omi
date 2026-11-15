@@ -1,6 +1,6 @@
 """Sealed records retain fresh delivery without changing backlog or custody."""
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
@@ -12,10 +12,10 @@ from database.batch_pipeline_intake import admit
 from database.batch_pipeline_projection import ProjectionStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
-from utils.batch_pipeline import live
+from utils.batch_pipeline import live, merge as merge_module
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.sync import reprocess
 
 NOW = 100_000.0
@@ -312,16 +312,15 @@ def test_recovering_record_sibling_does_not_block_an_independent_record(monkeypa
 
 @pytest.mark.parametrize('over_depth', [False, True])
 def test_sibling_probe_advances_full_held_pages_across_merge_instances(monkeypatch, over_depth):
-    from dataclasses import asdict
-    from utils.batch_pipeline.scheduler import owner_key
-
+    page_size = 8
+    monkeypatch.setattr(merge_module, 'RECORD_SIBLING_PROBE_ROWS', page_size)
     monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')
     store = MemoryStore()
     queue = Scheduler(store)
     binding = ProjectionBinding('owner', 'x', 'x-content', ('x1', 'x2'), native_record=True)
-    for i, sid in enumerate(('x1', 'x2', *(f'old-{j:03d}' for j in range(180)), 'y')):
+    for i, sid in enumerate(('x1', 'x2', *(f'old-{j:03d}' for j in range(page_size)), 'y')):
         queue.enqueue(item(sid, owner='owner', capture=NOW - 500 + i), NOW)
         job = store.rows['jobs', sid]
         job.update(
@@ -337,11 +336,18 @@ def test_sibling_probe_advances_full_held_pages_across_merge_instances(monkeypat
     store.rows['jobs', 'x1'].update(state='quarantined', merge_pending=False, recovery_state='running')
     if over_depth:
         store.rows['owners', owner_key('owner')]['log_sequence'] = 16
+    probe = Mock(wraps=store.ready_pending)
+    store.ready_pending = probe
     merge = OrderedMerge(store, catch_up_depth=16)
     assert merge.commit_next('owner', NOW) is None
-    assert store.rows['owners', owner_key('owner')]['record_sibling_cursor']
+    cursor = store.rows['owners', owner_key('owner')]['record_sibling_cursor']
+    assert cursor['segment_id'] == f'old-{page_size - 2:03d}'
+    assert probe.call_args.kwargs['after'] is None
+    assert probe.call_args.args[1] == page_size
     merged = OrderedMerge(store, catch_up_depth=16).commit_next('owner', NOW)
     assert merged and merged['segment_id'] == 'y'
+    assert probe.call_args.kwargs['after'] == (cursor['capture_at'], cursor['segment_id'])
+    assert probe.call_count == 2
     assert 'record_sibling_cursor' not in store.rows['owners', owner_key('owner')]
     assert store.rows['jobs', 'x2']['state'] == 'result_ready'
 

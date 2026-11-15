@@ -9,6 +9,7 @@ from config import record_seal_rules
 from database import pipeline_ledger
 from database._client import get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
+from database.record_seal_wake import prepare_native_wake
 
 
 class RecordUploadCapacityExceeded(ValueError):
@@ -60,6 +61,7 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # A clean late producer certifies its drain, never an earlier
             # missing tail. Repair refreshes the separate partial barrier.
             return None
+        wake = prepare_native_wake(client, tx, uid, conversation_id, row)
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
             patch: dict[str, bool | float | None] = {'record_audio_closed': True}
             if not row.get('record_audio_closed'):
@@ -73,6 +75,8 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
                 patch['record_admitted_at'] = time.time()
                 admitted = True
             tx.update(ref, patch)
+        if wake is not None:
+            tx.update(wake, {'available_at': 0, 'record_intake_retry_at': None})
         return None
 
     result = run_transactional(client, commit, transient=True)

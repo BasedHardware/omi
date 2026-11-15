@@ -1451,6 +1451,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_episode_switches_render_on_every_composition_host(environment):
     keys = (
+        'EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_DETAIL_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
@@ -1604,12 +1605,29 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
     }
     if chart == 'pusher':
         expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_SEAL_WAKE_ENABLED'] = 'true'
     else:
         expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
         expected['RECORD_INTAKE_AGE_PRIORITY_ENABLED'] = 'true'
         expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] = 'false'
+    expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
     contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
     for key, value in expected.items():
         entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
         assert entries == [{'name': key, 'value': value}]
         assert contract[key]['value'] == value
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_record_close_notify_renders_on_every_cloud_run_listener(environment, service, monkeypatch):
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](
+        _MODULE['_render_env_vars'](config['cloud_run']['services'][service]['env'])
+    )
+    for key in ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'):
+        expected = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
