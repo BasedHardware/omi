@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,7 +145,7 @@ void main() {
       });
     }
   }
-  for (final outcome in ['undo', 'commit', 'cancel', 'partial failure', 'member']) {
+  for (final outcome in ['undo', 'commit', 'cancel', 'partial failure', 'member', 'seed loading']) {
     testWidgets('episode Delete includes unloaded discarded members in one Undo window: $outcome', (tester) async {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
@@ -168,7 +169,11 @@ void main() {
         calls.add(id);
         return outcome != 'partial failure' || id != 'weekend';
       };
-      final episodes = EpisodeProvider(detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+      final hydrated = Completer<ApiResult<Episode>>();
+      final episodes = EpisodeProvider(
+          detail: (_) async => outcome == 'seed loading'
+              ? await hydrated.future
+              : const ApiFailure<Episode>(ApiProblem(ApiProblemKind.transport)))
         ..debugSetLive(null)
         ..debugSetHomeEpisodes([episode]);
       episodes.observeHomeConversations(history);
@@ -189,12 +194,28 @@ void main() {
             home: Builder(
                 builder: (context) => Scaffold(
                         body: TextButton(
-                      onPressed: () =>
-                          Navigator.of(context).push(omiPageRoute(builder: (_) => EpisodePage(episode: episode))),
+                      onPressed: () => Navigator.of(context).push(omiPageRoute(
+                          builder: (_) => EpisodePage(
+                              episode: outcome == 'seed loading'
+                                  ? episode.copyWith(members: [], conversationIds: [])
+                                  : episode,
+                              displaySeedOnly: outcome == 'seed loading'))),
                       child: const Text('Open episode'),
                     ))),
           )));
       await tester.tap(find.text('Open episode'));
+      if (outcome == 'seed loading') {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.byKey(const Key('episode_more')));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Delete'));
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text('Delete 3 Conversations?'), findsNothing);
+        expect(history.memoriesToDelete, isEmpty);
+        expect(calls, isEmpty);
+        hydrated.complete(ApiSuccess(episode));
+      }
       await tester.pumpAndSettle();
       expect(find.text('Title dinner'), findsOneWidget);
       expect(find.text('Title weekend'), findsOneWidget);

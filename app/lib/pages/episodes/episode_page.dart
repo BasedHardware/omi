@@ -29,13 +29,20 @@ class EpisodePage extends StatelessWidget {
     super.key,
     required this.episode,
     this.processingAggregate = false,
+    this.displaySeedOnly = false,
     this.processingEpisodes = const [],
   });
   final Episode episode;
+  final bool displaySeedOnly;
   final bool processingAggregate;
   final List<Episode> processingEpisodes;
 
   Future<void> _delete(BuildContext context, List<ServerConversation> displayedMembers) async {
+    final authoritative = displaySeedOnly ? context.read<EpisodeProvider?>()?.openedEpisode(episode.id) : episode;
+    if (authoritative == null) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
     final history = context.read<ConversationProvider>();
     final l10n = context.l10n;
     if (!context.read<ConnectivityProvider>().isConnected) {
@@ -48,9 +55,9 @@ class EpisodePage extends StatelessWidget {
     }
     // A finished episode owns all its records. A processing collection owns only
     // its displayed pending members; source identity is navigation metadata.
-    final ids = processingAggregate ? displayedMembers.map((m) => m.id).toSet() : episode.conversationIds.toSet();
+    final ids = processingAggregate ? displayedMembers.map((m) => m.id).toSet() : authoritative.conversationIds.toSet();
     final known = {
-      for (final c in episode.members) c.id: c,
+      for (final c in authoritative.members) c.id: c,
       for (final c in history.conversations) c.id: c,
       for (final c in displayedMembers) c.id: c,
     };
@@ -99,6 +106,7 @@ class EpisodePage extends StatelessWidget {
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
     final opened = this.episode;
+    final seedAwaiting = displaySeedOnly && episodes?.openedEpisode(opened.id) == null;
     final openedMemberIds = opened.members.map((m) => m.id).toSet();
     final replacement = episodes?.openedEpisode(opened.id) ??
         episodes?.homeEpisodes
@@ -165,7 +173,9 @@ class EpisodePage extends StatelessWidget {
       Text(title, style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4)),
       const SizedBox(height: OmiSpacing.sm),
       Text(
-        '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
+        seedAwaiting
+            ? context.l10n.loading
+            : '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
       ),
     ];
@@ -232,47 +242,61 @@ class EpisodePage extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: processing
-                ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
-                : ListView(
-                    padding: const EdgeInsets.all(OmiSpacing.md),
-                    children: [
-                      ...heading,
-                      const SizedBox(height: OmiSpacing.lg),
-                      if (composed) ...[
-                        // A composed episode reads like a conversation's summary: a lede, then a section per moment.
-                        if (episode.lede.trim().isNotEmpty)
-                          Text(
-                            episode.lede,
-                            key: const Key('episode_lede'),
-                            style: OmiType.callout.copyWith(height: 1.45),
-                          ),
-                        EpisodeSections(
-                          moments: moments,
-                          onOpenMoment: (moment) => _openMoment(context, moment, members),
-                        ),
-                        if (episode.followUps.isNotEmpty) ...[
-                          EpisodeSectionTitle(context.l10n.episodeFollowUps),
-                          EpisodeBullets(episode.followUps),
+            child: seedAwaiting
+                ? ListView(padding: const EdgeInsets.all(OmiSpacing.md), children: [
+                    ...heading,
+                    if (episodes?.openProblem(opened.id) != null)
+                      OmiErrorState(
+                          message: context.l10n.somethingWentWrong,
+                          onRetry: () async {
+                            await episodes?.openEpisode(opened.id);
+                          })
+                    else
+                      const OmiLoadingState(),
+                  ])
+                : processing
+                    ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
+                    : ListView(
+                        padding: const EdgeInsets.all(OmiSpacing.md),
+                        children: [
+                          ...heading,
+                          const SizedBox(height: OmiSpacing.lg),
+                          if (composed) ...[
+                            // A composed episode reads like a conversation's summary: a lede, then a section per moment.
+                            if (episode.lede.trim().isNotEmpty)
+                              Text(
+                                episode.lede,
+                                key: const Key('episode_lede'),
+                                style: OmiType.callout.copyWith(height: 1.45),
+                              ),
+                            EpisodeSections(
+                              moments: moments,
+                              onOpenMoment: (moment) => _openMoment(context, moment, members),
+                            ),
+                            if (episode.followUps.isNotEmpty) ...[
+                              EpisodeSectionTitle(context.l10n.episodeFollowUps),
+                              EpisodeBullets(episode.followUps),
+                            ],
+                          ] else
+                            EpisodeBullets(episode.bullets),
+                          if (items.isNotEmpty) ...[
+                            EpisodeSectionTitle(context.l10n.tasks, count: items.length),
+                            EpisodeContentCard(
+                              children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
+                            ),
+                          ],
+                          if (!composed && moments.isNotEmpty) ...[
+                            EpisodeSectionTitle(context.l10n.episodeMoments),
+                            EpisodeContentCard(
+                              children: [
+                                for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)
+                              ],
+                            ),
+                          ],
+                          EpisodeSectionTitle(context.l10n.conversations),
+                          ...memberRows,
                         ],
-                      ] else
-                        EpisodeBullets(episode.bullets),
-                      if (items.isNotEmpty) ...[
-                        EpisodeSectionTitle(context.l10n.tasks, count: items.length),
-                        EpisodeContentCard(
-                          children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
-                        ),
-                      ],
-                      if (!composed && moments.isNotEmpty) ...[
-                        EpisodeSectionTitle(context.l10n.episodeMoments),
-                        EpisodeContentCard(
-                          children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)],
-                        ),
-                      ],
-                      EpisodeSectionTitle(context.l10n.conversations),
-                      ...memberRows,
-                    ],
-                  ),
+                      ),
           ),
           // A late episode composes on this open; the server starts it on the read below.
           _OpenCompose(key: ValueKey('open-${episode.id}'), episode: episode),

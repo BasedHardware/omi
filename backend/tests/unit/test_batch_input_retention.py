@@ -23,6 +23,10 @@ from database.batch_pipeline_projection_release import ProjectionReleaseStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from scripts import redrive_staging_inputs as cli
+
+# Load shared helpers at collection; their provider/model imports are setup,
+# not part of the release operation's per-test CPU budget.
+from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row, ledger_row
 from tests.unit.test_batch_pipeline_timeliness import _sample, NOW, EPOCH  # pyright: ignore[reportPrivateUsage]
 from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS, staged_enqueue

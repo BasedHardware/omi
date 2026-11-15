@@ -223,6 +223,7 @@ class ListenPusherSession:
         self.audio_timeline_active = False
         self.audio_timeline_suspended = False
         self.record_close_supported = False
+        self.record_close_abort_supported = False
         self.record_close_unsupported_socket: object = None
         self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled(self.uid) else None
         self.record_close_boundaries: OrderedDict[str, bool] | None = (
@@ -518,15 +519,23 @@ class ListenPusherSession:
         self.pending_request_event.set()
         close = self.pending_record_closes[conversation_id]
         if self.deps.monotonic() >= close.deadline:
-            self.pending_record_closes.pop(conversation_id)
-            if self.deferred_record_closes is not None:
-                self.deferred_record_closes[conversation_id] = None
-                while len(self.deferred_record_closes) > self.config.max_pending_requests:
-                    self.deferred_record_closes.popitem(last=False)
-            self._record_close_fallback('timeout', close)
-            # No timeout is custody proof. Prepared producers stay fenced for
-            # socket-end/proven-dead repair; no drain task is retained here.
-            return False
+            if (
+                not close.abort_deadline
+                and self.record_close_abort_supported
+                and close.socket is self.pusher_ws
+                and self.pusher_connected
+            ):
+                close.abort_deadline = self.deps.monotonic() + RECORD_CLOSE_DEADLINE_SECONDS
+            if not close.abort_deadline or self.deps.monotonic() >= close.abort_deadline:
+                self.pending_record_closes.pop(conversation_id)
+                if self.deferred_record_closes is not None:
+                    self.deferred_record_closes[conversation_id] = None
+                    while len(self.deferred_record_closes) > self.config.max_pending_requests:
+                        self.deferred_record_closes.popitem(last=False)
+                self._record_close_fallback('timeout', close)
+                # No durable-tail proof/ACK within the separate abort deadline:
+                # retain the producer fence until actual EOF and repair.
+                return False
         if not self.record_close_supported or not self.pusher_connected:
             return False  # An old pusher must never interpret this as finalization.
         if self.deps.finish_recording_audio is not None and self.record_boundary is not None:
@@ -534,7 +543,9 @@ class ListenPusherSession:
             # No await before the ingress cutoff, including when a successor
             # has not been persisted. Reservations also cover capability wait.
         try:
-            async with asyncio.timeout(min(RECORD_CLOSE_ATTEMPT_SECONDS, close.deadline - self.deps.monotonic())):
+            async with asyncio.timeout(
+                min(RECORD_CLOSE_ATTEMPT_SECONDS, (close.abort_deadline or close.deadline) - self.deps.monotonic())
+            ):
                 return await self._send_recording_close(conversation_id)
         except TimeoutError:
             self._record_close_fallback('timeout', close)
@@ -550,6 +561,12 @@ class ListenPusherSession:
             close = self.pending_record_closes.get(conversation_id)
             if close is None:
                 return conversation_id in self.record_close_boundaries
+            if close.abort_deadline and (
+                close.socket is not socket
+                or not self.record_close_abort_supported
+                or self.deps.finish_recording_audio is None
+            ):
+                return False  # A replacement socket cannot prove the old request.
             if close.socket is not socket:
                 close.socket, close.prepared, close.base, close.sent = socket, False, 0, 0
             phase = 'prepare'
@@ -582,7 +599,7 @@ class ListenPusherSession:
                 # The earlier prepare control can yield while new runs are accepted;
                 # the final commit cannot. Late input is refused before acceptance.
                 close.frozen = True
-                phase = 'commit'
+                phase = 'abort' if close.abort_deadline else 'commit'
             if (
                 not self.pusher_connected
                 or not self.record_close_supported
@@ -600,6 +617,7 @@ class ListenPusherSession:
                             'request_id': close.request_id,
                             'phase': phase,
                             'watermark': close.base + close.sent,
+                            **({'source_tail_durable': True} if phase == 'abort' else {}),
                         }
                     ).encode()
                 )
@@ -890,6 +908,9 @@ class ListenPusherSession:
                         and type(ack.get('version')) is int
                         and ack['version'] == RECORD_CLOSE_VERSION
                     )
+                    self.record_close_abort_supported = (
+                        self.record_close_supported and ack.get('abort_to_legacy') is True
+                    )
                     if self.record_close_supported and self.pending_record_closes is not None:
                         for cid in list(self.pending_record_closes):
                             await self.request_recording_close(cid)
@@ -920,6 +941,10 @@ class ListenPusherSession:
                     elif ack.get('phase') == 'commit' and ack.get('status') == 'accepted' and close.frozen:
                         if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
                             self._remember_record_boundary(cid, accepted=True)
+                            self.pending_record_closes.pop(cid, None)
+                    elif ack.get('phase') == 'abort' and ack.get('status') in {'aborted', 'committed'} and close.frozen:
+                        if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
+                            self._remember_record_boundary(cid, accepted=ack['status'] == 'committed')
                             self.pending_record_closes.pop(cid, None)
                     elif ack.get('status') == 'unsupported':
                         self._record_close_fallback('capability_mismatch', close)
@@ -1289,6 +1314,7 @@ class ListenPusherSession:
             }
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
             self.record_close_supported = False
+            self.record_close_abort_supported = False
             self.record_close_unsupported_socket = None
             if (
                 close_notify_enabled(self.uid)
