@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+from typing import Any
 
 import yaml
 
@@ -44,7 +45,7 @@ def target(doc):
     return job, pod, pod['containers'][0]
 
 
-def node_affinity(pool):
+def node_affinity(pool) -> dict[str, Any]:
     return {
         'nodeAffinity': {
             'requiredDuringSchedulingIgnoredDuringExecution': {
