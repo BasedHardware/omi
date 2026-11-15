@@ -95,3 +95,23 @@ def test_pg_sim_forwards_finish_marker_to_postgres():
     store.pg.projection_finish_backfill_complete.return_value = False
     assert store.projection_finish_backfill_complete() is False
     store.pg.projection_finish_backfill_complete.assert_called_once_with()
+
+
+def test_every_serving_read_is_in_the_executable_parity_census():
+    from database.jobstore.serving_parity import STORE_QUERIES, TRANSACTION_QUERIES
+
+    mutations = {
+        'run',
+        'acquire_pull_claim',
+        'quarantine_fenced',
+        'cancel_fenced_recovery',
+        'defer_privacy_blocked_record',
+    }
+    assert STORE_QUERIES == _public(firestore_store.FirestoreStore) - mutations - {'client'}
+    assert TRANSACTION_QUERIES == _public(firestore_store.FirestoreTransaction) - {
+        'put',
+        'patch',
+        'defer_set',
+        'check_privacy',
+        'flush',
+    }

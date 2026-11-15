@@ -258,7 +258,7 @@ BODY_DIGEST = {
     # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
-    'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
+    'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }

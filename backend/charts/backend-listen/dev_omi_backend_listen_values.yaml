@@ -111,6 +111,10 @@ env:
     value: "true"
   - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
     value: "true"
+  - name: SYNC_RECORD_WAIT_MEMO_FIRST
+    value: "true"
+  - name: SYNC_RECORD_DECODE_FAILURE_MEMO
+    value: "true"
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
