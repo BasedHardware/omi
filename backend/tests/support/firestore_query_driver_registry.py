@@ -212,6 +212,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
+    'database.batch_pipeline_store.FirestoreStore.ready_pending': '26f763a5f32011d8c0b83f01b1fa5fe3556397a1a6a85378296ac794f0a84714',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',

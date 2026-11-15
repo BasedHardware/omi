@@ -467,6 +467,19 @@ def entries():
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.ready_pending',
+            covered_by=('database.batch_pipeline_store.ready_pending',),
+            reason='thin adapter for the existing ready-head shape; only the bounded page cap differs',
+            expect_observed=False,
+            body_digest='26f763a5f32011d8c0b83f01b1fa5fe3556397a1a6a85378296ac794f0a84714',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces},
+            neutrals={'limit': (160, 'bounded exceptional sibling-group page only')},
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.longest_ready_pending',
             covered_by=('database.batch_pipeline_store.longest_ready_pending',),
             reason='thin store adapter delegates unchanged query arguments to the named query builder',
