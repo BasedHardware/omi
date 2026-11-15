@@ -1764,14 +1764,14 @@
     "gcp_scheduler_reconcile.yml/reconcile": {
       "budget_p50_minutes": 5,
       "display_name": "reconcile",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_class": "manual-operator-infrequent",
+      "expected_runs_per_day": 0.14285714285714285,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual planned-job selection is production-gated; conservatively budget one 5-minute operator run per week",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5489,7 +5489,7 @@
     "gcp_scheduler_reconcile.yml": {
       "name": "Reconcile Cloud Scheduler",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Optional exact job selection enables planned-job deployment; blank selection retains full-manifest reconciliation",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
