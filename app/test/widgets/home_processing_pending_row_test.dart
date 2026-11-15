@@ -6,6 +6,8 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -33,8 +35,12 @@ List<TranscriptSegment> _finishedSpeech() => [
 
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
-  for (final mode in ['cold', '404', 'read error', 'disabled']) {
-    testWidgets('default Home keeps one pending aggregate across days before capability: $mode', (tester) async {
+  for (final (mode, compact) in [
+    for (final mode in ['cold', '404', 'read error', 'disabled'])
+      for (final compact in [false, true]) (mode, compact)
+  ]) {
+    testWidgets('default Home keeps one pending aggregate across days before capability: $mode compact=$compact',
+        (tester) async {
       tester.view.physicalSize = const Size(390, 1800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -64,7 +70,31 @@ void main() {
           loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
       addTearDown(provider.dispose);
       addTearDown(store.dispose);
-      final screen = await buildTypedConversationScreen(provider, pendingWork: store);
+      final feed = HomeFeedProvider(
+          owner: () => 'fixture',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(items: [
+                for (final c in provider.conversations)
+                  HomeFeedCard(
+                      id: 'conversation:${c.id}',
+                      kind: 'conversation',
+                      detailId: c.id,
+                      startedAt: c.startedAt,
+                      title: c.structured.title,
+                      emoji: '',
+                      preview: '',
+                      status: c.status.name,
+                      homeStep: c.homeStep,
+                      starred: false,
+                      isLocked: false,
+                      hasTasks: false,
+                      memberCount: 1,
+                      sources: const [],
+                      summaryAvailable: c.homeStep == 'ready',
+                      revision: 'fixture')
+              ], nextCursor: null, hasMore: false, truncated: false, generation: 'fixture')));
+      addTearDown(feed.dispose);
+      if (compact) await feed.start();
+      final screen = await buildTypedConversationScreen(provider, pendingWork: store, feed: compact ? feed : null);
       if (mode != 'cold') {
         store.homeProcessingToday = true;
         await store.refresh();
