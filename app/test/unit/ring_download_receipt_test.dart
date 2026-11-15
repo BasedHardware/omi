@@ -281,6 +281,41 @@ void main() {
     expect(replay, isEmpty);
   }, skip: !ringDrainRecoveryEnabled);
 
+  test('pre-upgrade ring proof cannot replay an unscoped foreign WAL', () async {
+    final file = await audio('legacy_foreign.bin');
+    file.$1.ownerUid = 'previous-owner';
+    await WalFileManager.saveWals([file.$1]);
+    await store.saveJson('device', {
+      'device_id': 'device',
+      'ring_id': 7,
+      'durable_seq': 100,
+      'last_advanced_seq': 100,
+      'reported_read_seq': 100,
+      'reported_write_seq': 200,
+      'live_ranges': [],
+      // Before scoped download receipts, custody refs had no owner or ring scope.
+      'ring_ranges': [
+        {
+          'start_seq': 100,
+          'end_seq': 120,
+          'wals': [
+            {'file': 'legacy_foreign.bin', 'bytes': 2, 'frames': 1},
+          ],
+        },
+      ],
+    });
+
+    final replay = <int>[];
+    final next = manager();
+    await next.beginConnection('device', 2, v1Info(readSeq: 100, writeSeq: 200), replayAdvance: (seq) async {
+      replay.add(seq);
+      return RingProtocol.ackOk;
+    });
+
+    expect(replay, isEmpty);
+    expect(await next.validatedAdvanceTarget('device', 2, 7), isNull);
+  }, skip: !ringDrainRecoveryEnabled);
+
   test('restart after index commit before custody receipt reconstructs exact range without downloading', () async {
     final file = await audio('index_is_journal.bin');
     file.$1
