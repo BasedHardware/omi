@@ -529,6 +529,7 @@ def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
     assert key in cohost['_BATCH_PIPELINE_LISTEN_ONLY']
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_post_seal_controls_are_listen_only_rendered_bindings(environment, preflight):
     root = SCRIPT.parents[2]
     flags = [

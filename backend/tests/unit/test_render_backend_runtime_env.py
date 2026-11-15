@@ -1503,6 +1503,7 @@ def test_episode_switches_render_on_every_composition_host(environment):
         ]
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize('chart', ['backend-listen', 'batch-pipeline-worker'])
 @pytest.mark.parametrize('mode', ['staged', 'disabled', 'qualified'])
 def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, mode, tmp_path):
