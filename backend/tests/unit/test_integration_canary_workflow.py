@@ -11,7 +11,7 @@ import subprocess
 import pytest
 import yaml
 
-from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, compose
+from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, RESTORED_DEFAULTS, compose
 from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
 from scripts.runtime_env_validation.manifest import validate_runtime_env
 from scripts.runtime_env_validation import workflows as workflow_validation
@@ -72,6 +72,90 @@ def config():
     }
 
 
+def test_integration_only_composition_preserves_every_other_service_and_live_binding():
+    original, live = config(), snapshot()
+    source = 'd' * 40
+    live.update(source=source, profile='integration-only')
+    live['services'] = {'backend-integration': live['services']['backend-integration']}
+    entries = live['services']['backend-integration']['revision']['spec']['containers'][0]['env']
+    entries.extend({'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items())
+    before = deepcopy((original, live))
+    result = compose(original, live, source)
+    assert (original, live) == before
+    for service in SERVICES:
+        if service != 'backend-integration':
+            assert result['cloud_run']['services'][service] == original['cloud_run']['services'][service]
+    desired = result['cloud_run']['services']['backend-integration']
+    assert desired['env']['UNOWNED']['value'] == 'private-live'
+    assert desired['env']['SYNC_TASKS_QUEUE']['value'] == 'backend-integration-fresh'
+    assert desired['secrets']['SYNC_JOB_SECRET'] == {'secret': 'ops-ref', 'version': '4'}
+    assert set(desired['forbidden_env']) == set(RESTORED_DEFAULTS) | {'BATCH_PIPELINE_RETIRED'}
+    assert not set(RESTORED_DEFAULTS) & (set(desired['env']) | set(desired['secrets']))
+    assert desired['env']['OMI_BACKEND_RELEASE_SHA']['value'] == source
+    entries[-1]['value'] = '20'
+    with pytest.raises(ValueError, match='saved inverse'):
+        compose(original, live, source)
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        {},
+        {'DEPLOY_TARGETS': 'all'},
+        {'SKIP_ELIGIBILITY': 'true'},
+        {'BREAK_GLASS_LOCK': 'true'},
+        {'RELEASE_SHA': 'main'},
+        {'WORKFLOW_MODE': 'build-only'},
+        {'SERVICE_IMAGES': 'integration-canary=gcr.io/based-hardware/backend:latest'},
+    ],
+)
+def test_actual_workflow_extension_boundary_binds_native_source_and_immutable_image(tmp_path, changed):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    script = workflow['jobs']['validate-production-boundary']['steps'][0]['run']
+    script = re.sub(r'\$\{\{[^}]*\}\}', 'false', script)
+    output = tmp_path / 'boundary-output'
+    env = dict(
+        os.environ,
+        DEPLOY_ENVIRONMENT='prod',
+        DEPLOY_TARGETS='cloud-run-only',
+        WORKFLOW_MODE='deploy',
+        REQUESTED_BY='SCA-2283',
+        RELEASE_SHA='d' * 40,
+        SERVICE_IMAGES='integration-canary=gcr.io/based-hardware/backend@sha256:' + 'a' * 64,
+        SKIP_ELIGIBILITY='false',
+        BREAK_GLASS_LOCK='false',
+        GITHUB_OUTPUT=str(output),
+    )
+    env.update(changed)
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    assert (result.returncode == 0) == (not changed)
+    if not changed:
+        assert 'integration_only=true' in output.read_text()
+
+
+def test_unbound_adapter_preflight_precedes_provider_writers_and_native_repair_is_disabled():
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    steps = action['runs']['steps']
+    prepare = next(i for i, step in enumerate(steps) if step.get('id') == 'integration-transport-prepare')
+    assert '--integration-only' in steps[prepare]['run']
+    # These are the existing native writer paths, never a replacement executor.
+    for step in steps:
+        script = step.get('run', '')
+        if '--repair-traffic' in script:
+            assert 'inputs.integration_only }}" != true' in script
+        if step.get('id') in {
+            'deploy-backend',
+            'sync-backfill',
+            'shift-cloud-run-traffic',
+            'configure-sync-queue',
+            'deploy-backend-sync',
+        }:
+            assert "inputs.integration_only != 'true'" in step['if']
+    recovery = next(step for step in steps if step['name'].startswith('Recover integration-only'))
+    assert 'cancelled()' in recovery['if'] and 'failure()' in recovery['if']
+    assert 'integration-transport-prepare.outcome' in recovery['if']
+
+
 def test_serving_ops_fresh_queue_secret_and_dispositions_are_composed_without_mutating_inputs():
     original, live = config(), snapshot()
     before = deepcopy((original, live))
@@ -126,6 +210,7 @@ def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, o
     ][-1]
     expression = condition.removeprefix('${{').removesuffix('}}').strip()
     expression = expression.replace("inputs.deploy_profile", repr('manual'))
+    expression = expression.replace('inputs.integration_only', repr('false'))
     expression = expression.replace('failure()', str(outcome == 'failure')).replace(
         'cancelled()', str(outcome == 'cancelled')
     )
@@ -241,6 +326,8 @@ def step_script(name, values=None):
     script = [s['run'] for s in action['runs']['steps'] if s['name'] == name][-1]
     context = {
         'inputs.integration_canary': 'true',
+        'inputs.integration_only': 'false',
+        'inputs.integration_image': '',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',
@@ -477,6 +564,54 @@ def test_full_validator_checks_composed_state_and_bound_workflow_provenance(comp
         integration_canary_source=SOURCE,
     )
     assert not errors, [str(e) for e in errors]
+
+
+def test_full_validator_checks_selected_integration_composition_and_ignores_no_consumer_write(
+    composed_canary_runtime, parsed_canary_validation_inputs
+):
+    private, state = composed_canary_runtime
+    rendered = json.loads(state.read_text())
+    selected = snapshot()
+    selected.update(profile='integration-only', source='d' * 40)
+    selected['services'] = {'backend-integration': selected['services']['backend-integration']}
+    selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'] = deepcopy(
+        rendered['services']['backend-integration']['env']
+    )
+    selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'].extend(
+        {'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items()
+    )
+    private.write_text(json.dumps(selected))
+    renderer = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
+    original = parsed_canary_validation_inputs[ROOT / 'backend/deploy/runtime_env.yaml']['environments']['prod']
+    effective = compose(original, selected, selected['source'])
+    # Pure renderer path for the selected service has no unresolved env vars:
+    # all literals and secret bindings originate in the retained snapshot.
+    selected_render = renderer['_render_cloud_run_state'](
+        {'cloud_run': {'services': {'backend-integration': effective['cloud_run']['services']['backend-integration']}}}
+    )
+    rendered['services'] = {'backend-integration': rendered['services']['backend-integration']}
+    rendered['services']['backend-integration']['env'] = selected_render['services']['backend-integration']['env']
+    state.write_text(json.dumps(rendered))
+    errors = validate_runtime_env(
+        env='prod',
+        cloud_run_state_path=state,
+        check_workflows=True,
+        workflow_root=ROOT,
+        integration_canary_state=private,
+        integration_canary_source=selected['source'],
+    )
+    assert not errors, [str(e) for e in errors]
+    for entry in rendered['services']['backend-integration']['env']:
+        if entry['name'] == 'OMI_BACKEND_RELEASE_SHA':
+            entry['value'] = 'unbound'
+    state.write_text(json.dumps(rendered))
+    errors = validate_runtime_env(
+        env='prod',
+        cloud_run_state_path=state,
+        integration_canary_state=private,
+        integration_canary_source=selected['source'],
+    )
+    assert any('OMI_BACKEND_RELEASE_SHA' in str(error) for error in errors)
 
 
 def test_full_canary_validator_refuses_wrong_rendered_source(composed_canary_runtime):

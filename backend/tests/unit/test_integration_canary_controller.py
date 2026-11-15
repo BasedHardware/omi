@@ -288,6 +288,257 @@ def make_candidate(harness):
     return harness
 
 
+class DiscoveryFixture:
+    """Offline protocol fixture, never an authenticated live producer."""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.rising = False
+        self.fresh_trip = False
+
+    def preflight(self, *, source, rollback):
+        assert len(source) == 40 and rollback == c.ROLLBACK
+
+    def collect(self, *, binding):
+        # This simulates an already-established trusted semantic adapter. It
+        # does not define a production producer, census TTL or metric policy.
+        elapsed = self.clock.time() - binding['receiving_verified_at']
+        state = 'awaiting_receipt' if elapsed < 1800 else 'qualified'
+        if self.fresh_trip or (self.rising and elapsed >= 1800):
+            state = 'rollback'
+        return {
+            'state': state,
+            'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+            'artifact_digests': ['sha256:' + 'f' * 64] if state != 'awaiting_receipt' else [],
+        }
+
+
+def extended(harness, *, reader=True):
+    controller, cloud, transport, clock, runtime = harness
+    controller.journal.path.unlink()
+    source = 'd' * 40
+    cloud.head = lambda: source
+    cloud.prove_source = lambda value: m.require(value == source, 'floor_source_mismatch')
+    controller.environ.update(
+        GITHUB_REPOSITORY='BasedHardware/omi',
+        GITHUB_REF='refs/heads/main',
+        GITHUB_WORKFLOW_REF='BasedHardware/omi/.github/workflows/gcp_backend.yml@refs/heads/main',
+        GITHUB_WORKFLOW_SHA='e' * 40,
+    )
+    transport.config = reply({'config': {'Labels': {'org.opencontainers.image.revision': source}, 'Env': []}})
+    transport.config_digest = c.digest_bytes(transport.config.raw)
+    transport.manifest = reply({'schemaVersion': 2, 'config': {'digest': transport.config_digest}})
+    transport.image = 'gcr.io/based-hardware/backend@' + c.digest_bytes(transport.manifest.raw)
+    old_env = c.app(cloud.revisions[c.ROLLBACK]['spec'])['env']
+    old_env.extend({'name': k, 'value': v} for k, v in c.RESTORED_DEFAULTS.items())
+    entries = {key: entry for key, entry in c.env_map(old_env).items() if key not in c.RESTORED_DEFAULTS}
+    entries.update(
+        {
+            key: {'name': key, 'value': value}
+            for key, value in {
+                **c.QUALITY,
+                c.BACKOFF: 'false',
+                c.PROVIDER: 'false',
+                c.STAMP: source,
+            }.items()
+        }
+    )
+    runtime['services'][c.SERVICE]['env'] = list(entries.values())
+    runtime['services'][c.SERVICE]['forbidden_env'] = list(c.RESTORED_DEFAULTS)
+    controller.discovery = DiscoveryFixture(clock) if reader else None
+    return controller, cloud, transport, clock, runtime, source
+
+
+def prepare_extended(parts):
+    controller, _cloud, transport, _clock, _runtime, source = parts
+    controller.prepare(source, transport.image, f'{c.SERVICE}-{source[:7]}-123-1', integration_only=True)
+    return parts
+
+
+def test_new_carrier_candidate_restores_only_ruled_defaults_and_never_writes_consumers(harness):
+    parts = extended(harness)
+    controller, cloud, _transport, _clock, runtime, source = parts
+    consumers = {s: copy.deepcopy(cloud.services[s]) for s in c.SERVICES if s != c.SERVICE}
+    inverse = copy.deepcopy(cloud.revisions[c.ROLLBACK])
+    prepare_extended(parts)
+    controller.candidate(runtime)
+    candidate = cloud.revisions[controller.state['candidate']]
+    env = c.env_map(c.app(candidate['spec'])['env'])
+    assert not set(c.RESTORED_DEFAULTS) & set(env)
+    assert env[c.STAMP]['value'] == source
+    assert controller.state['inverse'] == c.RESTORED_DEFAULTS
+    assert all(cloud.services[s] == before for s, before in consumers.items())
+    assert cloud.revisions[c.ROLLBACK] == inverse
+    assert all(body['metadata']['name'] == c.SERVICE for body in cloud.writes)
+    assert candidate['spec']['serviceAccountName'] == inverse['spec']['serviceAccountName']
+    assert candidate['spec']['containers'][1] == inverse['spec']['containers'][1]
+    assert candidate['spec']['containers'][0]['resources'] == inverse['spec']['containers'][0]['resources']
+
+
+def test_extension_without_authenticated_discovery_binding_cannot_prepare_or_write(harness):
+    parts = extended(harness, reader=False)
+    with pytest.raises(m.Refused, match='discovery_reader_not_bound'):
+        prepare_extended(parts)
+    assert not parts[1].writes and not parts[0].journal.path.exists()
+
+
+def test_integration_only_runtime_cannot_remove_unruled_live_bindings(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    runtime['services'][c.SERVICE]['env'] = [
+        entry for entry in runtime['services'][c.SERVICE]['env'] if entry['name'] != 'FRESH_QUEUE'
+    ]
+    runtime['services'][c.SERVICE]['forbidden_env'].append('FRESH_QUEUE')
+    with pytest.raises(m.Refused, match='unruled_environment_change'):
+        controller.candidate(runtime)
+    assert not cloud.writes
+
+
+@pytest.mark.parametrize('key', list(c.RESTORED_DEFAULTS))
+def test_registry_refuses_baked_override_even_when_runtime_removes_it(harness, key):
+    controller, _cloud, transport, _clock, _runtime, source = extended(harness)
+    transport.config = reply(
+        {'config': {'Labels': {'org.opencontainers.image.revision': source}, 'Env': [key + '=200']}}
+    )
+    transport.config_digest = c.digest_bytes(transport.config.raw)
+    transport.manifest = reply({'schemaVersion': 2, 'config': {'digest': transport.config_digest}})
+    image = 'gcr.io/based-hardware/backend@' + c.digest_bytes(transport.manifest.raw)
+    with pytest.raises(m.Refused, match='image_bakes_restored_override'):
+        controller.registry.verify(image, source, restored_defaults=True)
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('GITHUB_REF', 'refs/heads/other'),
+        ('GITHUB_REPOSITORY', 'foreign/omi'),
+        ('GITHUB_WORKFLOW_SHA', 'main'),
+        ('GITHUB_WORKFLOW_REF', 'BasedHardware/omi/.github/workflows/other.yml@refs/heads/main'),
+    ],
+)
+def test_extension_refuses_wrong_native_caller(harness, key, value):
+    parts = extended(harness)
+    parts[0].environ[key] = value
+    with pytest.raises(m.Refused, match='native_workflow_binding'):
+        prepare_extended(parts)
+    assert not parts[1].writes
+
+
+def test_stage_resume_does_not_repeat_a_25_percent_cas(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    original_observe = controller.observe
+    controller.observe = lambda *_: (_ for _ in ()).throw(InterruptedError())
+    with pytest.raises(InterruptedError):
+        controller.stage()
+    assert controller.state['phase'] == 'traffic_25' and len(cloud.writes) == 2
+    clock.sleep(60)
+    controller.observe = original_observe
+    controller.stage()
+    assert controller.state['phase'] == 'held_25' and len(cloud.writes) == 2
+    assert clock.monotonic() - controller.state['moved_monotonic'] >= 300
+
+
+def test_scoped_continuation_keeps_http_watch_separate_from_adapter_qualification(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    baseline = copy.deepcopy(controller.state['baseline'])
+    controller.stage()
+    controller.complete()
+    assert controller.state['phase'] == 'complete'
+    assert controller.state['discovery']['state'] == 'qualified'
+    assert clock.time() - controller.state['moved_at'] >= 1800
+    assert controller.state['baseline'] == baseline
+    assert len(cloud.writes) == 3 and all(b['metadata']['name'] == c.SERVICE for b in cloud.writes)
+    controller.rollback()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+    assert (
+        c.env_map(c.app(cloud.revisions[c.ROLLBACK]['spec'])['env'])['BATCH_PIPELINE_SERVING_TICK_SECONDS']['value']
+        == '10'
+    )
+
+
+def test_bound_adapter_rollback_restores_saved_inverse(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.discovery.rising = True
+    with pytest.raises(m.Refused, match='discovery_guard_rollback'):
+        controller.complete()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+
+
+@pytest.mark.parametrize('failure', ['binding', 'artifacts', 'state'])
+def test_scoped_guard_refuses_unbound_or_malformed_adapter_decisions(harness, failure):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+
+    def collect(*, binding):
+        result = {
+            'state': 'qualified',
+            'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+            'artifact_digests': ['sha256:' + 'f' * 64],
+        }
+        if failure == 'binding':
+            result['binding_sha256'] = 'sha256:' + '0' * 64
+        elif failure == 'artifacts':
+            result['artifact_digests'] = []
+        else:
+            result['state'] = 'healthy'
+        return result
+
+    controller.discovery.collect = collect
+    with pytest.raises(m.Refused, match='discovery_'):
+        controller.guard()
+    assert len(cloud.writes) == 3
+
+
+def test_unavailable_postroll_evidence_is_not_acceptance_or_a_rollback_instruction(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+    controller.discovery.collect = lambda *, binding: {
+        'state': 'unavailable',
+        'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+        'artifact_digests': [],
+        'private_payload': 'must-not-persist',
+    }
+    assert controller.guard() is False
+    assert controller.state['phase'] == 'awaiting_postwrap'
+    assert 'private_payload' not in controller.state['discovery']
+    assert len(cloud.writes) == 3
+
+
+def test_scoped_resume_refuses_changed_clock_control_head_and_uncertain_intent(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    saved = copy.deepcopy(controller.state)
+    controller.state['intent'] = {'kind': 'traffic_100', 'status': 'uncertain'}
+    controller.save()
+    with pytest.raises(m.Refused, match='scoped_complete_binding'):
+        controller.complete()
+    assert len(cloud.writes) == 2
+    controller.state = saved
+    controller.save()
+    clock.now += 60
+    with pytest.raises(m.Refused, match='continuation_clock_changed'):
+        controller.complete()
+    controller.environ['GITHUB_WORKFLOW_SHA'] = 'f' * 40
+    with pytest.raises(m.Refused, match='control_source_changed'):
+        controller.complete()
+
+
 def test_full_foreground_happy_path_and_immutable_baseline(harness, capsys):
     controller, cloud, transport, clock, runtime = make_candidate(harness)
     baseline = copy.deepcopy(controller.state['baseline'])

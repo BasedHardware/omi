@@ -2320,6 +2320,7 @@ def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
             'DEPLOY_TARGETS': 'cloud-run-only',
             'WORKFLOW_MODE': 'deploy',
             'SERVICE_IMAGES': '',
+            'GITHUB_OUTPUT': str(tmp_path / 'boundary-output'),
             'REQUESTED_BY': requested_by,
             'RELEASE_SHA': '',
             'SKIP_ELIGIBILITY': 'false',

@@ -57,6 +57,8 @@ else:
     )
 
 SOURCE = '0714c5198be8f0183c8fd7dd3810d53c91af17a4'
+SOURCE_FLOOR = '51b449ec8843980b16a8c07ff1069f4f1660796b'
+RESTORED_DEFAULTS = {'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200', 'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10'}
 ROLLBACK = 'backend-integration-provfix-off1114'
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', SERVICE)
 QUALITY = {
@@ -373,6 +375,23 @@ class Cloud:
     def head(self):
         return command(['git', 'rev-parse', '--verify', 'HEAD'])
 
+    def prove_source(self, source):
+        # The native workflow separately admits this exact SHA against main and
+        # Release Eligibility. This floor proves the reviewed controller/quality
+        # source is included; it never resolves a mutable main tip as authority.
+        command(['git', 'merge-base', '--is-ancestor', SOURCE_FLOOR, source])
+        # Execute the admitted source's pure configuration defaults in an
+        # isolated bounded child. Never print its environment or configuration.
+        script = (
+            "import json,os,sys;from pathlib import Path;"
+            "sys.path.insert(0,str(Path.cwd()/'backend'));"
+            "os.environ.pop('BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS',None);"
+            "os.environ.pop('BATCH_PIPELINE_SERVING_TICK_SECONDS',None);"
+            "from config.batch_pipeline import serving_sweep_page_rows,serving_tick_seconds;"
+            "print(json.dumps([serving_sweep_page_rows(),serving_tick_seconds()]))"
+        )
+        require(decode(command(['python3', '-I', '-c', script])) == [100, 20], 'source_defaults_not_100_20')
+
 
 class Registry:
     """Native base-image commit-tag policy plus existing workers-role image policy."""
@@ -389,8 +408,9 @@ class Registry:
             'GET', f'https://gcr.io/v2/{PROJECT}/{repository}/{kind}/{ref}', registry_blob=kind == 'blobs'
         )
 
-    def verify(self, image, source):
+    def verify(self, image, source, restored_defaults=False):
         self.reads = self.git_reads = 0
+        self.restored_defaults = restored_defaults
         with io_budget(60, getattr(self.transport, 'clock', Clock())):
             return self._verify(image, source)
 
@@ -429,6 +449,15 @@ class Registry:
         config_reply = self.get(repository, 'blobs', config_digest)
         require(digest_bytes(config_reply.raw) == config_digest, 'registry_config_mismatch')
         config = config_reply.doc.get('config', {})
+        if self.restored_defaults:
+            image_env = config.get('Env', [])
+            require(
+                isinstance(image_env, list) and all(isinstance(item, str) for item in image_env), 'registry_env_invalid'
+            )
+            require(
+                not {item.partition('=')[0] for item in image_env} & set(RESTORED_DEFAULTS),
+                'image_bakes_restored_override',
+            )
         source_label = config.get('Labels', {}).get('org.opencontainers.image.revision', '')
         if source_label:
             require(source_label == source, 'registry_source_mismatch')
@@ -462,11 +491,12 @@ class Registry:
 
 
 class Controller:
-    def __init__(self, journal, cloud, registry, metrics, clock=None, environ=None):
+    def __init__(self, journal, cloud, registry, metrics, clock=None, environ=None, discovery=None):
         self.journal, self.cloud, self.registry, self.metrics = journal, cloud, registry, metrics
         self.clock = clock or Clock()
         self.environ = os.environ if environ is None else environ
         self.state = None
+        self.discovery = discovery
         self.deadline = self.clock.monotonic() + 2700
 
     def bind(self):
@@ -487,17 +517,37 @@ class Controller:
         require(self.state.get('schema') == 1 and self.state.get('run_id') == run, 'journal_binding')
         require(self.state.get('run_attempt') == attempt, 'journal_binding')
         require(
-            self.state.get('source') == SOURCE
+            (self.state.get('source') == SOURCE or self.state.get('profile') == 'integration-only')
             and self.state.get('project') == PROJECT
             and self.state.get('region') == REGION
             and self.state.get('rollback') == ROLLBACK,
             'journal_binding',
         )
-        require(set(self.state.get('services', {})) == set(SERVICES), 'journal_services')
-        require(self.cloud.head() == SOURCE, 'source_checkout_mismatch')
+        require(set(self.state.get('services', {})) == set(self.selected_services()), 'journal_services')
+        require(self.cloud.head() == self.state['source'], 'source_checkout_mismatch')
+        if self.state.get('profile') == 'integration-only':
+            self.bind_extension(self.state['source'])
+            require(self.state.get('control_sha') == self.environ.get('GITHUB_WORKFLOW_SHA'), 'control_source_changed')
+            require(self.state.get('inverse') == RESTORED_DEFAULTS, 'saved_inverse_changed')
         baseline = self.state['baseline']
         require(self.state['baseline_hash'] == digest_bytes(canonical(baseline).encode()), 'baseline_changed')
         return self.state
+
+    def selected_services(self):
+        return (SERVICE,) if self.state and self.state.get('profile') == 'integration-only' else SERVICES
+
+    def bind_extension(self, source):
+        require(isinstance(source, str) and re.fullmatch(r'[0-9a-f]{40}', source), 'release_binding')
+        require(
+            self.environ.get('GITHUB_REPOSITORY') == 'BasedHardware/omi'
+            and self.environ.get('GITHUB_REF') == 'refs/heads/main'
+            and self.environ.get('GITHUB_WORKFLOW_REF')
+            == 'BasedHardware/omi/.github/workflows/gcp_backend.yml@refs/heads/main'
+            and re.fullmatch(r'[0-9a-f]{40}', self.environ.get('GITHUB_WORKFLOW_SHA', '')),
+            'native_workflow_binding',
+        )
+        with io_budget(60, self.clock):
+            self.cloud.prove_source(source)
 
     def tick(self):
         require(self.clock.monotonic() < self.deadline, 'controller_deadline')
@@ -514,17 +564,29 @@ class Controller:
         )
         return doc
 
-    def prepare(self, source, image, candidate, project=PROJECT, region=REGION):
+    def prepare(self, source, image, candidate, project=PROJECT, region=REGION, integration_only=False):
         run, attempt = self.bind()
-        require(source == SOURCE and project == PROJECT and region == REGION, 'release_binding')
+        require((source == SOURCE or integration_only) and project == PROJECT and region == REGION, 'release_binding')
+        if integration_only:
+            self.bind_extension(source)
+            # A fake/captured snapshot is not a live producer. The executable
+            # entry point must bind a reviewed authenticated discovery reader;
+            # no file or caller-supplied "healthy" switch is accepted here.
+            require(self.discovery is not None, 'discovery_reader_not_bound')
+            self.discovery.preflight(source=source, rollback=ROLLBACK)
         require(self.cloud.head() == source, 'source_checkout_mismatch')
         require(
             candidate == f'{SERVICE}-{source[:7]}-{run}-{attempt}' and len(candidate) <= 63, 'candidate_name_invalid'
         )
         require(not self.journal.path.exists(), 'journal_already_exists')
-        image = self.registry.verify(image, source)
+        image = (
+            self.registry.verify(image, source, restored_defaults=True)
+            if integration_only
+            else self.registry.verify(image, source)
+        )
         snapshots = {}
-        for service in SERVICES:
+        selected = (SERVICE,) if integration_only else SERVICES
+        for service in selected:
             doc = self.cloud.read('services', service)
             identity(doc, service, True)
             if service == SERVICE:
@@ -545,6 +607,11 @@ class Controller:
             require(revision['metadata']['namespace'] == doc['metadata']['namespace'], 'revision_namespace_mismatch')
             ready(revision)
             serving_env = env_map(app(revision['spec']).get('env', []))
+            if integration_only:
+                require(
+                    all(serving_env.get(k) == {'name': k, 'value': v} for k, v in RESTORED_DEFAULTS.items()),
+                    'saved_inverse_not_200_10',
+                )
             require(
                 PROVIDER not in serving_env or serving_env[PROVIDER] == {'name': PROVIDER, 'value': 'false'},
                 'provider_live_contract',
@@ -560,7 +627,7 @@ class Controller:
             'rows': [r.__dict__ for r in baseline['rows']],
         }
         # Detect changes during snapshot/baseline reads before exposing the snapshot to the renderer.
-        for service in SERVICES:
+        for service in selected:
             later = self.cloud.read('services', service)
             require(later == snapshots[service]['service'], 'prepare_snapshot_drift')
         self.state = {
@@ -581,6 +648,12 @@ class Controller:
             'intent': None,
             'moves': [],
         }
+        if integration_only:
+            self.state.update(
+                profile='integration-only',
+                control_sha=self.environ['GITHUB_WORKFLOW_SHA'],
+                inverse=dict(RESTORED_DEFAULTS),
+            )
         self.journal.save(self.state, create=True)
 
     def verify_config(self, doc, expected):
@@ -608,8 +681,15 @@ class Controller:
         )
         require(app(rev['spec'])['image'] == self.state['image'], 'candidate_digest_drift')
         env = contract(SERVICE, app(rev['spec']).get('env', []))
-        require(env.get(STAMP) == {'name': STAMP, 'value': SOURCE}, 'candidate_stamp_drift')
-        require(self.registry.verify(self.state['image'], SOURCE) == self.state['image'], 'candidate_source_drift')
+        require(env.get(STAMP) == {'name': STAMP, 'value': self.state['source']}, 'candidate_stamp_drift')
+        image = (
+            self.registry.verify(self.state['image'], self.state['source'], restored_defaults=True)
+            if self.state.get('profile') == 'integration-only'
+            else self.registry.verify(self.state['image'], self.state['source'])
+        )
+        require(image == self.state['image'], 'candidate_source_drift')
+        if self.state.get('profile') == 'integration-only':
+            require(not set(RESTORED_DEFAULTS) & set(env), 'restored_defaults_drift')
         pinned = self.state.get('candidate_uid')
         require(pinned is None or rev['metadata']['uid'] == pinned, 'candidate_replaced')
         self.state['candidate_uid'] = rev['metadata']['uid']
@@ -626,8 +706,8 @@ class Controller:
                 check_traffic(doc, {ROLLBACK: 100})
             raise Refused('candidate_reuse_refused')
         runtime_services = runtime_state.get('services', {})
-        require(set(SERVICES) <= set(runtime_services), 'runtime_services_missing')
-        for service in SERVICES:
+        require(set(self.selected_services()) <= set(runtime_services), 'runtime_services_missing')
+        for service in self.selected_services():
             contract(service, runtime_services[service]['env'])
         original = self.state['services'][SERVICE]
         doc = self.integration()
@@ -644,19 +724,37 @@ class Controller:
         forbidden = runtime_services[SERVICE].get('forbidden_env', [])
         require(isinstance(forbidden, list) and all(isinstance(k, str) for k in forbidden), 'invalid_forbidden_env')
         require(not set(forbidden) & set(declared), 'forbidden_env_declared')
+        if self.state.get('profile') == 'integration-only':
+            require(set(RESTORED_DEFAULTS) <= set(forbidden), 'restored_defaults_not_removed')
+            expected = {key: value for key, value in live_env.items() if key not in RESTORED_DEFAULTS}
+            expected.update(
+                {
+                    key: {'name': key, 'value': value}
+                    for key, value in {
+                        **QUALITY,
+                        BACKOFF: 'false',
+                        PROVIDER: 'false',
+                        STAMP: self.state['source'],
+                    }.items()
+                }
+            )
+            require(declared == expected, 'unruled_environment_change')
         # Queue routing/ops optimizations and all existing secret references stay live.
         for name, entry in live_env.items():
             protected = 'valueFrom' in entry or 'QUEUE' in name or name.startswith(OPS_PREFIXES)
-            if protected and name not in QUALITY and name not in forbidden:
+            named_decision = name in QUALITY or (
+                self.state.get('profile') == 'integration-only' and name in {BACKOFF, PROVIDER, STAMP}
+            )
+            if protected and not named_decision and name not in forbidden:
                 require(name not in declared or declared[name] == entry, 'serving_ops_env_changed')
         require(live_env.get(PROVIDER, {'value': 'false'}).get('value') == 'false', 'provider_live_contract')
         for name in forbidden:
             live_env.pop(name, None)
         live_env.update(declared)
-        live_env[STAMP] = {'name': STAMP, 'value': SOURCE}
+        live_env[STAMP] = {'name': STAMP, 'value': self.state['source']}
         ingress['env'] = list(live_env.values())
         ingress['image'] = self.state['image']
-        result['spec']['template']['metadata']['labels']['commit-sha'] = SOURCE
+        result['spec']['template']['metadata']['labels']['commit-sha'] = self.state['source']
         service_account = runtime_services[SERVICE].get('service_account')
         require(
             not service_account or service_account == old_rev['spec'].get('serviceAccountName'),
@@ -758,7 +856,9 @@ class Controller:
             self.clock.sleep(5)
         anchor = self.clock.time()
         self.state['moves'].append({'percent': percent, 'verified_at': anchor})
-        self.state.update(known=doc, intent=None, phase=f'traffic_{percent}', moved_at=anchor)
+        self.state.update(
+            known=doc, intent=None, phase=f'traffic_{percent}', moved_at=anchor, moved_monotonic=self.clock.monotonic()
+        )
         self.move_monotonic = self.clock.monotonic()
         self.save()
 
@@ -797,6 +897,7 @@ class Controller:
 
     def promote(self):
         self.load()
+        require(self.state.get('profile') != 'integration-only', 'use_scoped_continuation')
         require(self.state['phase'] == 'candidate_written' and self.state['intent'] is None, 'promotion_reuse_refused')
         self.verified(self.state['known'], 0)
         self.metrics.collect(30, preflight=True)  # Refresh headroom, NEVER replace the pinned baseline.
@@ -809,6 +910,125 @@ class Controller:
         require(self.state['health']['state'] == 'below_threshold', 'final_window_immature')
         self.state['phase'] = 'complete'
         self.save()
+
+    def continuation_anchor(self):
+        wall = self.clock.time() - self.state['moved_at']
+        elapsed = self.clock.monotonic() - self.state['moved_monotonic']
+        require(wall >= 0 and elapsed >= 0 and abs(wall - elapsed) <= 5, 'continuation_clock_changed')
+        self.move_monotonic = self.state['moved_monotonic']
+        return elapsed
+
+    def stage(self):
+        """One 25% CAS, then the persisted five-minute verified hold.
+
+        Re-entry after an interrupted read/hold is read-only until the hold is
+        proved. An uncertain mutation intent never authorizes a second PUT.
+        """
+        self.load()
+        require(
+            self.state.get('profile') == 'integration-only' and self.state['intent'] is None, 'scoped_stage_binding'
+        )
+        require(self.state['phase'] in ('candidate_written', 'traffic_25', 'held_25'), 'stage_phase_invalid')
+        if self.state['phase'] == 'candidate_written':
+            self.verified(self.state['known'], 0)
+            self.metrics.collect(30, preflight=True)
+            self.move(25)
+        self.verified(self.state['known'], 25)
+        self.continuation_anchor()
+        self.observe(25, 300)
+        self.state.update(phase='held_25', hold_verified_at=self.clock.time())
+        self.save()
+
+    def complete(self):
+        """Continue the same workflow/run and retained inverse to 100%.
+
+        CPU/request acceptance and the post-wrap discovery window are separate
+        proofs. A twenty-minute HTTP watch is never a discovery-window pass.
+        """
+        self.load()
+        require(
+            self.state.get('profile') == 'integration-only' and self.state['intent'] is None, 'scoped_complete_binding'
+        )
+        require(self.state['phase'] in ('held_25', 'traffic_100', 'awaiting_postwrap'), 'complete_phase_invalid')
+        require(self.discovery is not None, 'discovery_reader_not_bound')
+        if self.state['phase'] == 'held_25':
+            require(self.continuation_anchor() >= 300, 'verified_hold_incomplete')
+            self.verified(self.state['known'], 25)
+            self.metrics.collect(30, preflight=True)
+            self.move(100)
+        self.verified(self.state['known'], 100)
+        self.continuation_anchor()
+        self.observe(100, 1200)
+        require(self.state['health']['state'] == 'below_threshold', 'final_window_immature')
+        self.state['phase'] = 'awaiting_postwrap'
+        self.save()
+        while not self.guard():
+            self.tick()
+            self.clock.sleep(60)
+
+    def guard(self):
+        self.load()
+        require(
+            self.state.get('profile') == 'integration-only'
+            and self.state['phase'] in ('awaiting_postwrap', 'complete')
+            and self.state['intent'] is None,
+            'scoped_guard_binding',
+        )
+        require(self.discovery is not None, 'discovery_reader_not_bound')
+        self.sample(100)
+        binding = {
+            'project': PROJECT,
+            'region': REGION,
+            'service': SERVICE,
+            'source': self.state['source'],
+            'image': self.state['image'],
+            'revision': self.state['candidate'],
+            'revision_uid': self.state['candidate_uid'],
+            'generation': self.state['known']['metadata']['generation'],
+            'config_sha256': digest_bytes(canonical(service_config(self.state['known'])).encode()),
+            'run_id': self.state['run_id'],
+            'run_attempt': self.state['run_attempt'],
+            'control_sha': self.state['control_sha'],
+            'receiving_verified_at': self.state['moved_at'],
+        }
+        # This is an internal adapter boundary, not a file/boolean CLI. Its
+        # authenticated producer must bind originating artifact digests, the
+        # complete participating committer vector, post-receiving positive wrap,
+        # bounded complete recount and existing progress guard semantics. No
+        # census TTL, proxy metric or guard threshold is invented here. The CLI
+        # intentionally has no such live adapter until SCA-2015 establishes it.
+        verdict = self.discovery.collect(binding=binding)
+        require(
+            isinstance(verdict, dict) and verdict.get('binding_sha256') == digest_bytes(canonical(binding).encode()),
+            'discovery_binding_mismatch',
+        )
+        require(
+            verdict.get('state') in {'awaiting_receipt', 'unavailable', 'rollback', 'qualified'},
+            'discovery_decision_invalid',
+        )
+        require(
+            isinstance(verdict.get('artifact_digests'), list)
+            and len(verdict['artifact_digests']) <= 16
+            and all(isinstance(value, str) and DIGEST.fullmatch(value) for value in verdict['artifact_digests'])
+            and len(verdict['artifact_digests']) == len(set(verdict['artifact_digests'])),
+            'discovery_artifact_identity_missing',
+        )
+        if verdict['state'] in {'qualified', 'rollback'}:
+            require(bool(verdict['artifact_digests']), 'discovery_artifact_identity_missing')
+        # Persist only the counts-free adapter decision and immutable references,
+        # never an arbitrary producer payload in the sanitized receipt.
+        self.state['discovery'] = {key: verdict[key] for key in ('state', 'binding_sha256', 'artifact_digests')}
+        if verdict['state'] == 'rollback':
+            self.save()
+            self.rollback(loaded=True)
+            raise Refused('discovery_guard_rollback')
+        if verdict['state'] != 'qualified':
+            self.state['phase'] = 'awaiting_postwrap'
+            self.save()
+            return False
+        self.state['phase'] = 'complete'
+        self.save()
+        return True
 
     def rollback(self, loaded=False):
         if not loaded:
@@ -905,7 +1125,7 @@ def main(argv=None):
     try:
         parser = SafeParser(description=__doc__)
         commands = parser.add_subparsers(dest='step', required=True, parser_class=SafeParser)
-        for name in ('prepare', 'candidate', 'promote', 'rollback'):
+        for name in ('prepare', 'candidate', 'promote', 'rollback', 'stage', 'complete', 'guard'):
             sub = commands.add_parser(name)
             sub.add_argument('--state', required=True, type=Path)
             if name == 'prepare':
@@ -913,6 +1133,7 @@ def main(argv=None):
                     sub.add_argument('--' + option, required=True)
                 sub.add_argument('--project', default=PROJECT)
                 sub.add_argument('--region', default=REGION)
+                sub.add_argument('--integration-only', action='store_true')
             if name == 'candidate':
                 sub.add_argument('--runtime-state', required=True, type=Path)
         args = parser.parse_args(argv)
@@ -929,14 +1150,24 @@ def main(argv=None):
             try:
                 controller.bind()
                 if args.step == 'prepare':
-                    controller.prepare(args.source, args.image, args.candidate, args.project, args.region)
+                    controller.prepare(
+                        args.source,
+                        args.image,
+                        args.candidate,
+                        args.project,
+                        args.region,
+                        integration_only=args.integration_only,
+                    )
                 elif args.step == 'candidate':
                     with args.runtime_state.open('rb') as handle:
                         raw = handle.read(MAX_STATE + 1)
                     require(len(raw) <= MAX_STATE, 'runtime_state_too_large')
                     controller.candidate(decode(raw))
                 else:
-                    getattr(controller, args.step)()
+                    result = getattr(controller, args.step)()
+                    if args.step == 'guard' and result is False:
+                        print('integration_canary: postwrap_window_unproved', flush=True)
+                        return 3
             except (Exception, KeyboardInterrupt):
                 # Keep the lock through the failure receipt so a cancellation
                 # rollback cannot race a stale journal overwrite.
