@@ -156,8 +156,8 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     }
 
     final localPending = {for (final c in processingConversations.map(resolve)) c.id: c};
-    ServerConversation projectLocal(ServerConversation c) => c.homeStep == null && localPending.containsKey(c.id)
-        ? c.withHomeStep(knownSteps[c.id] ?? localPending[c.id]?.homeStep ?? 'transcribing')
+    ServerConversation projectLocal(ServerConversation c) => localPending.containsKey(c.id)
+        ? localHomeProcessingEntry(c, serverStep: knownSteps[c.id] ?? localPending[c.id]?.homeStep)
         : c;
     conversations = {for (final c in conversations.map(resolve).map(projectLocal)) c.id: c}.values.toList();
     processingConversations = localPending.values.map(projectLocal).toList();
@@ -523,6 +523,21 @@ HomeStep? homeStepOf(ServerConversation c) {
 
 /// Server-classified noise: a finished row with nothing worth showing on Home.
 bool isHomeNoise(ServerConversation c) => c.homeStep == 'noise' && !c.isLocked;
+
+/// Local queue membership can outlive the work. Preserve finished/terminal
+/// objects; only genuinely pending unknown work falls back to transcription.
+ServerConversation localHomeProcessingEntry(ServerConversation c, {String? serverStep}) {
+  if (c.homeStep != null ||
+      c.isHiddenFromDefaultList ||
+      c.isLocked ||
+      c.processingDeferred ||
+      c.clientProcessing != null) {
+    return c;
+  }
+  if (serverStep != null) return c.withHomeStep(serverStep);
+  final step = homeStepOf(c);
+  return step != null && step != HomeStep.failed ? c.withHomeStep('transcribing') : c;
+}
 
 /// The member's own record says it is terminal (ready, noise, failed, or locked). A local processing entry
 /// for such a member cannot hold its episode in "Finishing up…", so a stale entry cannot keep the

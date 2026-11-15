@@ -17,7 +17,7 @@ List<HomeRow> buildHomeCardRows(List<HomeFeedCard> cards, List<ServerConversatio
       if (!cardIds.contains(member.id) && !ownerIds.contains(member.episodeId) && !liveIds.contains(member.id))
         // Local placeholders cannot tell us that note writing has started.
         // An explicit server step wins, including ready/noise/failed.
-        member.homeStep == null ? member.withHomeStep('transcribing') : member,
+        localHomeProcessingEntry(member),
   ];
   final rows = [
     for (final seed in seeds)

@@ -1,9 +1,42 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/pages/conversations/home_card_rows.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
 
 import '../helpers/home_ready_members_fixture.dart';
 
 void main() {
+  test('stale queue entries preserve finished and terminal objects rather than manufacturing pending work', () {
+    final now = DateTime(2026, 11, 15, 12);
+    final ready = ServerConversation(
+        id: 'finished-local',
+        createdAt: now,
+        status: ConversationStatus.completed,
+        structured: Structured('Finished fixture', 'Own notes are ready.'));
+    final failed = ServerConversation(
+        id: 'failed-local', createdAt: now, status: ConversationStatus.failed, structured: Structured('', ''));
+    final discarded = ServerConversation(
+        id: 'discarded-local',
+        createdAt: now,
+        discarded: true,
+        status: ConversationStatus.processing,
+        structured: Structured('', ''));
+    final deleted = ServerConversation(
+        id: 'deleted-local',
+        createdAt: now,
+        deleted: true,
+        status: ConversationStatus.processing,
+        structured: Structured('', ''));
+    for (final member in [ready, failed, discarded, deleted]) {
+      expect(localHomeProcessingEntry(member), same(member));
+    }
+    final rows = buildHomeCardRows([], [ready, failed, discarded, deleted], now: now, processingTitle: 'Processing');
+    expect(rows, hasLength(1));
+    expect(rows.single.isProcessing, isFalse);
+    expect(rows.single.conversation, same(ready));
+  });
+
   test('Today pending members of an older owner share the one row; terminal members do not count', () {
     final now = DateTime(2026, 11, 15, 12, 36);
     final fixture = HomeSettledNoiseFixture(now);
