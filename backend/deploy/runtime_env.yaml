@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -922,6 +925,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1293,6 +1299,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1654,6 +1663,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2004,6 +2016,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -2585,6 +2600,9 @@ environments:
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
+            category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
             category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
@@ -3617,6 +3635,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4121,6 +4142,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4623,6 +4647,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5096,6 +5123,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'

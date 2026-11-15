@@ -139,6 +139,8 @@ env:
     value: "true"
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
+  - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
+    value: "true"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS
     value: "21600"
   - name: LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED

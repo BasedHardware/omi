@@ -3276,6 +3276,19 @@ wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enric
 a 4,200-second per-recording escalation lease (maximum hold plus one quiet window);
 expired intent restores the wait. Empty-transcript process entry bypasses this notes
 gate, and scheduling deferrals propagate through donor completion unchanged.
+`HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED` defaults on. A finished member's durable
+retry settles an idle owner through Home's activity-fenced idle-close transaction,
+including when the member is not last. Otherwise, at 180 seconds since its
+finalization job was created, its own notes may proceed while the owner stays
+live. One extra automatic paid attempt is admitted per finalization/content
+revision; retries cannot consume it twice. A failed or interrupted attempt
+recovers through ordinary closed-owner processing or explicit user reprocessing.
+Set this switch off on every finalization host to restore the original gate;
+existing permit metadata is then inert. There is no startup scan or historical
+recomposition. This is an eligibility bound checked on worker delivery, not a
+new deadline scheduler; the ordinary reconciliation interval still applies.
+The 1,800-second occasion grouping window and the composer's live refusal stay
+unchanged, so this does not promise notes within five minutes of last speech.
 Optional dependency failures preserve
 the detail read and fail eager for processing. Explicit Process Now carries
 `backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)

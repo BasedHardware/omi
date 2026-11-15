@@ -20,6 +20,7 @@ environment_shared:
       - memory.canonical.mutate
       env:
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
         PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
@@ -970,6 +971,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -1400,6 +1402,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -1783,6 +1786,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
@@ -2148,6 +2152,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
