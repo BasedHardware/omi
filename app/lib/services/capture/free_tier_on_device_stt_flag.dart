@@ -27,8 +27,8 @@ class FreeTierOnDeviceSttFlag {
   }
 
   /// True when the remote kill switch [FreeTierOnDeviceSttGate.killSwitchFlag] is set.
-  static Future<bool> killed({Future<bool> Function(String key)? readFlag}) =>
-      FreeTierOnDeviceSttGate.killed(readFlag: readFlag);
+  static Future<bool> killed({Future<bool> Function(String key)? readFlag, Future<bool> Function()? reloadFlags}) =>
+      FreeTierOnDeviceSttGate.killed(readFlag: readFlag, reloadFlags: reloadFlags);
 
   static bool isTruthy(String? raw) {
     if (raw == null) return false;

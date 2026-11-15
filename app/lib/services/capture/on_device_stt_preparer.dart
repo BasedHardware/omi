@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/models/transcription_allowance.dart';
+import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
@@ -25,8 +27,9 @@ abstract final class OnDeviceSttPreparer {
 
   /// True when [allowance] says the cloud minutes are spent or nearly spent.
   static bool shouldPrepareFor(TranscriptionAllowanceSnapshot? allowance) {
-    if (allowance == null || allowance.isBlocked) return false;
-    if (allowance.isOnDevice) return true;
+    if (allowance == null) return false;
+    if (allowance.isOnDevice) return !SttModeResolver.transientAllowanceReasons.contains(allowance.reason);
+    if (!allowance.isManaged) return false;
     final remaining = allowance.remainingSeconds;
     return remaining != null && remaining <= prepareBelowRemainingSeconds;
   }
@@ -38,7 +41,9 @@ abstract final class OnDeviceSttPreparer {
   static Future<void> _prepare({String? language}) async {
     try {
       if (Platform.isIOS) {
-        final lang = FreemiumTranscriptionService.effectiveLanguage(language: language);
+        // Apple's asset install has no Wi-Fi guard of its own; never spend cellular data on it.
+        if (!(await Connectivity().checkConnectivity()).contains(ConnectivityResult.wifi)) return;
+        final lang = language ?? FreemiumTranscriptionService.liveOnDeviceLanguage();
         final readiness = await OnDeviceAppleProvider.readiness(lang, prepare: true);
         Logger.debug('[OnDevicePrep] iOS speech ${readiness.engine}: ${readiness.status}');
       } else if (Platform.isAndroid) {
@@ -51,7 +56,8 @@ abstract final class OnDeviceSttPreparer {
       } else {
         return;
       }
-      await FreemiumTranscriptionService().checkReadiness(language: language);
+      await FreemiumTranscriptionService()
+          .checkReadiness(language: language ?? FreemiumTranscriptionService.liveOnDeviceLanguage());
     } catch (e) {
       Logger.debug('[OnDevicePrep] prepare failed: $e');
     }

@@ -10,6 +10,8 @@ import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/experiments/free_tier_on_device_stt_gate.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -163,10 +165,10 @@ void main() {
       expect(decision.reason, SttModeResolver.reasonUnsupportedCodec);
     });
 
-    test('unknown allowance mode fails closed', () {
+    test('unknown allowance mode is not proof of the cap: today\'s Omi socket', () {
       final decision = _resolve(allowance: _allowance('surprise', reason: 'future'));
-      expect(decision.opensManagedOmiSocket, isFalse);
-      expect(decision.path, SttResolvedPath.onDevice);
+      expect(decision.path, SttResolvedPath.managed);
+      expect(decision.reason, 'allowance_unrecognized');
     });
   });
 
@@ -266,6 +268,75 @@ void main() {
       expect(OnDeviceSttPreparer.shouldPrepareFor(null), isFalse);
       expect(OnDeviceSttPreparer.shouldPrepareFor(const TranscriptionAllowanceSnapshot(mode: 'blocked', reason: 'x')),
           isFalse);
+    });
+  });
+
+  group('review round 1', () {
+    test('transient on_device reasons never prepare a model', () {
+      for (final reason in SttModeResolver.transientAllowanceReasons) {
+        expect(OnDeviceSttPreparer.shouldPrepareFor(_allowance('on_device', reason: reason)), isFalse);
+      }
+      expect(OnDeviceSttPreparer.shouldPrepareFor(_allowance('surprise', reason: 'future')), isFalse);
+    });
+
+    test('an at-cap snapshot older than a day is not trusted by the default reader', () {
+      final now = DateTime(2026, 11, 16, 12);
+      TranscriptionAllowanceCache.replace(atCapSnapshot, now: now.subtract(const Duration(hours: 25)));
+      expect(TranscriptionAllowanceCache.currentWithin(SttModeResolver.onDeviceSnapshotMaxAge, now: now), isNull);
+      TranscriptionAllowanceCache.replace(atCapSnapshot, now: now.subtract(const Duration(hours: 2)));
+      expect(TranscriptionAllowanceCache.currentWithin(SttModeResolver.onDeviceSnapshotMaxAge, now: now)?.mode,
+          'on_device');
+    });
+
+    test('a snapshot saved before ages were tracked is not trusted', () {
+      TranscriptionAllowanceCache.replace(atCapSnapshot);
+      SharedPreferencesUtil().saveInt(TranscriptionAllowanceCache.savedAtPrefsKey, 0);
+      expect(TranscriptionAllowanceCache.currentWithin(SttModeResolver.onDeviceSnapshotMaxAge), isNull);
+    });
+
+    test('live on-device language: primary language first', () {
+      expect(
+          FreemiumTranscriptionService.liveOnDeviceLanguage(primary: 'de', deviceLocale: 'fr_FR', isIOS: true), 'de');
+    });
+
+    test('live on-device language: iOS uses the phone language instead of multi (which Apple maps to English)', () {
+      expect(FreemiumTranscriptionService.liveOnDeviceLanguage(primary: '', deviceLocale: 'es_MX', isIOS: true), 'es');
+      expect(FreemiumTranscriptionService.liveOnDeviceLanguage(primary: 'multi', deviceLocale: 'ja-JP', isIOS: true),
+          'ja');
+      expect(FreemiumTranscriptionService.liveOnDeviceLanguage(primary: '', deviceLocale: 'C', isIOS: true), 'multi');
+    });
+
+    test('live on-device language: Android keeps multi for Whisper language detection', () {
+      expect(
+          FreemiumTranscriptionService.liveOnDeviceLanguage(primary: '', deviceLocale: 'es_MX', isIOS: false), 'multi');
+    });
+
+    test('kill switch refreshes the cached flags at most every ten minutes', () async {
+      FreeTierOnDeviceSttGate.debugReset();
+      var reloads = 0;
+      var t = DateTime(2026, 11, 16, 12);
+      Future<bool> read(String _) async => true;
+      Future<bool> reload() async {
+        reloads++;
+        return true;
+      }
+
+      expect(await FreeTierOnDeviceSttGate.killed(readFlag: read, reloadFlags: reload, now: () => t), isTrue);
+      t = t.add(const Duration(minutes: 5));
+      await FreeTierOnDeviceSttGate.killed(readFlag: read, reloadFlags: reload, now: () => t);
+      expect(reloads, 1);
+      t = t.add(const Duration(minutes: 6));
+      await FreeTierOnDeviceSttGate.killed(readFlag: read, reloadFlags: reload, now: () => t);
+      expect(reloads, 2);
+    });
+
+    test('a failing flag refresh still reads the cached answer', () async {
+      FreeTierOnDeviceSttGate.debugReset();
+      expect(
+        await FreeTierOnDeviceSttGate.killed(
+            readFlag: (_) async => true, reloadFlags: () async => throw StateError('offline')),
+        isTrue,
+      );
     });
   });
 
