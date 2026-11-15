@@ -229,7 +229,10 @@ from utils.sync.capture_clock import (
     SyncCaptureTimeRejected,
     capture_clock_offset,
     is_early_capture_time,
+    is_implausible_future_capture_time,
 )
+from utils.sync.clock_run import capture_clock_run_from_path
+from utils.sync.receipt_clock import POLICY as RECEIPT_CLOCK_POLICY, FutureCaptureRefused, require_future_upload
 from utils.stt.outcomes import TranscriptionOutcome, sync_failure_from_exception
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.sync.rate_limit import (
@@ -933,6 +936,31 @@ async def sync_local_files_v2(
         early_capture_received_at = (
             capture_received_at if any(is_early_capture_time(get_timestamp_from_path(path)) for path in paths) else None
         )
+        future_capture = any(
+            is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at) for path in paths
+        )
+        capture_clock_policy = None
+        if future_capture:
+            future_paths = [
+                path
+                for path in paths
+                if is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at)
+            ]
+            require_future_upload(future_paths, received_at=capture_received_at)
+            if (
+                any(capture_clock_run_from_path(path) for path in future_paths)
+                and not client_device_context.client_device_id
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    headers={'Retry-After': '30'},
+                    content={'code': 'capture_clock_identity_required', 'detail': 'Retain local audio and retry'},
+                )
+            # Future clocks are a batch-only extension. Legacy and early-clock
+            # admission/placement keep main's existing context and behavior.
+            if isinstance(conversation_id, str):
+                raise FutureCaptureRefused()
+            capture_clock_policy = RECEIPT_CLOCK_POLICY
         # One server-clock offset per request shifts the client's
         # recording-session audio bounds onto the server clock before any
         # temporal comparison (recording-session binding compares them against
@@ -952,7 +980,7 @@ async def sync_local_files_v2(
                 except (IndexError, ValueError):
                     continue  # Admission above rejects unparseable names with the typed 400.
             if admitted_file_starts:
-                if any(is_early_capture_time(value) for value in admitted_file_starts):
+                if early_capture_received_at is not None or future_capture:
                     # Reset clocks prove no server-clock interval. Do not use
                     # a possibly years-wide client claim for session lookup;
                     # explicit targets and source-frame evidence stay intact.
@@ -1074,9 +1102,10 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
-                        {'capture_received_at': early_capture_received_at}
-                        if early_capture_received_at is not None
+                        {'capture_received_at': capture_received_at if future_capture else early_capture_received_at}
+                        if early_capture_received_at is not None or future_capture
                         else {}
                     ),
                     'recording_session_id': recording_session_id,
@@ -1101,6 +1130,11 @@ async def sync_local_files_v2(
                     record_upload_outcome('batch')
                 return batch_response
             sequencer_registration_started = False
+
+        if future_capture:
+            # A cohort/language/capacity decline retains the phone's files;
+            # this policy can never fall through to a legacy reader.
+            raise FutureCaptureRefused()
 
         if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
             # A legacy job is created only on a young mode read: a request that read 'on'
@@ -1642,6 +1676,10 @@ async def sync_local_files_v2(
                 'poll_after_ms': 3000,
                 'lane': lane_decision.lane.value,
             },
+        )
+    except FutureCaptureRefused:
+        return JSONResponse(
+            status_code=400, content={'code': INVALID_CAPTURE_TIME_CODE, 'detail': INVALID_CAPTURE_TIME_DETAIL}
         )
     except HTTPException as error:
         if error.status_code == 400:

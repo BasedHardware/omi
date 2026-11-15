@@ -11,6 +11,7 @@ from utils.capture.identity import compatible_keys, same_explicit_key
 from utils.capture.shadow import compare
 
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
+from utils.sync.capture_clock import CAPTURE_TIME_TRUST_FIELD
 
 # A tolerance beyond a day cannot describe a plausible capture window, so it is
 # malformed rather than merely strict. Keeping the bound also keeps the
@@ -34,6 +35,13 @@ def live_overlap_enabled() -> bool:
 
 
 def compatible_capture(left: dict, right: dict) -> bool:
+    # Receipt-clock placement is an ordering/display anchor, never proof that
+    # other audio was captured at that time. Exact identity can replay, while
+    # explicit targets and source-frame ownership have their own admission.
+    if (left.get(CAPTURE_TIME_TRUST_FIELD) == 'untrusted' or right.get(CAPTURE_TIME_TRUST_FIELD) == 'untrusted') and (
+        not left.get('id') or left.get('id') != right.get('id')
+    ):
+        return False
     # Unknown is a partition, not a wildcard: wildcard equality is non-transitive.
     # An estimated-clock run (utils/sync/clock_run.py) is a partition too: its
     # times never prove adjacency to another run or to device-clocked audio.

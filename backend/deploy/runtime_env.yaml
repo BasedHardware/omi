@@ -424,6 +424,9 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+            value: 'true'
+            category: ops_kill
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1307,6 +1310,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1696,6 +1702,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2070,6 +2079,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2405,6 +2417,9 @@ environments:
               value: '7200'
               category: config
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
               value: 'true'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
@@ -3153,6 +3168,9 @@ environments:
             value: '7200'
             category: config
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
             value: 'true'
             category: ops_kill
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
@@ -4171,6 +4189,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4697,6 +4718,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5215,6 +5239,9 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5677,6 +5704,9 @@ environments:
               value: '7200'
               category: config
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED:
               value: 'true'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:

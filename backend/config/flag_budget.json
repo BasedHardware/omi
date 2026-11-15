@@ -1043,6 +1043,11 @@
     "SYNC_FRESH_MAX_AGE_SECONDS": {
       "seeded": "2026-10-25"
     },
+    "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
+      "owner": "Q12-AD / sync capture recovery",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
     },
