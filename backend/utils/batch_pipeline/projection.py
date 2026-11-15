@@ -865,7 +865,7 @@ class Projector:
             '_batch_replace_live': {
                 'start': item.capture_at,
                 'end': item.capture_at + item.duration_seconds,
-                'terminal_empty_outcome': session.entry['result']['outcome'],
+                'terminal_empty_outcome': (session.entry.get('result') or {}).get('outcome'),
             },
         }
         try:

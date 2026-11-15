@@ -69,7 +69,15 @@ def terminal(row):
         end = end.timestamp() if isinstance(end, datetime) else None
     else:
         return False
-    if not all(type(value) in (int, float) and math.isfinite(value) for value in (start, end)) or end <= start:
+    if (
+        not isinstance(start, (int, float))
+        or isinstance(start, bool)
+        or not isinstance(end, (int, float))
+        or isinstance(end, bool)
+        or not math.isfinite(start)
+        or not math.isfinite(end)
+        or end <= start
+    ):
         return False
     return any(
         isinstance(span, Mapping)
