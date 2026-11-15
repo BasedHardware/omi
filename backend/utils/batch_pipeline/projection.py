@@ -7,6 +7,7 @@ No admission flag is consulted: already accepted work drains after rollback.
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy, kill_switch
 from collections.abc import Iterator
+from collections import Counter
 from contextlib import ExitStack, contextmanager
 from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 
 from config.batch_pipeline import (
     owner_drain_enabled,
+    owner_drain_admission_diagnostics_enabled,
     projection_index_deferred_enabled,
     projection_pending_page_enabled,
     projection_predecessor_replay_enabled,
@@ -42,6 +44,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
+from utils.batch_pipeline import projection_drain_diagnostics as drain_diagnostics
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
 from utils.batch_pipeline import artifact_missing
 from utils.batch_pipeline.errors import error_site_field
@@ -441,7 +444,8 @@ class Projector:
         # Search/people-stats work walks owe, converged off the ordered chain.
         self.index = ProjectionIndex()
         # Owners a sweep or wake wants drained; ``draining`` is live in this process.
-        self.drain_requests: dict[str, None] = {}
+        self.drain_requests: dict[str, int | None] = {}
+        self.drain_request_counts = Counter() if owner_drain_admission_diagnostics_enabled() else None
         self.draining: set[str] = set()
         self.drains = None
         # Sweeps and wakes hand off from sync-pool threads while overlapping
@@ -455,8 +459,16 @@ class Projector:
         # Resume point of the held-release scan; a short page wraps it.
         self.release_after: str | None = None
 
-    def request_drain(self, owner_id: str) -> None:
+    def request_drain(self, owner_id: str, *, reason: str = 'unknown') -> None:
         with self.handoff:
+            previous = self.drain_requests.get(owner_id)
+            if self.drain_request_counts is not None:
+                self.drain_request_counts['handoff_requests'] += 1
+                self.drain_request_counts['handoff_coalesced'] += int(owner_id in self.drain_requests)
+                if previous is not None or len(self.drain_requests) < drain_diagnostics.MAX_OWNERS:
+                    self.drain_requests[owner_id] = (previous or 0) | drain_diagnostics.origin_mask(reason)
+                    return
+                self.drain_request_counts['handoff_overflow'] += 1
             self.drain_requests[owner_id] = None
 
     def owe_followups(self, segment_ids) -> None:
@@ -485,6 +497,11 @@ class Projector:
             self.drains = OwnerDrains(self)
         with self.handoff:
             requests, self.drain_requests = self.drain_requests, {}
+            counts = self.drain_request_counts
+            if counts is not None:
+                self.drain_request_counts = Counter()
+        if counts is not None and self.drains.diagnostics is not None:
+            self.drains.diagnostics.counts.update(counts)
         self.drains.request(requests)
 
     def schedule_index_flush(self, owner_id: str | None = None) -> None:
@@ -1275,7 +1292,7 @@ class Projector:
         """
         walk = self._walk(owner_id, recovered=recovered, limit=limit, budget_seconds=budget_seconds)
         if walk.more and owner_drain_enabled():
-            self.request_drain(owner_id)
+            self.request_drain(owner_id, reason='targeted_wake')
         logger.info(
             'event=batch_projection action=owner_chain outcome=summary advanced=%d followups=%d stop=%s',
             len(walk.advanced),
@@ -1339,7 +1356,11 @@ class Projector:
         with ExitStack() as stack:
             drain = budget_seconds > 0 and owner_drain_enabled()
             if drain:
-                acquired = stack.enter_context(projection_claim(self.store.store.namespace, owner_key(owner_id)))
+                acquired = drain_diagnostics.observe(
+                    'claim_acquire',
+                    stack.enter_context,
+                    projection_claim(self.store.store.namespace, owner_key(owner_id)),
+                )
                 if not acquired:
                     logger.info('event=batch_projection action=owner_chain outcome=claim_busy')
                     return Walk([], [], stop='claim_busy')
@@ -1447,7 +1468,9 @@ class Projector:
             try:
                 prefetched = None
                 if prefetch is not None:
-                    prefetched = prefetch.take(segment_id, timeout=deadline - time.monotonic())
+                    prefetched = drain_diagnostics.observe(
+                        'prefetch_wait', prefetch.take, segment_id, timeout=deadline - time.monotonic()
+                    )
                     if prefetched is NOT_READY:
                         # Still loading at the step deadline: the next step
                         # resumes here instead of holding this pool slot.
@@ -1598,7 +1621,7 @@ class Projector:
                     walked.add(binding.owner_id)
                     if drain:
                         handed.add(binding.owner_id)
-                        self.request_drain(binding.owner_id)
+                        self.request_drain(binding.owner_id, reason='predecessor_replay')
                     else:
                         if chain_deadline is None:
                             chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
@@ -1645,7 +1668,7 @@ class Projector:
                 budget = 0.0
                 if drain:
                     handed.add(binding.owner_id)
-                    self.request_drain(binding.owner_id)
+                    self.request_drain(binding.owner_id, reason='discovery_after_assignment')
                 elif binding.owner_id not in walked:
                     if chain_deadline is None:
                         chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS

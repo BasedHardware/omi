@@ -2,6 +2,12 @@
 
 import os
 
+from config.refactor_modes import default_on
+
+
+def seal_pending_retry_bound_enabled() -> bool:
+    return default_on('PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED')
+
 
 def abandon_record_drain_cap() -> int:
     try:
