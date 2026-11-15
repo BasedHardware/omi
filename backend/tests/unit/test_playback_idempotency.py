@@ -582,6 +582,7 @@ async def test_empty_projection_pending_hint_survives_real_http_response(monkeyp
     from database import record_projection_rebuild
 
     app, sync = route_app
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     for key in (
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
         'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
