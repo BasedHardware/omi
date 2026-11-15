@@ -30,14 +30,12 @@ def test_single_flight_and_user_process_bounds_keep_running_timeout_reserved(coo
     assert coordinator.get('two', 'b') is second
     with pytest.raises(module.MetadataPending):
         coordinator.get('three', 'c')
-    # Expire the request wait deterministically while the underlying Future
-    # remains running, so timeout cannot free its single-flight/capacity slot.
-    timed_out_result = Mock(side_effect=module.TimeoutError())
+    result = Mock(side_effect=TimeoutError)
     with monkeypatch.context() as timeout_patch:
-        timeout_patch.setattr(first, 'result', timed_out_result)
+        timeout_patch.setattr(first, 'result', result)
         with pytest.raises(module.MetadataPending) as timeout:
             module.refresh_on_open('one', 'a')
-    timed_out_result.assert_called_once_with(timeout=module.OPEN_TIMEOUT_SECONDS)
+    result.assert_called_once_with(timeout=module.OPEN_TIMEOUT_SECONDS)
     assert timeout.value.reason == 'timeout'
     assert len(coordinator.active) == 2 and not first.cancelled()
     assert submit.call_count == 2  # Repeated open cannot launch another listing.
