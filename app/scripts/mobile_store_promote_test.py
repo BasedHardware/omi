@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
@@ -20,6 +21,28 @@ sys.modules[_SPEC.name] = promote
 _SPEC.loader.exec_module(promote)
 BUILD_ID = "00000000-0000-4000-8000-000000000001"
 BUILD_TAG = "v1.2.3+456-android-cm"
+
+
+def _fake_play_modules(client: object) -> dict[str, object]:
+    """Stub Google client modules so the contract runs without google-auth installed."""
+    google = types.ModuleType("google")
+    oauth2 = types.ModuleType("google.oauth2")
+    service_account = types.ModuleType("google.oauth2.service_account")
+    service_account.Credentials = Mock()
+    service_account.Credentials.from_service_account_info.return_value = object()
+    oauth2.service_account = service_account
+    google.oauth2 = oauth2
+    apiclient = types.ModuleType("googleapiclient")
+    discovery = types.ModuleType("googleapiclient.discovery")
+    discovery.build = Mock(return_value=client)
+    apiclient.discovery = discovery
+    return {
+        "google": google,
+        "google.oauth2": oauth2,
+        "google.oauth2.service_account": service_account,
+        "googleapiclient": apiclient,
+        "googleapiclient.discovery": discovery,
+    }
 
 
 class InputTests(unittest.TestCase):
@@ -38,11 +61,7 @@ class InputTests(unittest.TestCase):
         sleeps = []
         with (
             patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
-            patch(
-                "google.oauth2.service_account.Credentials.from_service_account_info",
-                return_value=object(),
-            ),
-            patch("googleapiclient.discovery.build", return_value=client),
+            patch.dict(sys.modules, _fake_play_modules(client)),
             patch.object(promote.time, "sleep", sleeps.append),
         ):
             self.assertEqual(promote.play_edit(), (client, "retry-edit"))
@@ -53,11 +72,7 @@ class InputTests(unittest.TestCase):
         execute.side_effect = [Conflict()] * promote.PLAY_EDIT_CREATE_ATTEMPTS
         with (
             patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
-            patch(
-                "google.oauth2.service_account.Credentials.from_service_account_info",
-                return_value=object(),
-            ),
-            patch("googleapiclient.discovery.build", return_value=client),
+            patch.dict(sys.modules, _fake_play_modules(client)),
             patch.object(promote.time, "sleep"),
         ):
             with self.assertRaisesRegex(promote.PromotionError, "Google Play edit creation failed"):
