@@ -12,6 +12,10 @@ WORKFLOWS = (
     Path(".github/workflows/gcp_llm_gateway.yml"),
 )
 CHECKOUT = "ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}"
+PUSHER_WORKFLOW = Path(".github/workflows/gcp_backend_pusher.yml")
+PUSHER_CHECKOUT = (
+    "ref: ${{ github.event.inputs.environment == 'prod' && github.workflow_sha || github.event.inputs.branch }}"
+)
 ORIGIN_MAIN_FETCH = "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
 ANCESTRY_GUARD = 'git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main'
 HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
@@ -130,7 +134,7 @@ def validate(root: Path) -> list[str]:
     for relative in WORKFLOWS:
         path = root / relative
         text = path.read_text(encoding="utf-8") if path.exists() else ""
-        if CHECKOUT not in text:
+        if (PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else CHECKOUT) not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
             errors.append(f"{relative} must prove production source is on fresh origin/main")
@@ -166,6 +170,28 @@ def validate(root: Path) -> list[str]:
         if relative == GATEWAY_WORKFLOW:
             errors.extend(validate_gateway_release_admission(text))
             errors.extend(validate_gateway_break_glass_hatch(text))
+        if relative == PUSHER_WORKFLOW:
+            for fragment in (
+                '"$GITHUB_REF" != refs/heads/main || "$GITHUB_SHA" != "$WORKFLOW_CONTROL_SHA"',
+                'BRANCH_INPUT: ${{ github.event.inputs.branch }}',
+                'if [[ "$BRANCH_INPUT" == main ]]; then',
+                'PINNED_PUSHER_RELEASE_SHA=\'\'',
+                '[[ ! "$BRANCH_INPUT" =~ ^[0-9a-f]{40}$ || "$BRANCH_INPUT" == "0000000000000000000000000000000000000000" ]]',
+                'backend/scripts/verify_pusher_promotion_evidence.py --admit-source',
+                '--release-sha "$PINNED_PUSHER_RELEASE_SHA" --workflow-sha "$WORKFLOW_CONTROL_SHA"',
+                'if [[ -n "$PINNED_PUSHER_RELEASE_SHA" ]]; then',
+                'actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}',
+                '.github/scripts/verify_backend_release_admission.py',
+                '--workflow-runs "$PROOF" --require-first-attempt',
+                'git checkout --detach "$DEPLOY_SHA"',
+                '"$CHECKED_OUT_SHA" != "$DEPLOY_SHA"',
+                'echo "PINNED_PUSHER_RELEASE_SHA=$PINNED_PUSHER_RELEASE_SHA" >> "$GITHUB_ENV"',
+                '--expected-qualification-source-sha "$PINNED_PUSHER_RELEASE_SHA"',
+            ):
+                if fragment not in text:
+                    errors.append(f"{relative} is missing trusted pinned-source admission: {fragment}")
+            if text.count('--expected-canary-workflow-sha "$GITHUB_SHA"') != 2:
+                errors.append(f"{relative} must bind canary and final run identity to trusted GITHUB_SHA")
     return errors
 
 

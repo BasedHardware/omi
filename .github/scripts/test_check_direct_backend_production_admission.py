@@ -67,6 +67,8 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                         shutil.copy2(source, target)
                     target = root / relative
                     text = target.read_text(encoding="utf-8")
+                    if name == "caller_ref" and relative == CHECKER.PUSHER_WORKFLOW:
+                        expected = CHECKER.PUSHER_CHECKOUT
                     self.assertIn(expected, text)
                     if name in replace_all:
                         target.write_text(text.replace(expected, replacement), encoding="utf-8")

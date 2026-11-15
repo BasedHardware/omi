@@ -252,6 +252,107 @@ void main() {
     expect(claims, 1);
   });
 
+  iosTestWidgets('ineligible mounted Home retries on return, not rebuilds, and displays only once', (tester) async {
+    var qualified = false;
+    var claims = 0;
+    final placementKey = GlobalKey();
+    final usage = await pump(
+        tester,
+        Scaffold(
+            body: YearlyRetentionPlacement(
+                key: placementKey,
+                surface: YearlySwitchSurface.engaged,
+                claim: (_) async {
+                  claims++;
+                  return qualified ? offer : wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged');
+                },
+                readEnabled: () async => true)));
+    final mountedState = placementKey.currentState;
+    final row = find.byKey(const ValueKey('yearly_retention_engaged'));
+    expect(claims, 1);
+    expect(row, findsNothing);
+    qualified = true;
+    usage.notifyListeners();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(minutes: 1));
+    expect(claims, 1);
+    final navigator = Navigator.of(placementKey.currentContext!);
+    navigator.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Other page'))));
+    await tester.pumpAndSettle();
+    // Foregrounding another route does not present Home.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    usage.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(claims, 1);
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(placementKey.currentState, same(mountedState));
+    expect(claims, 2);
+    expect(row, findsOneWidget);
+    usage.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(claims, 2);
+    await tester.tap(find.descendant(of: row, matching: find.byIcon(Icons.close)));
+    await tester.pumpAndSettle();
+    navigator.push(MaterialPageRoute<void>(builder: (_) => const Scaffold()));
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(claims, 2);
+    expect(row, findsNothing);
+    final observations = analytics.propertiesOf('Yearly Retention Observation').toList();
+    expect(observations.map((event) => event['action']), ['shown', 'dismissed']);
+    for (final event in observations) {
+      expect(event, containsPair('placement', 'engaged'));
+      expect(event, containsPair('variant', 'treatment'));
+      expect(event, containsPair('experiment_version', 1));
+    }
+  });
+
+  iosTestWidgets('Home foreground retries non-admission without overlapping pending claims', (tester) async {
+    final pending = Completer<wire.GeneratedYearlySwitchResponse?>();
+    var claims = 0;
+    final usage = await pump(
+        tester,
+        Scaffold(
+            body: YearlyRetentionPlacement(
+                surface: YearlySwitchSurface.engaged,
+                claim: (_) {
+                  claims++;
+                  return claims == 1 ? pending.future : Future.value(offer);
+                },
+                readEnabled: () async => true)));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(claims, 1);
+    pending.complete(wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged'));
+    await tester.pumpAndSettle();
+    usage.notifyListeners();
+    await tester.pumpAndSettle();
+    // An inactive/resumed transition (e.g. losing focus) is not a new visit.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(claims, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(claims, 2);
+    expect(find.byKey(const ValueKey('yearly_retention_engaged')), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    usage.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(claims, 2);
+    analytics.expectSingle('Yearly Retention Observation',
+        {'placement': 'engaged', 'action': 'shown', 'variant': 'treatment', 'experiment_version': 1});
+  });
+
   iosTestWidgets('flag disabled between preview and confirm prevents payment', (tester) async {
     var enabled = true;
     var charges = 0;

@@ -88,7 +88,14 @@ PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
     'Pusher storage PCM byte budget limit; zero means no budget is enforced',
 )
 
-from utils.observability.reasons import PusherPcmErrorReason, PusherPcmStage, ReasonFamily, reason_label
+from utils.observability.reasons import (
+    AppReviewConfigOutcome,
+    AppReviewConfigReason,
+    PusherPcmErrorReason,
+    PusherPcmStage,
+    ReasonFamily,
+    reason_label,
+)
 
 PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
     'omi_pusher_storage_pcm_refusals_total',
@@ -845,6 +852,50 @@ OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
     'Unix time of the most recent new/surge firing per error class',
     ['fingerprint', 'service'],
 )
+
+OMI_APP_REVIEW_CONFIG_ALERT_TOTAL = Counter(
+    'omi_app_review_config_alert_total',
+    'App-review hide lifecycle alerts by platform and bounded reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_alert_timestamp_seconds',
+    'Unix time of the latest app-review hide lifecycle alert by platform and reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL = Counter(
+    'omi_app_review_config_sweep_total',
+    'App-review lifecycle sweep ticks by overall outcome',
+    ['outcome'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_sweep_timestamp_seconds',
+    'Unix time of the most recent completed app-review lifecycle sweep',
+)
+for _app_review_platform in ('ios', 'android'):
+    for _app_review_reason in (
+        AppReviewConfigReason.CREDENTIALS_UNAVAILABLE,
+        AppReviewConfigReason.STORE_API_ERROR,
+        AppReviewConfigReason.RECONCILIATION_REPAIR,
+        AppReviewConfigReason.LIVE_HIDE_CLEARED,
+        AppReviewConfigReason.SUBMISSION_TOKEN_UNAVAILABLE,
+    ):
+        OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+        OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+for _app_review_outcome in (
+    AppReviewConfigOutcome.OK,
+    AppReviewConfigOutcome.PARTIAL,
+    AppReviewConfigOutcome.ERROR,
+):
+    OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL.labels(
+        outcome=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_outcome, AppReviewConfigOutcome)
+    )
 
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(

@@ -7,7 +7,7 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 from __future__ import annotations
 
 from config.refactor_modes import serving_for
-from config.llm_input_versions import prompt_version
+from config.llm_input_versions import NOTES_UNSCALED_PREVIOUS_VERSION, prompt_version
 from config.memory_l1_admission import noise_skip_enabled
 from config.llm_input_legacy import (
     LEGACY_DEPENDENCY_VERSIONS,
@@ -171,10 +171,17 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
     # and compatible prompt sources/dependencies; exact inputs + output validation
     # still apply. A dependency bump deliberately recomputes once per input.
     implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
+    unscaled_notes = feature == 'notes' and isinstance(inputs, dict) and 'scaled_detail' not in inputs
+    compatibility_version = NOTES_UNSCALED_PREVIOUS_VERSION if unscaled_notes else prompt_version(feature)
+    if unscaled_notes:
+        # Exact unchanged short/flag-off packets reuse notes-3 output, then are
+        # restamped with the current digest. This never schedules any work.
+        suffix = stable_implementation(feature).split(':', 1)[1]
+        implementations.add(f'{NOTES_UNSCALED_PREVIOUS_VERSION}:{suffix}')
     if (
         INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
         and routing_digest() == LEGACY_ROUTING
-        and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]
+        and compatibility_version in LEGACY_PROMPT_VERSIONS[feature]
     ):
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
         implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
@@ -210,6 +217,19 @@ def _notes_packet_identity(uid: str) -> dict[str, Any]:
     return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
 
 
+def _scaled_notes_identity(prefix: Any) -> dict[str, Any] | None:
+    from utils.conversations.relevance_rules import transcript_word_count
+    from utils.llm.notes_lengths import length_guide, scaled_length_range
+
+    data = prefix if isinstance(prefix, dict) else vars(prefix) if hasattr(prefix, '__dict__') else {}
+    context = data.get('shaped_context') or (
+        'FULL TRANSCRIPT\n' + data.get('context', '').split('FULL TRANSCRIPT\n', 1)[-1]
+    )
+    words = transcript_word_count(context)
+    bounds = scaled_length_range(words)
+    return {'version': prompt_version('notes'), 'range': bounds, 'guidance': length_guide(words)} if bounds else None
+
+
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
     open_loop_out = kwargs.pop('open_loop_out', None)
     if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
@@ -226,6 +246,9 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
         'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
     }
+    scaled_detail = _scaled_notes_identity(prefix)
+    if scaled_detail is not None:
+        inputs['scaled_detail'] = scaled_detail
     digest = fingerprint('notes', inputs)
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None

@@ -36,6 +36,11 @@ distinct active days**. No empty in-progress session is counted. The count,
 window, predicate version and placement are frozen at enrollment. Cancellation
 does not require engagement. Engagement is checked on each new Home presentation;
 a UID that qualifies after its first presentation can qualify on its next visit.
+For a mounted Home, returning from another route or foregrounding from a hidden/
+paused app while Home is current starts a new presentation. Rebuilds, elapsed
+time and focus-only inactive/resumed transitions do not retry admission. A
+pending claim cannot overlap another claim for that candidate; a successful
+admission stays consumed even after dismissal or a subsequent flag-off check.
 
 ## Flags and privacy
 

@@ -16,6 +16,15 @@ overlay:
   gke:
     backend-listen:
       env:
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -110,6 +119,11 @@ overlay:
     pusher:
       env:
         # Dev-only canary (lead2 2afa3e): byte-budgeted custody admission. Prod stays '0'. Rollback: '0'.
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         PUSHER_STORAGE_PCM_BUDGET_MB: {value: '512', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -361,6 +375,15 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -442,6 +465,15 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -536,6 +568,15 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -608,6 +649,15 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}

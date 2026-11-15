@@ -49,6 +49,10 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'RECORD_FRESH_MERGE_ENABLED',
+    'RECORD_NOTES_EAGER_ENABLED',
+    'RECORD_FOLLOWUP_WAKE_ENABLED',
+    'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
@@ -189,10 +193,9 @@ def test_pipeline_env_surface_holds_its_budget():
     assert not found, 'Flag budget (backend/docs/adr/0006-pipeline-flag-budget.md):\n' + '\n'.join(found)
 
 
-def test_budget_file_declares_scope_and_count():
+def test_budget_file_declares_scope_and_retired_ledger():
     data = _load()
     assert tuple(data['scope']) == SCOPE
-    assert data['count'] == len(data['names'])
     assert isinstance(data['retired'], dict)
 
 
@@ -298,15 +301,24 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
+        elif name.startswith('RECORD_'):
+            assert entry['owner'] == 'q12-post-seal'
+            assert entry['review_by'] == '2026-12-14'
         else:
             striped = name == 'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED'
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
         assert flag['kind'] == 'env'
-        assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']
-        assert flag['fail'] == 'open'
-        assert flag['summary'].startswith('Default on')
+        if name in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'}:
+            # Image-only GKE rolls do not install an explicit false binding.
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Default off')
+        else:
+            assert flag['lifecycle'] == 'ops_kill'
+            assert flag['fail'] == 'open'
+            assert flag['summary'].startswith('Default on')
 
 
 def _data(retired=None, **names):

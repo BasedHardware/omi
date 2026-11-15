@@ -14,7 +14,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Each mounted host attempts once. The server's UID enrollment owns admission
+/// Rebuilds never retry admission; a later Home presentation can try again.
+/// The server's UID enrollment owns admission
 /// across hosts, devices, reinstalls and retries; no client preference is truth.
 class YearlyRetentionPlacement extends StatefulWidget {
   const YearlyRetentionPlacement(
@@ -44,12 +45,24 @@ class YearlyRetentionPlacement extends StatefulWidget {
 class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> with WidgetsBindingObserver {
   wire.GeneratedYearlySwitchResponse? _offer;
   String? _attemptedFor;
+  String? _admittedFor;
+  final Set<String> _pendingClaims = {};
+  bool _routeCurrent = false;
+  bool _wasBackgrounded = false;
   Timer? _refresh;
   bool _opening = false;
 
   String? get _candidate {
     final candidate = yearlySwitchCandidate(context.read<UsageProvider?>());
     return candidate == null ? null : '${SharedPreferencesUtil().uid}:$candidate';
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final current = ModalRoute.isCurrentOf(context) ?? true;
+    if (current && !_routeCurrent) _presentHome();
+    _routeCurrent = current;
   }
 
   @override
@@ -68,7 +81,40 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _offer != null) unawaited(_checkEnabled());
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.resumed) {
+      if (_offer != null) {
+        unawaited(_checkEnabled());
+      } else if (_wasBackgrounded && _routeCurrent) {
+        _presentHome();
+      }
+      _wasBackgrounded = false;
+    }
+  }
+
+  void _presentHome() {
+    final candidate = _candidate;
+    if (widget.surface == YearlySwitchSurface.engaged &&
+        candidate != null &&
+        _attemptedFor == candidate &&
+        _admittedFor != candidate &&
+        !_pendingClaims.contains(candidate)) {
+      setState(() => _scheduleClaim(candidate));
+    }
+  }
+
+  void _scheduleClaim(String candidate) {
+    _attemptedFor = candidate;
+    _offer = null;
+    _refresh?.cancel();
+    _pendingClaims.add(candidate);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (mounted && _candidate == candidate) await _claim(candidate);
+      } finally {
+        _pendingClaims.remove(candidate);
+      }
+    });
   }
 
   Future<bool> _checkEnabled() async {
@@ -104,12 +150,10 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
     } catch (_) {
       return;
     }
-    if (!mounted ||
-        _candidate != candidate ||
-        offer?.eligible != true ||
-        offer?.yearlyAmount == null ||
-        offer?.savingsAmount == null ||
-        offer?.planId == null) {
+    if (!mounted || _candidate != candidate || offer?.eligible != true) return;
+    // Admission is consumed even if the flag changes before rendering.
+    _admittedFor = candidate;
+    if (offer?.yearlyAmount == null || offer?.savingsAmount == null || offer?.planId == null) {
       return;
     }
     if (!await _checkEnabled() || !mounted || _candidate != candidate || _attemptedFor != candidate) return;
@@ -147,12 +191,7 @@ class _YearlyRetentionPlacementState extends State<YearlyRetentionPlacement> wit
     final candidate = yearlySwitchCandidate(subscription) == null ? null : _candidate;
     if (candidate == null) return const SizedBox.shrink();
     if (_attemptedFor != candidate) {
-      _attemptedFor = candidate;
-      _offer = null;
-      _refresh?.cancel();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _candidate == candidate) unawaited(_claim(candidate));
-      });
+      _scheduleClaim(candidate);
     }
     final offer = _offer;
     if (offer == null) return const SizedBox.shrink();
