@@ -23,6 +23,7 @@ from google.api_core.exceptions import FailedPrecondition
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.batch_pipeline import record_seal_profile
+from utils.batch_pipeline.record_seal_budget import BudgetExhausted
 from config import refactor_modes
 from config import record_seal_repair as config
 from config import record_partial as partial_config
@@ -185,6 +186,7 @@ def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mod
             check_budget=budget.check,
             repair_upload_failed=True,
             repair_closed=True,
+            wake_admission=config.fresh_enabled(),
         )
         apply = repair.apply_seals
     else:
@@ -377,6 +379,8 @@ def discover_jobs(
     metric_ages=None,
     urgent=False,
     invalid_clock_counts=None,
+    fresh=False,
+    exclude=frozenset(),
 ):
     """Newest pending jobs, or earliest near-dead-letter deadline, with bounded cursors.
 
@@ -388,7 +392,9 @@ def discover_jobs(
     if not 1 <= max_rows <= MAX_ROWS or not 1 <= max_scan <= MAX_SCAN:
         raise ValueError('invalid jobs discovery limits')
     budget.check()
-    age_order = refactor_modes.record_seal_repair_age_order()
+    age_order = fresh or refactor_modes.record_seal_repair_age_order()
+    if fresh and urgent:
+        return [], False, None
     if urgent and not age_order:
         return [], False, None
     order_field = 'record_dead_letter_deadline_at' if urgent else 'enqueued_at'
@@ -410,6 +416,11 @@ def discover_jobs(
         query = client.collection('batch_pipeline_prod_jobs').where(filter=FieldFilter('state', '==', 'record_pending'))
         if age_order:
             cutoff = horizon.timestamp() + (NEAR_DEAD_LETTER_SECONDS if urgent else 0)
+            if fresh:
+                query = query.where(
+                    filter=FieldFilter(order_field, '>=', horizon.timestamp() - config.FRESH_WINDOW_SECONDS)
+                )
+                cutoff -= config.FRESH_MIN_AGE_SECONDS
             if urgent:
                 query = query.where(filter=FieldFilter(order_field, '>', 0))
             query = query.where(filter=FieldFilter(order_field, '<=', cutoff)).order_by(
@@ -437,6 +448,7 @@ def discover_jobs(
         message = str(error).lower()
         if (
             urgent
+            or fresh
             or not age_order
             or not (
                 'requires an index' in message
@@ -491,10 +503,14 @@ def discover_jobs(
                 or deadline > horizon.timestamp() + NEAR_DEAD_LETTER_SECONDS
             ):
                 continue
-        age = horizon.timestamp() - enqueued
-        if age < config.JOBS_MIN_AGE_SECONDS:
+        age = (time.time() if fresh else horizon.timestamp()) - enqueued
+        if fresh and age > config.FRESH_WINDOW_SECONDS:
+            continue
+        if age < (config.FRESH_MIN_AGE_SECONDS if fresh else config.JOBS_MIN_AGE_SECONDS):
             continue
         path = f'users/{uid}/conversations/{cid}'
+        if path in exclude:
+            continue
         # Preserve selection/cursors even for zero or negative clocks. Only the metric is absent.
         rows.append((path, max(0, int(age)) if valid_metric_clock(enqueued) else None))
         # Keep invalid-clock jobs eligible and preserve their exact cursor.
@@ -508,6 +524,41 @@ def discover_jobs(
             return rows, True, cursor
     saturated = len(page) >= min(128, max_scan)
     return rows, saturated, cursor if saturated else None
+
+
+class FreshLane:
+    """Always probe the live newest page; separately walk its bounded recent tail.
+
+    No persisted sweep horizon and no writes. Two pages per poll bound read cost;
+    a retry exclusion set prevents chronic refusals consuming every fresh poll.
+    """
+
+    def __init__(self, client):
+        self.client, self.after = client, None
+
+    def __call__(self, exclude):
+        from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+        budget = SweepBudget(10)
+        with silent_dependencies(), budget.interrupt_io():
+            head, saturated, cursor = discover_jobs(
+                self.client, budget=budget, max_rows=128, fresh=True, exclude=exclude
+            )
+            rows = head
+            if saturated:
+                tail, _, self.after = discover_jobs(
+                    self.client,
+                    budget=budget,
+                    after=self.after or cursor,
+                    max_rows=128,
+                    fresh=True,
+                    exclude=exclude | {path for path, _ in head},
+                )
+                rows += tail
+            else:
+                self.after = None
+        # The tail's frozen horizon can only supply older candidates than the live head.
+        return rows
 
 
 class RowProcess(subprocess.Popen):
@@ -633,6 +684,9 @@ def coordinate(
     pause=time.sleep,
     progress=lambda _: None,
     attempted=lambda _: None,
+    fresh=None,
+    fresh_workers=0,
+    bootstrap_rows=0,
 ):
     """Bound total concurrency and wall time; reap every child, including on failure."""
     pending, active, counts, reasons = deque(rows), [], Counter(), Counter()
@@ -641,25 +695,75 @@ def coordinate(
     deadline = started + run_seconds
     max_age, sealed_age, invalid_clock_rows = 0, 0, 0
     elapsed_by_disposition = Counter()
+    if not 0 <= fresh_workers < workers or (fresh is not None and not fresh_workers):
+        raise ValueError('fresh slots must leave at least one backlog slot')
+    if not 0 <= bootstrap_rows <= min(workers, len(pending)):
+        raise ValueError('bootstrap exceeds the guaranteed initial worker group')
+    bootstrap_remaining = bootstrap_rows
+    fresh_pending, fresh_processes, seen = deque(), set(), {}
+    active_paths = {}
+    pending_aged_at = started
+    fresh_at = started
     try:
-        while pending or active:
+        while pending or active or fresh is not None and clock() < deadline:
             now = clock()
             if now >= deadline:
-                counts['deferred'] += len(pending)
+                counts['deferred'] += len(pending) + len(fresh_pending)
                 if pending:
                     elapsed_by_disposition['deferred'] += 0
                 pending.clear()
-            while pending and len(active) < workers and now < deadline:
-                path, age = pending.popleft()
-                attempted(path)
+                fresh_pending.clear()
+            elif fresh is not None and now >= fresh_at:
+                try:
+                    incoming = fresh(
+                        {path for path, at in seen.items() if now - at < config.FRESH_RETRY_SECONDS}
+                        | set(active_paths.values())
+                    )
+                    # New head first, bounded queue, private identities remain in memory.
+                    elapsed = max(0, int(clock() - pending_aged_at))
+                    aged = [(path, age + elapsed) for path, age in fresh_pending]
+                    combined = dict(aged + incoming)
+                    fresh_pending = deque(sorted(combined.items(), key=lambda item: item[1])[:MAX_ROWS])
+                    pending_aged_at = clock()
+                except (Exception, BudgetExhausted):
+                    progress({'event': 'record_seal_repair_fresh', 'outcome': 'error'})
+                fresh_at = clock() + 15
+                now = clock()  # Discovery time counts against the original run deadline.
+            while len(active) < workers and now < deadline:
+                # Discovery checkpoints promise this initial group will be
+                # attempted. Start it before borrowing its ordinary capacity;
+                # otherwise an interruption could skip unattempted candidates.
+                is_fresh = bool(not bootstrap_remaining and fresh_pending and len(fresh_processes) < fresh_workers)
+                if is_fresh:
+                    path, age = fresh_pending.popleft()
+                elif pending:
+                    path, age = pending.popleft()
+                    bootstrap_remaining = max(0, bootstrap_remaining - 1)
+                else:
+                    break
+                if path in seen and (not is_fresh or now - seen[path] < config.FRESH_RETRY_SECONDS):
+                    continue
+                if path in active_paths.values():
+                    continue
+                seen[path] = now
+                if not is_fresh:
+                    attempted(path)
                 if age is None:
                     invalid_clock_rows += 1
                 else:
                     max_age = max(max_age, age)
                 seconds = min(row_seconds, deadline - now)
+                # The urgent/ordinary job leg retains its original half of the
+                # worker group and full row budget. Unused ordinary slots are
+                # lent to backlog, with a bound on how long fresh must wait.
+                if is_fresh or fresh is not None and len(active) - len(fresh_processes) >= workers - fresh_workers:
+                    seconds = min(seconds, config.FRESH_ROW_SECONDS)
                 try:
                     process = launch(path, seconds, mode)
                     active.append((process, now + seconds, age, now, RowOutput(process)))
+                    active_paths[process] = path
+                    if is_fresh:
+                        fresh_processes.add(process)
                 except Exception:
                     counts['error'] += 1
                     elapsed_by_disposition['error'] += max(0, round((clock() - now) * 1000))
@@ -720,6 +824,7 @@ def coordinate(
                             'elapsed_ms': row_elapsed,
                             **output.profile,
                             'count': 1,
+                            'lane': 'fresh' if process in fresh_processes else 'backlog',
                             **({'blocker': blocker} if blocker else {}),
                             'trimmed_divergent_overlaps': trimmed,
                             'disposition': disposition,
@@ -734,7 +839,9 @@ def coordinate(
                             ),
                         }
                     )
-            if active:
+                    fresh_processes.discard(process)
+                    active_paths.pop(process, None)
+            if active or fresh is not None and clock() < deadline:
                 pause(0.05)
     finally:
         for process, *_ in active:
@@ -799,6 +906,10 @@ def run(*, progress=lambda _: None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
     workers, row_seconds, run_seconds, mode = config.settings()
+    fresh_slots = workers // 2 if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
+    # Fresh borrows ordinary execution capacity; it never shrinks either
+    # discovery leg, the urgent allocation or the ordinary-job reserve.
+    sweep_workers = workers
     config.require_runtime()
     with silent_dependencies():
         from database._client import get_firestore_client
@@ -820,7 +931,7 @@ def run(*, progress=lambda _: None):
             invalid_clock_counts = Counter()
             if config.jobs_enabled():
                 jobs_frontier = RepairCursor(client, config.cursor_secret(), jobs=True)
-                allocation = max(1, workers // 2)
+                allocation = max(1, sweep_workers // 2)
                 # Scan ordinary jobs every run, even under continuous urgency.
                 job_rows, jobs_saturated, jobs_cursor = discover_jobs(
                     client,
@@ -871,7 +982,7 @@ def run(*, progress=lambda _: None):
                 client,
                 budget=budget,
                 after=frontier.read(budget),
-                advance_rows=workers - len(job_rows),
+                advance_rows=sweep_workers - len(job_rows),
                 max_rows=MAX_ROWS - len(job_rows),
                 max_scan=MAX_SCAN - (128 if jobs_frontier else 0) - (128 if urgent_frontier else 0),
                 selected_cursors=selected_cursors,
@@ -943,6 +1054,9 @@ def run(*, progress=lambda _: None):
         mode=mode,
         progress=progress,
         attempted=attempted,
+        fresh=FreshLane(client) if fresh_slots else None,
+        fresh_workers=fresh_slots,
+        bootstrap_rows=min(workers, len(rows)),
     )
     report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
     if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
