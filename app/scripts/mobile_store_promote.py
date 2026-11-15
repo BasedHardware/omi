@@ -446,8 +446,7 @@ def play_edit() -> tuple[object, str]:
             if status == 409 and attempt + 1 < PLAY_EDIT_CREATE_ATTEMPTS:
                 time.sleep(2**attempt)
                 continue
-            detail = f": {exc}" if str(exc).strip() else ""
-            raise PromotionError(f"Google Play edit creation failed{detail}") from exc
+            raise PromotionError("Google Play edit creation failed") from exc
     raise PromotionError("Google Play edit creation failed after bounded retries")
 
 
@@ -552,18 +551,64 @@ def promote_internal_android_to_alpha(
         raise PromotionError(f"Google Play rejected exact internal-to-alpha promotion{detail}") from exc
 
 
+def discard_play_edit(client: object, edit_id: str) -> None:
+    """Best-effort abandonment after a failed operation; preserve the root error."""
+    try:
+        client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+    except Exception:
+        print("WARN: uncommitted Play edit cleanup failed; the edit will expire", file=sys.stderr)
+
+
 def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     client, edit_id = play_edit()
-    alpha = play_track(client, edit_id, "alpha")
-    production = play_track(client, edit_id, "production")
-    select_play_release(alpha, production, version, build_number)
-    return client, edit_id
+    try:
+        alpha = play_track(client, edit_id, "alpha")
+        production = play_track(client, edit_id, "production")
+        select_play_release(alpha, production, version, build_number)
+        return client, edit_id
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
 
 
 PLAY_RELEASE_STATUSES = ("completed", "draft", "inProgress", "halted")
 
 
 def submit_android(
+    client: object,
+    edit_id: str,
+    version: str,
+    build_number: str,
+    notes: str,
+    *,
+    status: str | None = None,
+    user_fraction: float | None = None,
+    extra_codes: Sequence[str] = (),
+    base_release: dict[str, object] | None = None,
+    release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
+) -> None:
+    """Submit production changes, abandoning their edit on any failure."""
+    try:
+        _submit_android_edit(
+            client,
+            edit_id,
+            version,
+            build_number,
+            notes,
+            status=status,
+            user_fraction=user_fraction,
+            extra_codes=extra_codes,
+            base_release=base_release,
+            release_name=release_name,
+            retained_releases=retained_releases,
+        )
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
+
+
+def _submit_android_edit(
     client: object,
     edit_id: str,
     version: str,

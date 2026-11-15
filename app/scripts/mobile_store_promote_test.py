@@ -365,6 +365,24 @@ class AndroidChecks(unittest.TestCase):
             packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
         )
 
+    def test_prepare_android_discards_edit_when_validation_fails(self):
+        client = Mock()
+        with (
+            patch.object(promote, "play_edit", return_value=(client, "edit-id")),
+            patch.object(promote, "play_track", return_value={"releases": []}),
+            self.assertRaises(promote.PromotionError),
+        ):
+            promote.prepare_android("1.2.3", "23")
+        client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+        client.edits().commit.assert_not_called()
+
+    def test_failed_android_commit_discards_edit_without_replacing_root_error(self):
+        client = Mock()
+        client.edits().commit.return_value.execute.side_effect = RuntimeError("commit failed")
+        with self.assertRaisesRegex(promote.PromotionError, "commit failed"):
+            promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
+        client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+
     def test_internal_to_alpha_promotes_only_exact_completed_build_and_holds_commit(self):
         client = Mock()
         internal_release = {
