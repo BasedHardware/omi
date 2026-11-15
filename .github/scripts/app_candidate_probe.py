@@ -84,8 +84,8 @@ def check_state(service, revision, args, baseline, runtime_image):
     require(ready(revision), 'candidate is not Ready')
     require(revision.get('metadata', {}).get('name') == args.revision, 'revision mismatch')
     require(revision.get('status', {}).get('imageDigest') == runtime_image, 'candidate runtime image mismatch')
-    require(revision.get('spec', {}).get('containers', [{}])[0].get('image') == args.image,
-            'candidate is not pinned to tested digest')
+    require(revision.get('spec', {}).get('containers', [{}])[0].get('image') in {args.image, runtime_image},
+            'candidate image is outside verified index/runtime lineage')
 
 
 def check_image(image, source, carrier):

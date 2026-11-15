@@ -308,7 +308,16 @@ def test_cli_disabled_uses_shared_json_logging_without_cloud():
     assert result.returncode == 0 and not result.stderr
     records = [json.loads(line) for line in result.stdout.splitlines()]
     assert len(records) == 1 and records[0]['logger'] == 'record-seal-repair'
-    assert json.loads(records[0]['message']) == {'event': 'record_seal_repair', 'outcome': 'disabled'}
+    assert json.loads(records[0]['message']) == {
+        'event': 'record_seal_repair',
+        'outcome': 'disabled',
+        'repair_run_summary': 1,
+        'run_outcome': 'complete',
+        'run_phase': 'overall',
+        'shard': 0,
+        'shards': 1,
+        'exit_code': 0,
+    }
 
 
 def test_native_and_dependency_diagnostics_never_reach_cli_output(tmp_path):
@@ -1346,7 +1355,12 @@ def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage)
     failure = next(m for m in messages if m.get('event') == event and m.get('outcome') == 'error')
     assert failure['exception_type'] == 'RuntimeError'
     assert re.fullmatch(r'[a-z0-9_]{1,64}\.py:\d+', failure['error_site'])
-    assert set(failure) <= {'event', 'outcome', 'exception_type', 'error_site'}
+    allowed = {'event', 'outcome', 'exception_type', 'error_site'}
+    if stage == 'run':
+        allowed |= {'repair_run_summary', 'run_outcome', 'run_phase', 'shard', 'shards', 'exit_code', 'work_incomplete'}
+        assert failure['run_outcome'] == 'incomplete' and failure['run_phase'] == 'setup'
+        assert failure['exit_code'] == 1 and failure['shard'] == 0 and failure['shards'] == 1
+    assert set(failure) <= allowed
     assert result.returncode == (1 if stage == 'run' else 0)
 
 
@@ -1941,13 +1955,15 @@ def test_phase_budget_never_fabricates_seals_and_final_checkpoint_retains_counts
 
     work = Mock(side_effect=coordinate)
     monkeypatch.setattr(cluster, 'coordinate', work)
-    events = []
+    events, phases = [], []
     if stop_at == 'discovery':
         with pytest.raises(record_seal_budget.BudgetExhausted):
-            cluster.run(progress=events.append)
+            cluster.run(progress=events.append, phase_progress=phases.append)
         work.assert_not_called()
+        assert phases == ['discovery']
     else:
-        report = cluster.run(progress=events.append)
+        report = cluster.run(progress=events.append, phase_progress=phases.append)
+        assert phases == ['discovery', 'rows', 'checkpoint']
         assert report['outcome'] == 'budget_exhausted'
         assert report['cursor_checkpoint_outcome'] == 'budget_exhausted' and report['work_incomplete']
         assert report['dispositions'] == {'sealed': 1} and report['rows'] == 1
